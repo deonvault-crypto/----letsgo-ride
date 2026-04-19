@@ -1,0 +1,224 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    /* LetsGo Ride brand — strict palette */
+    --lg-charcoal: #0f1115;
+    --lg-surface: #171a1f;
+    --lg-surface-2: #1d2127;
+    --lg-green: #22c55e;
+    --lg-green-soft: rgba(34, 197, 94, 0.12);
+    --lg-green-glow: rgba(34, 197, 94, 0.35);
+    --lg-white: #ffffff;
+    --lg-muted: #9ca3af;
+    --lg-border: rgba(255, 255, 255, 0.08);
+    --lg-border-strong: rgba(255, 255, 255, 0.14);
+
+    /* shadcn dark-mode tokens, remapped to brand */
+    --background: 222 16% 7%;
+    --foreground: 0 0% 100%;
+    --card: 220 12% 11%;
+    --card-foreground: 0 0% 100%;
+    --popover: 220 12% 11%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 142 71% 45%;
+    --primary-foreground: 222 16% 7%;
+    --secondary: 220 10% 14%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 220 10% 14%;
+    --muted-foreground: 220 9% 65%;
+    --accent: 220 10% 14%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 100% / 0.08;
+    --input: 220 10% 14%;
+    --ring: 142 71% 45%;
+    --radius: 0.75rem;
+}
+
+.dark {
+    color-scheme: dark;
+}
+
+html,
+body {
+    margin: 0;
+    background: var(--lg-charcoal);
+    color: var(--lg-white);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+    font-family: "Manrope", "Inter", sans-serif;
+    letter-spacing: -0.025em;
+}
+
+.tracking-tight-xl {
+    letter-spacing: -0.04em;
+}
+
+::selection {
+    background: var(--lg-green);
+    color: var(--lg-charcoal);
+}
+
+/* Subtle radial glow utility used in hero */
+.hero-glow {
+    background:
+        radial-gradient(
+            900px 520px at 72% 18%,
+            rgba(34, 197, 94, 0.22),
+            transparent 60%
+        ),
+        radial-gradient(
+            700px 420px at 12% 85%,
+            rgba(34, 197, 94, 0.08),
+            transparent 55%
+        );
+}
+
+.grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.06 0 0 0 0 0.07 0 0 0 0 0.09 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    opacity: 0.35;
+    mix-blend-mode: overlay;
+}
+
+/* Card surface with green accent border on hover */
+.surface {
+    background: var(--lg-surface);
+    border: 1px solid var(--lg-border);
+    transition:
+        border-color 220ms ease,
+        transform 220ms ease,
+        background 220ms ease;
+}
+.surface:hover {
+    border-color: rgba(34, 197, 94, 0.45);
+}
+
+/* Primary pill button */
+.btn-primary {
+    background: var(--lg-green);
+    color: #06210f;
+    font-weight: 700;
+    border-radius: 9999px;
+    padding: 0.85rem 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition:
+        transform 180ms ease,
+        box-shadow 180ms ease,
+        background 180ms ease;
+    box-shadow: 0 10px 30px -10px rgba(34, 197, 94, 0.6);
+}
+.btn-primary:hover {
+    transform: translateY(-1px);
+    background: #2ee068;
+}
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--lg-white);
+    font-weight: 600;
+    border-radius: 9999px;
+    padding: 0.85rem 1.4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--lg-border-strong);
+    transition:
+        border-color 180ms ease,
+        background 180ms ease;
+}
+.btn-ghost:hover {
+    border-color: rgba(34, 197, 94, 0.6);
+    background: rgba(34, 197, 94, 0.06);
+}
+
+/* Icon tile */
+.icon-tile {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--lg-green-soft);
+    color: var(--lg-green);
+    border: 1px solid rgba(34, 197, 94, 0.28);
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.04);
+}
+
+/* Fade-up on scroll fallback without lib */
+@keyframes lg-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.fade-up {
+    animation: lg-fade-up 700ms ease both;
+}
+
+/* Phone mockup */
+.phone-frame {
+    position: relative;
+    width: 290px;
+    height: 590px;
+    border-radius: 44px;
+    background: linear-gradient(180deg, #1d2127, #121418);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+        0 40px 80px -30px rgba(0, 0, 0, 0.8),
+        inset 0 0 0 6px #0f1115;
+    overflow: hidden;
+}
+.phone-notch {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100px;
+    height: 24px;
+    border-radius: 14px;
+    background: #000;
+    z-index: 2;
+}
+
+/* Route line in phone UI */
+.route-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--lg-green);
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.15);
+}
+.route-line {
+    width: 2px;
+    background: repeating-linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.25) 0 4px,
+        transparent 4px 10px
+    );
+}
+
+/* accordion tweaks */
+[data-state="open"] .faq-caret {
+    transform: rotate(45deg);
+}
