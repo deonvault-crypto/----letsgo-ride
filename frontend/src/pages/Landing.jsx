@@ -1,654 +1,363 @@
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import {
-    ArrowRight,
-    BadgeCheck,
-    CalendarCheck,
-    Car,
-    CircleDollarSign,
-    Headphones,
-    MapPin,
-    MessageSquareWarning,
-    ReceiptText,
-    Route,
-    Search,
-    ShieldCheck,
-    UserCheck,
-    Users,
-} from "lucide-react";
-
-const navLinks = [
-    { href: "#how", label: "How it works" },
-    { href: "#safety", label: "Safety" },
-    { href: "#routes", label: "Routes" },
-    { href: "#drivers", label: "Drivers" },
-    { href: "#pricing", label: "Pricing" },
-];
-
-const cities = ["Harare", "Bulawayo", "Mutare", "Gweru", "Masvingo"];
-
-const passengerSteps = [
-    {
-        icon: Search,
-        title: "Search your route",
-        body: "Choose an intercity journey, city ride, or errand run with pickup and drop-off clarity.",
-    },
-    {
-        icon: UserCheck,
-        title: "Choose a driver",
-        body: "Review vehicle details, route timing, seat count, and driver verification signals.",
-    },
-    {
-        icon: CalendarCheck,
-        title: "Reserve your seat",
-        body: "Send a booking request and confirm the ride details before travel day.",
-    },
-    {
-        icon: ShieldCheck,
-        title: "Travel safely",
-        body: "Keep trip records, support directions, and reporting tools close for every journey.",
-    },
-];
-
-const driverSteps = [
-    {
-        icon: Route,
-        title: "Post a planned trip",
-        body: "Share where you are going, departure time, available seats, luggage notes, and price.",
-    },
-    {
-        icon: Users,
-        title: "Accept passengers",
-        body: "Review requests before confirming who rides with you and where they join.",
-    },
-    {
-        icon: CircleDollarSign,
-        title: "Earn from empty seats",
-        body: "Turn routes you already drive into practical income without changing your destination.",
-    },
-];
-
-const safetyItems = [
-    {
-        icon: BadgeCheck,
-        title: "Driver profile checks",
-        body: "Profiles are designed around ID, licence, vehicle, route, and rating signals before public activation.",
-    },
-    {
-        icon: MessageSquareWarning,
-        title: "Passenger reports",
-        body: "Riders need a direct way to report unsafe conduct, route changes, missed pickups, or payment disputes.",
-    },
-    {
-        icon: Headphones,
-        title: "Emergency support direction",
-        body: "The product is structured to guide users toward support and emergency contacts when something feels wrong.",
-    },
-    {
-        icon: ReceiptText,
-        title: "Trip records",
-        body: "Requests, confirmations, pickup notes, drop-off notes, and driver details should remain traceable.",
-    },
-    {
-        icon: MapPin,
-        title: "Clear meeting points",
-        body: "Each trip should state pickup, drop-off, timing, luggage expectations, and passenger count.",
-    },
-];
+﻿import React from "react";
 
 const routes = [
-    {
-        from: "Harare",
-        to: "Bulawayo",
-        type: "Intercity",
-        detail: "Morning and weekend seat-sharing corridor",
-    },
-    {
-        from: "Harare",
-        to: "Mutare",
-        type: "Intercity",
-        detail: "Eastern route for families, workers, and students",
-    },
-    {
-        from: "Gweru",
-        to: "Harare",
-        type: "Intercity",
-        detail: "Central link with predictable pickup points",
-    },
-    {
-        from: "Masvingo",
-        to: "Harare",
-        type: "Intercity",
-        detail: "Reliable route matching for planned travel",
-    },
-    {
-        from: "City errands",
-        to: "Local rides",
-        type: "Urban",
-        detail: "Short trips, parcel errands, and everyday city movement",
-    },
+  { from: "Harare", to: "Bulawayo", time: "6h 30m", price: "US$24", seats: "3 seats left", tag: "Bestseller" },
+  { from: "Harare", to: "Mutare", time: "3h 45m", price: "US$18", seats: "2 seats left", tag: "Popular" },
+  { from: "Gweru", to: "Harare", time: "2h 15m", price: "US$15", seats: "4 seats left", tag: "Fast route" },
+  { from: "Bulawayo", to: "Victoria Falls", time: "5h 30m", price: "US$22", seats: "3 seats left", tag: "Scenic" },
 ];
 
-const paymentNotes = [
-    "Cash payment can remain available where it is practical and agreed by driver and passenger.",
-    "Deposit proof support can help drivers confirm serious bookings before departure.",
-    "Online payments and service fees should be introduced only when the platform backend supports them safely.",
+const stats = [
+  ["10K+", "Trips planned"],
+  ["30+", "Cities and towns"],
+  ["4.8", "Average rating"],
+  ["100%", "Verified ride focus"],
 ];
 
-const footerLinks = [
-    { label: "Support", href: "#support" },
-    { label: "Safety", href: "#safety" },
-    { label: "Terms", href: "#legal" },
-    { label: "Privacy", href: "#legal" },
+const steps = [
+  ["01", "Search route", "Enter pickup, destination, date, and seats to find available rides instantly."],
+  ["02", "Choose driver", "Compare route details, ratings, prices, seats, and vehicle information."],
+  ["03", "Reserve seat", "Confirm your seat and keep clear trip records before travel."],
+  ["04", "Travel safely", "Use live trip details, support, and verified ride information."],
 ];
 
-function Nav() {
-    const [scrolled, setScrolled] = useState(false);
+const safety = [
+  ["Verified drivers", "Drivers are checked before trips and linked to clear route records."],
+  ["Trip history", "Every ride keeps pickup, destination, time, passenger, and driver details."],
+  ["Unsafe reports", "Passengers can report unsafe driving, fraud, or suspicious behavior."],
+  ["Emergency help", "Quick access to support and safety guidance during a journey."],
+];
 
-    useEffect(() => {
-        const onScroll = () => setScrolled(window.scrollY > 16);
-        onScroll();
-        window.addEventListener("scroll", onScroll, { passive: true });
-        return () => window.removeEventListener("scroll", onScroll);
-    }, []);
-
-    return (
-        <header
-            data-testid="site-nav"
-            className={`site-nav ${scrolled ? "site-nav--solid" : ""}`}
-        >
-            <div className="site-shell site-nav__inner">
-                <a href="#top" className="brand-mark" data-testid="nav-logo">
-                    <span className="brand-mark__glyph">LR</span>
-                    <span>LetsGo Ride</span>
-                </a>
-                <nav className="site-nav__links" aria-label="Primary">
-                    {navLinks.map((link) => (
-                        <a
-                            key={link.href}
-                            href={link.href}
-                            data-testid={`nav-link-${link.label.toLowerCase().replace(/\s/g, "-")}`}
-                        >
-                            {link.label}
-                        </a>
-                    ))}
-                </nav>
-                <div className="site-nav__actions">
-                    <a
-                        href="#access"
-                        className="button button--quiet nav-login"
-                        data-testid="nav-login-btn"
-                    >
-                        Log in
-                    </a>
-                    <a
-                        href="#access"
-                        className="button button--primary"
-                        data-testid="nav-get-app-btn"
-                    >
-                        Get the app
-                    </a>
-                </div>
-            </div>
-        </header>
-    );
-}
-
-function Hero() {
-    return (
-        <section id="top" className="hero-section" data-testid="hero-section">
-            <div className="hero-map" aria-hidden>
-                <span className="route-node route-node--harare" />
-                <span className="route-node route-node--bulawayo" />
-                <span className="route-node route-node--mutare" />
-                <span className="route-node route-node--gweru" />
-                <span className="route-node route-node--masvingo" />
-                <span className="route-line route-line--one" />
-                <span className="route-line route-line--two" />
-                <span className="route-line route-line--three" />
-            </div>
-            <div className="site-shell hero-section__content">
-                <motion.div
-                    initial={{ opacity: 0, y: 18 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6 }}
-                    className="hero-copy"
-                >
-                    <p className="eyebrow">Zimbabwe transport, rebuilt around trust</p>
-                    <h1 data-testid="hero-headline">
-                        Book a seat. Move across Zimbabwe safely.
-                    </h1>
-                    <p className="hero-sub" data-testid="hero-sub">
-                        LetsGo Ride connects passengers and verified drivers for
-                        intercity shared rides, local city trips, and everyday errands
-                        with clear routes, honest pricing, and practical payment
-                        support.
-                    </p>
-                    <div className="hero-actions">
-                        <a
-                            href="#routes"
-                            className="button button--primary button--large"
-                            data-testid="hero-cta-find-ride"
-                        >
-                            Find a Ride <ArrowRight size={18} />
-                        </a>
-                        <a
-                            href="#drivers"
-                            className="button button--quiet button--large"
-                            data-testid="hero-cta-offer-ride"
-                        >
-                            Offer a Ride & Earn
-                        </a>
-                    </div>
-                    <div className="trust-line" data-testid="hero-social-proof">
-                        {cities.map((city) => (
-                            <span key={city}>{city}</span>
-                        ))}
-                    </div>
-                </motion.div>
-            </div>
-        </section>
-    );
-}
-
-function PhonePreview() {
-    return (
-        <section
-            id="app-preview"
-            className="section section--preview"
-            data-testid="app-preview"
-        >
-            <div className="site-shell preview-grid">
-                <div className="section-kicker">
-                    <p className="eyebrow">Live product direction</p>
-                    <h2>Premium trip matching that feels built for real roads.</h2>
-                    <p>
-                        The app experience should make route, price, safety, and driver
-                        context obvious before a passenger commits. No mystery pickup
-                        points. No vague trip status.
-                    </p>
-                </div>
-                <motion.div
-                    initial={{ opacity: 0, y: 22 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-80px" }}
-                    transition={{ duration: 0.55 }}
-                    className="phone-stage"
-                    data-testid="hero-phone-mockup"
-                    aria-label="LetsGo Ride app preview"
-                >
-                    <div className="phone-device">
-                        <div className="phone-top">
-                            <span>9:41</span>
-                            <span>5G 86%</span>
-                        </div>
-                        <div className="phone-brand">
-                            <span className="status-dot" />
-                            LetsGo Ride
-                        </div>
-                        <div className="phone-title">Harare to Bulawayo</div>
-                        <div className="trip-card trip-card--route">
-                            <div className="trip-track">
-                                <span />
-                                <i />
-                                <span />
-                            </div>
-                            <div>
-                                <small>Pickup</small>
-                                <strong>Harare CBD, Fourth Street</strong>
-                                <small>Drop-off</small>
-                                <strong>Bulawayo City Hall</strong>
-                            </div>
-                        </div>
-                        <div className="trip-metrics">
-                            <div>
-                                <small>Seats</small>
-                                <strong>3 left</strong>
-                            </div>
-                            <div>
-                                <small>Seat price</small>
-                                <strong>US$12</strong>
-                            </div>
-                        </div>
-                        <div className="driver-card">
-                            <div className="driver-avatar">TM</div>
-                            <div>
-                                <strong>Tafadzwa M.</strong>
-                                <span>Toyota Wish - verified profile</span>
-                            </div>
-                            <BadgeCheck size={20} />
-                        </div>
-                        <div className="status-panel">
-                            <div>
-                                <small>Status</small>
-                                <strong>Accepting requests</strong>
-                            </div>
-                            <div>
-                                <small>Departure</small>
-                                <strong>06:30 tomorrow</strong>
-                            </div>
-                        </div>
-                        <button type="button" className="phone-cta">
-                            Request seat
-                        </button>
-                    </div>
-                </motion.div>
-            </div>
-        </section>
-    );
-}
-
-function StepList({ title, body, steps, variant }) {
-    return (
-        <div className={`workflow-panel workflow-panel--${variant}`}>
-            <div>
-                <p className="eyebrow">{variant === "passenger" ? "Passengers" : "Drivers"}</p>
-                <h3>{title}</h3>
-                <p>{body}</p>
-            </div>
-            <div className="workflow-list">
-                {steps.map((step) => (
-                    <div className="workflow-item" key={step.title}>
-                        <div className="icon-box">
-                            <step.icon size={20} />
-                        </div>
-                        <div>
-                            <h4>{step.title}</h4>
-                            <p>{step.body}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
+function Logo({ compact = false }) {
+  return (
+    <div className={compact ? "logo compact" : "logo"}>
+      <div className="logo-mark">
+        <span className="logo-road" />
+        <span className="logo-arrow" />
+      </div>
+      {!compact && (
+        <div className="logo-word">
+          Lets<span>Go</span>Ride
         </div>
-    );
+      )}
+    </div>
+  );
 }
 
-function HowItWorks() {
-    return (
-        <section id="how" className="section" data-testid="how-it-works">
-            <div className="site-shell">
-                <div className="section-heading">
-                    <p className="eyebrow">How it works</p>
-                    <h2>Two sides of one transport network.</h2>
-                    <p>
-                        Passengers need confidence before they reserve. Drivers need
-                        control over who joins them and how much each planned trip can
-                        earn.
-                    </p>
-                </div>
-                <div className="workflow-grid">
-                    <StepList
-                        title="Reserve with confidence"
-                        body="Search routes, compare details, request a seat, and keep the trip record close."
-                        steps={passengerSteps}
-                        variant="passenger"
-                    />
-                    <StepList
-                        title="Earn from trips you already drive"
-                        body="Post planned travel, approve passengers, and make unused seats work harder."
-                        steps={driverSteps}
-                        variant="driver"
-                    />
-                </div>
-            </div>
-        </section>
-    );
+function PhoneMockup() {
+  return (
+    <div className="phone">
+      <div className="phone-top" />
+      <Logo compact />
+      <h3>Where to?</h3>
+
+      <div className="phone-field">
+        <small>From</small>
+        <strong>Harare</strong>
+      </div>
+
+      <div className="phone-field">
+        <small>To</small>
+        <strong>Bulawayo</strong>
+      </div>
+
+      <div className="phone-field">
+        <small>Travel Date</small>
+        <strong>Fri, 24 May 2024</strong>
+      </div>
+
+      <button className="phone-btn">Search Rides</button>
+
+      <p className="phone-label">Recommended for you</p>
+
+      <div className="mini-route">
+        <span>Harare → Bulawayo</span>
+        <strong>US$24</strong>
+      </div>
+
+      <div className="mini-route">
+        <span>Harare → Mutare</span>
+        <strong>US$18</strong>
+      </div>
+
+      <div className="phone-tabs">
+        <span>Home</span>
+        <span>My Rides</span>
+        <span>Messages</span>
+        <span>Profile</span>
+      </div>
+    </div>
+  );
 }
 
-function Safety() {
-    return (
-        <section
-            id="safety"
-            className="section section--band"
-            data-testid="safety-section"
-        >
-            <div className="site-shell safety-grid">
-                <div className="section-kicker">
-                    <p className="eyebrow">Safety and trust</p>
-                    <h2>Built around records, visibility, and accountable travel.</h2>
-                    <p>
-                        LetsGo Ride should be useful for passengers, drivers,
-                        families, operators, and regulators because every key trip
-                        detail is structured and easy to review.
-                    </p>
-                </div>
-                <div className="safety-list">
-                    {safetyItems.map((item) => (
-                        <div className="safety-item" key={item.title}>
-                            <div className="icon-box">
-                                <item.icon size={20} />
-                            </div>
-                            <div>
-                                <h3>{item.title}</h3>
-                                <p>{item.body}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </section>
-    );
+function ZimbabweScene() {
+  return (
+    <div className="zim-scene" aria-hidden="true">
+      <div className="map-plate">
+        <div className="city harare"><span />Harare</div>
+        <div className="city bulawayo"><span />Bulawayo</div>
+        <div className="city mutare"><span />Mutare</div>
+        <div className="city gweru"><span />Gweru</div>
+        <div className="city vicfalls"><span />Victoria Falls</div>
+
+        <svg className="route-lines" viewBox="0 0 720 420" fill="none">
+          <path d="M145 280 C240 250, 320 220, 420 185 C500 155, 560 145, 625 120" />
+          <path d="M420 185 C480 230, 545 252, 650 260" />
+          <path d="M315 235 C380 260, 450 285, 535 330" />
+          <path d="M145 280 C120 220, 105 150, 90 95" />
+        </svg>
+
+        <div className="moving-car car-one" />
+        <div className="moving-car car-two" />
+        <div className="moving-car car-three" />
+
+        <div className="route-card floating-card one">
+          <small>Popular route</small>
+          <strong>Harare → Bulawayo</strong>
+          <span>6h 30m · 3 seats left</span>
+          <b>US$24</b>
+        </div>
+
+        <div className="route-card floating-card two">
+          <small>Fast route</small>
+          <strong>Harare → Mutare</strong>
+          <span>3h 45m · 2 seats left</span>
+          <b>US$18</b>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function RoutesSection() {
-    return (
-        <section id="routes" className="section" data-testid="routes-section">
-            <div className="site-shell">
-                <div className="section-heading section-heading--split">
-                    <div>
-                        <p className="eyebrow">Zimbabwe routes</p>
-                        <h2>Start with the corridors people already travel.</h2>
-                    </div>
-                    <p>
-                        The launch network focuses on practical movement: major
-                        intercity routes first, then local city rides and errands
-                        where shared transport solves daily friction.
-                    </p>
-                </div>
-                <div className="route-grid">
-                    {routes.map((route) => (
-                        <article className="route-card" key={`${route.from}-${route.to}`}>
-                            <span>{route.type}</span>
-                            <h3>
-                                {route.from} <ArrowRight size={18} /> {route.to}
-                            </h3>
-                            <p>{route.detail}</p>
-                        </article>
-                    ))}
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function DriverEarning() {
-    return (
-        <section
-            id="drivers"
-            className="section section--driver"
-            data-testid="drivers-section"
-        >
-            <div className="site-shell driver-grid">
-                <div className="driver-copy">
-                    <p className="eyebrow">For drivers</p>
-                    <h2>Turn planned trips into trusted passenger income.</h2>
-                    <p>
-                        A driver already heading from Harare to Bulawayo should be
-                        able to list available seats, approve passengers, and recover
-                        fuel costs without losing control of the trip.
-                    </p>
-                    <a href="#access" className="button button--primary button--large">
-                        Become a Driver <ArrowRight size={18} />
-                    </a>
-                </div>
-                <div className="earning-board" aria-label="Driver earning model">
-                    <div className="earning-board__header">
-                        <div>
-                            <small>Example trip</small>
-                            <strong>Harare to Bulawayo</strong>
-                        </div>
-                        <Car size={24} />
-                    </div>
-                    <div className="earning-bars">
-                        <div style={{ "--height": "44%" }}>
-                            <span />
-                            <small>1 seat</small>
-                        </div>
-                        <div style={{ "--height": "68%" }}>
-                            <span />
-                            <small>2 seats</small>
-                        </div>
-                        <div style={{ "--height": "88%" }}>
-                            <span />
-                            <small>3 seats</small>
-                        </div>
-                    </div>
-                    <p>
-                        Earnings depend on actual route, price, vehicle capacity,
-                        passenger acceptance, and local operating costs.
-                    </p>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function Pricing() {
-    return (
-        <section id="pricing" className="section" data-testid="pricing-section">
-            <div className="site-shell pricing-grid">
-                <div className="section-kicker">
-                    <p className="eyebrow">Pricing and payment clarity</p>
-                    <h2>Honest payment support before advanced payments go live.</h2>
-                    <p>
-                        LetsGo Ride should never pretend a payment feature exists
-                        before the product can support it. The launch language stays
-                        clear: agree the fare, confirm the seat, keep proof where
-                        useful.
-                    </p>
-                </div>
-                <div className="payment-list">
-                    {paymentNotes.map((note, index) => (
-                        <div className="payment-item" key={note}>
-                            <span>{String(index + 1).padStart(2, "0")}</span>
-                            <p>{note}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function Vision() {
-    return (
-        <section id="vision" className="section section--vision" data-testid="vision-section">
-            <div className="site-shell vision-panel">
-                <p className="eyebrow">Long-term vision</p>
-                <h2>Built for Zimbabwe. Ready for Africa.</h2>
-                <p>
-                    The first mission is simple: help Zimbabweans move with more
-                    trust, better information, and safer passenger-driver matching.
-                    The same operating model can later support regional routes,
-                    formal partnerships, transparent service fees, and stronger
-                    transport data across African markets.
-                </p>
-                <div className="vision-stats">
-                    <div>
-                        <strong>Intercity</strong>
-                        <span>Shared seats on planned routes</span>
-                    </div>
-                    <div>
-                        <strong>Local</strong>
-                        <span>City rides and errand movement</span>
-                    </div>
-                    <div>
-                        <strong>Trust</strong>
-                        <span>Profiles, records, and reporting</span>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function Access() {
-    return (
-        <section id="access" className="section section--access" data-testid="access-section">
-            <div className="site-shell access-grid">
-                <div>
-                    <p className="eyebrow">Launch access</p>
-                    <h2>Passenger and driver access is being prepared.</h2>
-                    <p>
-                        The login, driver onboarding, and app download actions route
-                        here until production pages are ready. That keeps every
-                        website action intentional and avoids dead links.
-                    </p>
-                </div>
-                <div className="access-actions">
-                    <a href="#routes" className="button button--primary">
-                        Explore routes
-                    </a>
-                    <a href="#drivers" className="button button--quiet">
-                        Driver overview
-                    </a>
-                </div>
-            </div>
-        </section>
-    );
-}
-
-function Footer() {
-    return (
-        <footer id="support" className="site-footer" data-testid="footer">
-            <div className="site-shell footer-grid">
-                <div>
-                    <a href="#top" className="brand-mark">
-                        <span className="brand-mark__glyph">LR</span>
-                        <span>LetsGo Ride</span>
-                    </a>
-                    <p>
-                        Zimbabwe-first ride-sharing for intercity trips, local
-                        city rides, errands, and safe passenger-driver matching.
-                    </p>
-                    <a className="domain-link" href="https://letsgoride.site">
-                        letsgoride.site
-                    </a>
-                </div>
-                <nav aria-label="Footer">
-                    {footerLinks.map((link) => (
-                        <a key={link.label} href={link.href}>
-                            {link.label}
-                        </a>
-                    ))}
-                </nav>
-                <div id="legal" className="legal-block">
-                    <strong>Terms and privacy</strong>
-                    <p>
-                        Formal terms, privacy policy, support channels, and regulator
-                        notices should be published before public passenger and driver
-                        transactions are enabled.
-                    </p>
-                </div>
-            </div>
-        </footer>
-    );
+function AppPanel() {
+  return (
+    <div className="app-panel">
+      <div className="browser-bar">
+        <Logo compact />
+        <span>Find a Ride</span>
+        <span>Offer a Ride</span>
+        <span>Safety</span>
+        <button>Sign Up / Log In</button>
+      </div>
+      <div className="browser-body">
+        <div>
+          <p className="eyebrow">Verified riders</p>
+          <h3>Book a seat. Anywhere in Zimbabwe.</h3>
+          <p>Search routes, compare seats, and travel with confidence.</p>
+        </div>
+        <div className="browser-map">
+          <span>Harare</span>
+          <span>Bulawayo</span>
+          <span>Mutare</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Landing() {
-    return (
-        <main className="landing-page" data-testid="landing-page">
-            <Nav />
-            <Hero />
-            <PhonePreview />
-            <HowItWorks />
-            <Safety />
-            <RoutesSection />
-            <DriverEarning />
-            <Pricing />
-            <Vision />
-            <Access />
-            <Footer />
-        </main>
-    );
+  return (
+    <main className="letsgo-page">
+      <header className="site-nav">
+        <Logo />
+        <nav>
+          <a href="#routes">Find a Ride</a>
+          <a href="#drivers">Offer a Ride</a>
+          <a href="#how">How it Works</a>
+          <a href="#safety">Safety</a>
+          <a href="#vision">Vision</a>
+        </nav>
+        <div className="nav-actions">
+          <button className="country">ZW</button>
+          <button className="primary small">Sign Up / Log In</button>
+        </div>
+      </header>
+
+      <section className="hero section-shell">
+        <div className="hero-copy">
+          <div className="pill">Zimbabwe-first mobility network</div>
+          <h1>Book a seat. Anywhere in <span>Zimbabwe.</span></h1>
+          <p>
+            LetsGoRide connects passengers and verified drivers across intercity and local routes with clear prices, safer trip records, and a premium booking experience.
+          </p>
+          <div className="hero-actions">
+            <a className="primary" href="#routes">Find a Ride</a>
+            <a className="secondary" href="#drivers">Offer a Ride & Earn</a>
+          </div>
+          <div className="trust-row">
+            <span>Verified drivers</span>
+            <span>Clear upfront pricing</span>
+            <span>Deposit proof ready</span>
+          </div>
+        </div>
+
+        <div className="hero-visual">
+          <ZimbabweScene />
+          <PhoneMockup />
+        </div>
+      </section>
+
+      <section className="stats-strip">
+        {stats.map(([value, label]) => (
+          <div key={label}>
+            <strong>{value}</strong>
+            <span>{label}</span>
+          </div>
+        ))}
+      </section>
+
+      <section id="routes" className="routes-section section-shell">
+        <div className="section-head center">
+          <div className="pill">Route marketplace</div>
+          <h2>Search, compare, and move with confidence.</h2>
+          <p>Built for Harare, Bulawayo, Mutare, Gweru, Victoria Falls, and every growing route between them.</p>
+        </div>
+
+        <div className="route-grid">
+          <form className="search-card">
+            <label>From<input placeholder="Start city or location" /></label>
+            <label>To<input placeholder="Destination city" /></label>
+            <div className="split">
+              <label>Date<input value="Fri, 24 May" readOnly /></label>
+              <label>Seats<input value="1 seat" readOnly /></label>
+            </div>
+            <button type="button" className="primary full">Search routes</button>
+          </form>
+
+          <div className="route-list">
+            {routes.map((route) => (
+              <article className="big-route-card" key={route.from + route.to}>
+                <span>{route.tag}</span>
+                <h3>{route.from} → {route.to}</h3>
+                <p>{route.time} · {route.seats}</p>
+                <strong>{route.price}</strong>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="how" className="section-shell">
+        <div className="section-head">
+          <div className="pill">How LetsGoRide works</div>
+          <h2>Your journey in <span>4 simple steps.</span></h2>
+          <p>Search, choose, reserve, and travel safely with real people and clear trip details.</p>
+        </div>
+
+        <div className="step-grid">
+          {steps.map(([number, title, text]) => (
+            <article className="step-card" key={number}>
+              <b>{number}</b>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="drivers" className="driver-section section-shell">
+        <div className="driver-copy">
+          <div className="pill">Drive & earn</div>
+          <h2>Your empty seats can <span>earn.</span></h2>
+          <p>
+            Share planned trips, reduce travel costs, fill empty seats, and serve trusted riders across Zimbabwe.
+          </p>
+          <div className="hero-actions">
+            <a className="primary" href="#join">Become a Driver</a>
+            <a className="secondary" href="#routes">Post a Trip</a>
+          </div>
+        </div>
+
+        <div className="driver-scene">
+          <div className="earning-card">
+            <small>Today’s earnings</small>
+            <strong>US$48.60</strong>
+            <span>6 completed trips · 312 km</span>
+          </div>
+          <div className="car-platform">
+            <div className="car-shape" />
+            <div className="green-road" />
+          </div>
+          <div className="post-card">
+            <h3>Post a Trip</h3>
+            <p>Harare → Bulawayo</p>
+            <strong>3 seats · US$18</strong>
+            <button className="primary full">Post Trip</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="safety" className="safety-section section-shell">
+        <div className="section-head">
+          <div className="pill">Safety center</div>
+          <h2>Your safety. <span>Our mission.</span></h2>
+          <p>LetsGoRide must feel serious, secure, and ready for real transport operations.</p>
+        </div>
+
+        <div className="safety-grid">
+          <div className="shield-scene">
+            <div className="shield">✓</div>
+          </div>
+          {safety.map(([title, text]) => (
+            <article className="safety-card" key={title}>
+              <div className="icon-dot" />
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="vision" className="ecosystem section-shell">
+        <div className="section-head wide">
+          <div className="pill">Web plus mobile ecosystem</div>
+          <h2>One premium identity across website, iOS, Android, and admin.</h2>
+          <p>
+            The same logo, dark-green brand system, route marketplace, driver flows, support records, and trust layer should work across every screen.
+          </p>
+        </div>
+
+        <div className="device-showcase">
+          <div className="brand-tile">
+            <Logo />
+            <h3>Route command web</h3>
+            <p>Book trips, compare prices, and view routes on a cinematic desktop layout.</p>
+          </div>
+          <AppPanel />
+        </div>
+      </section>
+
+      <section id="join" className="final-cta section-shell">
+        <Logo />
+        <h2>Built for Zimbabwe. Ready for Africa.</h2>
+        <p>LetsGoRide starts with Zimbabwe and grows into a trusted movement for safer shared mobility across Africa.</p>
+        <a className="primary" href="#routes">Join the movement</a>
+      </section>
+
+      <footer className="site-footer">
+        <div>
+          <Logo />
+          <p>Intercity travel made simple. Trusted rides. Transparent prices.</p>
+        </div>
+        <div>
+          <h4>Company</h4>
+          <a>About Us</a>
+          <a>How it Works</a>
+          <a>Safety</a>
+        </div>
+        <div>
+          <h4>Support</h4>
+          <a>Help Center</a>
+          <a>Contact Us</a>
+          <a>Privacy Policy</a>
+        </div>
+        <div>
+          <h4>Contact</h4>
+          <a>+263 78 123 4567</a>
+          <a>support@letsgoride.co.zw</a>
+          <a>Harare, Zimbabwe</a>
+        </div>
+      </footer>
+    </main>
+  );
 }
