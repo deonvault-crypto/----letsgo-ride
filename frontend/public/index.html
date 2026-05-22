@@ -1,131 +1,151 @@
-<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LetsGo Ride Zimbabwe</title>
-  <meta name="description" content="LetsGo Ride Zimbabwe connects travellers with trusted drivers for safe, affordable shared journeys across Zimbabwe." />
-  <meta name="theme-color" content="#116c4d" />
+  <title>LetsGoRide Zimbabwe</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <a href="#main" class="skip-link">Skip to main content</a>
   <header class="header">
-    <div class="header-inner">
-      <a class="brand" href="#main">LetsGo Ride</a>
-      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-label="Open navigation menu">Menu</button>
-      <nav id="siteNav" class="site-nav nav-list">
-        <a class="nav-link" href="#main">Home</a>
-        <a class="nav-link" href="#services">Services</a>
-        <a class="nav-link" href="#about">About</a>
-        <a class="nav-link" href="#contact">Contact</a>
-      </nav>
-    </div>
+    <a class="brand" href="#home">Lets<span class="go-green">Go</span>Ride</a>
+    <button class="menu-btn" id="menuBtn">Menu</button>
+    <nav class="nav" id="nav">
+      <a href="#how">How it works</a>
+      <a href="#passengers">Passengers</a>
+      <a href="#drivers">Drivers</a>
+      <a href="#app">App</a>
+      <a href="#contact">Contact</a>
+    </nav>
   </header>
 
-  <main id="main">
-    <section class="hero">
+  <main>
+    <section class="hero" id="home">
       <div class="hero-copy">
-        <p class="hero-eyebrow">Clean, premium ride sharing for Zimbabwe</p>
-        <h1 class="hero-title">Travel smarter, share the journey.</h1>
-        <p class="hero-text">LetsGo Ride makes intercity travel simple, reliable, and affordable with trusted drivers across Zimbabwe.</p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="#contact">Get Started</a>
-          <a class="btn btn-secondary" href="#about">Learn More</a>
+        <div class="logo-spin" aria-label="LetsGoRide rotating logo"><div class="logo-face logo-front">Lets<span>Go</span>Ride</div><div class="logo-face logo-back">Lets<span>Go</span>Ride</div></div>
+        <h1>Travel across Zimbabwe with calm, modern ride sharing.</h1>
+        <p class="lead">
+          A clean mobility platform for passengers and drivers. Book local trips,
+          join longer routes, and move with comfort, clarity, and trust.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="#app">Get app updates</a>
+          <a class="btn secondary" href="#drivers">Become a driver</a>
         </div>
       </div>
-      <div class="hero-cards">
-        <article class="hero-card">
-          <h2>Why LetsGo Ride?</h2>
-          <ul>
-            <li>Verified drivers and vetted vehicles</li>
-            <li>Flexible routes across major cities</li>
-            <li>Transparent pricing and easy booking</li>
-          </ul>
-        </article>
-      </div>
-    </section>
 
-    <section id="services" class="section">
-      <div class="container">
-        <h2>Premium ride sharing foundation</h2>
-        <p class="section-subtitle">A modern web presence built for trust, clarity, and conversion. This foundation is ready for manual editing and brand expansion.</p>
-        <div class="features-grid">
-          <article class="feature-card">
-            <h3>Driver connections</h3>
-            <p>Match with reliable drivers heading to your destination.</p>
-          </article>
-          <article class="feature-card">
-            <h3>Flexible booking</h3>
-            <p>Choose departure times and seat availability that suit your journey.</p>
-          </article>
-          <article class="feature-card">
-            <h3>Secure support</h3>
-            <p>Built for clear rider communication and safe shared travel.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section id="about" class="section section-alt">
-      <div class="container about-grid">
-        <div>
-          <h2>About LetsGo Ride</h2>
-          <p>LetsGo Ride Zimbabwe delivers a clean, trustworthy carpooling experience for travellers and drivers. Our focus is on dependable service, clear fares, and comfortable journeys between Zimbabwe's major cities.</p>
-          <p>Start with a simple web presence, then add booking, account management, and driver tools as the platform grows.</p>
-          <ul class="about-list">
-            <li>Designed for fast editing and brand updates</li>
-            <li>Responsive layout for desktop and mobile</li>
-            <li>Minimal styling for a premium, white-first site</li>
-          </ul>
-        </div>
-        <div class="about-image">
-          <img src="about-image.jpg" alt="Scenic Zimbabwe roadway with a premium travel feel" />
-        </div>
-      </div>
-    </section>
-
-    <section id="contact" class="section">
-      <div class="container">
-        <h2>Contact the team</h2>
-        <p class="section-subtitle">Ready to turn this website into a live service? Send us a message and we will follow up with the next steps.</p>
-        <div class="contact-grid">
-          <form id="contactForm" class="contact-form" novalidate>
-            <label for="name">Full name</label>
-            <input type="text" id="name" name="name" placeholder="Your name" required />
-            <label for="email">Email address</label>
-            <input type="email" id="email" name="email" placeholder="you@example.com" required />
-            <label for="message">Message</label>
-            <textarea id="message" name="message" placeholder="Tell us what you need" rows="5" required></textarea>
-            <div class="form-feedback" id="formFeedback" aria-live="polite"></div>
-            <button class="btn btn-primary" type="submit">Send message</button>
-          </form>
-          <div class="contact-panel">
-            <article class="feature-card">
-              <h3>Premium support</h3>
-              <p>We help you launch a clean website preview on localhost and keep the design simple for quick updates.</p>
-            </article>
-            <article class="feature-card">
-              <h3>Local preview</h3>
-              <p>Run <code>npm.cmd run build</code> then <code>npm.cmd run dev</code> to preview the site locally on port 3000.</p>
-            </article>
+      <div class="hero-visual">
+        <div class="image-card">
+          <div class="phone-card">
+            <span class="mini-label">Ride request</span>
+            <strong>Harare → Bulawayo</strong>
+            <small>2 seats available · Driver verified</small>
           </div>
         </div>
       </div>
     </section>
+
+    <section class="section" id="how">
+      <p class="label">How it works</p>
+      <h2>Simple rides in three clear steps</h2>
+      <div class="grid">
+        <article class="card"><span>01</span><h3>Choose your route</h3><p>Pick a local trip or longer route and send your request.</p></article>
+        <article class="card"><span>02</span><h3>Match with a driver</h3><p>Connect with available drivers using clear route details.</p></article>
+        <article class="card"><span>03</span><h3>Ride with confidence</h3><p>Travel with simple support, clear info, and safer records.</p></article>
+      </div>
+    </section>
+
+    <section class="section split" id="passengers">
+      <div>
+        <p class="label">Passenger benefits</p>
+        <h2>Comfort, clarity, and local service.</h2>
+      </div>
+      <div class="grid two">
+        <article class="card"><h3>Clear pricing</h3><p>Know the fare before you ride. No confusing hidden surprises.</p></article>
+        <article class="card"><h3>Reliable routes</h3><p>Find daily and regional trips with better organisation.</p></article>
+      </div>
+    </section>
+
+    <section class="section split" id="drivers">
+      <div>
+        <p class="label">Driver benefits</p>
+        <h2>Earn from routes you already drive.</h2>
+      </div>
+      <div class="grid two">
+        <article class="card"><h3>More organised requests</h3><p>Reduce random calls and receive cleaner trip interest.</p></article>
+        <article class="card"><h3>Driver support</h3><p>Join early and prepare your driver profile before launch.</p></article>
+      </div>
+    </section>
+
+    <section class="section app-section" id="app">
+      <div>
+        <p class="label">App coming soon</p>
+        <h2>The Lets<span class="go-green">Go</span>Ride app is being prepared.</h2>
+        <p>Passengers and drivers will get a smoother booking flow, route updates, safer trip records, and app-based support.</p>
+      </div>
+      <div class="store-buttons real-store-badges">
+  <a class="real-store-link" href="#contact" aria-label="App Store coming soon">
+    <span>Coming soon</span>
+    <img src="assets/app-store-badge.svg" alt="Download on the App Store badge">
+  </a>
+  <a class="real-store-link" href="#contact" aria-label="Google Play coming soon">
+    <span>Coming soon</span>
+    <img src="assets/google-play-badge.svg" alt="Get it on Google Play badge">
+  </a>
+</div>
+    </section>
+
+    <section class="section trust">
+      <p class="label">Why it feels safer</p>
+      <h2>Built for real roads and real people.</h2>
+      <div class="badges">
+        <span>Verified drivers</span>
+        <span>Clear route details</span>
+        <span>Trip sharing support</span>
+        <span>Driver onboarding</span>
+      </div>
+    </section>
+
+    <section class="section contact" id="contact">
+      <div>
+        <p class="label">Contact</p>
+        <h2>Talk with our team</h2>
+        <p>Email: hello@Lets<span class="go-green">Go</span>Ride.site</p>
+        <p>Phone: +263 77 123 4567</p>
+      </div>
+      <form id="contactForm">
+        <input id="name" placeholder="Your name" />
+        <input id="email" placeholder="Your email or phone" />
+        <textarea id="message" placeholder="Tell us your route or question"></textarea>
+        <button class="btn primary" type="submit">Send WhatsApp message</button>
+      </form>
+    </section>
   </main>
 
   <footer class="footer">
-    <div class="container footer-inner">
-      <div class="footer-left">
-        <p>Built by LetsGo Ride.</p>
-      </div>
-      <div class="footer-right">
-        <p>&copy; <span id="year"></span> LetsGo Ride Zimbabwe.</p>
-      </div>
+    <div>
+      <strong>Lets<span class="go-green">Go</span>Ride</strong>
+      <p>Clean, calm, and practical rides for Zimbabwe.</p>
     </div>
+    <div class="footer-links">
+  <a href="privacy.html">Privacy Policy</a>
+  <a href="terms.html">Terms</a>
+  <a href="support.html">Support</a>
+</div>
+<p>Built by Lets<span class="go-green">Go</span>Ride.</p>
   </footer>
 
   <script src="scripts.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
