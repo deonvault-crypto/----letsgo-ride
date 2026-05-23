@@ -6,7 +6,7 @@ import { DriverCard } from "../../../components/cards/DriverCard";
 import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
 import { AppButton } from "../../../components/ui/AppButton";
-import { AppInput } from "../../../components/ui/AppInput";
+import { ProfileCompletionModal } from "../../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
@@ -23,6 +23,7 @@ export default function DriverTripDetailScreen() {
   const [ride, setRide] = useState<Ride | null>(null);
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const [phone, setPhone] = useState("");
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -46,6 +47,7 @@ export default function DriverTripDetailScreen() {
   async function setStatus(requestId: string, status: RideRequest["status"]) {
     if (status === "confirmed" && !user?.phone) {
       setError("Add your phone number before accepting a passenger request.");
+      setShowPhoneModal(true);
       return;
     }
     await updateRideRequest(requestId, status);
@@ -55,6 +57,7 @@ export default function DriverTripDetailScreen() {
   async function savePhone() {
     await updateCurrentUser({ phone });
     await reloadUser();
+    setShowPhoneModal(false);
   }
 
   if (loading) {
@@ -75,6 +78,13 @@ export default function DriverTripDetailScreen() {
 
   return (
     <Screen title="Trip" navRole="driver">
+      <ProfileCompletionModal
+        visible={showPhoneModal}
+        phone={phone}
+        onChangePhone={setPhone}
+        onSave={savePhone}
+        onClose={() => setShowPhoneModal(false)}
+      />
       <View style={styles.card}>
         <StatusBadge label={formatStatus(ride.status)} tone="success" />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
@@ -89,8 +99,7 @@ export default function DriverTripDetailScreen() {
             Add your phone number to continue. Passengers and drivers need a
             reachable number for pickup coordination and trip safety.
           </Text>
-          <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-          <AppButton title="Save phone number" variant="secondary" disabled={phone.length < 6} onPress={savePhone} />
+          <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
         </View>
       ) : null}
       <Text style={styles.sectionTitle}>Passenger requests</Text>

@@ -19,7 +19,7 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
       </View>
       <View style={styles.row}>
         <MaterialCommunityIcons name="account-check-outline" size={18} color={colors.primaryGreen} />
-        <Text style={styles.driver}>{ride.driver_name} · {ride.driver_rating.toFixed(1)}</Text>
+        <Text style={styles.driver}>{ride.driver_name} - {ride.driver_rating.toFixed(1)}</Text>
       </View>
       <View style={styles.row}>
         <MaterialCommunityIcons name="car-outline" size={18} color={colors.mutedText} />

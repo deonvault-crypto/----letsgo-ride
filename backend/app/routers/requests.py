@@ -27,7 +27,7 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
         "created_at": timestamp,
         "updated_at": timestamp,
         **payload.model_dump(),
-        "passenger_name": payload.passenger_name or user.get("name") or "Passenger account",
+        "passenger_name": payload.passenger_name or user.get("name") or "Passenger",
         "passenger_phone": payload.passenger_phone or user.get("phone"),
     }
     return api_success(await database.insert_one("ride_requests", request))

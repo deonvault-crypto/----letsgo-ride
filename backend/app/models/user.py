@@ -51,4 +51,6 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = Field(default=None, min_length=6)
     email: Optional[str] = Field(default=None, min_length=5)
     city: Optional[str] = None
+    bio: Optional[str] = None
+    travel_preferences: Optional[str] = None
     role: Optional[UserRole] = None

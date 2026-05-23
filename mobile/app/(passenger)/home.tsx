@@ -6,24 +6,26 @@ import { RouteSearchCard } from "../../components/cards/RouteSearchCard";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
+import { PopularRouteChips } from "../../components/ui/PopularRouteChips";
 import { Screen } from "../../components/ui/Screen";
+import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
-import { zimbabweRoutes } from "../../constants/routes";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useRides } from "../../hooks/useRides";
+import { firstNameOrFallback } from "../../utils/displayName";
 
 export default function PassengerHomeScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
   const { rides, loading, error, reload } = useRides();
-  const passengerName = user?.name && user.name !== "Passenger account" ? user.name : "Passenger";
+  const passengerName = firstNameOrFallback(user?.name);
 
   return (
-    <Screen title="Passenger" navRole="passenger">
+    <Screen navRole="passenger">
       <View style={styles.hero}>
-        <Text style={styles.kicker}>Passenger account</Text>
-        <Text style={styles.title}>Good day, {passengerName}</Text>
+        <StatusBadge label="Passenger" tone="neutral" />
+        <Text style={styles.title}>Hi, {passengerName}</Text>
         <Text style={styles.body}>
           Search verified shared rides across Zimbabwe and reserve a seat with
           clear trip details.
@@ -34,21 +36,14 @@ export default function PassengerHomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Popular routes</Text>
-        <View style={styles.chips}>
-          {zimbabweRoutes.slice(0, 5).map((route) => (
-            <AppButton
-              key={`${route.origin}-${route.destination}`}
-              title={`${route.origin} to ${route.destination}`}
-              variant="secondary"
-              onPress={() =>
-                router.push({
-                  pathname: "/(passenger)/results",
-                  params: { origin: route.origin, destination: route.destination, seats: "1" },
-                } as never)
-              }
-            />
-          ))}
-        </View>
+        <PopularRouteChips
+          onSelect={(origin, destination) =>
+            router.push({
+              pathname: "/(passenger)/results",
+              params: { origin, destination, seats: "1" },
+            } as never)
+          }
+        />
       </View>
 
       <View style={styles.section}>
@@ -75,12 +70,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.md,
   },
-  kicker: {
-    color: colors.primaryGreen,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    fontSize: 12,
-  },
   title: {
     color: colors.whiteText,
     fontWeight: "900",
@@ -97,9 +86,6 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontSize: 19,
     fontWeight: "900",
-  },
-  chips: {
-    gap: spacing.sm,
   },
   rowBetween: {
     flexDirection: "row",

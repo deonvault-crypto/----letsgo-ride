@@ -6,6 +6,8 @@ export type User = {
   email?: string;
   name: string;
   city?: string;
+  bio?: string;
+  travel_preferences?: string;
   role: UserRole;
   rating?: number;
   token?: string;

@@ -66,7 +66,7 @@ export async function getCurrentUser() {
   return requestData<User>({ method: "GET", url: "/auth/me" });
 }
 
-export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "role">>) {
+export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "role">>) {
   return requestData<User>({ method: "PATCH", url: "/auth/me", data });
 }
 

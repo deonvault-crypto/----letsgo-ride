@@ -51,7 +51,7 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
     user = {
         "id": new_id(),
         "phone": phone,
-        "name": name or "Passenger account",
+        "name": name or "LetsGo Ride user",
         "city": "Harare",
         "role": role,
         "rating": 4.8,

@@ -44,9 +44,9 @@ export function Screen({
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <LinearGradient
-        colors={[colors.charcoal, "#101A15", colors.black]}
+        colors={[colors.appBackground, "#F7F2E8", "#EFE8DC"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -68,7 +68,7 @@ export function Screen({
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.charcoal,
+    backgroundColor: colors.appBackground,
   },
   keyboard: {
     flex: 1,

@@ -45,7 +45,7 @@ export function AppButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? colors.charcoal : colors.whiteText} />
+        <ActivityIndicator color={variant === "primary" ? colors.card : colors.whiteText} />
       ) : (
         <View style={styles.content}>
           {icon}
@@ -100,6 +100,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   primaryText: {
-    color: colors.charcoal,
+    color: colors.card,
   },
 });

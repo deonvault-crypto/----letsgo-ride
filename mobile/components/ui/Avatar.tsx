@@ -29,7 +29,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(105,240,174,0.35)",
   },
   text: {
-    color: colors.whiteText,
+    color: colors.primaryGreen,
     fontWeight: "900",
   },
 });

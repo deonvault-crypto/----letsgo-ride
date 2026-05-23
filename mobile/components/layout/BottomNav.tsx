@@ -21,6 +21,10 @@ const driverItems = [
   { label: "Profile", icon: "account-outline", href: "/(shared)/profile" },
 ];
 
+function navPath(href: string) {
+  return href.replace("/(passenger)", "").replace("/(driver)", "").replace("/(shared)", "");
+}
+
 export function BottomNav({ role }: { role: NavRole }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -29,12 +33,13 @@ export function BottomNav({ role }: { role: NavRole }) {
   return (
     <View style={styles.wrap}>
       {items.map((item) => {
-        const active = pathname.includes(item.href.replace("/(", "").replace(")", ""));
+        const activePath = navPath(item.href);
+        const active = pathname === activePath || pathname.endsWith(activePath);
         return (
           <Pressable
             key={item.label}
             onPress={() => router.push(item.href as never)}
-            style={styles.item}
+            style={[styles.item, active && styles.activeItem]}
           >
             <MaterialCommunityIcons
               name={item.icon as never}
@@ -59,14 +64,14 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "rgba(26,31,35,0.96)",
+    backgroundColor: "rgba(255,253,248,0.96)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
     shadowColor: colors.black,
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
   item: {
@@ -74,6 +79,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     minWidth: 58,
+    minHeight: 48,
+    borderRadius: 18,
+    paddingHorizontal: spacing.sm,
+  },
+  activeItem: {
+    backgroundColor: "rgba(17,139,68,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(17,139,68,0.34)",
+    shadowColor: colors.primaryGreen,
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
   },
   label: {
     color: colors.mutedText,
@@ -81,6 +98,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   activeLabel: {
-    color: colors.whiteText,
+    color: colors.primaryGreen,
   },
 });

@@ -6,6 +6,7 @@ import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
 import { AppButton } from "../../../components/ui/AppButton";
 import { AppInput } from "../../../components/ui/AppInput";
+import { ProfileCompletionModal } from "../../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
@@ -26,6 +27,7 @@ export default function RequestSeatScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -43,13 +45,14 @@ export default function RequestSeatScreen() {
   async function submit() {
     if (!user?.phone) {
       setError("Add your phone number before booking a seat.");
+      setShowPhoneModal(true);
       return;
     }
     try {
       setSaving(true);
       await requestSeat({
         ride_id: id,
-        passenger_name: user?.name || "Passenger account",
+        passenger_name: user?.name || "Passenger",
         passenger_phone: user.phone,
         passenger_note: note,
         seats: 1,
@@ -68,6 +71,7 @@ export default function RequestSeatScreen() {
       setError("");
       await updateCurrentUser({ phone });
       await reloadUser();
+      setShowPhoneModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save phone number.");
     } finally {
@@ -85,12 +89,20 @@ export default function RequestSeatScreen() {
 
   return (
     <Screen title="Request" navRole="passenger">
+      <ProfileCompletionModal
+        visible={showPhoneModal}
+        phone={phone}
+        saving={saving}
+        onChangePhone={setPhone}
+        onSave={savePhone}
+        onClose={() => setShowPhoneModal(false)}
+      />
       {error ? <ErrorState message={error} /> : null}
       {success ? (
         <View style={styles.success}>
           <StatusBadge label="Request submitted" tone="success" />
           <Text style={styles.title}>Your seat request is pending.</Text>
-          <Text style={styles.body}>The driver can confirm or decline the request from their dashboard.</Text>
+          <Text style={styles.body}>The driver can confirm or decline the request in the driver app.</Text>
           <AppButton title="View my trips" onPress={() => router.replace("/(passenger)/my-trips" as never)} />
         </View>
       ) : (
@@ -113,8 +125,7 @@ export default function RequestSeatScreen() {
                 Add your phone number to continue. Passengers and drivers need a
                 reachable number for pickup coordination and trip safety.
               </Text>
-              <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-              <AppButton title="Save phone number" loading={saving} disabled={phone.length < 6} onPress={savePhone} />
+              <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
             </View>
           ) : null}
           <AppInput

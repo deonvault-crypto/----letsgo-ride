@@ -1,33 +1,92 @@
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { AppButton } from "../../components/ui/AppButton";
+import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
+import { updateCurrentUser } from "../../services/authService";
+import { displayNameOrFallback, firstNameOrFallback, isGenericAccountName } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user } = useCurrentUser();
+  const { user, reload } = useCurrentUser();
   const role = user?.role === "driver" ? "driver" : "passenger";
-  const displayName = user?.name || "Passenger account";
+  const displayName = displayNameOrFallback(user?.name);
+  const firstName = firstNameOrFallback(user?.name);
   const contact = user?.phone || user?.email || "Add phone or email";
   const city = user?.city || "Zimbabwe";
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [profileCity, setProfileCity] = useState("");
+  const [bio, setBio] = useState("");
+  const [travelPreferences, setTravelPreferences] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setName(isGenericAccountName(user.name) ? "" : user.name || "");
+    setEmail(user.email || "");
+    setPhone(user.phone || "");
+    setProfileCity(user.city || "");
+    setBio(user.bio || "");
+    setTravelPreferences(user.travel_preferences || "");
+  }, [user]);
+
+  async function saveProfile() {
+    try {
+      setSaving(true);
+      setMessage("");
+      await updateCurrentUser({
+        name: name.trim() || undefined,
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        city: profileCity.trim() || undefined,
+        bio: bio.trim() || undefined,
+        travel_preferences: travelPreferences.trim() || undefined,
+      });
+      await reload();
+      setMessage("Profile updated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to update profile.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <Screen title="Profile" navRole={role}>
+    <Screen navRole={role}>
       <View style={styles.profileCard}>
         <Avatar name={displayName} />
         <View style={styles.profileText}>
-          <Text style={styles.name}>{displayName}</Text>
+          <Text style={styles.name}>Hi, {firstName}</Text>
           <Text style={styles.meta}>{contact}</Text>
           <Text style={styles.meta}>{city} - {formatStatus(role)} account</Text>
         </View>
         <StatusBadge label={formatStatus(role)} tone="success" />
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.title}>Profile details</Text>
+        <Text style={styles.body}>
+          Your phone number is used for pickup coordination and trip safety. It
+          is not shown in public ride browsing.
+        </Text>
+        <AppInput label="Full name" value={name} onChangeText={setName} />
+        <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+        <AppInput label="City" value={profileCity} onChangeText={setProfileCity} />
+        <AppInput label="About" value={bio} onChangeText={setBio} multiline />
+        <AppInput label="Travel preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline />
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+        <AppButton title="Save profile" loading={saving} onPress={saveProfile} />
       </View>
       <View style={styles.card}>
         <Text style={styles.title}>Passenger and driver modes</Text>
@@ -99,6 +158,10 @@ const styles = StyleSheet.create({
   body: {
     color: colors.mutedText,
     lineHeight: 21,
+  },
+  message: {
+    color: colors.primaryGreen,
+    fontWeight: "800",
   },
   links: {
     gap: spacing.sm,

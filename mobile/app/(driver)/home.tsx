@@ -9,13 +9,16 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useDriver } from "../../hooks/useDriver";
 import { useDriverRequests } from "../../hooks/useDriverRequests";
 import { useRides } from "../../hooks/useRides";
+import { firstNameOrFallback } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
 
 export default function DriverHomeScreen() {
   const router = useRouter();
+  const { user } = useCurrentUser();
   const { driver } = useDriver();
   const { rides, loading, error, reload } = useRides();
   const {
@@ -30,11 +33,13 @@ export default function DriverHomeScreen() {
       ? "Suspended"
       : formatStatus(driver?.verification_status || driver?.status || "pending_verification");
 
+  const firstName = firstNameOrFallback(user?.name);
+
   return (
-    <Screen title="Driver" navRole="driver">
+    <Screen navRole="driver">
       <View style={styles.hero}>
         <StatusBadge label={driverStatus} tone={driver?.verified ? "success" : driver?.status === "suspended" ? "danger" : "warning"} />
-        <Text style={styles.title}>Drive planned routes. Earn from empty seats.</Text>
+        <Text style={styles.title}>Hi, {firstName}</Text>
         <Text style={styles.body}>Post trips, review passenger requests, and keep clear records for each ride.</Text>
         <AppButton title="Post Trip" onPress={() => router.push("/(driver)/post-trip" as never)} />
         <AppButton title="Driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />

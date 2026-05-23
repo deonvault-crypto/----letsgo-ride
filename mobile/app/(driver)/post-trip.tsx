@@ -4,8 +4,11 @@ import { useRouter } from "expo-router";
 
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
+import { LocationPicker } from "../../components/ui/LocationPicker";
+import { ProfileCompletionModal } from "../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { TravelDatePicker } from "../../components/ui/TravelDatePicker";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
@@ -31,6 +34,7 @@ export default function PostTripScreen() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [phone, setPhone] = useState("");
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
 
   useEffect(() => {
     async function loadVerification() {
@@ -49,6 +53,7 @@ export default function PostTripScreen() {
       setError("");
       await updateCurrentUser({ phone });
       await reloadUser();
+      setShowPhoneModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save phone number.");
     } finally {
@@ -59,6 +64,7 @@ export default function PostTripScreen() {
   async function submit() {
     if (!user?.phone) {
       setError("Add your phone number before posting a trip.");
+      setShowPhoneModal(true);
       return;
     }
     if (verification?.verification_status !== "verified") {
@@ -93,9 +99,17 @@ export default function PostTripScreen() {
   }
 
   return (
-    <Screen title="Post" navRole="driver">
+    <Screen navRole="driver">
       <Text style={styles.title}>Post a trip</Text>
       <Text style={styles.body}>Add clear route, seat, price, and vehicle details before accepting passengers.</Text>
+      <ProfileCompletionModal
+        visible={showPhoneModal}
+        phone={phone}
+        saving={saving}
+        onChangePhone={setPhone}
+        onSave={savePhone}
+        onClose={() => setShowPhoneModal(false)}
+      />
       {userError ? (
         <View style={styles.notice}>
           <Text style={styles.body}>Sign in before posting rides as a driver.</Text>
@@ -109,8 +123,7 @@ export default function PostTripScreen() {
             Add your phone number to continue. Passengers and drivers need a
             reachable number for pickup coordination and trip safety.
           </Text>
-          <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-          <AppButton title="Save phone number" loading={saving} disabled={phone.length < 6} onPress={savePhone} />
+          <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
         </View>
       ) : null}
       {user?.phone && verification?.verification_status !== "verified" ? (
@@ -124,9 +137,9 @@ export default function PostTripScreen() {
           <AppButton title="Open driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
         </View>
       ) : null}
-      <AppInput label="Origin" value={origin} onChangeText={setOrigin} />
-      <AppInput label="Destination" value={destination} onChangeText={setDestination} />
-      <AppInput label="Date" value={date} onChangeText={setDate} />
+      <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} />
+      <LocationPicker label="Destination" value={destination} onChangeText={setDestination} />
+      <TravelDatePicker label="Date" value={date} onChangeText={setDate} />
       <AppInput label="Time" value={time} onChangeText={setTime} />
       <AppInput label="Available seats" value={seats} onChangeText={setSeats} keyboardType="number-pad" />
       <AppInput label="Price USD per seat" value={price} onChangeText={setPrice} keyboardType="number-pad" />

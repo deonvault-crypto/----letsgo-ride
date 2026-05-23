@@ -25,8 +25,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   success: {
-    backgroundColor: "rgba(0,200,83,0.12)",
-    borderColor: "rgba(0,200,83,0.4)",
+    backgroundColor: "rgba(17,139,68,0.1)",
+    borderColor: "rgba(17,139,68,0.25)",
   },
   warning: {
     backgroundColor: "rgba(255,176,32,0.12)",
