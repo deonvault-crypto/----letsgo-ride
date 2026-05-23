@@ -1,0 +1,36 @@
+from fastapi import APIRouter
+
+from app.database import database
+from app.models.report import WaitlistBody
+from app.utils import api_success, new_id, now_iso
+
+
+router = APIRouter(prefix="/waitlist", tags=["waitlist"])
+
+
+async def _create(collection: str, payload: WaitlistBody):
+    timestamp = now_iso()
+    item = {
+        "id": new_id(),
+        "status": "new",
+        "is_demo": False,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        **payload.model_dump(),
+    }
+    return api_success(await database.insert_one(collection, item))
+
+
+@router.post("")
+async def waitlist(payload: WaitlistBody):
+    return await _create("waitlist", payload)
+
+
+@router.post("/passenger-interest")
+async def passenger_interest(payload: WaitlistBody):
+    return await _create("passenger_interests", payload)
+
+
+@router.post("/driver-application")
+async def driver_application(payload: WaitlistBody):
+    return await _create("driver_applications", payload)

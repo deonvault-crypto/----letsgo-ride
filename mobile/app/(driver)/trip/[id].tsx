@@ -1,0 +1,121 @@
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
+
+import { DriverCard } from "../../../components/cards/DriverCard";
+import { ErrorState } from "../../../components/states/ErrorState";
+import { LoadingState } from "../../../components/states/LoadingState";
+import { AppButton } from "../../../components/ui/AppButton";
+import { Screen } from "../../../components/ui/Screen";
+import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { colors } from "../../../constants/colors";
+import { spacing } from "../../../constants/spacing";
+import { driverRideRequests, getRide, updateRideRequest } from "../../../services/ridesService";
+import { Ride, RideRequest } from "../../../types/ride.types";
+
+export default function DriverTripDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [ride, setRide] = useState<Ride | null>(null);
+  const [requests, setRequests] = useState<RideRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    try {
+      setLoading(true);
+      const [rideData, requestData] = await Promise.all([getRide(id), driverRideRequests()]);
+      setRide(rideData);
+      setRequests(requestData.filter((request) => request.ride_id === id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load trip.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (id) load();
+  }, [id]);
+
+  async function setStatus(requestId: string, status: RideRequest["status"]) {
+    await updateRideRequest(requestId, status);
+    await load();
+  }
+
+  if (loading) {
+    return (
+      <Screen title="Trip" navRole="driver">
+        <LoadingState label="Loading trip..." />
+      </Screen>
+    );
+  }
+
+  if (error || !ride) {
+    return (
+      <Screen title="Trip" navRole="driver">
+        <ErrorState message={error || "Trip not found."} />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen title="Trip" navRole="driver">
+      <View style={styles.card}>
+        <StatusBadge label={ride.status.toUpperCase()} tone="success" />
+        <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
+        <Text style={styles.body}>{ride.date} at {ride.time}</Text>
+        <Text style={styles.body}>{ride.available_seats} seats available · US${ride.price_usd} per seat</Text>
+      </View>
+      <DriverCard name={ride.driver_name} rating={ride.driver_rating} vehicle={ride.vehicle} />
+      <Text style={styles.sectionTitle}>Passenger requests</Text>
+      {requests.length === 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.body}>No passenger requests yet.</Text>
+        </View>
+      ) : requests.map((request) => (
+        <View key={request.id} style={styles.card}>
+          <StatusBadge label={request.status.toUpperCase()} tone={request.status === "confirmed" ? "success" : "warning"} />
+          <Text style={styles.requestName}>{request.passenger_name}</Text>
+          <Text style={styles.body}>{request.passenger_note || "No note from passenger."}</Text>
+          <View style={styles.actions}>
+            <AppButton title="Approve" onPress={() => setStatus(request.id, "confirmed")} />
+            <AppButton title="Decline" variant="ghost" onPress={() => setStatus(request.id, "declined")} />
+          </View>
+        </View>
+      ))}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  title: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 28,
+  },
+  body: {
+    color: colors.mutedText,
+    lineHeight: 21,
+  },
+  sectionTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 20,
+  },
+  requestName: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 18,
+  },
+  actions: {
+    gap: spacing.sm,
+  },
+});

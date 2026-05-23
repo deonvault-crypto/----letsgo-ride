@@ -1,0 +1,13 @@
+﻿LetsGo Ride preserved brand assets - 2026-05-23 13:24:14 +02:00
+Website folder marked DO-NOT-TOUCH for rebuild: C:\Users\mmm\----letsgo-ride\frontend
+
+C:\Users\mmm\----letsgo-ride\frontend\public\about-image.jpg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\about-image.jpg
+C:\Users\mmm\----letsgo-ride\frontend\public\assets\app-store-badge.svg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\assets\app-store-badge.svg
+C:\Users\mmm\----letsgo-ride\frontend\public\assets\car-icon.svg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\assets\car-icon.svg
+C:\Users\mmm\----letsgo-ride\frontend\public\assets\google-play-badge.svg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\assets\google-play-badge.svg
+C:\Users\mmm\----letsgo-ride\frontend\public\background.jpg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\background.jpg
+C:\Users\mmm\----letsgo-ride\frontend\public\letsgoride\about-image.jpg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\letsgoride\about-image.jpg
+C:\Users\mmm\----letsgo-ride\frontend\public\letsgoride\background.jpg -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\frontend\public\letsgoride\background.jpg
+C:\Users\mmm\Desktop\letsgoride-website.zip -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\Desktop\letsgoride-website.zip
+C:\Users\mmm\Desktop\letsgo_ride_clean_logo_assets.zip -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\Desktop\letsgo_ride_clean_logo_assets.zip
+C:\Users\mmm\Desktop\letsgo_sharktank_visual_patch.zip -> C:\Users\mmm\----letsgo-ride\_preserved_brand_assets\Desktop\letsgo_sharktank_visual_patch.zip

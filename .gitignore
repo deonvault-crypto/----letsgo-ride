@@ -88,3 +88,15 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# LetsGoRide local/build files
+node_modules/
+.expo/
+.venv/
+__pycache__/
+*.pyc
+.env
+letsgoride-mobile-backup-*/
+mobile_backup_*/
+_archive/
+frontend/public/*.backup-*

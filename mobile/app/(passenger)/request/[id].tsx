@@ -1,0 +1,121 @@
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+
+import { ErrorState } from "../../../components/states/ErrorState";
+import { LoadingState } from "../../../components/states/LoadingState";
+import { AppButton } from "../../../components/ui/AppButton";
+import { AppInput } from "../../../components/ui/AppInput";
+import { Screen } from "../../../components/ui/Screen";
+import { StatusBadge } from "../../../components/ui/StatusBadge";
+import { colors } from "../../../constants/colors";
+import { spacing } from "../../../constants/spacing";
+import { getRide, requestSeat } from "../../../services/ridesService";
+import { Ride } from "../../../types/ride.types";
+
+export default function RequestSeatScreen() {
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [ride, setRide] = useState<Ride | null>(null);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setRide(await getRide(id));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unable to load ride.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (id) load();
+  }, [id]);
+
+  async function submit() {
+    try {
+      setSaving(true);
+      await requestSeat({
+        ride_id: id,
+        passenger_name: "Guest Passenger",
+        passenger_note: note,
+        seats: 1,
+      });
+      setSuccess(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to request seat.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Screen title="Request" navRole="passenger">
+        <LoadingState label="Preparing request..." />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen title="Request" navRole="passenger">
+      {error ? <ErrorState message={error} /> : null}
+      {success ? (
+        <View style={styles.success}>
+          <StatusBadge label="Request submitted" tone="success" />
+          <Text style={styles.title}>Your seat request is pending.</Text>
+          <Text style={styles.body}>The driver can confirm or decline the request from their dashboard.</Text>
+          <AppButton title="View my trips" onPress={() => router.replace("/(passenger)/my-trips" as never)} />
+        </View>
+      ) : (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
+            <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
+            <Text style={styles.body}>Seat request for 1 passenger.</Text>
+          </View>
+          <AppInput
+            label="Message to driver"
+            value={note}
+            onChangeText={setNote}
+            placeholder="Pickup timing, luggage, or special note"
+            multiline
+          />
+          <AppButton title="Confirm request" loading={saving} onPress={submit} />
+        </>
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  success: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  title: {
+    color: colors.whiteText,
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  body: {
+    color: colors.mutedText,
+    lineHeight: 22,
+  },
+});
