@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 
+from app.config import get_settings
 from app.database import database
 from app.utils import new_id, now_iso
 
@@ -74,6 +75,9 @@ DEMO_RIDES: List[Dict[str, Any]] = [
 
 
 async def seed_demo_rides() -> None:
+    if not get_settings().enable_demo_seed:
+        return
+
     rides = await database.find_many("rides")
     if rides:
         return
@@ -95,12 +99,21 @@ async def seed_demo_rides() -> None:
     await database.replace_collection("rides", seeded)
 
 
+def is_public_ride(ride: Dict[str, Any]) -> bool:
+    return ride.get("is_demo") is not True
+
+
+async def list_public_rides() -> List[Dict[str, Any]]:
+    rides = await database.find_many("rides")
+    return [ride for ride in rides if is_public_ride(ride)]
+
+
 async def search_rides(
     origin: Optional[str] = None,
     destination: Optional[str] = None,
     seats: int = 1,
 ) -> List[Dict[str, Any]]:
-    rides = await database.find_many("rides")
+    rides = await list_public_rides()
     normalized_origin = (origin or "").strip().lower()
     normalized_destination = (destination or "").strip().lower()
 
@@ -114,6 +127,22 @@ async def search_rides(
             continue
         results.append(ride)
     return results
+
+
+async def cleanup_demo_rides() -> Dict[str, int]:
+    rides = await database.find_many("rides")
+    deleted_count = 0
+    preserved_count = 0
+
+    for ride in rides:
+        if ride.get("is_demo") is True:
+            deleted = await database.delete_one("rides", ride["id"])
+            if deleted:
+                deleted_count += 1
+        else:
+            preserved_count += 1
+
+    return {"deleted_demo_rides": deleted_count, "preserved_real_rides": preserved_count}
 
 
 async def create_ride(payload: Dict[str, Any]) -> Dict[str, Any]:

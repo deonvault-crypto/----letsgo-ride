@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from app.auth import get_admin_user
 from app.database import database
 from app.models.verification import VerificationStatusUpdateBody
+from app.services.audit_service import write_audit_log
+from app.services.ride_service import cleanup_demo_rides
 from app.services.verification_service import apply_admin_verification_status
 from app.utils import api_error, api_success
 
@@ -76,3 +78,17 @@ async def update_verification_status(
         document_status=payload.document_status,
     )
     return api_success(updated)
+
+
+@router.delete("/rides/demo")
+async def delete_demo_rides(admin=Depends(get_admin_user)):
+    result = await cleanup_demo_rides()
+    await write_audit_log(
+        actor_user_id=admin["id"],
+        actor_role=admin.get("role"),
+        action="demo_rides_cleanup",
+        target_type="rides",
+        target_id="demo",
+        metadata=result,
+    )
+    return api_success(result)

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
 from app.database import database
 from app.models.ride import RideCreateBody, RideUpdateBody
-from app.services.ride_service import create_ride, search_rides
+from app.services.ride_service import create_ride, is_public_ride, list_public_rides, search_rides
 from app.utils import api_error, api_success, now_iso
 
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/rides", tags=["rides"])
 
 @router.get("")
 async def list_rides():
-    return api_success(await database.find_many("rides"))
+    return api_success(await list_public_rides())
 
 
 @router.get("/search")
@@ -29,7 +29,7 @@ async def search(
 @router.get("/{ride_id}")
 async def ride_detail(ride_id: str):
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride:
+    if not ride or not is_public_ride(ride):
         api_error("Ride not found.", 404)
     return api_success(ride)
 

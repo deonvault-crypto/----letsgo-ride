@@ -14,6 +14,7 @@ class Settings:
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
         self.mock_otp = os.getenv("MOCK_OTP", "123456")
+        self.enable_demo_seed = self._parse_bool(os.getenv("ENABLE_DEMO_SEED", "false"))
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",
@@ -25,6 +26,10 @@ class Settings:
     def _parse_origins(value: str) -> List[str]:
         origins = [origin.strip() for origin in value.split(",") if origin.strip()]
         return origins or ["*"]
+
+    @staticmethod
+    def _parse_bool(value: str) -> bool:
+        return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 @lru_cache

@@ -42,7 +42,8 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 @app.on_event("startup")
 async def on_startup():
     await database.connect()
-    await seed_demo_rides()
+    if settings.enable_demo_seed:
+        await seed_demo_rides()
 
 
 @app.on_event("shutdown")

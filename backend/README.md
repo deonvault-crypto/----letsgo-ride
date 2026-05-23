@@ -7,7 +7,7 @@ FastAPI backend for the LetsGo Ride mobile product.
 - FastAPI app under `backend/app`.
 - MongoDB support through Motor when `MONGODB_URI` is configured.
 - In-memory fallback when MongoDB is not configured, so Expo Go can run locally.
-- Zimbabwe seed rides are added only when a database is empty.
+- Demo rides are disabled by default and should stay disabled in production.
 - Phone verification is ready for a real OTP provider.
 
 ## Start Backend
@@ -33,3 +33,7 @@ Invoke-RestMethod "http://localhost:4000/rides/search?origin=Harare&destination=
 Copy `.env.example` to `.env` later if you need MongoDB. Do not commit secrets.
 
 If `MONGODB_URI` is empty, `/health` returns `database_status: "not_configured"` and the app uses memory storage.
+
+Set `ENABLE_DEMO_SEED=false` in production. Demo rides are only for local testing and are inserted only when `ENABLE_DEMO_SEED=true` and the rides collection is empty.
+
+Public ride endpoints hide records where `is_demo=true`. Admin users can remove seeded demo rides with `DELETE /admin/rides/demo`; this cleanup deletes only rides marked `is_demo=true` and preserves real rides plus all users, requests, support messages, reports, and verification records.

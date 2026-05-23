@@ -41,7 +41,7 @@ npx expo start --lan --port 8082 -c
 
 ## API Base URL
 
-Mobile uses the local LAN API URL in:
+Mobile uses the API URL in:
 
 ```text
 mobile/constants/config.ts
@@ -50,7 +50,7 @@ mobile/constants/config.ts
 Current value:
 
 ```text
-http://192.168.0.21:4000
+https://letsgoride-backend.onrender.com
 ```
 
 ## Phone Verification
@@ -65,6 +65,7 @@ Development environments can use the configured verification code until the SMS 
 - No KYC provider.
 - No real emergency or police integration.
 - MongoDB is optional for local dev; when `MONGODB_URI` is missing the backend uses memory storage.
+- Production must keep `ENABLE_DEMO_SEED=false`. Demo rides are only for local testing and public ride APIs hide records marked `is_demo=true`.
 
 ## Next Phases
 
