@@ -29,6 +29,7 @@
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0F1214"
-    }
+    },
+    "runtimeVersion": "exposdk:54.0"
   }
 }

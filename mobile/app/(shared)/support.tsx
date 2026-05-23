@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { EmptyState } from "../../components/states/EmptyState";
@@ -9,7 +9,9 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { mySupportMessages, sendSupportMessage, SupportMessage } from "../../services/supportService";
+import { formatStatus } from "../../utils/formatStatus";
 
 export default function SupportScreen() {
   const [subject, setSubject] = useState("Ride support");
@@ -18,17 +20,15 @@ export default function SupportScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadMessages() {
+  const loadMessages = useCallback(async () => {
     try {
       setMessages(await mySupportMessages());
     } catch {
       setMessages([]);
     }
-  }
-
-  useEffect(() => {
-    loadMessages();
   }, []);
+
+  useLiveRefresh(loadMessages);
 
   async function submit() {
     try {
@@ -54,10 +54,10 @@ export default function SupportScreen() {
       <AppButton title="Send message" loading={saving} onPress={submit} disabled={message.trim().length < 5} />
       <Text style={styles.sectionTitle}>Submitted messages</Text>
       {messages.length === 0 ? (
-        <EmptyState title="No messages yet" body="Support messages you submit locally will appear here." />
+        <EmptyState title="No support messages yet" body="Messages you send to LetsGo Ride support will appear here." />
       ) : messages.map((item) => (
         <View key={item.id} style={styles.card}>
-          <StatusBadge label={item.status.toUpperCase()} tone="success" />
+          <StatusBadge label={formatStatus(item.status)} tone="success" />
           <Text style={styles.cardTitle}>{item.subject}</Text>
           <Text style={styles.body}>{item.message}</Text>
         </View>

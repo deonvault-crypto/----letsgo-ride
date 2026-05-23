@@ -8,6 +8,7 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useTrips } from "../../hooks/useTrips";
+import { formatStatus } from "../../utils/formatStatus";
 
 export default function MyTripsScreen() {
   const { trips, loading, error, reload } = useTrips();
@@ -18,11 +19,11 @@ export default function MyTripsScreen() {
       {loading ? <LoadingState label="Loading trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {!loading && !error && trips.length === 0 ? (
-        <EmptyState title="No trip requests yet" body="When you request a seat, pending and confirmed trips appear here." />
+        <EmptyState title="No trips yet" body="Your ride requests will appear here." />
       ) : null}
       {!loading && !error && trips.map((trip) => (
         <View key={trip.id} style={styles.card}>
-          <StatusBadge label={trip.status.toUpperCase()} tone={trip.status === "confirmed" ? "success" : trip.status === "declined" ? "danger" : "warning"} />
+          <StatusBadge label={formatStatus(trip.status)} tone={trip.status === "confirmed" ? "success" : trip.status === "declined" ? "danger" : "warning"} />
           <Text style={styles.route}>
             {trip.ride_snapshot?.origin || "Ride"} to {trip.ride_snapshot?.destination || "destination"}
           </Text>

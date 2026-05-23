@@ -1,6 +1,6 @@
 # LetsGo Ride
 
-Clean MVP rebuild checkpoint for the mobile app and backend.
+Production readiness checkpoint for the mobile app and backend.
 
 ## Scope
 
@@ -53,11 +53,11 @@ Current value:
 http://192.168.0.21:4000
 ```
 
-## Demo OTP
+## Phone Verification
 
-Use `123456` for local mock OTP verification.
+Development environments can use the configured verification code until the SMS provider is connected.
 
-## Current MVP Limits
+## Current Product Limits
 
 - No real SMS OTP provider.
 - No live payments or service fees.

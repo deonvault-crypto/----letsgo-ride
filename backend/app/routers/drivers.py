@@ -34,7 +34,7 @@ async def add_vehicle(payload: VehicleBody):
     timestamp = now_iso()
     vehicle = {
         "id": new_id(),
-        "driver_id": "local-driver",
+        "driver_id": new_id(),
         "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,

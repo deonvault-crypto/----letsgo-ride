@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { RideRequest } from "../types/ride.types";
 import { myRideRequests } from "../services/ridesService";
+import { useLiveRefresh } from "./useLiveRefresh";
 
 export function useTrips() {
   const [trips, setTrips] = useState<RideRequest[]>([]);
@@ -20,9 +21,7 @@ export function useTrips() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useLiveRefresh(load);
 
   return { trips, loading, error, reload: load };
 }

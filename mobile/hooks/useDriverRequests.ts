@@ -1,11 +1,11 @@
 import { useCallback, useState } from "react";
 
-import { DriverProfile } from "../types/driver.types";
-import { getDriverProfile } from "../services/driverService";
+import { RideRequest } from "../types/ride.types";
+import { driverRideRequests } from "../services/ridesService";
 import { useLiveRefresh } from "./useLiveRefresh";
 
-export function useDriver() {
-  const [driver, setDriver] = useState<DriverProfile | null>(null);
+export function useDriverRequests() {
+  const [requests, setRequests] = useState<RideRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,9 +13,9 @@ export function useDriver() {
     try {
       setLoading(true);
       setError(null);
-      setDriver(await getDriverProfile());
+      setRequests(await driverRideRequests());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load driver profile.");
+      setError(err instanceof Error ? err.message : "Unable to load passenger requests.");
     } finally {
       setLoading(false);
     }
@@ -23,5 +23,5 @@ export function useDriver() {
 
   useLiveRefresh(load);
 
-  return { driver, loading, error, reload: load };
+  return { requests, loading, error, reload: load };
 }

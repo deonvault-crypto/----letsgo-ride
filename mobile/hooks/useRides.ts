@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Ride, RideSearchParams } from "../types/ride.types";
 import { listRides, searchRides } from "../services/ridesService";
+import { useLiveRefresh } from "./useLiveRefresh";
 
 export function useRides(params?: RideSearchParams) {
   const [rides, setRides] = useState<Ride[]>([]);
@@ -21,9 +22,7 @@ export function useRides(params?: RideSearchParams) {
     }
   }, [params?.origin, params?.destination, params?.seats]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useLiveRefresh(load);
 
   return { rides, loading, error, reload: load };
 }

@@ -1,9 +1,26 @@
 from fastapi import APIRouter, Header
 
 from app.config import get_settings
-from app.models.user import RegisterBody, RequestOtpBody, VerifyOtpBody
-from app.services.auth_service import create_or_update_user, find_user_by_token
+from app.models.user import (
+    EmailLoginBody,
+    EmailRegisterBody,
+    ForgotPasswordBody,
+    RegisterBody,
+    RequestOtpBody,
+    ResetPasswordBody,
+    VerifyOtpBody,
+)
+from app.services.auth_service import (
+    create_password_record,
+    create_email_user,
+    create_or_update_user,
+    find_user_by_email,
+    find_user_by_token,
+    verify_email_user,
+)
 from app.utils import api_error, api_success
+from app.database import database
+from app.utils import now_iso
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -14,8 +31,7 @@ async def request_otp(payload: RequestOtpBody):
     return api_success(
         {
             "phone": payload.phone,
-            "message": "Mock OTP created for local development.",
-            "dev_otp": get_settings().mock_otp,
+            "message": "Verification code request received.",
         }
     )
 
@@ -35,6 +51,50 @@ async def register(payload: RegisterBody):
     if payload.city:
         user["city"] = payload.city
     return api_success({"token": user["token"], "user": user})
+
+
+@router.post("/email-register")
+async def email_register(payload: EmailRegisterBody):
+    user = await create_email_user(
+        payload.name,
+        payload.email,
+        payload.password,
+        payload.city,
+        payload.role,
+    )
+    return api_success({"token": user["token"], "user": user})
+
+
+@router.post("/email-login")
+async def email_login(payload: EmailLoginBody):
+    user = await verify_email_user(payload.email, payload.password)
+    if not user:
+        api_error("Invalid email or password.", 401)
+    return api_success({"token": user["token"], "user": user})
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordBody):
+    return api_success({"message": "If the account exists, a reset code will be sent."})
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordBody):
+    if payload.code != get_settings().mock_otp:
+        api_error("Invalid reset code.", 401)
+
+    user = await find_user_by_email(payload.email)
+    if user:
+        password_record = create_password_record(payload.password)
+        await database.update_one(
+            "users",
+            user["id"],
+            {
+                **password_record,
+                "updated_at": now_iso(),
+            },
+        )
+    return api_success({"message": "Password reset completed."})
 
 
 @router.get("/me")

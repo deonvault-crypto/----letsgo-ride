@@ -29,7 +29,7 @@ export default function SearchRideScreen() {
       <View style={styles.form}>
         <AppInput label="Origin" value={origin} onChangeText={setOrigin} placeholder="Harare" />
         <AppInput label="Destination" value={destination} onChangeText={setDestination} placeholder="Bulawayo" />
-        <AppInput label="Date placeholder" value={date} onChangeText={setDate} placeholder="2026-06-03" />
+        <AppInput label="Travel date" value={date} onChangeText={setDate} placeholder="2026-06-03" />
         <AppInput label="Seats" value={seats} onChangeText={setSeats} keyboardType="number-pad" placeholder="1" />
       </View>
       <View style={styles.section}>

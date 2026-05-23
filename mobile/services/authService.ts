@@ -4,10 +4,51 @@ import { User, UserRole } from "../types/user.types";
 type AuthPayload = { token: string; user: User };
 
 export async function requestOtp(phone: string) {
-  return requestData<{ phone: string; message: string; dev_otp?: string }>({
+  return requestData<{ phone: string; message: string }>({
     method: "POST",
     url: "/auth/request-otp",
     data: { phone },
+  });
+}
+
+export async function emailLogin(email: string, password: string) {
+  const result = await requestData<AuthPayload>({
+    method: "POST",
+    url: "/auth/email-login",
+    data: { email, password },
+  });
+  await saveToken(result.token);
+  return result;
+}
+
+export async function emailRegister(data: {
+  name: string;
+  email: string;
+  password: string;
+  city?: string;
+}) {
+  const result = await requestData<AuthPayload>({
+    method: "POST",
+    url: "/auth/email-register",
+    data,
+  });
+  await saveToken(result.token);
+  return result;
+}
+
+export async function forgotPassword(email: string) {
+  return requestData<{ message: string }>({
+    method: "POST",
+    url: "/auth/forgot-password",
+    data: { email },
+  });
+}
+
+export async function resetPassword(email: string, code: string, password: string) {
+  return requestData<{ message: string }>({
+    method: "POST",
+    url: "/auth/reset-password",
+    data: { email, code, password },
   });
 }
 

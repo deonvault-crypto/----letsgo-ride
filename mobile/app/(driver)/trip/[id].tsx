@@ -12,6 +12,7 @@ import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
 import { driverRideRequests, getRide, updateRideRequest } from "../../../services/ridesService";
 import { Ride, RideRequest } from "../../../types/ride.types";
+import { formatStatus } from "../../../utils/formatStatus";
 
 export default function DriverTripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -61,7 +62,7 @@ export default function DriverTripDetailScreen() {
   return (
     <Screen title="Trip" navRole="driver">
       <View style={styles.card}>
-        <StatusBadge label={ride.status.toUpperCase()} tone="success" />
+        <StatusBadge label={formatStatus(ride.status)} tone="success" />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
         <Text style={styles.body}>{ride.date} at {ride.time}</Text>
         <Text style={styles.body}>{ride.available_seats} seats available · US${ride.price_usd} per seat</Text>
@@ -74,7 +75,7 @@ export default function DriverTripDetailScreen() {
         </View>
       ) : requests.map((request) => (
         <View key={request.id} style={styles.card}>
-          <StatusBadge label={request.status.toUpperCase()} tone={request.status === "confirmed" ? "success" : "warning"} />
+          <StatusBadge label={formatStatus(request.status)} tone={request.status === "confirmed" ? "success" : "warning"} />
           <Text style={styles.requestName}>{request.passenger_name}</Text>
           <Text style={styles.body}>{request.passenger_note || "No note from passenger."}</Text>
           <View style={styles.actions}>

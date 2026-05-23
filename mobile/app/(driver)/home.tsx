@@ -10,26 +10,35 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useDriver } from "../../hooks/useDriver";
+import { useDriverRequests } from "../../hooks/useDriverRequests";
 import { useRides } from "../../hooks/useRides";
+import { formatStatus } from "../../utils/formatStatus";
 
 export default function DriverHomeScreen() {
   const router = useRouter();
   const { driver } = useDriver();
   const { rides, loading, error, reload } = useRides();
+  const {
+    requests,
+    loading: requestsLoading,
+    error: requestsError,
+    reload: reloadRequests,
+  } = useDriverRequests();
+  const driverStatus = driver?.verified ? "Verified" : driver?.status === "suspended" ? "Suspended" : "Pending verification";
 
   return (
     <Screen title="Driver" navRole="driver">
       <View style={styles.hero}>
-        <StatusBadge label={driver?.verified ? "Verified driver" : "Verification placeholder"} tone={driver?.verified ? "success" : "warning"} />
+        <StatusBadge label={driverStatus} tone={driver?.verified ? "success" : driver?.status === "suspended" ? "danger" : "warning"} />
         <Text style={styles.title}>Drive planned routes. Earn from empty seats.</Text>
         <Text style={styles.body}>Post trips, review passenger requests, and keep clear records for each ride.</Text>
         <AppButton title="Post Trip" onPress={() => router.push("/(driver)/post-trip" as never)} />
       </View>
       <View style={styles.metrics}>
         <Metric label="Today trips" value={String(rides.length)} />
-        <Metric label="Seat requests" value="0" />
+        <Metric label="Seat requests" value={String(requests.length)} />
       </View>
-      <Text style={styles.sectionTitle}>Your route board</Text>
+      <Text style={styles.sectionTitle}>Posted trips</Text>
       {loading ? <LoadingState label="Loading driver trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {!loading && !error && rides.slice(0, 3).map((ride) => (
@@ -38,6 +47,23 @@ export default function DriverHomeScreen() {
           ride={ride}
           onPress={() => router.push(`/(driver)/trip/${ride.id}` as never)}
         />
+      ))}
+
+      <Text style={styles.sectionTitle}>Incoming passenger requests</Text>
+      {requestsLoading ? <LoadingState label="Loading passenger requests..." /> : null}
+      {requestsError ? <ErrorState message={requestsError} onRetry={reloadRequests} /> : null}
+      {!requestsLoading && !requestsError && requests.length === 0 ? (
+        <View style={styles.requestCard}>
+          <Text style={styles.body}>No passenger requests yet.</Text>
+        </View>
+      ) : requests.slice(0, 4).map((request) => (
+        <View key={request.id} style={styles.requestCard}>
+          <StatusBadge label={formatStatus(request.status)} tone={request.status === "confirmed" ? "success" : request.status === "declined" ? "danger" : "warning"} />
+          <Text style={styles.requestTitle}>{request.passenger_name}</Text>
+          <Text style={styles.body}>
+            {request.ride_snapshot?.origin || "Ride"} to {request.ride_snapshot?.destination || "destination"} - {request.seats} seat
+          </Text>
+        </View>
       ))}
     </Screen>
   );
@@ -97,5 +123,18 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 20,
+  },
+  requestCard: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  requestTitle: {
+    color: colors.whiteText,
+    fontSize: 18,
+    fontWeight: "900",
   },
 });

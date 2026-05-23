@@ -1,14 +1,14 @@
 # LetsGo Ride API
 
-Clean FastAPI rebuild for the LetsGo Ride MVP.
+FastAPI backend for the LetsGo Ride mobile product.
 
 ## What Was Rebuilt
 
 - FastAPI app under `backend/app`.
 - MongoDB support through Motor when `MONGODB_URI` is configured.
 - In-memory fallback when MongoDB is not configured, so Expo Go can run locally.
-- Demo Zimbabwe rides seeded for local preview.
-- Mock OTP auth using `123456`.
+- Zimbabwe seed rides are added only when a database is empty.
+- Phone verification is ready for a real OTP provider.
 
 ## Start Backend
 

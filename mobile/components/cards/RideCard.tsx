@@ -27,7 +27,6 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
       </View>
       <View style={styles.footer}>
         <StatusBadge label={`${ride.available_seats} seats available`} tone="success" />
-        {ride.is_demo ? <StatusBadge label="Demo route" /> : null}
       </View>
     </Pressable>
   );

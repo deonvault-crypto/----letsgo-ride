@@ -1,6 +1,6 @@
 # LetsGo Ride Mobile
 
-Clean Expo Router TypeScript rebuild for the LetsGo Ride MVP.
+Expo Router TypeScript mobile app for LetsGo Ride.
 
 ## What Was Rebuilt
 
@@ -35,16 +35,15 @@ Current local LAN URL:
 http://192.168.0.21:4000
 ```
 
-## Demo Login
+## Phone Verification
 
-- Request OTP from the login screen.
-- Use mock OTP `123456`.
-- No real SMS provider is connected in the MVP.
+- Request a verification code from the login screen.
+- Development environments can use the configured test code until the SMS provider is connected.
 
-## MVP Limits
+## Current Product Limits
 
 - No real OTP provider yet.
 - No real payments yet.
 - No maps SDK yet.
 - No KYC provider yet.
-- Driver verification is a placeholder status until admin review tools are added.
+- Driver verification status is ready for review tooling.

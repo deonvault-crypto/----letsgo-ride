@@ -7,7 +7,6 @@ import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { ErrorState } from "../../components/states/ErrorState";
 import { colors } from "../../constants/colors";
-import { MOCK_OTP } from "../../constants/config";
 import { spacing } from "../../constants/spacing";
 import { useAuth } from "../../hooks/useAuth";
 import { isValidPhone } from "../../utils/validation";
@@ -33,8 +32,8 @@ export default function LoginScreen() {
       <View style={styles.copy}>
         <Text style={styles.title}>Enter your phone number</Text>
         <Text style={styles.body}>
-          LetsGo Ride uses phone sign-in for the MVP. In local development, use
-          mock OTP {MOCK_OTP}.
+          LetsGo Ride uses phone verification to protect passenger and driver
+          accounts.
         </Text>
       </View>
       <AppInput
@@ -47,6 +46,11 @@ export default function LoginScreen() {
       {localError ? <Text style={styles.error}>{localError}</Text> : null}
       {error ? <ErrorState message={error} /> : null}
       <AppButton title="Send OTP" loading={loading} onPress={handleContinue} />
+      <AppButton
+        title="Login with email"
+        variant="ghost"
+        onPress={() => router.push("/(auth)/email-login" as never)}
+      />
     </Screen>
   );
 }

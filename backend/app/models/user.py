@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-UserRole = Literal["passenger", "driver"]
+UserRole = Literal["passenger", "driver", "admin"]
 
 
 class RequestOtpBody(BaseModel):
@@ -21,6 +21,29 @@ class RegisterBody(BaseModel):
     name: str = Field(min_length=2)
     city: Optional[str] = None
     role: UserRole = "passenger"
+
+
+class EmailLoginBody(BaseModel):
+    email: str = Field(min_length=5)
+    password: str = Field(min_length=8)
+
+
+class EmailRegisterBody(BaseModel):
+    name: str = Field(min_length=2)
+    email: str = Field(min_length=5)
+    password: str = Field(min_length=8)
+    city: Optional[str] = None
+    role: UserRole = "passenger"
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str = Field(min_length=5)
+
+
+class ResetPasswordBody(BaseModel):
+    email: str = Field(min_length=5)
+    code: str = Field(min_length=4, max_length=8)
+    password: str = Field(min_length=8)
 
 
 class UserUpdate(BaseModel):

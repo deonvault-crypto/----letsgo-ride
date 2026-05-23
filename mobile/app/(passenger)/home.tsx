@@ -10,17 +10,20 @@ import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { zimbabweRoutes } from "../../constants/routes";
 import { spacing } from "../../constants/spacing";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useRides } from "../../hooks/useRides";
 
 export default function PassengerHomeScreen() {
   const router = useRouter();
+  const { user } = useCurrentUser();
   const { rides, loading, error, reload } = useRides();
+  const passengerName = user?.name && user.name !== "Passenger account" ? user.name : "Passenger";
 
   return (
     <Screen title="Passenger" navRole="passenger">
       <View style={styles.hero}>
-        <Text style={styles.kicker}>Good day</Text>
-        <Text style={styles.title}>Where are you going?</Text>
+        <Text style={styles.kicker}>Passenger account</Text>
+        <Text style={styles.title}>Good day, {passengerName}</Text>
         <Text style={styles.body}>
           Search verified shared rides across Zimbabwe and reserve a seat with
           clear trip details.

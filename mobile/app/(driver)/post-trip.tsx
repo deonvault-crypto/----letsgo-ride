@@ -41,7 +41,7 @@ export default function PostTripScreen() {
         vehicle,
         pickup_note: pickup,
         dropoff_note: dropoff,
-        driver_name: "Local Driver",
+        driver_name: "LetsGo Ride Driver",
         driver_rating: 4.8,
       });
       router.replace(`/(driver)/trip/${ride.id}` as never);
