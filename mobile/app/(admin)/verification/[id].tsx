@@ -97,7 +97,7 @@ export default function AdminVerificationDetailScreen() {
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       <View style={styles.card}>
         <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
-        <Text style={styles.title}>{String(driver.name || "Driver account")}</Text>
+        <Text style={styles.title}>{String(driver.name || "Driver")}</Text>
         <Text style={styles.body}>{String(driver.phone || driver.email || "No contact on file")}</Text>
         <Text style={styles.body}>{String(driver.city || "City not set")}</Text>
       </View>

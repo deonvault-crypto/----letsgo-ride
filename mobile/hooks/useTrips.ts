@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { RideRequest } from "../types/ride.types";
 import { myRideRequests } from "../services/ridesService";
@@ -8,12 +8,14 @@ export function useTrips() {
   const [trips, setTrips] = useState<RideRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoaded = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoaded.current) setLoading(true);
       setError(null);
       setTrips(await myRideRequests());
+      hasLoaded.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load trips.");
     } finally {

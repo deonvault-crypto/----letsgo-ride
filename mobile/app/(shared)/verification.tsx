@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 
@@ -38,12 +38,14 @@ export default function DriverVerificationScreen() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<VerificationDocumentType | null>(null);
   const [error, setError] = useState("");
+  const hasLoaded = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoaded.current) setLoading(true);
       setError("");
       setProfile(await getMyVerification());
+      hasLoaded.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load verification.");
     } finally {
@@ -135,7 +137,13 @@ export default function DriverVerificationScreen() {
           placeholder="Add anything that helps review your documents"
           multiline
         />
-        <Pressable style={styles.consentRow} onPress={() => setConsent((current) => !current)}>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityLabel="Driver verification consent"
+          accessibilityState={{ checked: consent }}
+          style={styles.consentRow}
+          onPress={() => setConsent((current) => !current)}
+        >
           <View style={[styles.checkbox, consent && styles.checkboxOn]} />
           <Text style={styles.body}>
             I consent to LetsGo Ride reviewing my identity and vehicle documents

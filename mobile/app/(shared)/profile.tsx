@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { AppButton } from "../../components/ui/AppButton";
@@ -28,31 +29,42 @@ export default function ProfileScreen() {
   const [profileCity, setProfileCity] = useState("");
   const [bio, setBio] = useState("");
   const [travelPreferences, setTravelPreferences] = useState("");
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
+  const [profilePhotoName, setProfilePhotoName] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
+  function fillFormFromUser(nextUser: typeof user) {
+    if (!nextUser) return;
+    setName(isGenericAccountName(nextUser.name) ? "" : nextUser.name || "");
+    setEmail(nextUser.email || "");
+    setPhone(nextUser.phone || "");
+    setProfileCity(nextUser.city || "");
+    setBio(nextUser.bio || "");
+    setTravelPreferences(nextUser.travel_preferences || "");
+    setProfilePhotoUrl(nextUser.profile_photo_url || "");
+    setProfilePhotoName(nextUser.profile_photo_name || "");
+  }
+
   useEffect(() => {
-    if (!user) return;
-    setName(isGenericAccountName(user.name) ? "" : user.name || "");
-    setEmail(user.email || "");
-    setPhone(user.phone || "");
-    setProfileCity(user.city || "");
-    setBio(user.bio || "");
-    setTravelPreferences(user.travel_preferences || "");
+    fillFormFromUser(user);
   }, [user]);
 
   async function saveProfile() {
     try {
       setSaving(true);
       setMessage("");
-      await updateCurrentUser({
+      const updated = await updateCurrentUser({
         name: name.trim() || undefined,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         city: profileCity.trim() || undefined,
         bio: bio.trim() || undefined,
         travel_preferences: travelPreferences.trim() || undefined,
+        profile_photo_url: profilePhotoUrl || undefined,
+        profile_photo_name: profilePhotoName || undefined,
       });
+      fillFormFromUser(updated);
       await reload();
       setMessage("Profile updated.");
     } catch (err) {
@@ -62,10 +74,36 @@ export default function ProfileScreen() {
     }
   }
 
+  async function chooseProfilePhoto() {
+    try {
+      setSaving(true);
+      setMessage("");
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.78,
+        mediaTypes: ["images"],
+      });
+      if (result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      const updated = await updateCurrentUser({
+        profile_photo_url: asset.uri,
+        profile_photo_name: asset.fileName || "profile-photo",
+      });
+      fillFormFromUser(updated);
+      await reload();
+      setMessage("Profile photo updated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to update profile photo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <Screen navRole={role}>
       <View style={styles.profileCard}>
-        <Avatar name={displayName} />
+        <Avatar name={displayName} imageUri={profilePhotoUrl || user?.profile_photo_url} />
         <View style={styles.profileText}>
           <Text style={styles.name}>Hi, {firstName}</Text>
           <Text style={styles.meta}>{contact}</Text>
@@ -79,6 +117,14 @@ export default function ProfileScreen() {
           Your phone number is used for pickup coordination and trip safety. It
           is not shown in public ride browsing.
         </Text>
+        <View style={styles.photoRow}>
+          <Avatar name={displayName} imageUri={profilePhotoUrl} size={64} />
+          <View style={styles.photoCopy}>
+            <Text style={styles.photoTitle}>Profile picture</Text>
+            <Text style={styles.meta}>{profilePhotoName || "Optional account photo"}</Text>
+          </View>
+          <AppButton title="Update photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} style={styles.photoButton} />
+        </View>
         <AppInput label="Full name" value={name} onChangeText={setName} />
         <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
         <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
@@ -165,5 +211,20 @@ const styles = StyleSheet.create({
   },
   links: {
     gap: spacing.sm,
+  },
+  photoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  photoCopy: {
+    flex: 1,
+  },
+  photoTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+  },
+  photoButton: {
+    minHeight: 44,
   },
 });

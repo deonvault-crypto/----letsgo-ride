@@ -8,6 +8,8 @@ export type User = {
   city?: string;
   bio?: string;
   travel_preferences?: string;
+  profile_photo_url?: string;
+  profile_photo_name?: string;
   role: UserRole;
   rating?: number;
   token?: string;

@@ -36,5 +36,6 @@ export type RideRequest = {
 export type RideSearchParams = {
   origin?: string;
   destination?: string;
+  date?: string;
   seats?: number;
 };

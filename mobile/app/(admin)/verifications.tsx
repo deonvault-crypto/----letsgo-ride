@@ -51,7 +51,7 @@ export default function AdminVerificationsScreen() {
       {!loading && !error && items.map((item) => (
         <View key={item.driver_id} style={styles.card}>
           <StatusBadge label={formatStatus(item.verification_status)} tone={statusTone(item.verification_status)} />
-          <Text style={styles.cardTitle}>{item.name || "Driver account"}</Text>
+          <Text style={styles.cardTitle}>{item.name || "Driver"}</Text>
           <Text style={styles.body}>{item.phone || item.email || "No contact on file"}</Text>
           <Text style={styles.body}>{item.city || "City not set"} - {item.document_count} documents</Text>
           <AppButton

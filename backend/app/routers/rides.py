@@ -21,9 +21,10 @@ async def list_rides():
 async def search(
     origin: Optional[str] = None,
     destination: Optional[str] = None,
+    date: Optional[str] = None,
     seats: int = Query(default=1, ge=1),
 ):
-    return api_success(await search_rides(origin, destination, seats))
+    return api_success(await search_rides(origin, destination, seats, date))
 
 
 @router.get("/{ride_id}")

@@ -45,7 +45,7 @@ export function TravelDatePicker({ label, value, onChangeText }: TravelDatePicke
 
   return (
     <>
-      <Pressable style={styles.field} onPress={() => setOpen(true)}>
+      <Pressable accessibilityRole="button" accessibilityLabel={label} style={styles.field} onPress={() => setOpen(true)}>
         <Text style={styles.label}>{label}</Text>
         <Text style={[styles.value, !value && styles.placeholder]}>{formatDisplay(value)}</Text>
       </Pressable>

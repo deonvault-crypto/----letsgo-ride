@@ -12,6 +12,7 @@ export async function searchRides(params: RideSearchParams) {
     params: {
       origin: params.origin,
       destination: params.destination,
+      date: params.date,
       seats: params.seats || 1,
     },
   });

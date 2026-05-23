@@ -29,7 +29,7 @@ export function LocationPicker({ label, value, onChangeText, placeholder }: Loca
 
   return (
     <>
-      <Pressable style={styles.field} onPress={() => {
+      <Pressable accessibilityRole="button" accessibilityLabel={label} style={styles.field} onPress={() => {
         setQuery("");
         setOpen(true);
       }}>

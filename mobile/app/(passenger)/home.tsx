@@ -6,6 +6,7 @@ import { RouteSearchCard } from "../../components/cards/RouteSearchCard";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
+import { Avatar } from "../../components/ui/Avatar";
 import { PopularRouteChips } from "../../components/ui/PopularRouteChips";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
@@ -24,8 +25,13 @@ export default function PassengerHomeScreen() {
   return (
     <Screen navRole="passenger">
       <View style={styles.hero}>
-        <StatusBadge label="Passenger" tone="neutral" />
-        <Text style={styles.title}>Hi, {passengerName}</Text>
+        <View style={styles.greetingRow}>
+          <Avatar name={user?.name || passengerName} imageUri={user?.profile_photo_url} size={54} />
+          <View style={styles.greetingCopy}>
+            <StatusBadge label="Passenger" tone="neutral" />
+            <Text style={styles.title}>Hi, {passengerName}</Text>
+          </View>
+        </View>
         <Text style={styles.body}>
           Search verified shared rides across Zimbabwe and reserve a seat with
           clear trip details.
@@ -74,6 +80,15 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 34,
+  },
+  greetingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  greetingCopy: {
+    flex: 1,
+    gap: spacing.xs,
   },
   body: {
     color: colors.mutedText,

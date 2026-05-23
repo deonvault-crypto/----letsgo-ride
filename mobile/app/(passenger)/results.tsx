@@ -13,14 +13,15 @@ import { useRides } from "../../hooks/useRides";
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ origin?: string; destination?: string; seats?: string }>();
+  const params = useLocalSearchParams<{ origin?: string; destination?: string; date?: string; seats?: string }>();
   const searchParams = useMemo(
     () => ({
       origin: params.origin || "",
       destination: params.destination || "",
+      date: params.date || "",
       seats: Number(params.seats || 1),
     }),
-    [params.origin, params.destination, params.seats],
+    [params.origin, params.destination, params.date, params.seats],
   );
   const { rides, loading, error, reload } = useRides(searchParams);
 

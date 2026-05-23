@@ -112,16 +112,20 @@ async def search_rides(
     origin: Optional[str] = None,
     destination: Optional[str] = None,
     seats: int = 1,
+    date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     rides = await list_public_rides()
     normalized_origin = (origin or "").strip().lower()
     normalized_destination = (destination or "").strip().lower()
+    normalized_date = (date or "").strip()
 
     results = []
     for ride in rides:
         if normalized_origin and normalized_origin not in ride["origin"].lower():
             continue
         if normalized_destination and normalized_destination not in ride["destination"].lower():
+            continue
+        if normalized_date and ride.get("date") != normalized_date:
             continue
         if int(ride.get("available_seats", 0)) < seats:
             continue

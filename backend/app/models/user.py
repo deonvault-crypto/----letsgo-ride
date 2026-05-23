@@ -53,4 +53,6 @@ class UserUpdate(BaseModel):
     city: Optional[str] = None
     bio: Optional[str] = None
     travel_preferences: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    profile_photo_name: Optional[str] = None
     role: Optional[UserRole] = None

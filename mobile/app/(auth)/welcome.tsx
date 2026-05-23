@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { BrandLogo } from "../../components/layout/BrandLogo";
@@ -16,15 +16,14 @@ export default function WelcomeScreen() {
         <View style={styles.logoWrap}>
           <BrandLogo size="large" />
         </View>
-        <View style={styles.previewCard}>
-          <View style={styles.routeLine}>
-            <View style={styles.dot} />
-            <View style={styles.line} />
-            <View style={styles.dot} />
-          </View>
-          <View style={styles.routeCopy}>
-            <Text style={styles.previewTitle}>Harare to Bulawayo</Text>
-            <Text style={styles.previewText}>3 seats available - clear pickup notes</Text>
+        <View style={styles.imageCard}>
+          <Image
+            source={require("../../assets/images/ride-sharing-welcome.jpg")}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <View style={styles.imageOverlay}>
+            <Text style={styles.imageLabel}>Travel together with clearer trip records.</Text>
           </View>
         </View>
         <View style={styles.copy}>
@@ -37,18 +36,13 @@ export default function WelcomeScreen() {
       </View>
       <View style={styles.actions}>
         <AppButton
-          title="Continue as Passenger"
-          onPress={() => router.replace("/(passenger)/home" as never)}
-        />
-        <AppButton
-          title="Continue as Driver"
-          variant="secondary"
-          onPress={() => router.replace("/(driver)/home" as never)}
-        />
-        <AppButton
           title="Login"
-          variant="ghost"
           onPress={() => router.push("/(auth)/email-login" as never)}
+        />
+        <AppButton
+          title="Create account"
+          variant="secondary"
+          onPress={() => router.push("/(auth)/email-register" as never)}
         />
       </View>
     </Screen>
@@ -64,51 +58,36 @@ const styles = StyleSheet.create({
   logoWrap: {
     alignSelf: "flex-start",
   },
-  previewCard: {
-    minHeight: 170,
+  imageCard: {
+    height: 210,
     borderRadius: 32,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.xl,
-    gap: spacing.lg,
     shadowColor: colors.black,
     shadowOpacity: 0.08,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 14 },
     elevation: 8,
+    overflow: "hidden",
   },
-  routeLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "76%",
+  heroImage: {
+    width: "100%",
+    height: "100%",
   },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: colors.primaryGreen,
+  imageOverlay: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    bottom: spacing.lg,
+    borderRadius: 18,
+    backgroundColor: "rgba(250,247,240,0.88)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  line: {
-    flex: 1,
-    height: 2,
-    backgroundColor: colors.border,
-  },
-  routeCopy: {
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  previewTitle: {
+  imageLabel: {
     color: colors.whiteText,
     fontWeight: "900",
-    fontSize: 18,
-  },
-  previewText: {
-    color: colors.mutedText,
-    fontWeight: "700",
-    textAlign: "center",
   },
   copy: {
     gap: spacing.md,

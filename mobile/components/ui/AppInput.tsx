@@ -15,6 +15,7 @@ export function AppInput({ label, style, ...props }: AppInputProps) {
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        accessibilityLabel={label}
         placeholderTextColor={colors.mutedText}
         style={[styles.input, style]}
         {...props}

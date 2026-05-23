@@ -9,7 +9,12 @@ import { StatusBadge } from "../ui/StatusBadge";
 
 export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${ride.origin} to ${ride.destination}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
       <View style={styles.top}>
         <View>
           <Text style={styles.route}>{ride.origin} to {ride.destination}</Text>

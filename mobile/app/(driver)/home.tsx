@@ -5,6 +5,7 @@ import { RideCard } from "../../components/cards/RideCard";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
+import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
@@ -38,8 +39,13 @@ export default function DriverHomeScreen() {
   return (
     <Screen navRole="driver">
       <View style={styles.hero}>
-        <StatusBadge label={driverStatus} tone={driver?.verified ? "success" : driver?.status === "suspended" ? "danger" : "warning"} />
-        <Text style={styles.title}>Hi, {firstName}</Text>
+        <View style={styles.greetingRow}>
+          <Avatar name={user?.name || firstName} imageUri={user?.profile_photo_url} size={54} />
+          <View style={styles.greetingCopy}>
+            <StatusBadge label={driverStatus} tone={driver?.verified ? "success" : driver?.status === "suspended" ? "danger" : "warning"} />
+            <Text style={styles.title}>Hi, {firstName}</Text>
+          </View>
+        </View>
         <Text style={styles.body}>Post trips, review passenger requests, and keep clear records for each ride.</Text>
         <AppButton title="Post Trip" onPress={() => router.push("/(driver)/post-trip" as never)} />
         <AppButton title="Driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
@@ -102,6 +108,15 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 30,
     lineHeight: 34,
+  },
+  greetingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  greetingCopy: {
+    flex: 1,
+    gap: spacing.xs,
   },
   body: {
     color: colors.mutedText,
