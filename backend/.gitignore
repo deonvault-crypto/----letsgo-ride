@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 *.log
+storage/verification_documents/*
+!storage/verification_documents/.gitkeep

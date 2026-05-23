@@ -48,5 +48,7 @@ class ResetPasswordBody(BaseModel):
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
+    phone: Optional[str] = Field(default=None, min_length=6)
+    email: Optional[str] = Field(default=None, min_length=5)
     city: Optional[str] = None
     role: Optional[UserRole] = None

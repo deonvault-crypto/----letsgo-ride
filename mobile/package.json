@@ -6,6 +6,7 @@
     "@expo/vector-icons": "^15.0.3",
     "axios": "^1.16.1",
     "expo": "~54.0.34",
+    "expo-document-picker": "~14.0.8",
     "expo-linear-gradient": "~15.0.8",
     "expo-router": "~6.0.23",
     "expo-secure-store": "~15.0.8",

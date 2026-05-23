@@ -10,14 +10,18 @@ import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
+import { useCurrentUser } from "../../../hooks/useCurrentUser";
+import { updateCurrentUser } from "../../../services/authService";
 import { getRide, requestSeat } from "../../../services/ridesService";
 import { Ride } from "../../../types/ride.types";
 
 export default function RequestSeatScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user, loading: userLoading, error: userError, reload: reloadUser } = useCurrentUser();
   const [ride, setRide] = useState<Ride | null>(null);
   const [note, setNote] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -37,17 +41,35 @@ export default function RequestSeatScreen() {
   }, [id]);
 
   async function submit() {
+    if (!user?.phone) {
+      setError("Add your phone number before booking a seat.");
+      return;
+    }
     try {
       setSaving(true);
       await requestSeat({
         ride_id: id,
-        passenger_name: "Guest Passenger",
+        passenger_name: user?.name || "Passenger account",
+        passenger_phone: user.phone,
         passenger_note: note,
         seats: 1,
       });
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to request seat.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function savePhone() {
+    try {
+      setSaving(true);
+      setError("");
+      await updateCurrentUser({ phone });
+      await reloadUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save phone number.");
     } finally {
       setSaving(false);
     }
@@ -75,9 +97,26 @@ export default function RequestSeatScreen() {
         <>
           <View style={styles.card}>
             <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
-            <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
-            <Text style={styles.body}>Seat request for 1 passenger.</Text>
-          </View>
+          <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
+          <Text style={styles.body}>Seat request for 1 passenger.</Text>
+        </View>
+          {userError ? (
+            <View style={styles.card}>
+              <Text style={styles.body}>Sign in before requesting a seat.</Text>
+              <AppButton title="Login with email" onPress={() => router.push("/(auth)/email-login" as never)} />
+            </View>
+          ) : null}
+          {!userLoading && user && !user.phone ? (
+            <View style={styles.card}>
+              <StatusBadge label="Phone required" tone="warning" />
+              <Text style={styles.body}>
+                Add your phone number to continue. Passengers and drivers need a
+                reachable number for pickup coordination and trip safety.
+              </Text>
+              <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+              <AppButton title="Save phone number" loading={saving} disabled={phone.length < 6} onPress={savePhone} />
+            </View>
+          ) : null}
           <AppInput
             label="Message to driver"
             value={note}

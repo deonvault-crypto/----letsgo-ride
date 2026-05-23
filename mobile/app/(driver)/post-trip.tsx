@@ -1,17 +1,24 @@
-import { useState } from "react";
-import { StyleSheet, Text } from "react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
+import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
+import { updateCurrentUser } from "../../services/authService";
 import { createRide } from "../../services/ridesService";
+import { getMyVerification } from "../../services/verificationService";
+import { VerificationProfile } from "../../types/verification.types";
 import { hasRequiredValues } from "../../utils/validation";
 
 export default function PostTripScreen() {
   const router = useRouter();
+  const { user, loading: userLoading, error: userError, reload: reloadUser } = useCurrentUser();
+  const [verification, setVerification] = useState<VerificationProfile | null>(null);
   const [origin, setOrigin] = useState("Harare");
   const [destination, setDestination] = useState("Bulawayo");
   const [date, setDate] = useState("2026-06-03");
@@ -23,8 +30,41 @@ export default function PostTripScreen() {
   const [dropoff, setDropoff] = useState("Bulawayo City Hall");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [phone, setPhone] = useState("");
+
+  useEffect(() => {
+    async function loadVerification() {
+      try {
+        setVerification(await getMyVerification());
+      } catch {
+        setVerification(null);
+      }
+    }
+    loadVerification();
+  }, []);
+
+  async function savePhone() {
+    try {
+      setSaving(true);
+      setError("");
+      await updateCurrentUser({ phone });
+      await reloadUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save phone number.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function submit() {
+    if (!user?.phone) {
+      setError("Add your phone number before posting a trip.");
+      return;
+    }
+    if (verification?.verification_status !== "verified") {
+      setError("Complete driver verification before posting a trip.");
+      return;
+    }
     if (!hasRequiredValues([origin, destination, date, time, seats, price, vehicle, pickup, dropoff])) {
       setError("Complete every required trip field.");
       return;
@@ -56,6 +96,34 @@ export default function PostTripScreen() {
     <Screen title="Post" navRole="driver">
       <Text style={styles.title}>Post a trip</Text>
       <Text style={styles.body}>Add clear route, seat, price, and vehicle details before accepting passengers.</Text>
+      {userError ? (
+        <View style={styles.notice}>
+          <Text style={styles.body}>Sign in before posting rides as a driver.</Text>
+          <AppButton title="Login with email" onPress={() => router.push("/(auth)/email-login" as never)} />
+        </View>
+      ) : null}
+      {!userLoading && user && !user.phone ? (
+        <View style={styles.notice}>
+          <StatusBadge label="Phone required" tone="warning" />
+          <Text style={styles.body}>
+            Add your phone number to continue. Passengers and drivers need a
+            reachable number for pickup coordination and trip safety.
+          </Text>
+          <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <AppButton title="Save phone number" loading={saving} disabled={phone.length < 6} onPress={savePhone} />
+        </View>
+      ) : null}
+      {user?.phone && verification?.verification_status !== "verified" ? (
+        <View style={styles.notice}>
+          <StatusBadge label="Verification required" tone="warning" />
+          <Text style={styles.body}>
+            Drivers must verify their identity and vehicle details before
+            posting rides. This helps protect passengers and keeps LetsGo Ride
+            safer.
+          </Text>
+          <AppButton title="Open driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
+        </View>
+      ) : null}
       <AppInput label="Origin" value={origin} onChangeText={setOrigin} />
       <AppInput label="Destination" value={destination} onChangeText={setDestination} />
       <AppInput label="Date" value={date} onChangeText={setDate} />
@@ -85,5 +153,13 @@ const styles = StyleSheet.create({
   error: {
     color: colors.danger,
     fontWeight: "700",
+  },
+  notice: {
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
 });

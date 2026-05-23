@@ -1,7 +1,8 @@
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.auth import get_current_user
 from app.database import database
 from app.models.ride import RideCreateBody, RideUpdateBody
 from app.services.ride_service import create_ride, search_rides
@@ -34,8 +35,28 @@ async def ride_detail(ride_id: str):
 
 
 @router.post("")
-async def post_ride(payload: RideCreateBody):
-    return api_success(await create_ride(payload.model_dump()))
+async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
+    if not user.get("phone"):
+        api_error("Add your phone number before posting a trip.")
+
+    driver = await database.find_one("drivers", {"user_id": user["id"]})
+    if not driver:
+        api_error("Complete driver verification before posting a trip.")
+    if driver.get("status") not in ("approved", "verified") or not driver.get("verified"):
+        api_error("Complete driver verification before posting a trip.")
+    if driver.get("verification_status") != "verified":
+        api_error("Complete driver verification before posting a trip.")
+
+    data = payload.model_dump()
+    data.update(
+        {
+            "driver_id": driver["id"],
+            "user_id": user["id"],
+            "driver_name": driver.get("name") or user.get("name") or data.get("driver_name"),
+            "driver_rating": driver.get("rating", data.get("driver_rating", 4.8)),
+        }
+    )
+    return api_success(await create_ride(data))
 
 
 @router.patch("/{ride_id}")

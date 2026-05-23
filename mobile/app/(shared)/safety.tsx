@@ -16,7 +16,7 @@ export default function SafetyScreen() {
         <Text style={styles.title}>Safety Center</Text>
         <Text style={styles.body}>Safety starts with clear trip details, accountable profiles, and a simple reporting path.</Text>
       </View>
-      <SafetyCard title="Driver verification" body="Driver profiles can show verified status once review flows are active." icon="account-check-outline" />
+      <SafetyCard title="Driver verification" body="Drivers submit identity and vehicle details for manual review before posting public rides." icon="account-check-outline" />
       <SafetyCard title="Trip records" body="Ride requests and status updates stay visible in My Trips." icon="clipboard-text-clock-outline" />
       <SafetyCard title="Unsafe driving reports" body="Report unsafe driving, scams, payment issues, or passenger problems." icon="alert-outline" />
       <SafetyCard title="Support review" body="Reports are sent to LetsGo Ride support for review and follow-up." icon="shield-search" />

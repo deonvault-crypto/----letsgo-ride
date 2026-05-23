@@ -6,18 +6,23 @@ import { DriverCard } from "../../../components/cards/DriverCard";
 import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
 import { AppButton } from "../../../components/ui/AppButton";
+import { AppInput } from "../../../components/ui/AppInput";
 import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
+import { useCurrentUser } from "../../../hooks/useCurrentUser";
+import { updateCurrentUser } from "../../../services/authService";
 import { driverRideRequests, getRide, updateRideRequest } from "../../../services/ridesService";
 import { Ride, RideRequest } from "../../../types/ride.types";
 import { formatStatus } from "../../../utils/formatStatus";
 
 export default function DriverTripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user, reload: reloadUser } = useCurrentUser();
   const [ride, setRide] = useState<Ride | null>(null);
   const [requests, setRequests] = useState<RideRequest[]>([]);
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -39,8 +44,17 @@ export default function DriverTripDetailScreen() {
   }, [id]);
 
   async function setStatus(requestId: string, status: RideRequest["status"]) {
+    if (status === "confirmed" && !user?.phone) {
+      setError("Add your phone number before accepting a passenger request.");
+      return;
+    }
     await updateRideRequest(requestId, status);
     await load();
+  }
+
+  async function savePhone() {
+    await updateCurrentUser({ phone });
+    await reloadUser();
   }
 
   if (loading) {
@@ -65,9 +79,20 @@ export default function DriverTripDetailScreen() {
         <StatusBadge label={formatStatus(ride.status)} tone="success" />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
         <Text style={styles.body}>{ride.date} at {ride.time}</Text>
-        <Text style={styles.body}>{ride.available_seats} seats available · US${ride.price_usd} per seat</Text>
+        <Text style={styles.body}>{ride.available_seats} seats available - US${ride.price_usd} per seat</Text>
       </View>
       <DriverCard name={ride.driver_name} rating={ride.driver_rating} vehicle={ride.vehicle} />
+      {!user?.phone ? (
+        <View style={styles.card}>
+          <StatusBadge label="Phone required" tone="warning" />
+          <Text style={styles.body}>
+            Add your phone number to continue. Passengers and drivers need a
+            reachable number for pickup coordination and trip safety.
+          </Text>
+          <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <AppButton title="Save phone number" variant="secondary" disabled={phone.length < 6} onPress={savePhone} />
+        </View>
+      ) : null}
       <Text style={styles.sectionTitle}>Passenger requests</Text>
       {requests.length === 0 ? (
         <View style={styles.card}>

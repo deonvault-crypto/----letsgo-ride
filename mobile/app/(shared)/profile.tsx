@@ -47,6 +47,10 @@ export default function ProfileScreen() {
         />
       </View>
       <View style={styles.links}>
+        <AppButton title="Driver verification" variant="ghost" onPress={() => router.push("/(shared)/verification" as never)} />
+        {user?.role === "admin" ? (
+          <AppButton title="Admin verification queue" variant="secondary" onPress={() => router.push("/(admin)/verifications" as never)} />
+        ) : null}
         <AppButton title="Settings" variant="ghost" onPress={() => router.push("/(shared)/settings" as never)} />
         <AppButton title="Safety Center" variant="ghost" onPress={() => router.push("/(shared)/safety" as never)} />
         <AppButton title="Support" variant="ghost" onPress={() => router.push("/(shared)/support" as never)} />

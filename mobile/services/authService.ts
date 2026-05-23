@@ -66,6 +66,16 @@ export async function getCurrentUser() {
   return requestData<User>({ method: "GET", url: "/auth/me" });
 }
 
+export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "role">>) {
+  return requestData<User>({ method: "PATCH", url: "/auth/me", data });
+}
+
+export async function deleteAccount() {
+  const result = await requestData<{ deleted: boolean }>({ method: "DELETE", url: "/auth/me" });
+  await clearToken();
+  return result;
+}
+
 export async function logout() {
   await clearToken();
 }

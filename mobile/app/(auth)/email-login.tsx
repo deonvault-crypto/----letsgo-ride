@@ -33,7 +33,10 @@ export default function EmailLoginScreen() {
     <Screen title="Email login">
       <View style={styles.copy}>
         <Text style={styles.title}>Login with email</Text>
-        <Text style={styles.body}>Use email and password when your account has email access enabled.</Text>
+        <Text style={styles.body}>
+          Use email and password to access your passenger or driver account.
+          You can add a phone number later before booking or posting rides.
+        </Text>
       </View>
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <AppInput label="Password" value={password} onChangeText={setPassword} secureTextEntry />
@@ -41,6 +44,7 @@ export default function EmailLoginScreen() {
       <AppButton title="Login" loading={loading} onPress={submit} disabled={!email || password.length < 8} />
       <AppButton title="Create account" variant="ghost" onPress={() => router.push("/(auth)/email-register" as never)} />
       <AppButton title="Forgot password" variant="ghost" onPress={() => router.push("/(auth)/forgot-password" as never)} />
+      <AppButton title="Use phone verification" variant="ghost" onPress={() => router.push("/(auth)/login" as never)} />
     </Screen>
   );
 }

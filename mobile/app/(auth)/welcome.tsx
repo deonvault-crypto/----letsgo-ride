@@ -42,7 +42,7 @@ export default function WelcomeScreen() {
         <AppButton
           title="Login"
           variant="ghost"
-          onPress={() => router.push("/(auth)/login" as never)}
+          onPress={() => router.push("/(auth)/email-login" as never)}
         />
       </View>
     </Screen>

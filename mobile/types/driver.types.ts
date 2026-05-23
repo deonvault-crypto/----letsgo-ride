@@ -5,6 +5,10 @@ export type DriverProfile = {
   city?: string;
   status: string;
   verified: boolean;
+  verification_status?: "not_started" | "pending" | "needs_review" | "verified" | "rejected";
+  verification_provider?: "manual";
+  verification_submitted_at?: string | null;
+  verification_checked_at?: string | null;
   rating?: number;
   message?: string;
 };

@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import auth, drivers, health, reports, requests, rides, support, waitlist
+from app.routers import admin, auth, drivers, health, reports, requests, rides, support, verification, waitlist
 from app.services.ride_service import seed_demo_rides
 
 
@@ -57,4 +57,6 @@ app.include_router(requests.router)
 app.include_router(drivers.router)
 app.include_router(reports.router)
 app.include_router(support.router)
+app.include_router(verification.router)
+app.include_router(admin.router)
 app.include_router(waitlist.router)

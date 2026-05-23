@@ -24,7 +24,11 @@ export default function DriverHomeScreen() {
     error: requestsError,
     reload: reloadRequests,
   } = useDriverRequests();
-  const driverStatus = driver?.verified ? "Verified" : driver?.status === "suspended" ? "Suspended" : "Pending verification";
+  const driverStatus = driver?.verified
+    ? "Verified"
+    : driver?.status === "suspended"
+      ? "Suspended"
+      : formatStatus(driver?.verification_status || driver?.status || "pending_verification");
 
   return (
     <Screen title="Driver" navRole="driver">
@@ -33,6 +37,7 @@ export default function DriverHomeScreen() {
         <Text style={styles.title}>Drive planned routes. Earn from empty seats.</Text>
         <Text style={styles.body}>Post trips, review passenger requests, and keep clear records for each ride.</Text>
         <AppButton title="Post Trip" onPress={() => router.push("/(driver)/post-trip" as never)} />
+        <AppButton title="Driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
       </View>
       <View style={styles.metrics}>
         <Metric label="Today trips" value={String(rides.length)} />

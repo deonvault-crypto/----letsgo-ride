@@ -5,13 +5,18 @@ import { AppButton } from "../../components/ui/AppButton";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { logout } from "../../services/authService";
+import { deleteAccount, logout } from "../../services/authService";
 
 export default function SettingsScreen() {
   const router = useRouter();
 
   async function handleLogout() {
     await logout();
+    router.replace("/(auth)/welcome" as never);
+  }
+
+  async function handleDeleteAccount() {
+    await deleteAccount();
     router.replace("/(auth)/welcome" as never);
   }
 
@@ -28,9 +33,23 @@ export default function SettingsScreen() {
       </View>
       <View style={styles.card}>
         <Text style={styles.itemTitle}>Legal</Text>
-        <Text style={styles.body}>Terms of Use, Privacy Policy, and Safety Policy apply to passenger and driver activity.</Text>
+        <Text style={styles.body}>
+          Terms of Use, Privacy Policy, and Safety Policy apply to passenger and
+          driver activity. LetsGo Ride may collect driver identity and vehicle
+          documents for manual safety review, fraud prevention, and admin
+          review. Driver documents are not visible to passengers.
+        </Text>
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.itemTitle}>Account deletion</Text>
+        <Text style={styles.body}>
+          You can request account deletion from this app. Some safety and trip
+          records may be retained where required for dispute handling or legal
+          obligations.
+        </Text>
       </View>
       <AppButton title="Logout" variant="danger" onPress={handleLogout} />
+      <AppButton title="Request account deletion" variant="ghost" onPress={handleDeleteAccount} />
     </Screen>
   );
 }

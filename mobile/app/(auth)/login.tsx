@@ -32,8 +32,8 @@ export default function LoginScreen() {
       <View style={styles.copy}>
         <Text style={styles.title}>Enter your phone number</Text>
         <Text style={styles.body}>
-          LetsGo Ride uses phone verification to protect passenger and driver
-          accounts.
+          Phone verification is available when you want to add a reachable
+          number for bookings, pickup coordination, and driver activity.
         </Text>
       </View>
       <AppInput
@@ -47,7 +47,7 @@ export default function LoginScreen() {
       {error ? <ErrorState message={error} /> : null}
       <AppButton title="Send OTP" loading={loading} onPress={handleContinue} />
       <AppButton
-        title="Login with email"
+        title="Use email instead"
         variant="ghost"
         onPress={() => router.push("/(auth)/email-login" as never)}
       />

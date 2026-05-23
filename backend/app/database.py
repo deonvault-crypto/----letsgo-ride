@@ -20,6 +20,7 @@ COLLECTION_NAMES = [
     "waitlist",
     "passenger_interests",
     "driver_applications",
+    "audit_logs",
 ]
 
 
