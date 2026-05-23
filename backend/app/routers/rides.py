@@ -55,13 +55,19 @@ async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
             "user_id": user["id"],
             "driver_name": driver.get("name") or user.get("name") or data.get("driver_name"),
             "driver_rating": driver.get("rating", data.get("driver_rating", 4.8)),
+            "driver_verification_status": driver.get("verification_status"),
         }
     )
     return api_success(await create_ride(data))
 
 
 @router.patch("/{ride_id}")
-async def update_ride(ride_id: str, payload: RideUpdateBody):
+async def update_ride(ride_id: str, payload: RideUpdateBody, user=Depends(get_current_user)):
+    existing = await database.find_one("rides", {"id": ride_id})
+    if not existing or not is_public_ride(existing):
+        api_error("Ride not found.", 404)
+    if user.get("role") != "admin" and existing.get("user_id") != user.get("id"):
+        api_error("You can only update trips connected to your account.", 403)
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     updates["updated_at"] = now_iso()
     ride = await database.update_one("rides", ride_id, updates)
@@ -71,7 +77,12 @@ async def update_ride(ride_id: str, payload: RideUpdateBody):
 
 
 @router.delete("/{ride_id}")
-async def delete_ride(ride_id: str):
+async def delete_ride(ride_id: str, user=Depends(get_current_user)):
+    existing = await database.find_one("rides", {"id": ride_id})
+    if not existing or not is_public_ride(existing):
+        api_error("Ride not found.", 404)
+    if user.get("role") != "admin" and existing.get("user_id") != user.get("id"):
+        api_error("You can only delete trips connected to your account.", 403)
     deleted = await database.delete_one("rides", ride_id)
     if not deleted:
         api_error("Ride not found.", 404)

@@ -149,6 +149,15 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
         "updated_at": timestamp,
     }
     updated = await database.update_one("drivers", driver["id"], updates) or driver
+    await database.update_one(
+        "users",
+        user["id"],
+        {
+            "verification_status": "pending",
+            "verification_provider": "manual",
+            "updated_at": timestamp,
+        },
+    )
     await write_audit_log(
         actor_user_id=user["id"],
         actor_role=user.get("role"),
@@ -200,6 +209,15 @@ async def save_uploaded_document(
             "updated_at": timestamp,
         },
     )
+    await database.update_one(
+        "users",
+        user["id"],
+        {
+            "verification_status": "needs_review" if driver.get("verification_status") == "rejected" else driver.get("verification_status", "not_started"),
+            "verification_provider": "manual",
+            "updated_at": timestamp,
+        },
+    )
     await write_audit_log(
         actor_user_id=user["id"],
         actor_role=user.get("role"),
@@ -247,6 +265,16 @@ async def apply_admin_verification_status(
         "updated_at": timestamp,
     }
     updated = await database.update_one("drivers", driver["id"], updates) or driver
+    if driver.get("user_id"):
+        await database.update_one(
+            "users",
+            driver["user_id"],
+            {
+                "verification_status": status,
+                "verification_provider": "manual",
+                "updated_at": timestamp,
+            },
+        )
     if driver.get("application_id"):
         await database.update_one(
             "driver_applications",

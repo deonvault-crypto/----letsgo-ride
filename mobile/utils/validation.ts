@@ -1,6 +1,6 @@
 export function isValidPhone(value: string) {
-  const phone = value.trim();
-  return /^[+0-9\s-]{6,18}$/.test(phone);
+  const phone = value.trim().replace(/\s|-/g, "");
+  return /^\+[1-9]\d{7,14}$/.test(phone);
 }
 
 export function hasRequiredValues(values: string[]) {

@@ -19,7 +19,7 @@ export default function LoginScreen() {
 
   async function handleContinue() {
     if (!isValidPhone(phone)) {
-      setLocalError("Enter a valid Zimbabwe or international phone number.");
+      setLocalError("Enter your phone number with country code, for example +263772554186.");
       return;
     }
     setLocalError("");
@@ -28,7 +28,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen title="Login" showHeader>
+    <Screen title="Phone verification" showBack fallbackRoute="/(auth)/welcome" showNotifications={false}>
       <View style={styles.copy}>
         <Text style={styles.title}>Enter your phone number</Text>
         <Text style={styles.body}>

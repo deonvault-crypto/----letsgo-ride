@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.database import database
 from app.routers import admin, auth, drivers, health, reports, requests, rides, support, verification, waitlist
+from app.services.auth_service import ensure_admin_seed_user
 from app.services.ride_service import seed_demo_rides
 
 
@@ -42,6 +43,7 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 @app.on_event("startup")
 async def on_startup():
     await database.connect()
+    await ensure_admin_seed_user()
     if settings.enable_demo_seed:
         await seed_demo_rides()
 

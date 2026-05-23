@@ -9,6 +9,18 @@ from app.utils import api_error, api_success, new_id, now_iso
 router = APIRouter(prefix="/requests", tags=["requests"])
 
 
+async def _user_can_manage_request(user, request) -> bool:
+    if user.get("role") == "admin":
+        return True
+    if request.get("user_id") == user.get("id"):
+        return True
+    driver = await database.find_one("drivers", {"user_id": user["id"]})
+    if not driver:
+        return False
+    ride = await database.find_one("rides", {"id": request.get("ride_id")})
+    return bool(ride and ride.get("driver_id") == driver.get("id"))
+
+
 @router.post("")
 async def create_request(payload: RideRequestCreateBody, user=Depends(get_current_user)):
     if not user.get("phone"):
@@ -51,8 +63,16 @@ async def driver_requests(user=Depends(get_current_user)):
 
 @router.patch("/{request_id}")
 async def update_request(request_id: str, payload: RideRequestUpdateBody, user=Depends(get_current_user)):
-    if payload.status == "confirmed" and not user.get("phone"):
-        api_error("Add your phone number before accepting a passenger request.")
+    existing = await database.find_one("ride_requests", {"id": request_id})
+    if not existing:
+        api_error("Ride request not found.", 404)
+    if not await _user_can_manage_request(user, existing):
+        api_error("You can only manage requests connected to your account.", 403)
+    if payload.status == "confirmed":
+        if existing.get("user_id") == user.get("id") and user.get("role") != "admin":
+            api_error("Only the driver can confirm a passenger request.", 403)
+        if not user.get("phone"):
+            api_error("Add your phone number before accepting a passenger request.")
     request = await database.update_one(
         "ride_requests",
         request_id,
@@ -64,7 +84,12 @@ async def update_request(request_id: str, payload: RideRequestUpdateBody, user=D
 
 
 @router.delete("/{request_id}")
-async def delete_request(request_id: str):
+async def delete_request(request_id: str, user=Depends(get_current_user)):
+    existing = await database.find_one("ride_requests", {"id": request_id})
+    if not existing:
+        api_error("Ride request not found.", 404)
+    if not await _user_can_manage_request(user, existing):
+        api_error("You can only delete requests connected to your account.", 403)
     deleted = await database.delete_one("ride_requests", request_id)
     if not deleted:
         api_error("Ride request not found.", 404)

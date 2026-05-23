@@ -32,7 +32,7 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <Screen title="Reset password">
+    <Screen title="Reset password" showBack fallbackRoute="/(auth)/forgot-password" showNotifications={false}>
       <View style={styles.copy}>
         <Text style={styles.title}>Set a new password</Text>
         <Text style={styles.body}>Use the reset code sent to your email.</Text>

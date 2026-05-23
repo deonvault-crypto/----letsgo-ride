@@ -6,6 +6,7 @@ import { spacing } from "../../constants/spacing";
 import { Ride } from "../../types/ride.types";
 import { formatUsd } from "../../utils/formatPrice";
 import { StatusBadge } from "../ui/StatusBadge";
+import { VerifiedBadge } from "../ui/VerifiedBadge";
 
 export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }) {
   return (
@@ -24,7 +25,9 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
       </View>
       <View style={styles.row}>
         <MaterialCommunityIcons name="account-check-outline" size={18} color={colors.primaryGreen} />
-        <Text style={styles.driver}>{ride.driver_name} - {ride.driver_rating.toFixed(1)}</Text>
+        <Text style={styles.driver}>{ride.driver_name}</Text>
+        <VerifiedBadge verified={ride.driver_verification_status === "verified"} />
+        <Text style={styles.meta}>- {ride.driver_rating.toFixed(1)}</Text>
       </View>
       <View style={styles.row}>
         <MaterialCommunityIcons name="car-outline" size={18} color={colors.mutedText} />
@@ -45,6 +48,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: spacing.lg,
     gap: spacing.md,
+    shadowColor: colors.black,
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
   pressed: {
     transform: [{ scale: 0.99 }],
@@ -73,6 +81,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    flexWrap: "wrap",
   },
   driver: {
     color: colors.whiteText,

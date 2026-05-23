@@ -10,6 +10,18 @@ from app.utils import api_error, api_success, new_id, now_iso
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
 
+def public_driver_profile(driver):
+    hidden = {
+        "documents",
+        "admin_verification_notes",
+        "verification_notes",
+        "phone",
+        "email",
+        "user_id",
+    }
+    return {key: value for key, value in driver.items() if key not in hidden}
+
+
 @router.post("/apply")
 async def apply(payload: DriverApplicationBody, user=Depends(get_current_user)):
     return api_success(await create_driver_application(payload.model_dump(), user))
@@ -62,4 +74,4 @@ async def driver_detail(driver_id: str):
     driver = await database.find_one("drivers", {"id": driver_id})
     if not driver:
         api_error("Driver not found.", 404)
-    return api_success(driver)
+    return api_success(public_driver_profile(driver))

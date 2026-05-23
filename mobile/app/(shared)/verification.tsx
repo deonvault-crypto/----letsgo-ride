@@ -100,7 +100,7 @@ export default function DriverVerificationScreen() {
   const requiredDocuments = profile?.required_documents || (Object.keys(documentLabels) as VerificationDocumentType[]);
 
   return (
-    <Screen title="Verification" navRole="driver">
+    <Screen title="Driver verification" showBack fallbackRoute="/(shared)/profile" navRole="driver">
       <View style={styles.card}>
         <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
         <Text style={styles.title}>Driver verification</Text>
@@ -115,48 +115,57 @@ export default function DriverVerificationScreen() {
 
       {!loading && status !== "not_started" ? <StatusCopy status={status} /> : null}
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Required documents</Text>
-        {requiredDocuments.map((documentType) => (
-          <DocumentRow
-            key={documentType}
-            documentType={documentType}
-            documents={uploadedDocuments}
-            uploading={uploading === documentType}
-            onUpload={() => pickDocument(documentType)}
-          />
-        ))}
-      </View>
+      {!loading && (status === "pending" || status === "verified") ? (
+        <SubmittedState status={status} documents={uploadedDocuments} />
+      ) : null}
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Review notes</Text>
-        <AppInput
-          label="Message for verification team"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Add anything that helps review your documents"
-          multiline
-        />
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityLabel="Driver verification consent"
-          accessibilityState={{ checked: consent }}
-          style={styles.consentRow}
-          onPress={() => setConsent((current) => !current)}
-        >
-          <View style={[styles.checkbox, consent && styles.checkboxOn]} />
-          <Text style={styles.body}>
-            I consent to LetsGo Ride reviewing my identity and vehicle documents
-            for driver verification, safety, and fraud prevention.
-          </Text>
-        </Pressable>
-        <AppButton
-          title="Submit for review"
-          loading={saving}
-          disabled={!consent}
-          onPress={submit}
-        />
-      </View>
+      {!loading && (status === "not_started" || status === "needs_review" || status === "rejected") ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Required documents</Text>
+            {requiredDocuments.map((documentType) => (
+              <DocumentRow
+                key={documentType}
+                documentType={documentType}
+                documents={uploadedDocuments}
+                uploading={uploading === documentType}
+                onUpload={() => pickDocument(documentType)}
+              />
+            ))}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Review notes</Text>
+            <AppInput
+              label="Message for verification team"
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Add anything that helps review your documents"
+              multiline
+            />
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityLabel="Driver verification consent"
+              accessibilityState={{ checked: consent }}
+              style={styles.consentRow}
+              onPress={() => setConsent((current) => !current)}
+            >
+              <View style={[styles.checkbox, consent && styles.checkboxOn]} />
+              <Text style={styles.body}>
+                I consent to LetsGoRide reviewing my identity and vehicle
+                documents for driver verification, safety, and fraud
+                prevention.
+              </Text>
+            </Pressable>
+            <AppButton
+              title={status === "not_started" ? "Submit for review" : "Resubmit for review"}
+              loading={saving}
+              disabled={!consent}
+              onPress={submit}
+            />
+          </View>
+        </>
+      ) : null}
     </Screen>
   );
 }
@@ -177,7 +186,7 @@ function DocumentRow({
     <View style={styles.documentRow}>
       <View style={styles.documentCopy}>
         <Text style={styles.documentTitle}>{documentLabels[documentType]}</Text>
-        <Text style={styles.body}>
+        <Text numberOfLines={1} style={styles.body}>
           {document ? `${document.file_name} - ${formatStatus(document.status || "pending")}` : "Not uploaded"}
         </Text>
       </View>
@@ -188,6 +197,57 @@ function DocumentRow({
         onPress={onUpload}
         style={styles.smallButton}
       />
+    </View>
+  );
+}
+
+function SubmittedState({
+  status,
+  documents,
+}: {
+  status: VerificationProfile["verification_status"];
+  documents: VerificationDocument[];
+}) {
+  const success = status === "verified";
+  const rows: VerificationDocumentType[] = [
+    "identity_document",
+    "driver_license",
+    "vehicle_registration_or_logbook",
+    "vehicle_photo_optional",
+  ];
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>
+        {success ? "Driver verification approved" : "Verification submitted"}
+      </Text>
+      <Text style={styles.body}>
+        {success
+          ? "Your driver verification is approved. You can now post rides."
+          : "Your documents have been submitted and are now under review. We will notify you when your driver verification is approved or if more information is needed."}
+      </Text>
+      <View style={styles.summaryCard}>
+        <Text style={styles.documentTitle}>Submitted documents</Text>
+        {rows.map((documentType) => {
+          const document = documents.find((item) => item.document_type === documentType);
+          return (
+            <View key={documentType} style={styles.summaryRow}>
+              <Text numberOfLines={1} style={styles.summaryLabel}>{documentLabels[documentType]}</Text>
+              <StatusBadge
+                label={document ? formatStatus(document.status || "pending") : documentType === "vehicle_photo_optional" ? "Optional" : "Pending"}
+                tone={document?.status === "accepted" ? "success" : document?.status === "rejected" ? "danger" : "warning"}
+              />
+            </View>
+          );
+        })}
+      </View>
+      {!success ? (
+        <Text style={styles.body}>
+          Once approved, your profile will show a blue verified badge so
+          passengers and drivers know your account has been reviewed by
+          LetsGoRide.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -262,6 +322,25 @@ const styles = StyleSheet.create({
   smallButton: {
     alignSelf: "flex-start",
     minHeight: 44,
+  },
+  summaryCard: {
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: 20,
+    backgroundColor: colors.elevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  summaryLabel: {
+    flex: 1,
+    color: colors.whiteText,
+    fontWeight: "800",
   },
   consentRow: {
     flexDirection: "row",

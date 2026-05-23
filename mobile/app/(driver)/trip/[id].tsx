@@ -62,7 +62,7 @@ export default function DriverTripDetailScreen() {
 
   if (loading) {
     return (
-      <Screen title="Trip" navRole="driver">
+      <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
         <LoadingState label="Loading trip..." />
       </Screen>
     );
@@ -70,14 +70,14 @@ export default function DriverTripDetailScreen() {
 
   if (error || !ride) {
     return (
-      <Screen title="Trip" navRole="driver">
+      <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
         <ErrorState message={error || "Trip not found."} />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Trip" navRole="driver">
+    <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
       <ProfileCompletionModal
         visible={showPhoneModal}
         phone={phone}
@@ -91,7 +91,12 @@ export default function DriverTripDetailScreen() {
         <Text style={styles.body}>{ride.date} at {ride.time}</Text>
         <Text style={styles.body}>{ride.available_seats} seats available - US${ride.price_usd} per seat</Text>
       </View>
-      <DriverCard name={ride.driver_name} rating={ride.driver_rating} vehicle={ride.vehicle} />
+      <DriverCard
+        name={ride.driver_name}
+        rating={ride.driver_rating}
+        vehicle={ride.vehicle}
+        verified={ride.driver_verification_status === "verified"}
+      />
       {!user?.phone ? (
         <View style={styles.card}>
           <StatusBadge label="Phone required" tone="warning" />

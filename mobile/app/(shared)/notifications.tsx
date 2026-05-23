@@ -7,7 +7,7 @@ import { spacing } from "../../constants/spacing";
 
 export default function NotificationsScreen() {
   return (
-    <Screen title="Notifications" navRole="passenger">
+    <Screen title="Notifications" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
       <Text style={styles.title}>Notifications</Text>
       <View style={styles.card}>
         <Text style={styles.body}>Trip confirmations, request updates, and support responses will appear here.</Text>

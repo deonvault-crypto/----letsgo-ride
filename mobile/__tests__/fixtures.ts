@@ -71,3 +71,13 @@ export const pendingProfile: VerificationProfile = {
   documents: [],
   required_documents: ["identity_document", "driver_license", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
 };
+
+export const notStartedProfile: VerificationProfile = {
+  driver_id: "driver-1",
+  driver_status: "pending_review",
+  verified: false,
+  verification_status: "not_started",
+  verification_provider: "manual",
+  documents: [],
+  required_documents: ["identity_document", "driver_license", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
+};

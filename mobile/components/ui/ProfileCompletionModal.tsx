@@ -4,6 +4,7 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { AppButton } from "./AppButton";
 import { AppInput } from "./AppInput";
+import { isValidPhone } from "../../utils/validation";
 
 export function ProfileCompletionModal({
   visible,
@@ -29,8 +30,15 @@ export function ProfileCompletionModal({
             Passengers and drivers need a reachable number for pickup
             coordination and trip safety.
           </Text>
-          <AppInput label="Phone number" value={phone} onChangeText={onChangePhone} keyboardType="phone-pad" />
-          <AppButton title="Save phone number" loading={saving} disabled={phone.trim().length < 6} onPress={onSave} />
+          <AppInput
+            label="Phone number"
+            value={phone}
+            onChangeText={onChangePhone}
+            keyboardType="phone-pad"
+            placeholder="+263772554186"
+          />
+          <Text style={styles.hint}>Use country code format, for example +263772554186.</Text>
+          <AppButton title="Save phone number" loading={saving} disabled={!isValidPhone(phone)} onPress={onSave} />
           <AppButton title="Not now" variant="ghost" onPress={onClose} />
         </View>
       </View>
@@ -63,5 +71,10 @@ const styles = StyleSheet.create({
   body: {
     color: colors.mutedText,
     lineHeight: 22,
+  },
+  hint: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

@@ -23,7 +23,7 @@ export default function OtpScreen() {
   }
 
   return (
-    <Screen title="Verify">
+    <Screen title="Verify phone" showBack fallbackRoute="/(auth)/login" showNotifications={false}>
       <View style={styles.copy}>
         <Text style={styles.title}>Verify your phone</Text>
         <Text style={styles.body}>

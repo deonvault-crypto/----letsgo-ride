@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import { Href } from "expo-router";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
@@ -20,6 +21,9 @@ type ScreenProps = {
   title?: string;
   navRole?: "passenger" | "driver";
   showHeader?: boolean;
+  showBack?: boolean;
+  fallbackRoute?: Href;
+  showNotifications?: boolean;
   scroll?: boolean;
 };
 
@@ -28,6 +32,9 @@ export function Screen({
   title,
   navRole,
   showHeader = true,
+  showBack = false,
+  fallbackRoute,
+  showNotifications = true,
   scroll = true,
 }: ScreenProps) {
   const contentPadding = navRole ? spacing.bottomNavHeight + 36 : spacing.xl;
@@ -56,7 +63,14 @@ export function Screen({
         style={styles.keyboard}
       >
         <View style={styles.frame}>
-          {showHeader ? <Header title={title} /> : null}
+          {showHeader ? (
+            <Header
+              title={title}
+              showBack={showBack}
+              fallbackRoute={fallbackRoute}
+              showNotifications={showNotifications}
+            />
+          ) : null}
           {body}
         </View>
         {navRole ? <BottomNav role={navRole} /> : null}

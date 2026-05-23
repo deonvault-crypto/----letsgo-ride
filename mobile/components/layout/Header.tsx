@@ -1,43 +1,29 @@
-import { Pressable, StyleSheet, View } from "react-native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Href } from "expo-router";
 
-import { colors } from "../../constants/colors";
-import { spacing } from "../../constants/spacing";
+import { AppTopBar } from "./AppTopBar";
 import { BrandLogo } from "./BrandLogo";
 
 export function BrandWordmark({ compact = false }: { compact?: boolean }) {
   return <BrandLogo size={compact ? "small" : "regular"} />;
 }
 
-export function Header({ title: _title }: { title?: string }) {
-  const router = useRouter();
+export function Header({
+  title,
+  showBack,
+  fallbackRoute,
+  showNotifications,
+}: {
+  title?: string;
+  showBack?: boolean;
+  fallbackRoute?: Href;
+  showNotifications?: boolean;
+}) {
   return (
-    <View style={styles.header}>
-      <BrandLogo size="small" />
-      <Pressable onPress={() => router.push("/(shared)/notifications" as never)} style={styles.iconButton}>
-        <MaterialCommunityIcons name="bell-outline" size={21} color={colors.whiteText} />
-      </Pressable>
-    </View>
+    <AppTopBar
+      title={title}
+      showBack={showBack}
+      fallbackRoute={fallbackRoute}
+      showNotifications={showNotifications}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  header: {
-    minHeight: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-});

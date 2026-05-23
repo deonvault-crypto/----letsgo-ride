@@ -82,7 +82,7 @@ export default function AdminVerificationDetailScreen() {
 
   if (loading) {
     return (
-      <Screen title="Verification">
+      <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications">
         <LoadingState label="Loading verification..." />
       </Screen>
     );
@@ -92,8 +92,7 @@ export default function AdminVerificationDetailScreen() {
   const status = String(driver.verification_status || "not_started") as VerificationStatus;
 
   return (
-    <Screen title="Verification">
-      <AppButton title="Back to queue" variant="ghost" onPress={() => router.back()} />
+    <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications">
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       <View style={styles.card}>
         <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />

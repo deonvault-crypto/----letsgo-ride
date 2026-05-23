@@ -19,7 +19,7 @@ export function PopularRouteChips({
           style={styles.chip}
           onPress={() => onSelect(route.origin, route.destination)}
         >
-          <Text style={styles.text}>{`${route.origin} -> ${route.destination}`}</Text>
+          <Text numberOfLines={1} style={styles.text}>{`${route.origin} to ${route.destination}`}</Text>
         </Pressable>
       ))}
     </ScrollView>
@@ -35,9 +35,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 999,
-    backgroundColor: colors.card,
+    backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: colors.border,
+    maxWidth: 190,
   },
   text: {
     color: colors.whiteText,

@@ -81,14 +81,14 @@ export default function RequestSeatScreen() {
 
   if (loading) {
     return (
-      <Screen title="Request" navRole="passenger">
+      <Screen title="Request" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
         <LoadingState label="Preparing request..." />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Request" navRole="passenger">
+    <Screen title="Request" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <ProfileCompletionModal
         visible={showPhoneModal}
         phone={phone}

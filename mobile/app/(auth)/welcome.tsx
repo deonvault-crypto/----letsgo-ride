@@ -1,11 +1,13 @@
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { BrandLogo } from "../../components/layout/BrandLogo";
 import { AppButton } from "../../components/ui/AppButton";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
+import { legalUrls } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
+import { openExternalUrl } from "../../utils/openExternalUrl";
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -44,8 +46,25 @@ export default function WelcomeScreen() {
           variant="secondary"
           onPress={() => router.push("/(auth)/email-register" as never)}
         />
+        <View style={styles.legalLinks}>
+          <LegalLink label="Privacy Policy" url={legalUrls.privacy} />
+          <Text style={styles.separator}>|</Text>
+          <LegalLink label="Terms of Use" url={legalUrls.terms} />
+          <Text style={styles.separator}>|</Text>
+          <LegalLink label="Support" url={legalUrls.support} />
+        </View>
       </View>
     </Screen>
+  );
+}
+
+function LegalLink({ label, url }: { label: string; url: string }) {
+  return (
+    <Pressable onPress={() => openExternalUrl(url)} hitSlop={8}>
+      {({ pressed }) => (
+        <Text style={[styles.legalText, pressed && styles.legalTextPressed]}>{label}</Text>
+      )}
+    </Pressable>
   );
 }
 
@@ -106,5 +125,25 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.md,
     paddingBottom: spacing.xl,
+  },
+  legalLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  legalText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  legalTextPressed: {
+    color: colors.primaryGreen,
+  },
+  separator: {
+    color: colors.border,
+    fontWeight: "700",
   },
 });

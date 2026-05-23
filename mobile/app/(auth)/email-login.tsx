@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
@@ -11,7 +11,8 @@ import { emailLogin } from "../../services/authService";
 
 export default function EmailLoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const params = useLocalSearchParams<{ email?: string }>();
+  const [email, setEmail] = useState(params.email || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,8 +21,14 @@ export default function EmailLoginScreen() {
     try {
       setLoading(true);
       setError("");
-      await emailLogin(email, password);
-      router.replace("/(passenger)/home" as never);
+      const result = await emailLogin(email, password);
+      if (result.user.role === "admin") {
+        router.replace("/(admin)/verifications" as never);
+      } else if (result.user.role === "driver") {
+        router.replace("/(driver)/home" as never);
+      } else {
+        router.replace("/(passenger)/home" as never);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {
@@ -30,7 +37,7 @@ export default function EmailLoginScreen() {
   }
 
   return (
-    <Screen title="Email login">
+    <Screen title="Login" showBack fallbackRoute="/(auth)/welcome" showNotifications={false}>
       <View style={styles.copy}>
         <Text style={styles.title}>Login with email</Text>
         <Text style={styles.body}>
@@ -41,6 +48,18 @@ export default function EmailLoginScreen() {
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <AppInput label="Password" value={password} onChangeText={setPassword} secureTextEntry />
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error.includes("verify your email") ? (
+        <AppButton
+          title="Verify email"
+          variant="secondary"
+          onPress={() =>
+            router.push({
+              pathname: "/(auth)/email-verification",
+              params: { email },
+            } as never)
+          }
+        />
+      ) : null}
       <AppButton title="Login" loading={loading} onPress={submit} disabled={!email || password.length < 8} />
       <AppButton title="Create account" variant="ghost" onPress={() => router.push("/(auth)/email-register" as never)} />
       <AppButton title="Forgot password" variant="ghost" onPress={() => router.push("/(auth)/forgot-password" as never)} />

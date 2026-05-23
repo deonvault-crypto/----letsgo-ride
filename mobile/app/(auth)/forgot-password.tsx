@@ -31,7 +31,7 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <Screen title="Forgot password">
+    <Screen title="Forgot password" showBack fallbackRoute="/(auth)/email-login" showNotifications={false}>
       <View style={styles.copy}>
         <Text style={styles.title}>Reset access</Text>
         <Text style={styles.body}>Enter your email and we will send instructions if the account exists.</Text>

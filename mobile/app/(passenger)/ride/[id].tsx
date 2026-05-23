@@ -38,7 +38,7 @@ export default function RideDetailScreen() {
 
   if (loading) {
     return (
-      <Screen title="Ride" navRole="passenger">
+      <Screen title="Ride" showBack fallbackRoute="/(passenger)/results" navRole="passenger">
         <LoadingState label="Loading ride details..." />
       </Screen>
     );
@@ -46,14 +46,14 @@ export default function RideDetailScreen() {
 
   if (error || !ride) {
     return (
-      <Screen title="Ride" navRole="passenger">
+      <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
         <ErrorState message={error || "Ride not found."} />
       </Screen>
     );
   }
 
   return (
-    <Screen title="Ride" navRole="passenger">
+    <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <View style={styles.headerCard}>
         <StatusBadge label={ride.status.toUpperCase()} tone="success" />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
@@ -67,7 +67,12 @@ export default function RideDetailScreen() {
         <Info icon="seat-passenger" label="Seats" value={`${ride.available_seats} available`} />
       </View>
 
-      <DriverCard name={ride.driver_name} rating={ride.driver_rating} vehicle={ride.vehicle} />
+      <DriverCard
+        name={ride.driver_name}
+        rating={ride.driver_rating}
+        vehicle={ride.vehicle}
+        verified={ride.driver_verification_status === "verified"}
+      />
 
       <View style={styles.detailCard}>
         <Text style={styles.sectionTitle}>Safety notes</Text>

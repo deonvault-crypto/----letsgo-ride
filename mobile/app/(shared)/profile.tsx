@@ -6,14 +6,17 @@ import * as ImagePicker from "expo-image-picker";
 import { Avatar } from "../../components/ui/Avatar";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
+import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { updateCurrentUser } from "../../services/authService";
 import { displayNameOrFallback, firstNameOrFallback, isGenericAccountName } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
+import { isValidPhone } from "../../utils/validation";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -23,6 +26,7 @@ export default function ProfileScreen() {
   const firstName = firstNameOrFallback(user?.name);
   const contact = user?.phone || user?.email || "Add phone or email";
   const city = user?.city || "Zimbabwe";
+  const verified = isIdentityVerified(user);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -54,6 +58,10 @@ export default function ProfileScreen() {
     try {
       setSaving(true);
       setMessage("");
+      if (phone.trim() && !isValidPhone(phone)) {
+        setMessage("Enter your phone number with country code, for example +263772554186.");
+        return;
+      }
       const updated = await updateCurrentUser({
         name: name.trim() || undefined,
         email: email.trim() || undefined,
@@ -105,12 +113,25 @@ export default function ProfileScreen() {
       <View style={styles.profileCard}>
         <Avatar name={displayName} imageUri={profilePhotoUrl || user?.profile_photo_url} />
         <View style={styles.profileText}>
-          <Text style={styles.name}>Hi, {firstName}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>Hi, {firstName}</Text>
+            <VerifiedBadge verified={verified} size="medium" />
+          </View>
           <Text style={styles.meta}>{contact}</Text>
           <Text style={styles.meta}>{city} - {formatStatus(role)} account</Text>
         </View>
         <StatusBadge label={formatStatus(role)} tone="success" />
       </View>
+      {!verified ? (
+        <View style={styles.card}>
+          <Text style={styles.title}>Get verified</Text>
+          <Text style={styles.body}>
+            Verification builds trust. A verified badge helps other people know
+            your account is real and reviewed by LetsGoRide.
+          </Text>
+          <AppButton title="Start verification" onPress={() => router.push("/(shared)/verification" as never)} />
+        </View>
+      ) : null}
       <View style={styles.card}>
         <Text style={styles.title}>Profile details</Text>
         <Text style={styles.body}>
@@ -143,22 +164,22 @@ export default function ProfileScreen() {
         <AppButton
           title="Open passenger mode"
           variant="secondary"
-          onPress={() => router.push("/(passenger)/home" as never)}
+          onPress={() => router.replace("/(passenger)/home" as never)}
         />
         <AppButton
           title="Open driver mode"
           variant="ghost"
-          onPress={() => router.push("/(driver)/home" as never)}
+          onPress={() => router.replace("/(driver)/home" as never)}
         />
       </View>
       <View style={styles.links}>
-        <AppButton title="Driver verification" variant="ghost" onPress={() => router.push("/(shared)/verification" as never)} />
+        <ListTile icon="shield-check-outline" title="Driver verification" subtitle="Verify your identity before posting rides" onPress={() => router.push("/(shared)/verification" as never)} />
         {user?.role === "admin" ? (
           <AppButton title="Admin verification queue" variant="secondary" onPress={() => router.push("/(admin)/verifications" as never)} />
         ) : null}
-        <AppButton title="Settings" variant="ghost" onPress={() => router.push("/(shared)/settings" as never)} />
-        <AppButton title="Safety Center" variant="ghost" onPress={() => router.push("/(shared)/safety" as never)} />
-        <AppButton title="Support" variant="ghost" onPress={() => router.push("/(shared)/support" as never)} />
+        <ListTile icon="cog-outline" title="Settings" subtitle="Account, privacy, and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
+        <ListTile icon="shield-alert-outline" title="Safety Center" subtitle="Report issues and review trip safety" onPress={() => router.push("/(shared)/safety" as never)} />
+        <ListTile icon="lifebuoy" title="Support" subtitle="Contact LetsGoRide support" onPress={() => router.push("/(shared)/support" as never)} />
       </View>
     </Screen>
   );
@@ -183,6 +204,12 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 20,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexWrap: "wrap",
   },
   meta: {
     color: colors.mutedText,

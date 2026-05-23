@@ -15,6 +15,7 @@ export default function EmailRegisterScreen() {
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("Harare");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,8 +23,25 @@ export default function EmailRegisterScreen() {
     try {
       setLoading(true);
       setError("");
-      await emailRegister({ name, email, city, password });
-      router.replace("/(passenger)/home" as never);
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+      await emailRegister({
+        name,
+        email,
+        city,
+        password,
+        confirm_password: confirmPassword,
+      });
+      router.replace({
+        pathname: "/(auth)/email-verification",
+        params: { email },
+      } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account.");
     } finally {
@@ -32,7 +50,7 @@ export default function EmailRegisterScreen() {
   }
 
   return (
-    <Screen title="Register">
+    <Screen title="Create account" showBack fallbackRoute="/(auth)/welcome" showNotifications={false}>
       <View style={styles.copy}>
         <Text style={styles.title}>Create passenger account</Text>
         <Text style={styles.body}>Register for ride requests, support, and trip records.</Text>
@@ -41,8 +59,9 @@ export default function EmailRegisterScreen() {
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <AppInput label="City" value={city} onChangeText={setCity} />
       <AppInput label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <AppInput label="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <AppButton title="Create account" loading={loading} onPress={submit} disabled={!name || !email || password.length < 8} />
+      <AppButton title="Create account" loading={loading} onPress={submit} disabled={!name || !email || password.length < 8 || confirmPassword.length < 8} />
     </Screen>
   );
 }

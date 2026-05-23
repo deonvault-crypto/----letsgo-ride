@@ -11,7 +11,7 @@ export default function SafetyScreen() {
   const router = useRouter();
 
   return (
-    <Screen title="Safety" navRole="passenger">
+    <Screen title="Safety" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
       <View style={styles.hero}>
         <Text style={styles.title}>Safety Center</Text>
         <Text style={styles.body}>Safety starts with clear trip details, accountable profiles, and a simple reporting path.</Text>

@@ -15,6 +15,12 @@ class Settings:
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
         self.mock_otp = os.getenv("MOCK_OTP", "123456")
         self.enable_demo_seed = self._parse_bool(os.getenv("ENABLE_DEMO_SEED", "false"))
+        self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
+        self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
+        self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
+        self.resend_api_key = os.getenv("RESEND_API_KEY", "").strip()
+        self.resend_from_email = os.getenv("RESEND_FROM_EMAIL", "").strip()
+        self.resend_reply_to = os.getenv("RESEND_REPLY_TO", "").strip()
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",

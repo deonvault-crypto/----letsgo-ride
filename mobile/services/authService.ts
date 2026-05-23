@@ -2,6 +2,11 @@ import { requestData, saveToken, clearToken, getToken } from "./api";
 import { User, UserRole } from "../types/user.types";
 
 type AuthPayload = { token: string; user: User };
+type EmailVerificationPayload = {
+  email: string;
+  email_verified: boolean;
+  message: string;
+};
 
 export async function requestOtp(phone: string) {
   return requestData<{ phone: string; message: string }>({
@@ -25,15 +30,30 @@ export async function emailRegister(data: {
   name: string;
   email: string;
   password: string;
+  confirm_password: string;
   city?: string;
 }) {
-  const result = await requestData<AuthPayload>({
+  return requestData<EmailVerificationPayload>({
     method: "POST",
     url: "/auth/email-register",
     data,
   });
-  await saveToken(result.token);
-  return result;
+}
+
+export async function verifyEmail(email: string, code: string) {
+  return requestData<EmailVerificationPayload>({
+    method: "POST",
+    url: "/auth/verify-email",
+    data: { email, code },
+  });
+}
+
+export async function resendEmailVerification(email: string) {
+  return requestData<EmailVerificationPayload>({
+    method: "POST",
+    url: "/auth/resend-email-verification",
+    data: { email },
+  });
 }
 
 export async function forgotPassword(email: string) {
@@ -66,7 +86,7 @@ export async function getCurrentUser() {
   return requestData<User>({ method: "GET", url: "/auth/me" });
 }
 
-export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "profile_photo_url" | "profile_photo_name" | "role">>) {
+export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "profile_photo_url" | "profile_photo_name" | "role" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
   return requestData<User>({ method: "PATCH", url: "/auth/me", data });
 }
 

@@ -26,7 +26,7 @@ export default function ResultsScreen() {
   const { rides, loading, error, reload } = useRides(searchParams);
 
   return (
-    <Screen title="Results" navRole="passenger">
+    <Screen title="Results" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <Text style={styles.title}>{searchParams.origin || "Any origin"} to {searchParams.destination || "any destination"}</Text>
       <Text style={styles.body}>Showing rides with at least {searchParams.seats} seat available.</Text>
       {loading ? <LoadingState label="Searching rides..." /> : null}

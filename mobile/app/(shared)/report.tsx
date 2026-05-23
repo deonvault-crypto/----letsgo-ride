@@ -48,7 +48,7 @@ export default function ReportIssueScreen() {
   }
 
   return (
-    <Screen title="Report" navRole="passenger">
+    <Screen title="Report" showBack fallbackRoute="/(shared)/safety" navRole="passenger">
       <Text style={styles.title}>Report issue</Text>
       <View style={styles.chips}>
         {reportTypes.map((type) => (

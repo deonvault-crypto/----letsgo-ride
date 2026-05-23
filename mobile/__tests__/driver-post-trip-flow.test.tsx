@@ -50,9 +50,7 @@ describe("driver post-trip flow", () => {
   it("uses location selectors and date picker for post-trip fields", async () => {
     const screen = render(<PostTripScreen />);
 
-    await waitFor(() => {
-      expect(getMyVerification).toHaveBeenCalled();
-    });
+    expect(await screen.findByText("Driver verified")).toBeOnTheScreen();
 
     fireEvent.press(screen.getByRole("button", { name: "Origin" }));
     fireEvent.press(screen.getByText("Mutare"));
@@ -75,6 +73,18 @@ describe("driver post-trip flow", () => {
     await waitFor(() => {
       expect(getMyVerification).toHaveBeenCalled();
     });
+    fireEvent.press(screen.getByRole("button", { name: "Origin" }));
+    fireEvent.press(screen.getByText("Harare"));
+    fireEvent.press(screen.getByRole("button", { name: "Destination" }));
+    fireEvent.press(screen.getByText("Bulawayo"));
+    fireEvent.press(screen.getByRole("button", { name: "Date" }));
+    fireEvent.press(screen.getByText("Tomorrow"));
+    fireEvent.changeText(screen.getByLabelText("Time"), "07:30");
+    fireEvent.changeText(screen.getByLabelText("Available seats"), "3");
+    fireEvent.changeText(screen.getByLabelText("Price USD per seat"), "12");
+    fireEvent.changeText(screen.getByLabelText("Vehicle"), "Toyota Wish, silver");
+    fireEvent.changeText(screen.getByLabelText("Pickup note"), "Harare CBD");
+    fireEvent.changeText(screen.getByLabelText("Drop-off note"), "Bulawayo City Hall");
     fireEvent.press(screen.getByRole("button", { name: "Publish trip" }));
 
     expect(screen.getByText("Add your phone number to continue")).toBeOnTheScreen();
@@ -100,9 +110,19 @@ describe("driver post-trip flow", () => {
 
     const screen = render(<PostTripScreen />);
 
-    await waitFor(() => {
-      expect(getMyVerification).toHaveBeenCalled();
-    });
+    expect(await screen.findByText("Driver verified")).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole("button", { name: "Origin" }));
+    fireEvent.press(screen.getByText("Harare"));
+    fireEvent.press(screen.getByRole("button", { name: "Destination" }));
+    fireEvent.press(screen.getByText("Bulawayo"));
+    fireEvent.press(screen.getByRole("button", { name: "Date" }));
+    fireEvent.press(screen.getByText("Tomorrow"));
+    fireEvent.changeText(screen.getByLabelText("Time"), "07:30");
+    fireEvent.changeText(screen.getByLabelText("Available seats"), "3");
+    fireEvent.changeText(screen.getByLabelText("Price USD per seat"), "12");
+    fireEvent.changeText(screen.getByLabelText("Vehicle"), "Toyota Wish, silver");
+    fireEvent.changeText(screen.getByLabelText("Pickup note"), "Harare CBD");
+    fireEvent.changeText(screen.getByLabelText("Drop-off note"), "Bulawayo City Hall");
     fireEvent.press(screen.getByRole("button", { name: "Publish trip" }));
 
     await waitFor(() => {

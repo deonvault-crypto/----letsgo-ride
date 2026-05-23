@@ -57,6 +57,22 @@ https://letsgoride-backend.onrender.com
 
 Development environments can use the configured verification code until the SMS provider is connected.
 
+## Email Verification and Admin Seed
+
+New email accounts must verify their email before login. The backend can use Resend when these environment variables are configured in the hosting environment:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_REPLY_TO`
+
+Admin login is created or refreshed safely on startup only when these environment variables are set:
+
+- `ADMIN_SEED_EMAIL`
+- `ADMIN_SEED_PASSWORD`
+- `ADMIN_AUTO_CREATE=true`
+
+Do not store admin credentials in this repository.
+
 ## Current Product Limits
 
 - No real SMS OTP provider.

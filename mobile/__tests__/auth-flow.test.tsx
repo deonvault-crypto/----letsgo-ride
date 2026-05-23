@@ -9,6 +9,7 @@ const mockReplace = jest.fn();
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useLocalSearchParams: () => ({}),
   usePathname: () => "/email-login",
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = require("react");

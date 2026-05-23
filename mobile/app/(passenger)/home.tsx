@@ -10,6 +10,7 @@ import { Avatar } from "../../components/ui/Avatar";
 import { PopularRouteChips } from "../../components/ui/PopularRouteChips";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
@@ -21,6 +22,7 @@ export default function PassengerHomeScreen() {
   const { user } = useCurrentUser();
   const { rides, loading, error, reload } = useRides();
   const passengerName = firstNameOrFallback(user?.name);
+  const verified = isIdentityVerified(user);
 
   return (
     <Screen navRole="passenger">
@@ -29,7 +31,10 @@ export default function PassengerHomeScreen() {
           <Avatar name={user?.name || passengerName} imageUri={user?.profile_photo_url} size={54} />
           <View style={styles.greetingCopy}>
             <StatusBadge label="Passenger" tone="neutral" />
-            <Text style={styles.title}>Hi, {passengerName}</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.title}>Hi, {passengerName}</Text>
+              <VerifiedBadge verified={verified} size="medium" />
+            </View>
           </View>
         </View>
         <Text style={styles.body}>
@@ -38,7 +43,7 @@ export default function PassengerHomeScreen() {
         </Text>
       </View>
 
-      <RouteSearchCard onPress={() => router.push("/(passenger)/search" as never)} />
+      <RouteSearchCard onPress={() => router.replace("/(passenger)/search" as never)} />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Popular routes</Text>
@@ -89,6 +94,12 @@ const styles = StyleSheet.create({
   greetingCopy: {
     flex: 1,
     gap: spacing.xs,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexWrap: "wrap",
   },
   body: {
     color: colors.mutedText,

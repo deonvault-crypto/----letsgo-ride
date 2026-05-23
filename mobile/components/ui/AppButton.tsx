@@ -49,7 +49,7 @@ export function AppButton({
       ) : (
         <View style={styles.content}>
           {icon}
-          <Text style={[styles.text, variant === "primary" && styles.primaryText]}>
+          <Text style={[styles.text, variant === "primary" && styles.primaryText, variant === "danger" && styles.dangerText]}>
             {title}
           </Text>
         </View>
@@ -60,8 +60,8 @@ export function AppButton({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 54,
-    borderRadius: 18,
+    minHeight: 56,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.lg,
@@ -70,6 +70,11 @@ const styles = StyleSheet.create({
   primary: {
     backgroundColor: colors.primaryGreen,
     borderColor: colors.primaryGreen,
+    shadowColor: colors.primaryGreen,
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
   secondary: {
     backgroundColor: colors.card,
@@ -84,7 +89,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,90,95,0.35)",
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.58,
   },
   pressed: {
     transform: [{ scale: 0.98 }],
@@ -101,5 +106,8 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: colors.card,
+  },
+  dangerText: {
+    color: colors.danger,
   },
 });

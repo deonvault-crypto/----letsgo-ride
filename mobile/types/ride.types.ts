@@ -5,6 +5,7 @@ export type Ride = {
   driver_id?: string;
   driver_name: string;
   driver_rating: number;
+  driver_verification_status?: string;
   vehicle: string;
   origin: string;
   destination: string;

@@ -22,15 +22,15 @@ export default function PostTripScreen() {
   const router = useRouter();
   const { user, loading: userLoading, error: userError, reload: reloadUser } = useCurrentUser();
   const [verification, setVerification] = useState<VerificationProfile | null>(null);
-  const [origin, setOrigin] = useState("Harare");
-  const [destination, setDestination] = useState("Bulawayo");
-  const [date, setDate] = useState("2026-06-03");
-  const [time, setTime] = useState("07:30");
-  const [seats, setSeats] = useState("3");
-  const [price, setPrice] = useState("12");
-  const [vehicle, setVehicle] = useState("Toyota Wish, silver");
-  const [pickup, setPickup] = useState("Harare CBD, Fourth Street pickup point");
-  const [dropoff, setDropoff] = useState("Bulawayo City Hall");
+  const [origin, setOrigin] = useState("");
+  const [destination, setDestination] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [seats, setSeats] = useState("1");
+  const [price, setPrice] = useState("");
+  const [vehicle, setVehicle] = useState("");
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [phone, setPhone] = useState("");
@@ -135,6 +135,12 @@ export default function PostTripScreen() {
             safer.
           </Text>
           <AppButton title="Open driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
+        </View>
+      ) : null}
+      {user?.phone && verification?.verification_status === "verified" ? (
+        <View style={styles.notice}>
+          <StatusBadge label="Driver verified" tone="success" />
+          <Text style={styles.body}>Your account is approved to post public rides.</Text>
         </View>
       ) : null}
       <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} />

@@ -38,7 +38,9 @@ export function BottomNav({ role }: { role: NavRole }) {
         return (
           <Pressable
             key={item.label}
-            onPress={() => router.push(item.href as never)}
+            onPress={() => {
+              if (!active) router.replace(item.href as never);
+            }}
             style={[styles.item, active && styles.activeItem]}
           >
             <MaterialCommunityIcons

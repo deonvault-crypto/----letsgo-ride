@@ -7,7 +7,7 @@ import {
   submitManualVerification,
   uploadVerificationDocument,
 } from "../services/verificationService";
-import { pendingProfile, verifiedProfile } from "./fixtures";
+import { notStartedProfile, pendingProfile, verifiedProfile } from "./fixtures";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -31,7 +31,7 @@ jest.mock("../services/verificationService", () => ({
 describe("manual driver verification flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (getMyVerification as jest.Mock).mockResolvedValue(pendingProfile);
+    (getMyVerification as jest.Mock).mockResolvedValue(notStartedProfile);
     (uploadVerificationDocument as jest.Mock).mockResolvedValue({
       id: "doc-1",
       document_type: "identity_document",
@@ -48,7 +48,7 @@ describe("manual driver verification flow", () => {
   it("opens verification, uploads a required document, and submits for review", async () => {
     const screen = render(<DriverVerificationScreen />);
 
-    expect(await screen.findByText("Driver verification")).toBeOnTheScreen();
+    expect(await screen.findAllByText("Driver verification")).toHaveLength(2);
     expect(screen.getByText("Before posting rides, we need to verify your identity and vehicle details. This helps protect passengers and keeps LetsGo Ride safer.")).toBeOnTheScreen();
 
     fireEvent.press(screen.getAllByRole("button", { name: "Upload" })[0]);
@@ -73,5 +73,15 @@ describe("manual driver verification flow", () => {
       });
       expect(screen.getByText("Your driver verification is approved.")).toBeOnTheScreen();
     });
+  });
+
+  it("shows a complete submitted state while verification is pending", async () => {
+    (getMyVerification as jest.Mock).mockResolvedValueOnce(pendingProfile);
+
+    const screen = render(<DriverVerificationScreen />);
+
+    expect(await screen.findByText("Verification submitted")).toBeOnTheScreen();
+    expect(screen.getByText("Submitted documents")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
   });
 });

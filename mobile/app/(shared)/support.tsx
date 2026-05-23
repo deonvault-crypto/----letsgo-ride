@@ -45,7 +45,7 @@ export default function SupportScreen() {
   }
 
   return (
-    <Screen title="Support" navRole="passenger">
+    <Screen title="Support" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
       <Text style={styles.title}>Support</Text>
       <Text style={styles.body}>Send a message to LetsGo Ride support for route, account, or safety help.</Text>
       <AppInput label="Subject" value={subject} onChangeText={setSubject} />

@@ -5,12 +5,13 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { Avatar } from "../ui/Avatar";
 import { StatusBadge } from "../ui/StatusBadge";
+import { VerifiedBadge } from "../ui/VerifiedBadge";
 
 export function DriverCard({
   name,
   rating,
   vehicle,
-  verified = true,
+  verified = false,
 }: {
   name: string;
   rating?: number;
@@ -21,14 +22,17 @@ export function DriverCard({
     <View style={styles.card}>
       <Avatar name={name} />
       <View style={styles.body}>
-        <Text style={styles.name}>{name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name}>{name}</Text>
+          <VerifiedBadge verified={verified} />
+        </View>
         <View style={styles.row}>
           <MaterialCommunityIcons name="star" size={16} color={colors.warning} />
           <Text style={styles.meta}>{rating ? rating.toFixed(1) : "New driver"}</Text>
         </View>
         {vehicle ? <Text style={styles.meta}>{vehicle}</Text> : null}
       </View>
-      {verified ? <StatusBadge label="Verified" tone="success" /> : <StatusBadge label="Pending" tone="warning" />}
+      {verified ? <StatusBadge label="Identity verified" tone="neutral" /> : <StatusBadge label="Pending" tone="warning" />}
     </View>
   );
 }
@@ -52,6 +56,12 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 16,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexWrap: "wrap",
   },
   row: {
     flexDirection: "row",
