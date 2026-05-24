@@ -18,14 +18,16 @@ class Settings:
         self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
-        self.resend_api_key = os.getenv("RESEND_API_KEY", "").strip()
-        self.resend_from_email = (
-            os.getenv("RESEND_FROM_EMAIL")
-            or os.getenv("RESEND_SENDER_EMAIL")
-            or os.getenv("RESEND_FROM")
-            or ""
-        ).strip()
-        self.resend_reply_to = (os.getenv("RESEND_REPLY_TO") or os.getenv("RESEND_REPLY_TO_EMAIL") or "").strip()
+        self.resend_api_key = self._get_env_first("RESEND_API_KEY")
+        self.resend_from_email = self._get_env_first(
+            "RESEND_FROM_EMAIL",
+            "RESEND_SENDER_EMAIL",
+            "RESEND_FROM",
+        )
+        self.resend_reply_to = self._get_env_first(
+            "RESEND_REPLY_TO_EMAIL",
+            "RESEND_REPLY_TO",
+        )
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",
@@ -41,6 +43,30 @@ class Settings:
     @staticmethod
     def _parse_bool(value: str) -> bool:
         return value.strip().lower() in ("1", "true", "yes", "on")
+
+    @staticmethod
+    def _get_env_first(*names: str) -> str:
+        for name in names:
+            value = os.getenv(name)
+            if value and value.strip():
+                return value.strip()
+        return ""
+
+    @property
+    def resend_api_key_present(self) -> bool:
+        return bool(self.resend_api_key)
+
+    @property
+    def resend_api_key_prefix_ok(self) -> bool:
+        return self.resend_api_key.startswith("re_")
+
+    @property
+    def resend_api_key_length(self) -> int:
+        return len(self.resend_api_key)
+
+    @property
+    def resend_configured(self) -> bool:
+        return bool(self.resend_api_key and self.resend_from_email)
 
 
 @lru_cache
