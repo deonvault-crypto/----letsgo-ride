@@ -7,7 +7,7 @@ import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { emailLogin } from "../../services/authService";
+import { emailLogin, resendEmailVerification } from "../../services/authService";
 
 export default function EmailLoginScreen() {
   const router = useRouter();
@@ -15,15 +15,18 @@ export default function EmailLoginScreen() {
   const [email, setEmail] = useState(params.email || "");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   async function submit() {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
       const result = await emailLogin(email, password);
       if (result.user.role === "admin") {
-        router.replace("/(admin)/verifications" as never);
+        router.replace("/(admin)/dashboard" as never);
       } else if (result.user.role === "driver") {
         router.replace("/(driver)/home" as never);
       } else {
@@ -33,6 +36,20 @@ export default function EmailLoginScreen() {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function resendCode() {
+    try {
+      setResending(true);
+      setError("");
+      setMessage("");
+      await resendEmailVerification(email.trim());
+      setMessage("Verification code sent. Check your email.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification code could not be sent. Please try again.");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -47,18 +64,28 @@ export default function EmailLoginScreen() {
       </View>
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
       <AppInput label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      {message ? <Text style={styles.message}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {error.includes("verify your email") ? (
-        <AppButton
-          title="Verify email"
-          variant="secondary"
-          onPress={() =>
-            router.push({
-              pathname: "/(auth)/email-verification",
-              params: { email },
-            } as never)
-          }
-        />
+        <View style={styles.inlineActions}>
+          <AppButton
+            title="Resend verification code"
+            variant="secondary"
+            loading={resending}
+            onPress={resendCode}
+            disabled={!email}
+          />
+          <AppButton
+            title="Go to email verification"
+            variant="ghost"
+            onPress={() =>
+              router.push({
+                pathname: "/(auth)/email-verification",
+                params: { email },
+              } as never)
+            }
+          />
+        </View>
       ) : null}
       <AppButton title="Login" loading={loading} onPress={submit} disabled={!email || password.length < 8} />
       <AppButton title="Create account" variant="ghost" onPress={() => router.push("/(auth)/email-register" as never)} />
@@ -72,5 +99,7 @@ const styles = StyleSheet.create({
   copy: { gap: spacing.md },
   title: { color: colors.whiteText, fontWeight: "900", fontSize: 30 },
   body: { color: colors.mutedText, lineHeight: 22 },
+  message: { color: colors.primaryGreen, fontWeight: "800" },
   error: { color: colors.danger, fontWeight: "700" },
+  inlineActions: { gap: spacing.sm },
 });

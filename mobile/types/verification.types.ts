@@ -20,6 +20,7 @@ export type VerificationDocument = {
   uploaded_at?: string;
   status?: VerificationDocumentStatus;
   rejection_reason?: string;
+  content_type?: string | null;
 };
 
 export type VerificationProfile = {

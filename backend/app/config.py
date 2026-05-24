@@ -19,8 +19,13 @@ class Settings:
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
         self.resend_api_key = os.getenv("RESEND_API_KEY", "").strip()
-        self.resend_from_email = os.getenv("RESEND_FROM_EMAIL", "").strip()
-        self.resend_reply_to = os.getenv("RESEND_REPLY_TO", "").strip()
+        self.resend_from_email = (
+            os.getenv("RESEND_FROM_EMAIL")
+            or os.getenv("RESEND_SENDER_EMAIL")
+            or os.getenv("RESEND_FROM")
+            or ""
+        ).strip()
+        self.resend_reply_to = (os.getenv("RESEND_REPLY_TO") or os.getenv("RESEND_REPLY_TO_EMAIL") or "").strip()
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",

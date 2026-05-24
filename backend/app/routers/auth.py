@@ -70,13 +70,16 @@ async def email_register(payload: EmailRegisterBody):
         api_error("Admin accounts must be created by an existing administrator.", 403)
     if payload.password != payload.confirm_password:
         api_error("Passwords do not match.", 400)
-    user = await create_email_user(
-        payload.name,
-        payload.email,
-        payload.password,
-        payload.city,
-        payload.role,
-    )
+    try:
+        user = await create_email_user(
+            payload.name,
+            payload.email,
+            payload.password,
+            payload.city,
+            payload.role,
+        )
+    except RuntimeError as error:
+        api_error(str(error), 503)
     return api_success(
         {
             "email": user["email"],
@@ -113,7 +116,10 @@ async def verify_email(payload: VerifyEmailBody):
 
 @router.post("/resend-email-verification")
 async def resend_verification(payload: ResendEmailVerificationBody):
-    user = await resend_email_verification(payload.email)
+    try:
+        user = await resend_email_verification(payload.email)
+    except RuntimeError as error:
+        api_error(str(error), 503)
     if not user:
         api_error("Account not found.", 404)
     return api_success(

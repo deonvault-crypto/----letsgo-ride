@@ -122,13 +122,13 @@ export default function SettingsScreen() {
           icon="account-edit-outline"
           title="Edit profile"
           subtitle="Name, photo, phone, city, and travel preferences"
-          onPress={() => router.push("/(shared)/profile" as never)}
+          onPress={() => router.push("/(shared)/edit-profile" as never)}
         />
         <ListTile
           icon="cellphone"
           title="Change phone number"
           subtitle="Use country code format, for example +263772554186"
-          onPress={() => router.push("/(shared)/profile" as never)}
+          onPress={() => router.push("/(shared)/edit-profile" as never)}
         />
         <ListTile
           icon="account-switch-outline"

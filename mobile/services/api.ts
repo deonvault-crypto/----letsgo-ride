@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig } from "axios";
+import axios, { AxiosError, AxiosRequestConfig } from "axios";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
@@ -57,11 +57,45 @@ api.interceptors.request.use(async (config) => {
 });
 
 export async function requestData<T>(config: AxiosRequestConfig) {
-  const response = await api.request<ApiResponse<T>>(config);
-  if (!response.data.success) {
-    throw new Error(response.data.error || "Request failed.");
+  try {
+    const response = await api.request<ApiResponse<T>>(config);
+    if (!response.data.success) {
+      throw new Error(response.data.error || "Request failed.");
+    }
+    return response.data.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(toFriendlyApiError(error));
+    }
+    throw error;
   }
-  return response.data.data;
+}
+
+function toFriendlyApiError(error: AxiosError<ApiResponse<unknown>>) {
+  const status = error.response?.status;
+  const responseData = error.response?.data;
+  const serverMessage = responseData && responseData.success === false ? responseData.error : undefined;
+
+  if (serverMessage) {
+    if (serverMessage.toLowerCase().includes("verify your email")) {
+      return "Please verify your email before logging in.";
+    }
+    if (serverMessage.toLowerCase().includes("invalid or expired verification")) {
+      return "The verification code is incorrect or expired.";
+    }
+    if (serverMessage.toLowerCase().includes("invalid email or password")) {
+      return "Email or password is incorrect.";
+    }
+    if (serverMessage.toLowerCase().includes("email verification could not be sent")) {
+      return "Verification code could not be sent. Please try again.";
+    }
+    return serverMessage;
+  }
+
+  if (status === 401) return "Email or password is incorrect.";
+  if (status === 403) return "Please verify your email before logging in.";
+  if (status === 400) return "The request could not be completed. Please check your details.";
+  return "Could not connect to LetsGoRide. Please try again.";
 }
 
 export async function saveToken(token: string) {

@@ -1,16 +1,18 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
+import EditProfileScreen from "../app/(shared)/edit-profile";
 import ProfileScreen from "../app/(shared)/profile";
 import { updateCurrentUser } from "../services/authService";
 import { User } from "../types/user.types";
 import { passengerUser } from "./fixtures";
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 const mockReload = jest.fn();
 let mockCurrentUser: User | null = passengerUser;
 
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: mockPush, replace: jest.fn() }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   usePathname: () => "/profile",
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = require("react");
@@ -45,6 +47,7 @@ describe("profile update flow", () => {
   });
 
   it("shows saved profile data, saves edits, and keeps updated fields visible", async () => {
+    jest.useFakeTimers();
     const updatedUser: User = {
       ...passengerUser,
       name: "Tendai Chipo",
@@ -55,8 +58,13 @@ describe("profile update flow", () => {
     };
     (updateCurrentUser as jest.Mock).mockResolvedValueOnce(updatedUser);
 
-    const screen = render(<ProfileScreen />);
+    const summary = render(<ProfileScreen />);
+    expect(summary.getByText("Hi, Tendai")).toBeOnTheScreen();
+    expect(summary.getByText("+263771234567")).toBeOnTheScreen();
+    fireEvent.press(summary.getByRole("button", { name: "Edit profile" }));
+    expect(mockPush).toHaveBeenCalledWith("/(shared)/edit-profile");
 
+    const screen = render(<EditProfileScreen />);
     expect(screen.getByDisplayValue("Tendai Moyo")).toBeOnTheScreen();
     expect(screen.getByDisplayValue("+263771234567")).toBeOnTheScreen();
     expect(screen.getByDisplayValue("Harare")).toBeOnTheScreen();
@@ -78,14 +86,17 @@ describe("profile update flow", () => {
       }));
       expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
       expect(screen.getByDisplayValue("Mutare")).toBeOnTheScreen();
-      expect(screen.getByText("Profile updated.")).toBeOnTheScreen();
+      expect(screen.getByText("Profile saved.")).toBeOnTheScreen();
     });
+    jest.runOnlyPendingTimers();
+    expect(mockReplace).toHaveBeenCalledWith("/(shared)/profile");
 
     mockCurrentUser = updatedUser;
-    screen.rerender(<ProfileScreen />);
+    screen.rerender(<EditProfileScreen />);
 
     expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
     expect(screen.queryByDisplayValue("")).not.toBeOnTheScreen();
+    jest.useRealTimers();
   });
 
   it("stores profile photo metadata and keeps initials as fallback when no photo exists", async () => {
@@ -95,7 +106,7 @@ describe("profile update flow", () => {
       profile_photo_name: "profile.jpg",
     });
 
-    const screen = render(<ProfileScreen />);
+    const screen = render(<EditProfileScreen />);
 
     expect(screen.getAllByText("TM").length).toBeGreaterThan(0);
     fireEvent.press(screen.getByRole("button", { name: "Update photo" }));
@@ -105,7 +116,7 @@ describe("profile update flow", () => {
         profile_photo_url: "file:///profile.jpg",
         profile_photo_name: "profile.jpg",
       });
-      expect(screen.getByText("Profile photo updated.")).toBeOnTheScreen();
+      expect(screen.getByText("Profile photo saved.")).toBeOnTheScreen();
     });
   });
 });

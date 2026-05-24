@@ -43,7 +43,7 @@ export default function EmailVerificationScreen() {
       setError("");
       setMessage("");
       await resendEmailVerification(email.trim());
-      setMessage("Verification code sent.");
+      setMessage("Verification code sent. Check your email.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to resend code.");
     } finally {

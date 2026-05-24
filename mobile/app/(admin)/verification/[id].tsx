@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, Linking, Modal, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { ErrorState } from "../../../components/states/ErrorState";
@@ -13,6 +13,7 @@ import { spacing } from "../../../constants/spacing";
 import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
 import {
   getAdminVerification,
+  getAdminDocumentUrl,
   updateAdminVerificationStatus,
 } from "../../../services/adminService";
 import { AdminVerificationDetail, VerificationStatus } from "../../../types/verification.types";
@@ -26,6 +27,7 @@ export default function AdminVerificationDetailScreen() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<VerificationStatus | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -45,6 +47,10 @@ export default function AdminVerificationDetailScreen() {
 
   async function updateStatus(status: Extract<VerificationStatus, "needs_review" | "verified" | "rejected">) {
     if (!id) return;
+    if (status === "rejected" && !rejectionReason.trim()) {
+      setError("Rejection reason is required.");
+      return;
+    }
     try {
       setSaving(status);
       setError("");
@@ -64,6 +70,10 @@ export default function AdminVerificationDetailScreen() {
 
   async function updateDocument(documentId: string, documentStatus: "accepted" | "rejected") {
     if (!id) return;
+    if (documentStatus === "rejected" && !rejectionReason.trim()) {
+      setError("Rejection reason is required.");
+      return;
+    }
     try {
       setError("");
       await updateAdminVerificationStatus({
@@ -80,6 +90,17 @@ export default function AdminVerificationDetailScreen() {
     }
   }
 
+  async function viewDocument(documentId: string, fileName?: string, contentType?: string | null) {
+    if (!id) return;
+    const url = await getAdminDocumentUrl(id, documentId);
+    const isImage = Boolean(contentType?.startsWith("image/")) || /\.(png|jpe?g|webp|gif)$/i.test(fileName || "");
+    if (isImage) {
+      setPreviewUrl(url);
+      return;
+    }
+    await Linking.openURL(url);
+  }
+
   if (loading) {
     return (
       <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications">
@@ -93,6 +114,14 @@ export default function AdminVerificationDetailScreen() {
 
   return (
     <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications">
+      <Modal transparent visible={Boolean(previewUrl)} animationType="fade" onRequestClose={() => setPreviewUrl("")}>
+        <View style={styles.previewBackdrop}>
+          <View style={styles.previewCard}>
+            <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
+            <AppButton title="Close document" variant="secondary" onPress={() => setPreviewUrl("")} />
+          </View>
+        </View>
+      </Modal>
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       <View style={styles.card}>
         <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
@@ -106,10 +135,11 @@ export default function AdminVerificationDetailScreen() {
         {(detail?.documents || []).map((document) => (
           <View key={document.id || document.file_name} style={styles.documentRow}>
             <Text style={styles.documentTitle}>{formatStatus(document.document_type)}</Text>
-            <Text style={styles.body}>{document.file_name}</Text>
+            <Text numberOfLines={1} style={styles.body}>{decodeFileName(document.file_name)}</Text>
             <StatusBadge label={formatStatus(document.status || "pending")} tone={document.status === "rejected" ? "danger" : document.status === "accepted" ? "success" : "warning"} />
             {document.id ? (
               <View style={styles.documentActions}>
+                <AppButton title="View document" onPress={() => viewDocument(document.id as string, document.file_name, document.content_type)} />
                 <AppButton title="Accept document" variant="secondary" onPress={() => updateDocument(document.id as string, "accepted")} />
                 <AppButton title="Reject document" variant="ghost" onPress={() => updateDocument(document.id as string, "rejected")} />
               </View>
@@ -140,6 +170,14 @@ export default function AdminVerificationDetailScreen() {
       </View>
     </Screen>
   );
+}
+
+function decodeFileName(fileName: string) {
+  try {
+    return decodeURIComponent(fileName);
+  } catch {
+    return fileName;
+  }
 }
 
 function statusTone(status: VerificationStatus): "success" | "warning" | "danger" | "neutral" {
@@ -184,5 +222,24 @@ const styles = StyleSheet.create({
   },
   documentActions: {
     gap: spacing.sm,
+  },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(17,20,23,0.42)",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  previewCard: {
+    height: "78%",
+    borderRadius: 26,
+    backgroundColor: colors.appBackground,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  previewImage: {
+    flex: 1,
+    width: "100%",
   },
 });

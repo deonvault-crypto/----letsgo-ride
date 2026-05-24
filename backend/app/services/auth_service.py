@@ -97,7 +97,9 @@ async def start_email_verification(user: Dict[str, Any], force: bool = False) ->
         "updated_at": now.isoformat(),
     }
     updated = await database.update_one("users", user["id"], updates) or {**user, **updates}
-    await send_verification_email(updated["email"], code)
+    sent = await send_verification_email(updated["email"], code)
+    if not sent:
+        raise RuntimeError("Email verification could not be sent.")
     return updated
 
 
@@ -243,7 +245,7 @@ async def resend_email_verification(email: str) -> Optional[Dict[str, Any]]:
         return None
     if user.get("email_verified"):
         return user
-    return await start_email_verification(user)
+    return await start_email_verification(user, force=True)
 
 
 async def ensure_admin_seed_user() -> None:
