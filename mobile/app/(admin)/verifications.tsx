@@ -1,10 +1,12 @@
-import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
+import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
@@ -17,6 +19,8 @@ import { formatStatus } from "../../utils/formatStatus";
 export default function AdminVerificationsScreen() {
   const router = useRouter();
   const [items, setItems] = useState<AdminVerificationListItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -36,6 +40,16 @@ export default function AdminVerificationsScreen() {
   useLiveRefresh(load, 15000);
 
   const pendingCount = items.filter((item) => item.verification_status === "pending").length;
+  const filteredItems = useMemo(
+    () =>
+      items.filter((item) => {
+        const matchesFilter = filter === "all" || item.verification_status === filter;
+        const term = search.trim().toLowerCase();
+        const matchesSearch = !term || [item.name, item.email, item.phone, item.city, item.verification_status].some((value) => String(value || "").toLowerCase().includes(term));
+        return matchesFilter && matchesSearch;
+      }),
+    [filter, items, search],
+  );
 
   return (
     <Screen title="Admin">
@@ -48,7 +62,29 @@ export default function AdminVerificationsScreen() {
       {loading ? <LoadingState label="Loading verification queue..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
 
-      {!loading && !error && items.map((item) => (
+      {!loading && !error ? (
+        <>
+          <AppInput label="Search" value={search} onChangeText={setSearch} leftIcon="magnify" placeholder="Search by name, email, phone, city, or status" />
+          <View style={styles.filters}>
+            {["all", "pending", "needs_review", "verified", "rejected"].map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="button"
+                onPress={() => setFilter(value)}
+                style={({ pressed }) => [styles.filterChip, filter === value && styles.filterChipActive, pressed && styles.pressed]}
+              >
+                <Text style={[styles.filterText, filter === value && styles.filterTextActive]}>{formatStatus(value)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
+
+      {!loading && !error && filteredItems.length === 0 ? (
+        <EmptyState title="No pending verifications" body="Driver verification submissions will appear here when they match your filter." />
+      ) : null}
+
+      {!loading && !error && filteredItems.map((item) => (
         <View key={item.driver_id} style={styles.card}>
           <StatusBadge label={formatStatus(item.verification_status)} tone={statusTone(item.verification_status)} />
           <Text style={styles.cardTitle}>{item.name || "Driver"}</Text>
@@ -91,8 +127,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 22,
+    backgroundColor: colors.card,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
@@ -102,5 +138,33 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontSize: 20,
     fontWeight: "900",
+  },
+  filters: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  filterChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  filterChipActive: {
+    backgroundColor: "rgba(17,139,68,0.12)",
+    borderColor: "rgba(17,139,68,0.36)",
+  },
+  filterText: {
+    color: colors.mutedText,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  filterTextActive: {
+    color: colors.primaryGreen,
+  },
+  pressed: {
+    transform: [{ scale: 0.99 }],
   },
 });
