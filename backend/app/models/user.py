@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator
 
 UserRole = Literal["passenger", "driver", "admin"]
 PHONE_PATTERN = re.compile(r"^\+[1-9]\d{7,14}$")
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+PASSWORD_SYMBOL_PATTERN = re.compile(r"[^A-Za-z0-9]")
 
 
 def validate_international_phone(phone: Optional[str]) -> Optional[str]:
@@ -16,6 +18,27 @@ def validate_international_phone(phone: Optional[str]) -> Optional[str]:
     if not PHONE_PATTERN.match(normalized):
         raise ValueError("Enter your phone number with country code, for example +263772554186.")
     return normalized
+
+
+def normalize_email(value: str) -> str:
+    normalized = value.strip().lower()
+    if not EMAIL_PATTERN.match(normalized):
+        raise ValueError("Enter a valid email address.")
+    return normalized
+
+
+def validate_strong_password(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError("Password must be at least 8 characters.")
+    if not any(character.isupper() for character in value):
+        raise ValueError("Password must include uppercase, lowercase, number, and symbol.")
+    if not any(character.islower() for character in value):
+        raise ValueError("Password must include uppercase, lowercase, number, and symbol.")
+    if not any(character.isdigit() for character in value):
+        raise ValueError("Password must include uppercase, lowercase, number, and symbol.")
+    if not PASSWORD_SYMBOL_PATTERN.search(value):
+        raise ValueError("Password must include uppercase, lowercase, number, and symbol.")
+    return value
 
 
 class RequestOtpBody(BaseModel):
@@ -54,6 +77,11 @@ class EmailLoginBody(BaseModel):
     email: str = Field(min_length=5)
     password: str = Field(min_length=8)
 
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class EmailRegisterBody(BaseModel):
     name: str = Field(min_length=2)
@@ -63,15 +91,41 @@ class EmailRegisterBody(BaseModel):
     city: Optional[str] = None
     role: UserRole = "passenger"
 
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: str) -> str:
+        return normalize_email(value)
+
+    @field_validator("password", "confirm_password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        return validate_strong_password(value)
+
 
 class ForgotPasswordBody(BaseModel):
     email: str = Field(min_length=5)
 
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class ResetPasswordBody(BaseModel):
     email: str = Field(min_length=5)
-    code: str = Field(min_length=4, max_length=8)
+    code: str = Field(min_length=6, max_length=6)
     password: str = Field(min_length=8)
+    confirm_password: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: str) -> str:
+        return normalize_email(value)
+
+    @field_validator("password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        return validate_strong_password(value)
 
 
 class UserUpdate(BaseModel):
@@ -97,11 +151,28 @@ class UserUpdate(BaseModel):
     def phone_has_country_code(cls, value: Optional[str]) -> Optional[str]:
         return validate_international_phone(value)
 
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: Optional[str]) -> Optional[str]:
+        if value in (None, ""):
+            return value
+        return normalize_email(value)
+
 
 class VerifyEmailBody(BaseModel):
     email: str = Field(min_length=5)
     code: str = Field(min_length=6, max_length=6)
 
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class ResendEmailVerificationBody(BaseModel):
     email: str = Field(min_length=5)
+
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: str) -> str:
+        return normalize_email(value)

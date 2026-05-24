@@ -122,13 +122,18 @@ def _send_resend_email(to_email: str, subject: str, html: str, text: str, action
 async def send_verification_email(to_email: str, code: str) -> bool:
     subject = "Verify your LetsGoRide email"
     text = (
-        f"Your LetsGoRide verification code is: {code}\n\n"
-        "This code expires in 15 minutes."
+        f"Use this code to activate your LetsGoRide account: {code}\n\n"
+        "This code expires in 15 minutes.\n\n"
+        "If you did not create a LetsGoRide account, you can ignore this email.\n\n"
+        "LetsGoRide - Safer shared rides across Zimbabwe"
     )
-    html = (
-        "<p>Your LetsGoRide verification code is: "
-        f"<strong>{escape(code)}</strong></p>"
-        "<p>This code expires in 15 minutes.</p>"
+    html = branded_code_email(
+        title="Verify your email",
+        preheader="Use this code to activate your LetsGoRide account.",
+        message="Use this 6-digit code to activate your LetsGoRide account.",
+        code=code,
+        security_note="If you did not create a LetsGoRide account, you can ignore this email.",
+        footer="LetsGoRide - Safer shared rides across Zimbabwe",
     )
     try:
         return await asyncio.to_thread(_send_resend_email, to_email, subject, html, text, "send_verification_email")
@@ -138,3 +143,80 @@ async def send_verification_email(to_email: str, code: str) -> bool:
             _resend_log_context("send_verification_email", message="unexpected email service error"),
         )
         return False
+
+
+async def send_password_reset_email(to_email: str, code: str) -> bool:
+    subject = "Reset your LetsGoRide password"
+    text = (
+        f"Use this code to reset your LetsGoRide password: {code}\n\n"
+        "This code expires in 15 minutes.\n\n"
+        "If you did not request this, you can ignore this email.\n\n"
+        "LetsGoRide Support"
+    )
+    html = branded_code_email(
+        title="Reset your password",
+        preheader="Use this code to reset your LetsGoRide password.",
+        message="Use this 6-digit code to reset your password.",
+        code=code,
+        security_note="If you did not request this, you can ignore this email.",
+        footer="LetsGoRide Support",
+    )
+    try:
+        return await asyncio.to_thread(_send_resend_email, to_email, subject, html, text, "send_password_reset_email")
+    except Exception:
+        logger.warning(
+            "Password reset email failed: Resend request rejected %s",
+            _resend_log_context("send_password_reset_email", message="unexpected email service error"),
+        )
+        return False
+
+
+def branded_code_email(title: str, preheader: str, message: str, code: str, security_note: str, footer: str) -> str:
+    safe_title = escape(title)
+    safe_preheader = escape(preheader)
+    safe_message = escape(message)
+    safe_code = escape(code)
+    safe_security = escape(security_note)
+    safe_footer = escape(footer)
+    return f"""<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{safe_title}</title>
+  </head>
+  <body style="margin:0;background:#FAF7F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#15191D;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{safe_preheader}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FAF7F0;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#FFFFFF;border:1px solid #E5DED4;border-radius:28px;overflow:hidden;">
+            <tr>
+              <td style="padding:30px 28px 14px 28px;">
+                <div style="font-size:28px;font-weight:900;letter-spacing:0;color:#15191D;">Lets<span style="color:#118B44;">Go</span>Ride</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 28px 0 28px;">
+                <h1 style="margin:0;font-size:25px;line-height:1.2;color:#15191D;">{safe_title}</h1>
+                <p style="margin:14px 0 0 0;font-size:15px;line-height:1.55;color:#64707D;">{safe_message}</p>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:26px 28px 10px 28px;">
+                <div style="display:inline-block;background:#F4F1EA;border:1px solid #E5DED4;border-radius:20px;padding:18px 28px;font-size:34px;line-height:1;font-weight:900;letter-spacing:6px;color:#118B44;">{safe_code}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 28px 26px 28px;">
+                <p style="margin:0;font-size:14px;line-height:1.5;color:#64707D;">This code expires in 15 minutes.</p>
+                <p style="margin:12px 0 0 0;font-size:13px;line-height:1.5;color:#64707D;">{safe_security}</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:18px 0 0 0;font-size:12px;color:#64707D;">{safe_footer}</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""

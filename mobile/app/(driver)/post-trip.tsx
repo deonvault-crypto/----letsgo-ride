@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { AppButton } from "../../components/ui/AppButton";
@@ -7,6 +7,7 @@ import { AppInput } from "../../components/ui/AppInput";
 import { LocationPicker } from "../../components/ui/LocationPicker";
 import { ProfileCompletionModal } from "../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../components/ui/Screen";
+import { SeatCounterPicker } from "../../components/ui/SeatCounterPicker";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { TravelDatePicker } from "../../components/ui/TravelDatePicker";
 import { colors } from "../../constants/colors";
@@ -26,7 +27,8 @@ export default function PostTripScreen() {
   const [destination, setDestination] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [seats, setSeats] = useState("1");
+  const [seats, setSeats] = useState(1);
+  const [seatPickerOpen, setSeatPickerOpen] = useState(false);
   const [price, setPrice] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [pickup, setPickup] = useState("");
@@ -71,7 +73,7 @@ export default function PostTripScreen() {
       setError("Complete driver verification before posting a trip.");
       return;
     }
-    if (!hasRequiredValues([origin, destination, date, time, seats, price, vehicle, pickup, dropoff])) {
+    if (!hasRequiredValues([origin, destination, date, time, String(seats), price, vehicle, pickup, dropoff])) {
       setError("Complete every required trip field.");
       return;
     }
@@ -82,7 +84,7 @@ export default function PostTripScreen() {
         destination,
         date,
         time,
-        available_seats: Number(seats),
+        available_seats: seats,
         price_usd: Number(price),
         vehicle,
         pickup_note: pickup,
@@ -147,13 +149,32 @@ export default function PostTripScreen() {
       <LocationPicker label="Destination" value={destination} onChangeText={setDestination} />
       <TravelDatePicker label="Date" value={date} onChangeText={setDate} />
       <AppInput label="Time" value={time} onChangeText={setTime} />
-      <AppInput label="Available seats" value={seats} onChangeText={setSeats} keyboardType="number-pad" />
+      <Pressable accessibilityRole="button" accessibilityLabel="Available seats" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
+        <View>
+          <Text style={styles.fieldLabel}>Seats available</Text>
+          <Text style={styles.fieldValue}>{seats} {seats === 1 ? "seat" : "seats"}</Text>
+        </View>
+        <Text style={styles.changeText}>Change</Text>
+      </Pressable>
       <AppInput label="Price USD per seat" value={price} onChangeText={setPrice} keyboardType="number-pad" />
       <AppInput label="Vehicle" value={vehicle} onChangeText={setVehicle} />
       <AppInput label="Pickup note" value={pickup} onChangeText={setPickup} />
       <AppInput label="Drop-off note" value={dropoff} onChangeText={setDropoff} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <AppButton title="Publish trip" loading={saving} onPress={submit} />
+      <SeatCounterPicker
+        visible={seatPickerOpen}
+        title="Seats available"
+        value={seats}
+        min={1}
+        max={8}
+        helperText="Choose how many seats passengers can book."
+        onConfirm={(nextSeats) => {
+          setSeats(nextSeats);
+          setSeatPickerOpen(false);
+        }}
+        onClose={() => setSeatPickerOpen(false)}
+      />
     </Screen>
   );
 }
@@ -180,5 +201,35 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  seatField: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  pressed: {
+    transform: [{ scale: 0.99 }],
+  },
+  fieldLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  fieldValue: {
+    color: colors.whiteText,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  changeText: {
+    color: colors.primaryGreen,
+    fontWeight: "900",
   },
 });

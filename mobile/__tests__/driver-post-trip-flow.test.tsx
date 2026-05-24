@@ -80,7 +80,6 @@ describe("driver post-trip flow", () => {
     fireEvent.press(screen.getByRole("button", { name: "Date" }));
     fireEvent.press(screen.getByText("Tomorrow"));
     fireEvent.changeText(screen.getByLabelText("Time"), "07:30");
-    fireEvent.changeText(screen.getByLabelText("Available seats"), "3");
     fireEvent.changeText(screen.getByLabelText("Price USD per seat"), "12");
     fireEvent.changeText(screen.getByLabelText("Vehicle"), "Toyota Wish, silver");
     fireEvent.changeText(screen.getByLabelText("Pickup note"), "Harare CBD");
@@ -118,7 +117,10 @@ describe("driver post-trip flow", () => {
     fireEvent.press(screen.getByRole("button", { name: "Date" }));
     fireEvent.press(screen.getByText("Tomorrow"));
     fireEvent.changeText(screen.getByLabelText("Time"), "07:30");
-    fireEvent.changeText(screen.getByLabelText("Available seats"), "3");
+    fireEvent.press(screen.getByRole("button", { name: "Available seats" }));
+    fireEvent.press(screen.getByRole("button", { name: "Increase seats" }));
+    fireEvent.press(screen.getByRole("button", { name: "Increase seats" }));
+    fireEvent.press(screen.getByRole("button", { name: "Confirm" }));
     fireEvent.changeText(screen.getByLabelText("Price USD per seat"), "12");
     fireEvent.changeText(screen.getByLabelText("Vehicle"), "Toyota Wish, silver");
     fireEvent.changeText(screen.getByLabelText("Pickup note"), "Harare CBD");

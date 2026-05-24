@@ -31,6 +31,7 @@ import {
   updateAdminUserStatus,
 } from "../../services/adminService";
 import { logout } from "../../services/authService";
+import { disableBiometricLogin } from "../../services/biometricService";
 import { Ride, RideRequest } from "../../types/ride.types";
 import { User } from "../../types/user.types";
 import { AdminVerificationListItem } from "../../types/verification.types";
@@ -97,6 +98,7 @@ export default function AdminDashboardScreen() {
   useLiveRefresh(load, 15000);
 
   async function handleLogout() {
+    await disableBiometricLogin();
     await logout();
     router.replace("/(auth)/welcome" as never);
   }

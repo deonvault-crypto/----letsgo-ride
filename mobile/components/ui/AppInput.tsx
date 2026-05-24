@@ -1,4 +1,5 @@
-import { KeyboardTypeOptions, StyleSheet, Text, TextInput, TextInputProps, View } from "react-native";
+import { KeyboardTypeOptions, Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
@@ -8,18 +9,29 @@ type AppInputProps = TextInputProps & {
   value: string;
   onChangeText: (value: string) => void;
   keyboardType?: KeyboardTypeOptions;
+  leftIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  rightIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  onPressRightIcon?: () => void;
 };
 
-export function AppInput({ label, style, ...props }: AppInputProps) {
+export function AppInput({ label, style, leftIcon, rightIcon, onPressRightIcon, ...props }: AppInputProps) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor={colors.mutedText}
-        style={[styles.input, style]}
-        {...props}
-      />
+      <View style={[styles.inputShell, style]}>
+        {leftIcon ? <MaterialCommunityIcons name={leftIcon} size={20} color={colors.mutedText} /> : null}
+        <TextInput
+          accessibilityLabel={label}
+          placeholderTextColor={colors.mutedText}
+          style={styles.input}
+          {...props}
+        />
+        {rightIcon ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`${label} action`} hitSlop={8} onPress={onPressRightIcon}>
+            <MaterialCommunityIcons name={rightIcon} size={21} color={colors.mutedText} />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -33,14 +45,21 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 13,
   },
-  input: {
+  inputShell: {
     minHeight: 56,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 22,
     backgroundColor: colors.elevated,
     paddingHorizontal: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  input: {
+    flex: 1,
     color: colors.whiteText,
     fontSize: 15,
+    paddingVertical: spacing.md,
   },
 });

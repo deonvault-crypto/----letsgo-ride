@@ -1,6 +1,6 @@
 import { Alert, StyleSheet, Switch, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
@@ -9,6 +9,13 @@ import { legalUrls } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { deleteAccount, logout, updateCurrentUser } from "../../services/authService";
+import {
+  biometricAvailable,
+  biometricLabel,
+  disableBiometricLogin,
+  enableBiometricLogin,
+  isBiometricEnabled,
+} from "../../services/biometricService";
 import { formatStatus } from "../../utils/formatStatus";
 import { openExternalUrl } from "../../utils/openExternalUrl";
 
@@ -57,6 +64,22 @@ export default function SettingsScreen() {
   const { user, reload } = useCurrentUser();
   const role = user?.role === "driver" ? "driver" : "passenger";
   const verificationStatus = user?.verification_status || "not_started";
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricText, setBiometricText] = useState("Use biometrics");
+  const [biometricSaving, setBiometricSaving] = useState(false);
+
+  useEffect(() => {
+    async function loadBiometricState() {
+      setBiometricSupported(await biometricAvailable());
+      setBiometricEnabled(await isBiometricEnabled());
+      setBiometricText(await biometricLabel());
+    }
+    loadBiometricState().catch(() => {
+      setBiometricSupported(false);
+      setBiometricEnabled(false);
+    });
+  }, []);
 
   async function updatePreference(key: PreferenceKey, value: boolean) {
     await updateCurrentUser({ [key]: value });
@@ -67,9 +90,10 @@ export default function SettingsScreen() {
     Alert.alert("Logout", "You will be signed out of this LetsGoRide account.", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+          await disableBiometricLogin();
           await logout();
           router.replace("/(auth)/welcome" as never);
         },
@@ -88,12 +112,33 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             await deleteAccount();
+            await disableBiometricLogin();
             Alert.alert("Account deletion requested", "Your LetsGoRide account has been updated.");
             router.replace("/(auth)/welcome" as never);
           },
         },
       ],
     );
+  }
+
+  async function toggleBiometrics(nextValue: boolean) {
+    try {
+      setBiometricSaving(true);
+      if (nextValue) {
+        await enableBiometricLogin();
+        setBiometricEnabled(true);
+        Alert.alert("Biometric login enabled", `${biometricText} is now available on this device.`);
+      } else {
+        await disableBiometricLogin();
+        setBiometricEnabled(false);
+        Alert.alert("Biometric login disabled", "LetsGoRide will ask for your email and password next time.");
+      }
+    } catch (err) {
+      setBiometricEnabled(await isBiometricEnabled());
+      Alert.alert("Biometric login", err instanceof Error ? err.message : "Could not update biometric login.");
+    } finally {
+      setBiometricSaving(false);
+    }
   }
 
   function explainVerifiedBadge() {
@@ -162,6 +207,26 @@ export default function SettingsScreen() {
             </View>
           );
         })}
+      </Section>
+
+      <Section title="Security">
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleCopy}>
+            <Text style={styles.toggleTitle}>Biometric login</Text>
+            <Text style={styles.toggleSubtitle}>
+              {biometricSupported
+                ? `${biometricText} to unlock LetsGoRide. Face ID prompts may require an installed development or production build.`
+                : "Biometrics are not available or not enrolled on this device."}
+            </Text>
+          </View>
+          <Switch
+            value={biometricEnabled}
+            disabled={!biometricSupported || biometricSaving}
+            onValueChange={toggleBiometrics}
+            trackColor={{ false: "#D9D0C3", true: "rgba(17,139,68,0.36)" }}
+            thumbColor={biometricEnabled ? colors.primaryGreen : "#FFFDF8"}
+          />
+        </View>
       </Section>
 
       <Section title="Privacy and safety">

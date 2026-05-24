@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { ErrorState } from "../../../components/states/ErrorState";
@@ -8,6 +8,7 @@ import { AppButton } from "../../../components/ui/AppButton";
 import { AppInput } from "../../../components/ui/AppInput";
 import { ProfileCompletionModal } from "../../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../../components/ui/Screen";
+import { SeatCounterPicker } from "../../../components/ui/SeatCounterPicker";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
@@ -23,6 +24,8 @@ export default function RequestSeatScreen() {
   const [ride, setRide] = useState<Ride | null>(null);
   const [note, setNote] = useState("");
   const [phone, setPhone] = useState("");
+  const [seats, setSeats] = useState(1);
+  const [seatPickerOpen, setSeatPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -59,7 +62,7 @@ export default function RequestSeatScreen() {
         passenger_name: user?.name || "Passenger",
         passenger_phone: user.phone,
         passenger_note: note,
-        seats: 1,
+        seats,
       });
       setSuccess(true);
     } catch (err) {
@@ -114,7 +117,7 @@ export default function RequestSeatScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
           <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
-          <Text style={styles.body}>Seat request for 1 passenger.</Text>
+          <Text style={styles.body}>Seat request for {seats} {seats === 1 ? "passenger" : "passengers"}.</Text>
           {ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id) ? (
             <StatusBadge label="Your ride" tone="neutral" />
           ) : null}
@@ -135,6 +138,13 @@ export default function RequestSeatScreen() {
               <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
             </View>
           ) : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Seats needed" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
+            <View>
+              <Text style={styles.fieldLabel}>Seats needed</Text>
+              <Text style={styles.fieldValue}>{seats} {seats === 1 ? "seat" : "seats"}</Text>
+            </View>
+            <Text style={styles.changeText}>Change</Text>
+          </Pressable>
           <AppInput
             label="Message to driver"
             value={note}
@@ -147,6 +157,19 @@ export default function RequestSeatScreen() {
             loading={saving}
             disabled={Boolean(ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id))}
             onPress={submit}
+          />
+          <SeatCounterPicker
+            visible={seatPickerOpen}
+            title="Seats needed"
+            value={seats}
+            min={1}
+            max={Math.max(1, Math.min(ride?.available_seats || 1, 6))}
+            helperText="Choose how many seats you want to reserve."
+            onConfirm={(nextSeats) => {
+              setSeats(nextSeats);
+              setSeatPickerOpen(false);
+            }}
+            onClose={() => setSeatPickerOpen(false)}
           />
         </>
       )}
@@ -170,6 +193,36 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.xl,
     gap: spacing.md,
+  },
+  seatField: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  pressed: {
+    transform: [{ scale: 0.99 }],
+  },
+  fieldLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  fieldValue: {
+    color: colors.whiteText,
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 4,
+  },
+  changeText: {
+    color: colors.primaryGreen,
+    fontWeight: "900",
   },
   title: {
     color: colors.whiteText,

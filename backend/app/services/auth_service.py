@@ -5,8 +5,17 @@ from typing import Any, Dict, Optional
 
 from app.config import get_settings
 from app.database import database
-from app.services.email_service import send_verification_email
+from app.models.user import normalize_email, validate_strong_password
+from app.services.email_service import send_password_reset_email, send_verification_email
 from app.utils import new_id, now_iso
+
+
+class DuplicateVerifiedEmailError(Exception):
+    pass
+
+
+class ExistingUnverifiedEmailError(Exception):
+    pass
 
 
 async def find_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
@@ -14,7 +23,7 @@ async def find_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
 
 
 async def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    return await database.find_one("users", {"email": email.lower().strip()})
+    return await database.find_one("users", {"email": normalize_email(email)})
 
 
 async def find_user_by_token(token: str) -> Optional[Dict[str, Any]]:
@@ -29,6 +38,7 @@ def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
         "email_verification_salt",
         "reset_code_hash",
         "reset_code_salt",
+        "reset_salt",
         "token",
     }
     return {key: value for key, value in user.items() if key not in hidden}
@@ -48,17 +58,17 @@ def create_password_record(password: str) -> Dict[str, str]:
     return {"password_salt": salt, "password_hash": hash_password(password, salt)}
 
 
-def create_code_record(code: str) -> Dict[str, str]:
+def create_code_record(code: str, prefix: str = "email_verification") -> Dict[str, str]:
     salt = secrets.token_hex(16)
     return {
-        "email_verification_salt": salt,
-        "email_verification_code_hash": hash_password(code, salt),
+        f"{prefix}_salt": salt,
+        f"{prefix}_code_hash": hash_password(code, salt),
     }
 
 
-def code_matches(user: Dict[str, Any], code: str) -> bool:
-    salt = user.get("email_verification_salt")
-    code_hash = user.get("email_verification_code_hash")
+def code_matches(user: Dict[str, Any], code: str, prefix: str = "email_verification") -> bool:
+    salt = user.get(f"{prefix}_salt")
+    code_hash = user.get(f"{prefix}_code_hash")
     if not salt or not code_hash:
         return False
     return code_hash == hash_password(code, salt)
@@ -68,8 +78,8 @@ def generate_email_code() -> str:
     return f"{secrets.randbelow(1000000):06d}"
 
 
-def code_not_expired(user: Dict[str, Any]) -> bool:
-    expires_at = user.get("email_verification_expires_at")
+def code_not_expired(user: Dict[str, Any], prefix: str = "email_verification") -> bool:
+    expires_at = user.get(f"{prefix}_expires_at")
     if not expires_at:
         return False
     try:
@@ -142,28 +152,22 @@ async def create_email_user(
     city: Optional[str],
     role: str,
 ) -> Dict[str, Any]:
-    existing = await find_user_by_email(email)
+    normalized_email = normalize_email(email)
+    validate_strong_password(password)
+    existing = await find_user_by_email(normalized_email)
     timestamp = now_iso()
     token = f"acct_{new_id()}"
     password_record = create_password_record(password)
 
     if existing:
-        updates = {
-            "name": name,
-            "city": city or existing.get("city", "Harare"),
-            "role": role or existing.get("role", "passenger"),
-            **password_record,
-            "token": token,
-            "email_verified": bool(existing.get("email_verified", False)),
-            "updated_at": timestamp,
-        }
-        updated = await database.update_one("users", existing["id"], updates)
-        return await start_email_verification(updated or existing, force=True)
+        if existing.get("email_verified"):
+            raise DuplicateVerifiedEmailError("This email already has an account. Please log in or reset your password.")
+        raise ExistingUnverifiedEmailError("This account is waiting for email verification.")
 
     user = {
         "id": new_id(),
         "phone": "",
-        "email": email.lower().strip(),
+        "email": normalized_email,
         "name": name,
         "city": city or "Harare",
         "role": role,
@@ -211,6 +215,8 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
     user = await find_user_by_email(email)
     if not user:
         return None
+    if user.get("email_verified"):
+        return user
     attempts = int(user.get("email_verification_attempts", 0))
     if attempts >= 5:
         return None
@@ -233,6 +239,7 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
             "email_verification_code_hash": "",
             "email_verification_salt": "",
             "email_verification_attempts": 0,
+            "token": f"acct_{new_id()}",
             "updated_at": now_iso(),
         },
     )
@@ -246,6 +253,59 @@ async def resend_email_verification(email: str) -> Optional[Dict[str, Any]]:
     if user.get("email_verified"):
         return user
     return await start_email_verification(user, force=True)
+
+
+async def start_password_reset(email: str) -> None:
+    user = await find_user_by_email(email)
+    if not user:
+        return
+    now = datetime.now(timezone.utc)
+    code = generate_email_code()
+    updates = {
+        **create_code_record(code, "reset"),
+        "reset_expires_at": (now + timedelta(minutes=15)).isoformat(),
+        "reset_attempts": 0,
+        "reset_sent_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    updated = await database.update_one("users", user["id"], updates) or {**user, **updates}
+    sent = await send_password_reset_email(updated["email"], code)
+    if not sent:
+        raise RuntimeError("Password reset code could not be sent.")
+
+
+async def reset_email_password(email: str, code: str, password: str) -> bool:
+    validate_strong_password(password)
+    user = await find_user_by_email(email)
+    if not user:
+        return True
+    attempts = int(user.get("reset_attempts", 0))
+    if attempts >= 5:
+        return False
+    settings = get_settings()
+    local_mock_allowed = settings.app_env != "production" and code == settings.mock_otp
+    if not local_mock_allowed and (not code_not_expired(user, "reset") or not code_matches(user, code, "reset")):
+        await database.update_one(
+            "users",
+            user["id"],
+            {"reset_attempts": attempts + 1, "updated_at": now_iso()},
+        )
+        return False
+
+    password_record = create_password_record(password)
+    await database.update_one(
+        "users",
+        user["id"],
+        {
+            **password_record,
+            "reset_code_hash": "",
+            "reset_salt": "",
+            "reset_attempts": 0,
+            "reset_expires_at": None,
+            "updated_at": now_iso(),
+        },
+    )
+    return True
 
 
 async def ensure_admin_seed_user() -> None:

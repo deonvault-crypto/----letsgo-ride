@@ -6,6 +6,8 @@ type EmailVerificationPayload = {
   email: string;
   email_verified: boolean;
   message: string;
+  token?: string;
+  user?: User;
 };
 
 export async function requestOtp(phone: string) {
@@ -41,11 +43,13 @@ export async function emailRegister(data: {
 }
 
 export async function verifyEmail(email: string, code: string) {
-  return requestData<EmailVerificationPayload>({
+  const result = await requestData<EmailVerificationPayload>({
     method: "POST",
     url: "/auth/verify-email",
     data: { email, code },
   });
+  if (result.token) await saveToken(result.token);
+  return result;
 }
 
 export async function resendEmailVerification(email: string) {
@@ -64,11 +68,11 @@ export async function forgotPassword(email: string) {
   });
 }
 
-export async function resetPassword(email: string, code: string, password: string) {
+export async function resetPassword(email: string, code: string, password: string, confirmPassword?: string) {
   return requestData<{ message: string }>({
     method: "POST",
     url: "/auth/reset-password",
-    data: { email, code, password },
+    data: { email, code, password, confirm_password: confirmPassword },
   });
 }
 

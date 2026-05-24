@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Modal, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import { BrandLogo } from "../../components/layout/BrandLogo";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { resendEmailVerification, verifyEmail } from "../../services/authService";
+import { normalizeEmail } from "../../utils/passwordRules";
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
@@ -16,20 +18,27 @@ export default function EmailVerificationScreen() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [verificationComplete, setVerificationComplete] = useState(false);
+  const [verifiedRole, setVerifiedRole] = useState<string | null>(null);
+  const [verifiedWithSession, setVerifiedWithSession] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  function routeForRole(role?: string | null) {
+    if (role === "admin") router.replace("/(admin)/dashboard" as never);
+    else if (role === "driver") router.replace("/(driver)/home" as never);
+    else router.replace("/(passenger)/home" as never);
+  }
 
   async function submit() {
     try {
       setLoading(true);
       setError("");
       setMessage("");
-      await verifyEmail(email.trim(), code.trim());
-      setMessage("Email verified. You can now login.");
-      router.replace({
-        pathname: "/(auth)/email-login",
-        params: { email },
-      } as never);
+      const result = await verifyEmail(normalizeEmail(email), code.trim());
+      setVerificationComplete(true);
+      setVerifiedRole(result.user?.role || null);
+      setVerifiedWithSession(Boolean(result.token && result.user));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to verify email.");
     } finally {
@@ -42,7 +51,7 @@ export default function EmailVerificationScreen() {
       setResending(true);
       setError("");
       setMessage("");
-      await resendEmailVerification(email.trim());
+      await resendEmailVerification(normalizeEmail(email));
       setMessage("Verification code sent. Check your email.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to resend code.");
@@ -53,27 +62,69 @@ export default function EmailVerificationScreen() {
 
   return (
     <Screen title="Verify email" showBack fallbackRoute="/(auth)/email-login" showNotifications={false}>
+      <View style={styles.logoWrap}>
+        <BrandLogo size="regular" />
+      </View>
       <View style={styles.copy}>
         <Text style={styles.title}>Verify your email</Text>
-        <Text style={styles.body}>
-          We sent a verification code to your email. Enter the code to activate
-          your LetsGoRide account.
-        </Text>
+        <Text style={styles.body}>We sent a 6-digit code to your email. Enter the code to activate your LetsGoRide account.</Text>
       </View>
-      <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-      <AppInput label="6-digit code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} />
+      <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" />
+      <AppInput label="6-digit code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} leftIcon="numeric" />
       {message ? <Text style={styles.message}>{message}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <AppButton title="Verify email" loading={loading} onPress={submit} disabled={!email || code.length !== 6} />
       <AppButton title="Resend code" variant="secondary" loading={resending} onPress={resend} disabled={!email} />
+      <Modal visible={verificationComplete} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <BrandLogo size="regular" />
+            <Text style={styles.modalTitle}>Account verified</Text>
+            <Text style={styles.modalBody}>Welcome to LetsGoRide.</Text>
+            <AppButton
+              title={verifiedWithSession ? "Continue" : "Continue to login"}
+              onPress={() => {
+                if (verifiedWithSession) routeForRole(verifiedRole);
+                else router.replace({ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email) } } as never);
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  logoWrap: { alignItems: "center" },
   copy: { gap: spacing.md },
   title: { color: colors.whiteText, fontWeight: "900", fontSize: 30 },
   body: { color: colors.mutedText, lineHeight: 22 },
   message: { color: colors.primaryGreen, fontWeight: "800" },
   error: { color: colors.danger, fontWeight: "700" },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.xl,
+    backgroundColor: "rgba(17,20,23,0.28)",
+  },
+  modalCard: {
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.xl,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  modalTitle: {
+    color: colors.whiteText,
+    fontSize: 26,
+    fontWeight: "900",
+  },
+  modalBody: {
+    color: colors.mutedText,
+    textAlign: "center",
+    lineHeight: 22,
+  },
 });

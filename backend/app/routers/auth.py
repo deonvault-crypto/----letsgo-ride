@@ -15,13 +15,16 @@ from app.models.user import (
     VerifyOtpBody,
 )
 from app.services.auth_service import (
-    create_password_record,
+    DuplicateVerifiedEmailError,
+    ExistingUnverifiedEmailError,
     create_email_user,
     create_or_update_user,
     find_user_by_email,
     find_user_by_token,
     public_user,
     resend_email_verification,
+    reset_email_password,
+    start_password_reset,
     start_email_verification,
     verify_email_code,
     verify_email_user,
@@ -80,6 +83,10 @@ async def email_register(payload: EmailRegisterBody):
             payload.city,
             payload.role,
         )
+    except DuplicateVerifiedEmailError as error:
+        api_error(str(error), 409)
+    except ExistingUnverifiedEmailError as error:
+        api_error(str(error), 409)
     except RuntimeError as error:
         api_error(str(error), 503)
     return api_success(
@@ -107,12 +114,16 @@ async def verify_email(payload: VerifyEmailBody):
     user = await verify_email_code(payload.email, payload.code)
     if not user:
         api_error("Invalid or expired verification code.", 400)
+    response = {
+        "email": user["email"],
+        "email_verified": True,
+        "message": "Email verified.",
+    }
+    if user.get("token"):
+        response["token"] = user["token"]
+        response["user"] = public_user(user)
     return api_success(
-        {
-            "email": user["email"],
-            "email_verified": True,
-            "message": "Email verified.",
-        }
+        response
     )
 
 
@@ -135,25 +146,20 @@ async def resend_verification(payload: ResendEmailVerificationBody):
 
 @router.post("/forgot-password")
 async def forgot_password(payload: ForgotPasswordBody):
+    try:
+        await start_password_reset(payload.email)
+    except RuntimeError as error:
+        api_error(str(error), 503)
     return api_success({"message": "If the account exists, a reset code will be sent."})
 
 
 @router.post("/reset-password")
 async def reset_password(payload: ResetPasswordBody):
-    if payload.code != get_settings().mock_otp:
-        api_error("Invalid reset code.", 401)
-
-    user = await find_user_by_email(payload.email)
-    if user:
-        password_record = create_password_record(payload.password)
-        await database.update_one(
-            "users",
-            user["id"],
-            {
-                **password_record,
-                "updated_at": now_iso(),
-            },
-        )
+    if payload.confirm_password and payload.password != payload.confirm_password:
+        api_error("Passwords do not match.", 400)
+    ok = await reset_email_password(payload.email, payload.code, payload.password)
+    if not ok:
+        api_error("That code is incorrect or expired. Please request a new code.", 400)
     return api_success({"message": "Password reset completed."})
 
 

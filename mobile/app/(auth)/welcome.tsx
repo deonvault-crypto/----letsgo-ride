@@ -1,5 +1,6 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
 
 import { BrandLogo } from "../../components/layout/BrandLogo";
 import { AppButton } from "../../components/ui/AppButton";
@@ -11,30 +12,94 @@ import { openExternalUrl } from "../../utils/openExternalUrl";
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const logoScale = useRef(new Animated.Value(0.94)).current;
+  const logoTranslateY = useRef(new Animated.Value(14)).current;
+  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const heroTranslateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((reduceMotion) => {
+        if (!mounted) return;
+        if (reduceMotion) {
+          logoScale.setValue(1);
+          logoTranslateY.setValue(0);
+          heroOpacity.setValue(1);
+          heroTranslateY.setValue(0);
+          return;
+        }
+        Animated.sequence([
+          Animated.spring(logoScale, {
+            toValue: 1,
+            friction: 5,
+            tension: 78,
+            useNativeDriver: true,
+          }),
+          Animated.parallel([
+            Animated.timing(heroOpacity, {
+              toValue: 1,
+              duration: 360,
+              useNativeDriver: true,
+            }),
+            Animated.timing(heroTranslateY, {
+              toValue: 0,
+              duration: 360,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]).start();
+        Animated.spring(logoTranslateY, {
+          toValue: 0,
+          friction: 6,
+          tension: 70,
+          useNativeDriver: true,
+        }).start();
+      })
+      .catch(() => {
+        logoScale.setValue(1);
+        logoTranslateY.setValue(0);
+        heroOpacity.setValue(1);
+        heroTranslateY.setValue(0);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [heroOpacity, heroTranslateY, logoScale, logoTranslateY]);
 
   return (
     <Screen showHeader={false} scroll={false}>
       <View style={styles.hero}>
-        <View style={styles.logoWrap}>
+        <Animated.View
+          style={[
+            styles.logoWrap,
+            {
+              transform: [{ translateY: logoTranslateY }, { scale: logoScale }],
+            },
+          ]}
+        >
           <BrandLogo size="large" />
-        </View>
-        <View style={styles.imageCard}>
-          <Image
-            source={require("../../assets/images/ride-sharing-welcome.jpg")}
-            style={styles.heroImage}
-            resizeMode="cover"
-          />
-          <View style={styles.imageOverlay}>
-            <Text style={styles.imageLabel}>Travel together with clearer trip records.</Text>
+        </Animated.View>
+        <Animated.View style={[styles.animatedHeroContent, { opacity: heroOpacity, transform: [{ translateY: heroTranslateY }] }]}>
+          <View style={styles.imageCard}>
+            <Image
+              source={require("../../assets/images/ride-sharing-welcome.jpg")}
+              style={styles.heroImage}
+              resizeMode="cover"
+            />
+            <View style={styles.imageOverlay}>
+              <Text style={styles.imageLabel}>Verified rides. Clear trips. Safer journeys.</Text>
+            </View>
           </View>
-        </View>
-        <View style={styles.copy}>
-          <Text style={styles.title}>Find trusted rides across Zimbabwe.</Text>
-          <Text style={styles.body}>
-            Book intercity seats, local rides, and errands with verified drivers,
-            clear pricing, and safer trip records.
-          </Text>
-        </View>
+          <View style={styles.copy}>
+            <Text style={styles.title}>Find trusted rides across Zimbabwe.</Text>
+            <Text style={styles.body}>
+              Book intercity seats, local rides, and errands with verified drivers,
+              clear pricing, and safer trip records.
+            </Text>
+          </View>
+        </Animated.View>
       </View>
       <View style={styles.actions}>
         <AppButton
@@ -76,6 +141,9 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     alignSelf: "flex-start",
+  },
+  animatedHeroContent: {
+    gap: spacing.xxl,
   },
   imageCard: {
     height: 210,
