@@ -132,7 +132,7 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
     user = {
         "id": new_id(),
         "phone": phone,
-        "name": name or "LetsGo Ride user",
+        "name": name or "LetsGoRide user",
         "city": "Harare",
         "role": role,
         "email_verified": False,
@@ -324,7 +324,7 @@ async def ensure_admin_seed_user() -> None:
             existing["id"],
             {
                 "role": "admin",
-                "name": existing.get("name") or "LetsGo Ride Admin",
+                "name": existing.get("name") or "LetsGoRide Admin",
                 "email": email,
                 "email_verified": True,
                 "email_verified_at": existing.get("email_verified_at") or timestamp,
@@ -339,7 +339,7 @@ async def ensure_admin_seed_user() -> None:
         "id": new_id(),
         "phone": "",
         "email": email,
-        "name": "LetsGo Ride Admin",
+        "name": "LetsGoRide Admin",
         "city": "Harare",
         "role": "admin",
         "rating": 5,

@@ -1,12 +1,12 @@
-# LetsGo Ride Mobile
+# LetsGoRide Mobile
 
-Expo Router TypeScript mobile app for LetsGo Ride.
+Expo Router TypeScript mobile app for LetsGoRide.
 
 ## What Was Rebuilt
 
 - Expo Go compatible app in `mobile`.
 - TypeScript screen architecture with Expo Router.
-- Passenger flow: welcome, login, OTP, home, search, results, ride detail, request seat, my trips.
+- Passenger flow: welcome, email login, email verification, home, search, results, ride detail, request seat, my trips.
 - Driver flow: dashboard, post trip, trip details, passenger request actions.
 - Shared flow: profile, settings, safety, report, support, notifications.
 - Reusable UI components, cards, states, services, hooks, constants, types, and utilities.
@@ -29,21 +29,22 @@ The mobile API base URL is defined in:
 mobile/constants/config.ts
 ```
 
-Current local LAN URL:
+Current live URL:
 
 ```text
-http://192.168.0.21:4000
+https://letsgoride-backend.onrender.com
 ```
 
-## Phone Verification
+## Authentication
 
-- Request a verification code from the login screen.
-- Development environments can use the configured test code until the SMS provider is connected.
+- Email and password are the primary login method.
+- New accounts verify email once with a six-digit code.
+- Phone numbers are optional during signup and required before booking or posting rides.
+- Optional biometric login can be enabled after a successful login.
 
 ## Current Product Limits
 
-- No real OTP provider yet.
 - No real payments yet.
 - No maps SDK yet.
 - No KYC provider yet.
-- Driver verification status is ready for review tooling.
+- Driver verification uses manual LetsGoRide admin review.

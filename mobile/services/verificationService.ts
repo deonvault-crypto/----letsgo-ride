@@ -1,4 +1,6 @@
-import { api, requestData } from "./api";
+import axios from "axios";
+
+import { api, requestData, toFriendlyApiError } from "./api";
 import { ApiResponse } from "../types/api.types";
 import {
   VerificationDocument,
@@ -38,13 +40,20 @@ export async function uploadVerificationDocument(data: {
     type: data.mimeType || "application/octet-stream",
   } as unknown as Blob);
 
-  const response = await api.post<ApiResponse<VerificationDocument>>(
-    "/verification/manual/upload",
-    formData,
-    { headers: { "Content-Type": "multipart/form-data" } },
-  );
-  if (!response.data.success) {
-    throw new Error(response.data.error || "Upload failed.");
+  try {
+    const response = await api.post<ApiResponse<VerificationDocument>>(
+      "/verification/manual/upload",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || "Upload failed.");
+    }
+    return response.data.data;
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      throw new Error(toFriendlyApiError(err));
+    }
+    throw err;
   }
-  return response.data.data;
 }

@@ -19,8 +19,9 @@ export default function SafetyScreen() {
       <SafetyCard title="Driver verification" body="Drivers submit identity and vehicle details for manual review before posting public rides." icon="account-check-outline" />
       <SafetyCard title="Trip records" body="Ride requests and status updates stay visible in My Trips." icon="clipboard-text-clock-outline" />
       <SafetyCard title="Unsafe driving reports" body="Report unsafe driving, scams, payment issues, or passenger problems." icon="alert-outline" />
-      <SafetyCard title="Support review" body="Reports are sent to LetsGo Ride support for review and follow-up." icon="shield-search" />
-      <SafetyCard title="Emergency guidance" body="For emergencies, contact the appropriate local emergency service first." icon="phone-alert-outline" />
+      <SafetyCard title="Support review" body="Reports are sent to LetsGoRide support for review and follow-up." icon="shield-search" />
+      <SafetyCard title="Privacy by design" body="Verification documents are reviewed by LetsGoRide admins only and are not visible to passengers or drivers." icon="lock-check-outline" />
+      <SafetyCard title="Emergency guidance" body="For emergencies, contact the appropriate local emergency service first. LetsGoRide does not claim police or government integration." icon="phone-alert-outline" />
       <AppButton title="Report an issue" onPress={() => router.push("/(shared)/report" as never)} />
     </Screen>
   );

@@ -49,7 +49,7 @@ describe("manual driver verification flow", () => {
     const screen = render(<DriverVerificationScreen />);
 
     expect(await screen.findAllByText("Driver verification")).toHaveLength(2);
-    expect(screen.getByText("Before posting rides, we need to verify your identity and vehicle details. This helps protect passengers and keeps LetsGo Ride safer.")).toBeOnTheScreen();
+    expect(screen.getByText("Before posting rides, we need to verify your identity and vehicle details. This helps protect passengers and keeps LetsGoRide safer.")).toBeOnTheScreen();
 
     fireEvent.press(screen.getAllByRole("button", { name: "Upload" })[0]);
 

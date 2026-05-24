@@ -4,3 +4,5 @@ export const legalUrls = {
   support: "https://letsgoride.site/support",
   safety: "https://letsgoride.site/safety",
 };
+
+export const supportEmail = "support@letsgoride.site";

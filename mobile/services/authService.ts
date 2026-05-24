@@ -1,4 +1,6 @@
-import { api, requestData, saveToken, clearToken, getToken } from "./api";
+import axios from "axios";
+
+import { api, requestData, saveToken, clearToken, getToken, toFriendlyApiError } from "./api";
 import { User, UserRole } from "../types/user.types";
 
 type AuthPayload = { token: string; user: User };
@@ -101,13 +103,20 @@ export async function uploadProfilePhoto(asset: { uri: string; fileName?: string
     name: asset.fileName || "profile-photo.jpg",
     type: asset.mimeType || asset.type || "image/jpeg",
   } as unknown as Blob);
-  const response = await api.post("/auth/me/profile-photo", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  if (!response.data.success) {
-    throw new Error(response.data.error || "Unable to upload profile photo.");
+  try {
+    const response = await api.post("/auth/me/profile-photo", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    if (!response.data.success) {
+      throw new Error(response.data.error || "Unable to upload profile photo.");
+    }
+    return response.data.data as User;
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      throw new Error(toFriendlyApiError(err));
+    }
+    throw err;
   }
-  return response.data.data as User;
 }
 
 export async function deleteAccount() {

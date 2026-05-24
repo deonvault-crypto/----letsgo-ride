@@ -89,7 +89,7 @@ export default function PostTripScreen() {
         vehicle,
         pickup_note: pickup,
         dropoff_note: dropoff,
-        driver_name: "LetsGo Ride Driver",
+        driver_name: user?.name || "LetsGoRide Driver",
         driver_rating: 4.8,
       });
       router.replace(`/(driver)/trip/${ride.id}` as never);
@@ -133,7 +133,7 @@ export default function PostTripScreen() {
           <StatusBadge label="Verification required" tone="warning" />
           <Text style={styles.body}>
             Drivers must verify their identity and vehicle details before
-            posting rides. This helps protect passengers and keeps LetsGo Ride
+            posting rides. This helps protect passengers and keeps LetsGoRide
             safer.
           </Text>
           <AppButton title="Open driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />

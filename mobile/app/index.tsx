@@ -30,7 +30,7 @@ export default function IndexScreen() {
 
   return (
     <Screen showHeader={false}>
-      <LoadingState label="Preparing LetsGo Ride..." />
+      <LoadingState label="Preparing LetsGoRide..." />
     </Screen>
   );
 }

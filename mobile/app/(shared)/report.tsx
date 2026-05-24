@@ -74,7 +74,7 @@ export default function ReportIssueScreen() {
 
       <Text style={styles.sectionTitle}>Your reports</Text>
       {reports.length === 0 ? (
-        <EmptyState title="No reports yet" body="Reports you send to LetsGo Ride support will appear here." />
+        <EmptyState title="No reports yet" body="Reports you send to LetsGoRide support will appear here." />
       ) : reports.map((report) => (
         <View key={report.id} style={styles.reportCard}>
           <StatusBadge label={formatStatus(report.status)} tone="warning" />

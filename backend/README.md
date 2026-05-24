@@ -1,6 +1,6 @@
-# LetsGo Ride API
+# LetsGoRide API
 
-FastAPI backend for the LetsGo Ride mobile product.
+FastAPI backend for the LetsGoRide mobile product.
 
 ## What Was Rebuilt
 
@@ -8,7 +8,8 @@ FastAPI backend for the LetsGo Ride mobile product.
 - MongoDB support through Motor when `MONGODB_URI` is configured.
 - In-memory fallback when MongoDB is not configured, so Expo Go can run locally.
 - Demo rides are disabled by default and should stay disabled in production.
-- Phone verification is ready for a real OTP provider.
+- Email verification and password reset use Resend when configured.
+- Phone numbers are stored for trip coordination after a user adds them, but phone login is not the public primary flow.
 
 ## Start Backend
 

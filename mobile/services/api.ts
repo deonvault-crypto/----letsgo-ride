@@ -71,31 +71,46 @@ export async function requestData<T>(config: AxiosRequestConfig) {
   }
 }
 
-function toFriendlyApiError(error: AxiosError<ApiResponse<unknown>>) {
+export function toFriendlyApiError(error: AxiosError<ApiResponse<unknown>>) {
   const status = error.response?.status;
   const responseData = error.response?.data;
   const serverMessage = responseData && responseData.success === false ? responseData.error : undefined;
+  const requestUrl = String(error.config?.url || "");
+
+  if (!error.response) {
+    return "Could not connect to LetsGoRide. Please check your connection and try again.";
+  }
 
   if (serverMessage) {
-    if (serverMessage.toLowerCase().includes("verify your email")) {
+    const normalizedMessage = serverMessage.toLowerCase();
+    if (normalizedMessage.includes("verify your email")) {
       return "Please verify your email before logging in.";
     }
-    if (serverMessage.toLowerCase().includes("invalid or expired verification")) {
+    if (normalizedMessage.includes("invalid or expired verification")) {
       return "The verification code is incorrect or expired.";
     }
-    if (serverMessage.toLowerCase().includes("invalid email or password")) {
+    if (normalizedMessage.includes("invalid email or password")) {
       return "Email or password is incorrect.";
     }
-    if (serverMessage.toLowerCase().includes("email verification could not be sent")) {
+    if (normalizedMessage.includes("email verification could not be sent")) {
       return "Verification code could not be sent. Please try again.";
     }
     return serverMessage;
   }
 
-  if (status === 401) return "Email or password is incorrect.";
-  if (status === 403) return "Please verify your email before logging in.";
+  if (status === 401) {
+    return requestUrl.includes("/auth/email-login")
+      ? "Email or password is incorrect."
+      : "Your session expired. Please log in again.";
+  }
+  if (status === 403) {
+    return requestUrl.includes("/auth/email-login")
+      ? "Please verify your email before logging in."
+      : "Your session expired. Please log in again.";
+  }
   if (status === 400) return "The request could not be completed. Please check your details.";
-  return "Could not connect to LetsGoRide. Please try again.";
+  if (status && status >= 500) return "Something went wrong. Please try again.";
+  return "Could not connect to LetsGoRide. Please check your connection and try again.";
 }
 
 export async function saveToken(token: string) {

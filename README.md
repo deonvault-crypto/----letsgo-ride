@@ -1,4 +1,4 @@
-# LetsGo Ride
+# LetsGoRide
 
 Production readiness checkpoint for the mobile app and backend.
 
@@ -53,10 +53,6 @@ Current value:
 https://letsgoride-backend.onrender.com
 ```
 
-## Phone Verification
-
-Development environments can use the configured verification code until the SMS provider is connected.
-
 ## Email Verification and Admin Seed
 
 New email accounts must verify their email before login. The backend can use Resend when these environment variables are configured in the hosting environment:
@@ -75,7 +71,7 @@ Do not store admin credentials in this repository.
 
 ## Current Product Limits
 
-- No real SMS OTP provider.
+- Phone login is not the primary public auth flow. Phone numbers are optional during signup and required before booking or posting rides.
 - No live payments or service fees.
 - No maps SDK.
 - No KYC provider.
@@ -85,7 +81,6 @@ Do not store admin credentials in this repository.
 
 ## Next Phases
 
-- Add real OTP provider.
-- Add admin review tools for reports and driver verification.
+- Add production build testing for App Store and Play Store review.
 - Add maps and pickup/drop-off geocoding.
 - Add payment intent/deposit-proof workflows only after product rules are final.

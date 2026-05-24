@@ -12,7 +12,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 async def health_check():
     return api_success(
         {
-            "service": "LetsGo Ride API",
+            "service": "LetsGoRide API",
             "status": "ok",
             "database_status": database.status,
         }

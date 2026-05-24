@@ -49,7 +49,7 @@ export function VerifiedBadge({
             </View>
             <Text style={styles.modalBody}>
               This person has completed LetsGoRide identity verification.
-              Verification helps build trust, reduce fake accounts, and make
+              Verification helps build trust, reduce impersonation, and make
               passengers and drivers feel safer before sharing a ride.
             </Text>
             <Text style={styles.modalBody}>

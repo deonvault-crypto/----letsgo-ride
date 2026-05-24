@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "LetsGo Ride",
+    "name": "LetsGoRide",
     "slug": "letsgoride-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "scheme": "letsgoride",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,6 +31,12 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow LetsGoRide to use Face ID for faster secure login."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library."
         }
       ]
     ],

@@ -5,7 +5,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
-import { legalUrls } from "../../constants/legal";
+import { legalUrls, supportEmail } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { deleteAccount, logout, updateCurrentUser } from "../../services/authService";
@@ -90,9 +90,9 @@ export default function SettingsScreen() {
     Alert.alert("Logout", "You will be signed out of this LetsGoRide account.", [
       { text: "Cancel", style: "cancel" },
       {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
           await disableBiometricLogin();
           await logout();
           router.replace("/(auth)/welcome" as never);
@@ -239,6 +239,18 @@ export default function SettingsScreen() {
             documents are not visible to passengers or other normal users.
           </Text>
         </View>
+        <View style={styles.explainerCard}>
+          <Text style={styles.explainerTitle}>How LetsGoRide uses account data</Text>
+          <Text style={styles.body}>
+            LetsGoRide uses email and password login, optional biometric login
+            on your device, in-app messages, support messages, safety reports,
+            and notifications for trip updates. Phone numbers are optional
+            until booking or posting a ride. Profile photos and driver
+            verification documents are used for trust and safety review. The
+            app does not offer online payments, GPS tracking, contacts access,
+            or advertising tracking.
+          </Text>
+        </View>
         <ListTile
           icon="check-decagram-outline"
           title="Verified identity badge"
@@ -262,7 +274,13 @@ export default function SettingsScreen() {
       <Section title="Legal">
         <ListTile icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
         <ListTile icon="file-document-outline" title="Terms of Use" onPress={() => openExternalUrl(legalUrls.terms)} />
-        <ListTile icon="shield-outline" title="Safety Policy" onPress={() => router.push("/(shared)/safety" as never)} />
+        <ListTile icon="shield-outline" title="Safety Policy" onPress={() => openExternalUrl(legalUrls.safety)} />
+        <ListTile
+          icon="email-outline"
+          title="Support contact"
+          subtitle={supportEmail}
+          onPress={() => openExternalUrl(legalUrls.support)}
+        />
       </Section>
 
       <Section title="Account control">

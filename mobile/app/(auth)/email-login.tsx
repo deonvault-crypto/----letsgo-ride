@@ -134,7 +134,7 @@ export default function EmailLoginScreen() {
         {biometricReady ? <AppButton title={biometricText} variant="secondary" onPress={biometricLogin} loading={loading} /> : null}
         <AppButton title="Create account" variant="secondary" onPress={() => router.push("/(auth)/email-register" as never)} />
       </View>
-      <Text style={styles.footer}>🇿🇼 Proudly Zimbabwean · Built for safer shared rides</Text>
+      <Text style={styles.footer}>Proudly Zimbabwean - Built for safer shared rides</Text>
     </Screen>
   );
 }

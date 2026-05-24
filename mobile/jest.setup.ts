@@ -16,3 +16,9 @@ jest.mock("react-native-safe-area-context", () => ({
 jest.mock("@expo/vector-icons", () => ({
   MaterialCommunityIcons: ({ name }: { name: string }) => name,
 }));
+
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(),
+  setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
+}));

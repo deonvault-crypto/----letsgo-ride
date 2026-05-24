@@ -106,7 +106,7 @@ export default function DriverVerificationScreen() {
         <Text style={styles.title}>Driver verification</Text>
         <Text style={styles.body}>
           Before posting rides, we need to verify your identity and vehicle
-          details. This helps protect passengers and keeps LetsGo Ride safer.
+          details. This helps protect passengers and keeps LetsGoRide safer.
         </Text>
       </View>
 

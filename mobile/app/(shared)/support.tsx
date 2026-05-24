@@ -8,6 +8,7 @@ import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
+import { supportEmail } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { mySupportMessages, sendSupportMessage, SupportMessage } from "../../services/supportService";
@@ -47,14 +48,17 @@ export default function SupportScreen() {
   return (
     <Screen title="Support" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
       <Text style={styles.title}>Support</Text>
-      <Text style={styles.body}>Send a message to LetsGo Ride support for route, account, or safety help.</Text>
+      <Text style={styles.body}>
+        Send a message to LetsGoRide support for route, account,
+        verification, or safety help. You can also reach us at {supportEmail}.
+      </Text>
       <AppInput label="Subject" value={subject} onChangeText={setSubject} />
       <AppInput label="Message" value={message} onChangeText={setMessage} placeholder="How can we help?" multiline />
       {error ? <ErrorState message={error} /> : null}
       <AppButton title="Send message" loading={saving} onPress={submit} disabled={message.trim().length < 5} />
       <Text style={styles.sectionTitle}>Submitted messages</Text>
       {messages.length === 0 ? (
-        <EmptyState title="No support messages yet" body="Messages you send to LetsGo Ride support will appear here." />
+        <EmptyState title="No support messages yet" body="Messages you send to LetsGoRide support will appear here." />
       ) : messages.map((item) => (
         <View key={item.id} style={styles.card}>
           <StatusBadge label={formatStatus(item.status)} tone="success" />
