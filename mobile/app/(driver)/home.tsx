@@ -23,6 +23,7 @@ export default function DriverHomeScreen() {
   const { user } = useCurrentUser();
   const { driver } = useDriver();
   const { rides, loading, error, reload } = useRides();
+  const ownRides = rides.filter((ride) => ride.is_own_ride);
   const {
     requests,
     loading: requestsLoading,
@@ -56,13 +57,13 @@ export default function DriverHomeScreen() {
         <AppButton title="Driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
       </View>
       <View style={styles.metrics}>
-        <Metric label="Today trips" value={String(rides.length)} />
+        <Metric label="Today trips" value={String(ownRides.length)} />
         <Metric label="Seat requests" value={String(requests.length)} />
       </View>
       <Text style={styles.sectionTitle}>Posted trips</Text>
       {loading ? <LoadingState label="Loading driver trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
-      {!loading && !error && rides.slice(0, 3).map((ride) => (
+      {!loading && !error && ownRides.slice(0, 3).map((ride) => (
         <RideCard
           key={ride.id}
           ride={ride}
@@ -80,7 +81,15 @@ export default function DriverHomeScreen() {
       ) : requests.slice(0, 4).map((request) => (
         <View key={request.id} style={styles.requestCard}>
           <StatusBadge label={formatStatus(request.status)} tone={request.status === "confirmed" ? "success" : request.status === "declined" ? "danger" : "warning"} />
-          <Text style={styles.requestTitle}>{request.passenger_name}</Text>
+          <View style={styles.passengerRow}>
+            <Avatar name={request.passenger_name} imageUri={request.passenger_profile_photo_url} size={38} />
+            <View style={styles.passengerCopy}>
+              <View style={styles.nameRow}>
+                <Text style={styles.requestTitle}>{request.passenger_name}</Text>
+                <VerifiedBadge verified={request.passenger_verification_status === "verified"} />
+              </View>
+            </View>
+          </View>
           <Text style={styles.body}>
             {request.ride_snapshot?.origin || "Ride"} to {request.ride_snapshot?.destination || "destination"} - {request.seats} seat
           </Text>
@@ -172,5 +181,13 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontSize: 18,
     fontWeight: "900",
+  },
+  passengerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  passengerCopy: {
+    flex: 1,
   },
 });

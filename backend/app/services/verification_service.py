@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import UploadFile
 
 from app.database import database
+from app.services.notification_service import create_app_notification, notify_admins
 from app.services.audit_service import write_audit_log
 from app.utils import new_id, now_iso
 
@@ -166,6 +167,12 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
         target_id=driver["id"],
         metadata={"document_count": len(documents)},
     )
+    await notify_admins(
+        "driver_verification",
+        "New driver verification",
+        f"{user.get('name') or 'A driver'} submitted documents for review.",
+        {"driver_id": driver["id"]},
+    )
     return updated
 
 
@@ -289,4 +296,14 @@ async def apply_admin_verification_status(
         target_id=driver["id"],
         metadata={"admin_notes": admin_notes, "rejection_reason": rejection_reason},
     )
+    if driver.get("user_id"):
+        title = "Driver verification approved" if status == "verified" else "Verification needs attention"
+        body = "You can now post rides on LetsGoRide." if status == "verified" else "Please review your documents and resubmit."
+        await create_app_notification(
+            driver["user_id"],
+            "driver_verification",
+            title,
+            body,
+            {"driver_id": driver["id"], "verification_status": status},
+        )
     return updated

@@ -2,7 +2,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import EditProfileScreen from "../app/(shared)/edit-profile";
 import ProfileScreen from "../app/(shared)/profile";
-import { updateCurrentUser } from "../services/authService";
+import { updateCurrentUser, uploadProfilePhoto } from "../services/authService";
 import { User } from "../types/user.types";
 import { passengerUser } from "./fixtures";
 
@@ -38,6 +38,7 @@ jest.mock("../hooks/useCurrentUser", () => ({
 
 jest.mock("../services/authService", () => ({
   updateCurrentUser: jest.fn(),
+  uploadProfilePhoto: jest.fn(),
 }));
 
 describe("profile update flow", () => {
@@ -100,9 +101,9 @@ describe("profile update flow", () => {
   });
 
   it("stores profile photo metadata and keeps initials as fallback when no photo exists", async () => {
-    (updateCurrentUser as jest.Mock).mockResolvedValueOnce({
+    (uploadProfilePhoto as jest.Mock).mockResolvedValueOnce({
       ...passengerUser,
-      profile_photo_url: "file:///profile.jpg",
+      profile_photo_url: "https://letsgoride-backend.onrender.com/media/profile-photos/user/profile.jpg",
       profile_photo_name: "profile.jpg",
     });
 
@@ -112,9 +113,10 @@ describe("profile update flow", () => {
     fireEvent.press(screen.getByRole("button", { name: "Update photo" }));
 
     await waitFor(() => {
-      expect(updateCurrentUser).toHaveBeenCalledWith({
-        profile_photo_url: "file:///profile.jpg",
-        profile_photo_name: "profile.jpg",
+      expect(uploadProfilePhoto).toHaveBeenCalledWith({
+        uri: "file:///profile.jpg",
+        fileName: "profile.jpg",
+        mimeType: "image/jpeg",
       });
       expect(screen.getByText("Profile photo saved.")).toBeOnTheScreen();
     });

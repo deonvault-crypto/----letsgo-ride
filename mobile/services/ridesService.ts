@@ -51,3 +51,31 @@ export async function updateRideRequest(id: string, status: RideRequest["status"
     data: { status },
   });
 }
+
+export async function acceptRideRequest(id: string) {
+  return requestData<RideRequest>({ method: "POST", url: `/requests/${id}/accept` });
+}
+
+export async function declineRideRequest(id: string, reason?: string) {
+  return requestData<RideRequest>({
+    method: "POST",
+    url: `/requests/${id}/decline`,
+    data: { status: "declined", reason },
+  });
+}
+
+export async function cancelMyRideRequest(id: string, reason?: string) {
+  return requestData<RideRequest>({
+    method: "POST",
+    url: `/requests/${id}/cancel`,
+    data: { status: "cancelled_by_passenger", reason },
+  });
+}
+
+export async function cancelPassengerRideRequest(id: string, reason: string) {
+  return requestData<RideRequest>({
+    method: "POST",
+    url: `/requests/${id}/cancel-passenger`,
+    data: { status: "cancelled_by_driver", reason },
+  });
+}

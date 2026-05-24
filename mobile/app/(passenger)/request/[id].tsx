@@ -43,6 +43,10 @@ export default function RequestSeatScreen() {
   }, [id]);
 
   async function submit() {
+    if (ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id)) {
+      setError("You cannot request a seat on your own ride.");
+      return;
+    }
     if (!user?.phone) {
       setError("Add your phone number before booking a seat.");
       setShowPhoneModal(true);
@@ -107,10 +111,13 @@ export default function RequestSeatScreen() {
         </View>
       ) : (
         <>
-          <View style={styles.card}>
-            <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
+      <View style={styles.card}>
+        <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
           <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
           <Text style={styles.body}>Seat request for 1 passenger.</Text>
+          {ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id) ? (
+            <StatusBadge label="Your ride" tone="neutral" />
+          ) : null}
         </View>
           {userError ? (
             <View style={styles.card}>
@@ -135,7 +142,12 @@ export default function RequestSeatScreen() {
             placeholder="Pickup timing, luggage, or special note"
             multiline
           />
-          <AppButton title="Confirm request" loading={saving} onPress={submit} />
+          <AppButton
+            title={ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id) ? "You cannot book your own ride" : "Confirm request"}
+            loading={saving}
+            disabled={Boolean(ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id))}
+            onPress={submit}
+          />
         </>
       )}
     </Screen>

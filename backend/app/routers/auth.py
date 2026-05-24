@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, File, Header, UploadFile
 
 from app.config import get_settings
+from app.auth import get_current_user
 from app.models.user import (
     EmailLoginBody,
     EmailRegisterBody,
@@ -25,6 +26,7 @@ from app.services.auth_service import (
     verify_email_code,
     verify_email_user,
 )
+from app.services.profile_photo_service import save_profile_photo
 from app.utils import api_error, api_success
 from app.database import database
 from app.utils import now_iso
@@ -188,6 +190,15 @@ async def update_me(payload: UserUpdate, authorization: str = Header(default="")
     if updated and updates.get("email_verified") is False:
         await start_email_verification(updated, force=True)
     return api_success(public_user(updated or user))
+
+
+@router.post("/me/profile-photo")
+async def upload_profile_photo(file: UploadFile = File(...), user=Depends(get_current_user)):
+    try:
+        updated = await save_profile_photo(user, file)
+    except ValueError as error:
+        api_error(str(error), 400)
+    return api_success(public_user(updated))
 
 
 @router.delete("/me")

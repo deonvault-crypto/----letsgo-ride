@@ -18,6 +18,7 @@ class Settings:
         self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
+        self.public_api_base_url = self._get_env_first("PUBLIC_API_BASE_URL", "API_PUBLIC_BASE_URL") or "https://letsgoride-backend.onrender.com"
         self.resend_api_key = self._get_env_first("RESEND_API_KEY")
         self.resend_from_email = self._get_env_first(
             "RESEND_FROM_EMAIL",

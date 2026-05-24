@@ -109,6 +109,14 @@ export default function AdminVerificationDetailScreen() {
     );
   }
 
+  if (error && !detail) {
+    return (
+      <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications">
+        <ErrorState message={friendlyVerificationError(error)} onRetry={load} />
+      </Screen>
+    );
+  }
+
   const driver = detail?.driver || {};
   const status = String(driver.verification_status || "not_started") as VerificationStatus;
 
@@ -122,7 +130,7 @@ export default function AdminVerificationDetailScreen() {
           </View>
         </View>
       </Modal>
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {error ? <ErrorState message={friendlyVerificationError(error)} onRetry={load} /> : null}
       <View style={styles.card}>
         <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
         <Text style={styles.title}>{String(driver.name || "Driver")}</Text>
@@ -140,8 +148,8 @@ export default function AdminVerificationDetailScreen() {
             {document.id ? (
               <View style={styles.documentActions}>
                 <AppButton title="View document" onPress={() => viewDocument(document.id as string, document.file_name, document.content_type)} />
-                <AppButton title="Accept document" variant="secondary" onPress={() => updateDocument(document.id as string, "accepted")} />
-                <AppButton title="Reject document" variant="ghost" onPress={() => updateDocument(document.id as string, "rejected")} />
+                <AppButton title="Accept document" variant="secondary" disabled={Boolean(saving)} onPress={() => updateDocument(document.id as string, "accepted")} />
+                <AppButton title="Reject document" variant="ghost" disabled={Boolean(saving)} onPress={() => updateDocument(document.id as string, "rejected")} />
               </View>
             ) : null}
           </View>
@@ -164,9 +172,9 @@ export default function AdminVerificationDetailScreen() {
           placeholder="Required when rejecting"
           multiline
         />
-        <AppButton title="Approve verification" loading={saving === "verified"} onPress={() => updateStatus("verified")} />
-        <AppButton title="Needs review" variant="secondary" loading={saving === "needs_review"} onPress={() => updateStatus("needs_review")} />
-        <AppButton title="Reject verification" variant="danger" loading={saving === "rejected"} onPress={() => updateStatus("rejected")} />
+        <AppButton title="Approve verification" loading={saving === "verified"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("verified")} />
+        <AppButton title="Needs review" variant="secondary" loading={saving === "needs_review"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("needs_review")} />
+        <AppButton title="Reject verification" variant="danger" loading={saving === "rejected"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("rejected")} />
       </View>
     </Screen>
   );
@@ -178,6 +186,13 @@ function decodeFileName(fileName: string) {
   } catch {
     return fileName;
   }
+}
+
+function friendlyVerificationError(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes("admin access")) return "Admin access required. Please log in again.";
+  if (lower.includes("not found")) return "Verification record not found.";
+  return "Could not load verification details. Please try again.";
 }
 
 function statusTone(status: VerificationStatus): "success" | "warning" | "danger" | "neutral" {

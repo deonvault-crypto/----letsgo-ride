@@ -72,11 +72,11 @@ export async function listAdminRequests() {
   return requestData<RideRequest[]>({ method: "GET", url: "/admin/requests" });
 }
 
-export async function updateAdminRequestStatus(requestId: string, status: RideRequest["status"]) {
+export async function updateAdminRequestStatus(requestId: string, status: Extract<RideRequest["status"], "cancelled_by_admin">, reason: string) {
   return requestData<RideRequest>({
     method: "PATCH",
     url: `/admin/requests/${requestId}/status`,
-    data: { status },
+    data: { status, reason },
   });
 }
 
@@ -138,5 +138,5 @@ export async function updateAdminVerificationStatus(data: {
 export async function getAdminDocumentUrl(driverId: string, documentId: string) {
   const token = await getToken();
   const query = token ? `?access_token=${encodeURIComponent(token)}` : "";
-  return `${API_BASE_URL}/admin/verifications/${encodeURIComponent(driverId)}/documents/${encodeURIComponent(documentId)}${query}`;
+  return `${API_BASE_URL}/admin/verifications/${encodeURIComponent(driverId)}/documents/${encodeURIComponent(documentId)}/view${query}`;
 }

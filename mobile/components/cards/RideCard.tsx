@@ -5,6 +5,7 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { Ride } from "../../types/ride.types";
 import { formatUsd } from "../../utils/formatPrice";
+import { Avatar } from "../ui/Avatar";
 import { StatusBadge } from "../ui/StatusBadge";
 import { VerifiedBadge } from "../ui/VerifiedBadge";
 
@@ -24,10 +25,18 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
         <Text style={styles.price}>{formatUsd(ride.price_usd)}</Text>
       </View>
       <View style={styles.row}>
-        <MaterialCommunityIcons name="account-check-outline" size={18} color={colors.primaryGreen} />
-        <Text style={styles.driver}>{ride.driver_name}</Text>
-        <VerifiedBadge verified={ride.driver_verification_status === "verified"} />
-        <Text style={styles.meta}>- {ride.driver_rating.toFixed(1)}</Text>
+        <Avatar name={ride.driver_name} imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url || undefined} size={38} />
+        <View style={styles.driverCopy}>
+          <View style={styles.driverNameRow}>
+            <Text style={styles.driver}>{ride.driver_name}</Text>
+            <VerifiedBadge verified={ride.driver_verification_status === "verified"} />
+            {ride.is_own_ride ? <StatusBadge label="Your ride" tone="neutral" /> : null}
+          </View>
+          <View style={styles.inlineRow}>
+            <MaterialCommunityIcons name="star" size={15} color={colors.warning} />
+            <Text style={styles.meta}>{ride.driver_rating.toFixed(1)}</Text>
+          </View>
+        </View>
       </View>
       <View style={styles.row}>
         <MaterialCommunityIcons name="car-outline" size={18} color={colors.mutedText} />
@@ -81,6 +90,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+  },
+  inlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  driverCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  driverNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
     flexWrap: "wrap",
   },
   driver: {

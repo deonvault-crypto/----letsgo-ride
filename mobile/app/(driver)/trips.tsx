@@ -12,16 +12,17 @@ import { useRides } from "../../hooks/useRides";
 export default function DriverTripsScreen() {
   const router = useRouter();
   const { rides, loading, error, reload } = useRides();
+  const ownRides = rides.filter((ride) => ride.is_own_ride);
 
   return (
     <Screen title="Trips" navRole="driver">
       <Text style={styles.title}>Driver trips</Text>
       {loading ? <LoadingState label="Loading trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
-      {!loading && !error && rides.length === 0 ? (
+      {!loading && !error && ownRides.length === 0 ? (
         <EmptyState title="No driver trips" body="Post a trip to start accepting passenger seat requests." />
       ) : null}
-      {!loading && !error && rides.map((ride) => (
+      {!loading && !error && ownRides.map((ride) => (
         <RideCard
           key={ride.id}
           ride={ride}

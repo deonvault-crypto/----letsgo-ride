@@ -165,10 +165,14 @@ export default function AdminDashboardScreen() {
               <Text style={styles.cardTitle}>{request.passenger_name}</Text>
               <Text style={styles.body}>{request.ride_snapshot?.origin || "Ride"} to {request.ride_snapshot?.destination || "destination"} - {request.seats} seat</Text>
               <Text style={styles.body}>Passenger phone: {request.passenger_phone || "Not shared"}</Text>
-              <View style={styles.row}>
-                <AppButton title="Confirm" variant="secondary" onPress={() => updateAdminRequestStatus(request.id, "confirmed").then(load)} style={styles.smallAction} />
-                <AppButton title="Decline" variant="danger" onPress={() => updateAdminRequestStatus(request.id, "declined").then(load)} style={styles.smallAction} />
-              </View>
+              {request.status === "pending" || request.status === "confirmed" ? (
+                <AppButton
+                  title="Cancel for safety"
+                  variant="danger"
+                  onPress={() => updateAdminRequestStatus(request.id, "cancelled_by_admin", "Admin safety or support intervention.").then(load)}
+                  style={styles.smallAction}
+                />
+              ) : null}
             </View>
           ))}
         </RecordSection>

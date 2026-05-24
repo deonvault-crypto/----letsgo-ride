@@ -11,6 +11,7 @@ import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
+import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { getRide } from "../../../services/ridesService";
 import { Ride } from "../../../types/ride.types";
 import { formatUsd } from "../../../utils/formatPrice";
@@ -18,6 +19,7 @@ import { formatUsd } from "../../../utils/formatPrice";
 export default function RideDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useCurrentUser();
   const [ride, setRide] = useState<Ride | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,6 +53,7 @@ export default function RideDetailScreen() {
       </Screen>
     );
   }
+  const isOwnRide = Boolean(ride.is_own_ride || (user?.id && ride.driver_user_id === user.id));
 
   return (
     <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
@@ -72,6 +75,7 @@ export default function RideDetailScreen() {
         rating={ride.driver_rating}
         vehicle={ride.vehicle}
         verified={ride.driver_verification_status === "verified"}
+        imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url}
       />
 
       <View style={styles.detailCard}>
@@ -82,10 +86,18 @@ export default function RideDetailScreen() {
         </Text>
       </View>
 
-      <AppButton
-        title="Request Seat"
-        onPress={() => router.push(`/(passenger)/request/${ride.id}` as never)}
-      />
+      {isOwnRide ? (
+        <View style={styles.detailCard}>
+          <StatusBadge label="Your ride" tone="neutral" />
+          <Text style={styles.body}>This is your posted ride. Passengers can request seats from their own accounts.</Text>
+          <AppButton title="View passenger requests" variant="secondary" onPress={() => router.replace(`/(driver)/trip/${ride.id}` as never)} />
+        </View>
+      ) : (
+        <AppButton
+          title="Request Seat"
+          onPress={() => router.push(`/(passenger)/request/${ride.id}` as never)}
+        />
+      )}
     </Screen>
   );
 }

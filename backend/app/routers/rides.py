@@ -2,10 +2,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_optional_current_user
 from app.database import database
 from app.models.ride import RideCreateBody, RideUpdateBody
-from app.services.ride_service import create_ride, is_public_ride, list_public_rides, search_rides
+from app.services.ride_service import create_ride, enrich_ride, is_public_ride, list_public_rides, search_rides
 from app.utils import api_error, api_success, now_iso
 
 
@@ -13,8 +13,8 @@ router = APIRouter(prefix="/rides", tags=["rides"])
 
 
 @router.get("")
-async def list_rides():
-    return api_success(await list_public_rides())
+async def list_rides(user=Depends(get_optional_current_user)):
+    return api_success(await list_public_rides(user))
 
 
 @router.get("/search")
@@ -23,16 +23,17 @@ async def search(
     destination: Optional[str] = None,
     date: Optional[str] = None,
     seats: int = Query(default=1, ge=1),
+    user=Depends(get_optional_current_user),
 ):
-    return api_success(await search_rides(origin, destination, seats, date))
+    return api_success(await search_rides(origin, destination, seats, date, user))
 
 
 @router.get("/{ride_id}")
-async def ride_detail(ride_id: str):
+async def ride_detail(ride_id: str, user=Depends(get_optional_current_user)):
     ride = await database.find_one("rides", {"id": ride_id})
     if not ride or not is_public_ride(ride):
         api_error("Ride not found.", 404)
-    return api_success(ride)
+    return api_success(await enrich_ride(ride, user))
 
 
 @router.post("")

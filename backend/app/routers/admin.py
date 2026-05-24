@@ -1,4 +1,5 @@
 import mimetypes
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,7 @@ from app.utils import api_error, api_success, now_iso
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 
 def _without_private_fields(rows):
@@ -131,9 +133,20 @@ async def admin_requests(admin=Depends(get_admin_user)):
 
 @router.patch("/requests/{request_id}/status")
 async def update_request_status(request_id: str, payload: RideRequestUpdateBody, admin=Depends(get_admin_user)):
-    request = await database.update_one("ride_requests", request_id, {"status": payload.status, "updated_at": now_iso()})
-    if not request:
+    existing = await database.find_one("ride_requests", {"id": request_id})
+    if not existing:
         api_error("Ride request not found.", 404)
+    if payload.status in {"confirmed", "declined"}:
+        api_error("Drivers approve or decline passenger requests. Admin can only intervene for safety or support.", 403)
+    if payload.status != "cancelled_by_admin":
+        api_error("Unsupported admin request action.", 400)
+    if not payload.reason:
+        api_error("Admin cancellation reason is required.", 400)
+    request = await database.update_one(
+        "ride_requests",
+        request_id,
+        {"status": "cancelled_by_admin", "admin_cancellation_reason": payload.reason, "updated_at": now_iso()},
+    )
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),
@@ -226,10 +239,6 @@ async def verification_detail(driver_id: str, admin=Depends(get_admin_user)):
     driver = await database.find_one("drivers", {"id": driver_id})
     if not driver:
         api_error("Verification submission not found.", 404)
-    if payload.status == "rejected" and not payload.rejection_reason:
-        api_error("Rejection reason is required.", 400)
-    if payload.document_status == "rejected" and not payload.rejection_reason:
-        api_error("Rejection reason is required.", 400)
     user = await database.find_one("users", {"id": driver.get("user_id")}) if driver.get("user_id") else None
     vehicles = await database.find_many("vehicles", {"driver_id": driver_id})
     documents = [_public_document(document) for document in driver.get("documents", [])]
@@ -270,22 +279,32 @@ async def update_verification_status(
 async def verification_document(driver_id: str, document_id: str, admin=Depends(_get_admin_from_header_or_query)):
     driver = await database.find_one("drivers", {"id": driver_id})
     if not driver:
+        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
         api_error("Verification submission not found.", 404)
     document = next((item for item in driver.get("documents", []) if item.get("id") == document_id), None)
     if not document:
+        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
         api_error("Document not found.", 404)
     storage_path = document.get("storage_path")
     if not storage_path:
-        api_error("Document file is not available.", 404)
+        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
+        api_error("Document file is unavailable on the server. The user may need to re-upload.", 404)
     path = Path(storage_path)
     if not path.exists() or not path.is_file():
-        api_error("Document file is not available.", 404)
+        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
+        api_error("Document file is unavailable on the server. The user may need to re-upload.", 404)
     media_type = mimetypes.guess_type(document.get("file_name") or str(path))[0] or "application/octet-stream"
+    logger.info("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=200 file_found=true content_type=%s", driver_id, document_id, admin.get("id"), media_type)
     return FileResponse(
         path,
         media_type=media_type,
         filename=document.get("file_name") or "verification-document",
     )
+
+
+@router.get("/verifications/{driver_id}/documents/{document_id}/view")
+async def verification_document_view(driver_id: str, document_id: str, admin=Depends(_get_admin_from_header_or_query)):
+    return await verification_document(driver_id, document_id, admin)
 
 
 @router.delete("/rides/demo")

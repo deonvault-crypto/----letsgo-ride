@@ -3,7 +3,15 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-RequestStatus = Literal["pending", "confirmed", "declined", "cancelled"]
+RequestStatus = Literal[
+    "pending",
+    "confirmed",
+    "declined",
+    "cancelled",
+    "cancelled_by_passenger",
+    "cancelled_by_driver",
+    "cancelled_by_admin",
+]
 
 
 class RideRequestCreateBody(BaseModel):
@@ -16,3 +24,4 @@ class RideRequestCreateBody(BaseModel):
 
 class RideRequestUpdateBody(BaseModel):
     status: RequestStatus
+    reason: Optional[str] = None

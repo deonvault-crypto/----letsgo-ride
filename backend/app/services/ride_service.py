@@ -103,9 +103,36 @@ def is_public_ride(ride: Dict[str, Any]) -> bool:
     return ride.get("is_demo") is not True
 
 
-async def list_public_rides() -> List[Dict[str, Any]]:
+def _public_driver_photo_url(user: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not user:
+        return None
+    photo_url = user.get("profile_photo_url") or user.get("profile_picture") or user.get("avatar_url") or user.get("photo_url")
+    if not photo_url or str(photo_url).startswith("file://"):
+        return None
+    return photo_url
+
+
+async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    enriched = dict(ride)
+    driver_user = await database.find_one("users", {"id": ride.get("user_id")}) if ride.get("user_id") else None
+    if driver_user:
+        enriched["driver_user_id"] = driver_user.get("id")
+        enriched["driver_name"] = driver_user.get("name") or ride.get("driver_name") or "LetsGo Driver"
+        enriched["driver_profile_photo_url"] = _public_driver_photo_url(driver_user)
+        enriched["driver_avatar_url"] = enriched["driver_profile_photo_url"]
+        enriched["driver_verification_status"] = driver_user.get("verification_status") or ride.get("driver_verification_status")
+    else:
+        enriched["driver_profile_photo_url"] = None
+        enriched["driver_avatar_url"] = None
+    enriched["is_own_ride"] = bool(current_user and ride.get("user_id") == current_user.get("id"))
+    enriched.pop("driver_phone", None)
+    enriched.pop("driver_email", None)
+    return enriched
+
+
+async def list_public_rides(current_user: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     rides = await database.find_many("rides")
-    return [ride for ride in rides if is_public_ride(ride)]
+    return [await enrich_ride(ride, current_user) for ride in rides if is_public_ride(ride)]
 
 
 async def search_rides(
@@ -113,8 +140,9 @@ async def search_rides(
     destination: Optional[str] = None,
     seats: int = 1,
     date: Optional[str] = None,
+    current_user: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    rides = await list_public_rides()
+    rides = await list_public_rides(current_user)
     normalized_origin = (origin or "").strip().lower()
     normalized_destination = (destination or "").strip().lower()
     normalized_date = (date or "").strip()
@@ -160,4 +188,5 @@ async def create_ride(payload: Dict[str, Any]) -> Dict[str, Any]:
         "updated_at": timestamp,
         **payload,
     }
-    return await database.insert_one("rides", ride)
+    created = await database.insert_one("rides", ride)
+    return await enrich_ride(created, {"id": payload.get("user_id")})

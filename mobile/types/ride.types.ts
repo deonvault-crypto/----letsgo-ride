@@ -3,9 +3,12 @@ export type RideStatus = "open" | "closed" | "cancelled";
 export type Ride = {
   id: string;
   driver_id?: string;
+  driver_user_id?: string;
   driver_name: string;
   driver_rating: number;
   driver_verification_status?: string;
+  driver_profile_photo_url?: string | null;
+  driver_avatar_url?: string | null;
   vehicle: string;
   origin: string;
   destination: string;
@@ -16,6 +19,7 @@ export type Ride = {
   price_usd: number;
   available_seats: number;
   status: RideStatus;
+  is_own_ride?: boolean;
   is_demo?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -26,9 +30,15 @@ export type RideRequest = {
   ride_id: string;
   passenger_name: string;
   passenger_phone?: string;
+  passenger_profile_photo_url?: string;
+  passenger_verification_status?: string;
   passenger_note?: string;
   seats: number;
-  status: "pending" | "confirmed" | "declined" | "cancelled";
+  status: "pending" | "confirmed" | "declined" | "cancelled" | "cancelled_by_passenger" | "cancelled_by_driver" | "cancelled_by_admin";
+  driver_decision_reason?: string;
+  cancellation_reason?: string;
+  driver_cancellation_reason?: string;
+  admin_cancellation_reason?: string;
   ride_snapshot?: Ride;
   created_at?: string;
   updated_at?: string;

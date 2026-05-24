@@ -12,15 +12,17 @@ export function DriverCard({
   rating,
   vehicle,
   verified = false,
+  imageUri,
 }: {
   name: string;
   rating?: number;
   vehicle?: string;
   verified?: boolean;
+  imageUri?: string | null;
 }) {
   return (
     <View style={styles.card}>
-      <Avatar name={name} />
+      <Avatar name={name} imageUri={imageUri || undefined} />
       <View style={styles.body}>
         <View style={styles.nameRow}>
           <Text style={styles.name}>{name}</Text>

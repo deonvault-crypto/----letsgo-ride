@@ -21,6 +21,11 @@ COLLECTION_NAMES = [
     "passenger_interests",
     "driver_applications",
     "audit_logs",
+    "conversations",
+    "messages",
+    "app_notifications",
+    "device_push_tokens",
+    "notification_preferences",
 ]
 
 

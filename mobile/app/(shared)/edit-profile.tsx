@@ -10,7 +10,7 @@ import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { updateCurrentUser } from "../../services/authService";
+import { updateCurrentUser, uploadProfilePhoto } from "../../services/authService";
 import { displayNameOrFallback, isGenericAccountName } from "../../utils/displayName";
 import { isValidPhone } from "../../utils/validation";
 
@@ -92,9 +92,10 @@ export default function EditProfileScreen() {
       });
       if (result.canceled || !result.assets[0]) return;
       const asset = result.assets[0];
-      const updated = await updateCurrentUser({
-        profile_photo_url: asset.uri,
-        profile_photo_name: asset.fileName || "profile-photo",
+      const updated = await uploadProfilePhoto({
+        uri: asset.uri,
+        fileName: asset.fileName || "profile-photo.jpg",
+        mimeType: asset.mimeType || "image/jpeg",
       });
       fillFormFromUser(updated);
       await reload();

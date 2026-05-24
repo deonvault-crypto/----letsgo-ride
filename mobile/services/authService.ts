@@ -1,4 +1,4 @@
-import { requestData, saveToken, clearToken, getToken } from "./api";
+import { api, requestData, saveToken, clearToken, getToken } from "./api";
 import { User, UserRole } from "../types/user.types";
 
 type AuthPayload = { token: string; user: User };
@@ -88,6 +88,22 @@ export async function getCurrentUser() {
 
 export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "profile_photo_url" | "profile_photo_name" | "role" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
   return requestData<User>({ method: "PATCH", url: "/auth/me", data });
+}
+
+export async function uploadProfilePhoto(asset: { uri: string; fileName?: string | null; mimeType?: string | null; type?: string | null }) {
+  const formData = new FormData();
+  formData.append("file", {
+    uri: asset.uri,
+    name: asset.fileName || "profile-photo.jpg",
+    type: asset.mimeType || asset.type || "image/jpeg",
+  } as unknown as Blob);
+  const response = await api.post("/auth/me/profile-photo", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  if (!response.data.success) {
+    throw new Error(response.data.error || "Unable to upload profile photo.");
+  }
+  return response.data.data as User;
 }
 
 export async function deleteAccount() {
