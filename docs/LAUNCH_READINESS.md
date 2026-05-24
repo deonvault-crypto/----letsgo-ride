@@ -24,6 +24,7 @@ This note captures the current launch checkpoint for the LetsGoRide mobile app a
 
 - Expo Go is useful for local testing, but push notifications and Face ID behavior should be tested in a development build or production build.
 - Splash and app icon changes may require closing Expo Go, clearing cache, or rebuilding the installed development or production app.
+- If Expo Go still shows an old native icon or splash image, close Expo Go, clear the Expo cache with `npx expo start -c`, and create a new development or production build. Native splash and icon assets are bundled into installed app builds.
 - App Store and Play Store builds should be tested on real iOS and Android devices before public release.
 - Render backend must be deployed and healthy before mobile testing. The mobile API base URL is `https://letsgoride-backend.onrender.com`.
 
@@ -60,6 +61,13 @@ This note captures the current launch checkpoint for the LetsGoRide mobile app a
 - LetsGoRide does not currently request contacts access, microphone access, advertising tracking, or GPS location tracking.
 - Verification documents are not visible to passengers or normal drivers. Admin access is required for document review.
 - Some trip, safety, support, and admin records may be retained after account deletion where legally or operationally required.
+
+## Ride Lifecycle Notes
+
+- Public ride lists and search results should show only bookable rides with departure date and time still in the future.
+- Ride detail can show a past ride as departed, but passengers should not be able to request a seat after departure.
+- Current launch behavior uses the posted departure date and time, not GPS or live trip tracking.
+- Future versions can add driver start/completion actions, passenger trip completion confirmation, and automatic completion after departure time plus an estimated route duration.
 
 ## Final Regression Guardrails
 

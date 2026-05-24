@@ -46,6 +46,10 @@ export default function RequestSeatScreen() {
   }, [id]);
 
   async function submit() {
+    if (ride?.is_departed || ride?.status === "departed" || ride?.status === "completed") {
+      setError("This ride has already departed.");
+      return;
+    }
     if (ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id)) {
       setError("You cannot request a seat on your own ride.");
       return;
@@ -94,6 +98,9 @@ export default function RequestSeatScreen() {
     );
   }
 
+  const hasDeparted = Boolean(ride?.is_departed || ride?.status === "departed" || ride?.status === "completed");
+  const isOwnRide = Boolean(ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id));
+
   return (
     <Screen title="Request" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <ProfileCompletionModal
@@ -118,10 +125,19 @@ export default function RequestSeatScreen() {
         <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
           <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
           <Text style={styles.body}>Seat request for {seats} {seats === 1 ? "passenger" : "passengers"}.</Text>
-          {ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id) ? (
+          {hasDeparted ? (
+            <StatusBadge label="Departed" tone="warning" />
+          ) : null}
+          {isOwnRide ? (
             <StatusBadge label="Your ride" tone="neutral" />
           ) : null}
         </View>
+          {hasDeparted ? (
+            <View style={styles.card}>
+              <StatusBadge label="Departed" tone="warning" />
+              <Text style={styles.body}>This ride has already departed.</Text>
+            </View>
+          ) : null}
           {userError ? (
             <View style={styles.card}>
               <Text style={styles.body}>Sign in before requesting a seat.</Text>
@@ -138,6 +154,7 @@ export default function RequestSeatScreen() {
               <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
             </View>
           ) : null}
+          {!hasDeparted ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Seats needed" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
             <View>
               <Text style={styles.fieldLabel}>Seats needed</Text>
@@ -145,6 +162,8 @@ export default function RequestSeatScreen() {
             </View>
             <Text style={styles.changeText}>Change</Text>
           </Pressable>
+          ) : null}
+          {!hasDeparted ? (
           <AppInput
             label="Message to driver"
             value={note}
@@ -152,10 +171,11 @@ export default function RequestSeatScreen() {
             placeholder="Pickup timing, luggage, or special note"
             multiline
           />
+          ) : null}
           <AppButton
-            title={ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id) ? "You cannot book your own ride" : "Confirm request"}
+            title={hasDeparted ? "Ride departed" : isOwnRide ? "You cannot book your own ride" : "Confirm request"}
             loading={saving}
-            disabled={Boolean(ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id))}
+            disabled={Boolean(hasDeparted || isOwnRide)}
             onPress={submit}
           />
           <SeatCounterPicker

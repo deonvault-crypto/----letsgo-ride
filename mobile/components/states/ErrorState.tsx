@@ -6,16 +6,18 @@ import { spacing } from "../../constants/spacing";
 import { AppButton } from "../ui/AppButton";
 
 export function ErrorState({
+  title = "Something needs attention",
   message,
   onRetry,
 }: {
+  title?: string;
   message: string;
   onRetry?: () => void;
 }) {
   return (
     <View style={styles.state}>
       <MaterialCommunityIcons name="alert-circle-outline" size={34} color={colors.warning} />
-      <Text style={styles.title}>Something needs attention</Text>
+      <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{message}</Text>
       {onRetry ? <AppButton title="Retry" variant="secondary" onPress={onRetry} /> : null}
     </View>

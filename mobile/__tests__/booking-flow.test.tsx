@@ -104,6 +104,23 @@ describe("ride booking flow", () => {
     expect(await screen.findByText("Ride is no longer available.")).toBeOnTheScreen();
   });
 
+  it("blocks requesting a ride that has already departed", async () => {
+    (getRide as jest.Mock).mockResolvedValueOnce({
+      ...ride,
+      status: "departed",
+      is_departed: true,
+    });
+
+    const screen = render(<RequestSeatScreen />);
+
+    await screen.findByText("Harare to Bulawayo");
+    expect(screen.getByText("This ride has already departed.")).toBeOnTheScreen();
+    expect(screen.getByText("Ride departed")).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole("button", { name: "Ride departed" }));
+
+    expect(requestSeat).not.toHaveBeenCalled();
+  });
+
   it("saves phone from the completion modal and shows booked rides in trips", async () => {
     mockUser = { ...passengerUser, phone: "" };
     (updateCurrentUser as jest.Mock).mockResolvedValueOnce({ ...passengerUser, phone: "+263778888888" });

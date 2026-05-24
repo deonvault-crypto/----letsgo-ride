@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -100,10 +100,11 @@ export default function AdminDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const hasLoaded = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      if (!overview) setLoading(true);
+      if (!hasLoaded.current) setLoading(true);
       else setRefreshing(true);
       setError("");
       const [overviewData, usersData, ridesData, requestsData, verificationData, supportData, reportData, auditData] = await Promise.all([
@@ -124,15 +125,16 @@ export default function AdminDashboardScreen() {
       setSupport(supportData.items);
       setReports(reportData.items);
       setAuditLogs(auditData.items);
+      hasLoaded.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load admin dashboard.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [overview]);
+  }, []);
 
-  useLiveRefresh(load, 15000);
+  useLiveRefresh(load, 45000);
 
   function switchSection(nextSection: AdminSection) {
     setActive(nextSection);
@@ -210,6 +212,9 @@ export default function AdminDashboardScreen() {
       return filter === "all" || report.status === filter;
     });
   }, [filter, reports, search]);
+  const adminError = getAdminErrorCopy(error);
+  const blockingError = Boolean(error && !overview);
+  const canRenderSection = !loading && !blockingError;
 
   return (
     <Screen title="Admin" showNotifications={false}>
@@ -248,9 +253,16 @@ export default function AdminDashboardScreen() {
       </View>
 
       {loading ? <LoadingState label="Loading admin operations..." /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {blockingError ? <ErrorState title={adminError.title} message={adminError.body} onRetry={load} /> : null}
+      {error && overview ? (
+        <View style={styles.inlineError}>
+          <Text style={styles.inlineErrorTitle}>{adminError.title}</Text>
+          <Text style={styles.body}>{adminError.body}</Text>
+          <AppButton title="Retry refresh" variant="secondary" onPress={load} />
+        </View>
+      ) : null}
 
-      {!loading && !error && active === "overview" ? (
+      {canRenderSection && active === "overview" ? (
         <>
           <SectionTitle title="Operational summary" />
           <MetricGrid overview={overview} />
@@ -261,7 +273,7 @@ export default function AdminDashboardScreen() {
         </>
       ) : null}
 
-      {!loading && !error && active === "users" ? (
+      {canRenderSection && active === "users" ? (
         <AdminList title="Users" search={search} setSearch={setSearch} filters={userFilters} activeFilter={filter} setFilter={setFilter}>
           {filteredUsers.length === 0 ? <EmptyState title="No users found" body="Try a different search or filter." /> : null}
           {filteredUsers.map((user) => (
@@ -285,7 +297,7 @@ export default function AdminDashboardScreen() {
         </AdminList>
       ) : null}
 
-      {!loading && !error && active === "rides" ? (
+      {canRenderSection && active === "rides" ? (
         <AdminList title="Rides" search={search} setSearch={setSearch} filters={rideFilters} activeFilter={filter} setFilter={setFilter}>
           {filteredRides.length === 0 ? <EmptyState title="No rides found" body="No rides match this operational filter." /> : null}
           {filteredRides.map((ride) => (
@@ -310,7 +322,7 @@ export default function AdminDashboardScreen() {
         </AdminList>
       ) : null}
 
-      {!loading && !error && active === "requests" ? (
+      {canRenderSection && active === "requests" ? (
         <AdminList title="Bookings and requests" search={search} setSearch={setSearch} filters={requestFilters} activeFilter={filter} setFilter={setFilter}>
           {filteredRequests.length === 0 ? <EmptyState title="No ride requests" body="Driver approvals and passenger bookings will appear here." /> : null}
           {filteredRequests.map((request) => (
@@ -333,7 +345,7 @@ export default function AdminDashboardScreen() {
         </AdminList>
       ) : null}
 
-      {!loading && !error && active === "verifications" ? (
+      {canRenderSection && active === "verifications" ? (
         <AdminList title="Driver verifications" search={search} setSearch={setSearch} filters={verificationFilters} activeFilter={filter} setFilter={setFilter}>
           {filteredVerifications.length === 0 ? <EmptyState title="No pending verifications" body="Driver submissions will appear here when they need review." /> : null}
           {filteredVerifications.map((item) => (
@@ -342,7 +354,7 @@ export default function AdminDashboardScreen() {
         </AdminList>
       ) : null}
 
-      {!loading && !error && active === "support" ? (
+      {canRenderSection && active === "support" ? (
         <AdminList title="Support cases" search={search} setSearch={setSearch} filters={supportFilters} activeFilter={filter} setFilter={setFilter}>
           {filteredSupport.length === 0 ? <EmptyState title="No support cases" body="New user support messages will appear here." /> : null}
           {filteredSupport.map((message) => (
@@ -357,7 +369,7 @@ export default function AdminDashboardScreen() {
         </AdminList>
       ) : null}
 
-      {!loading && !error && active === "reports" ? (
+      {canRenderSection && active === "reports" ? (
         <AdminList title="Safety reports" search={search} setSearch={setSearch} filters={reportFilters} activeFilter={filter} setFilter={setFilter}>
           {filteredReports.length === 0 ? <EmptyState title="No safety reports" body="Submitted reports will appear here for review." /> : null}
           {filteredReports.map((report) => (
@@ -372,7 +384,7 @@ export default function AdminDashboardScreen() {
         </AdminList>
       ) : null}
 
-      {!loading && !error && active === "operations" ? (
+      {canRenderSection && active === "operations" ? (
         <View style={styles.section}>
           <SectionTitle title="Operations log" subtitle="Admin actions, verification decisions, booking interventions, support, and safety updates." />
           {auditLogs.length === 0 ? <EmptyState title="No operations yet" body="Admin actions will appear here after operational changes are made." /> : null}
@@ -387,7 +399,7 @@ export default function AdminDashboardScreen() {
         </View>
       ) : null}
 
-      {!loading && !error && active === "actions" ? (
+      {canRenderSection && active === "actions" ? (
         <View style={styles.section}>
           <SectionTitle title="Account actions" />
           <ListTile icon="refresh" title="Refresh data" subtitle="Reload admin dashboard records" onPress={load} />
@@ -763,6 +775,26 @@ function formatDate(value?: string) {
   return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function getAdminErrorCopy(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("session expired") || normalized.includes("log in again") || normalized.includes("401")) {
+    return {
+      title: "Admin session expired",
+      body: "Please log in again to continue.",
+    };
+  }
+  if (normalized.includes("admin access") || normalized.includes("permission") || normalized.includes("403")) {
+    return {
+      title: "Admin access required",
+      body: "This section is only available to authorized admin users.",
+    };
+  }
+  return {
+    title: "Connection issue",
+    body: "We could not load the latest admin data. Check your connection or try again.",
+  };
+}
+
 const styles = StyleSheet.create({
   hero: {
     backgroundColor: colors.card,
@@ -790,6 +822,19 @@ const styles = StyleSheet.create({
     color: colors.primaryGreen,
     fontWeight: "800",
     fontSize: 12,
+  },
+  inlineError: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,176,32,0.32)",
+    backgroundColor: "#FFF8E6",
+  },
+  inlineErrorTitle: {
+    color: colors.whiteText,
+    fontSize: 16,
+    fontWeight: "900",
   },
   navGrid: {
     flexDirection: "row",

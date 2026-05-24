@@ -54,11 +54,12 @@ export default function RideDetailScreen() {
     );
   }
   const isOwnRide = Boolean(ride.is_own_ride || (user?.id && ride.driver_user_id === user.id));
+  const hasDeparted = ride.is_departed || ride.status === "departed" || ride.status === "completed";
 
   return (
     <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <View style={styles.headerCard}>
-        <StatusBadge label={ride.status.toUpperCase()} tone="success" />
+        <StatusBadge label={hasDeparted ? "DEPARTED" : ride.status.toUpperCase()} tone={hasDeparted ? "warning" : "success"} />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
         <Text style={styles.price}>{formatUsd(ride.price_usd)} per seat</Text>
       </View>
@@ -86,7 +87,12 @@ export default function RideDetailScreen() {
         </Text>
       </View>
 
-      {isOwnRide ? (
+      {hasDeparted ? (
+        <View style={styles.detailCard}>
+          <StatusBadge label="Departed" tone="warning" />
+          <Text style={styles.body}>This ride has already departed.</Text>
+        </View>
+      ) : isOwnRide ? (
         <View style={styles.detailCard}>
           <StatusBadge label="Your ride" tone="neutral" />
           <Text style={styles.body}>This is your posted ride. Passengers can request seats from their own accounts.</Text>

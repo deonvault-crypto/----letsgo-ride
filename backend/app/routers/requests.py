@@ -6,7 +6,7 @@ from app.models.request import RideRequestCreateBody, RideRequestUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.conversation_service import ensure_conversation_for_request
 from app.services.notification_service import create_app_notification
-from app.services.ride_service import enrich_ride, is_public_ride
+from app.services.ride_service import enrich_ride, is_bookable_public_ride, is_public_ride
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -28,6 +28,19 @@ async def _load_request_and_ride(request_id: str):
     return existing, ride
 
 
+async def _enrich_request_for_user(request, user):
+    enriched = dict(request)
+    ride = await database.find_one("rides", {"id": request.get("ride_id")}) if request.get("ride_id") else None
+    passenger = await database.find_one("users", {"id": request.get("user_id")}) if request.get("user_id") else None
+    if ride:
+        enriched["ride_snapshot"] = await enrich_ride(ride, user)
+    if passenger:
+        enriched["passenger_name"] = passenger.get("name") or request.get("passenger_name")
+        enriched["passenger_profile_photo_url"] = passenger.get("profile_photo_url") or request.get("passenger_profile_photo_url")
+        enriched["passenger_verification_status"] = passenger.get("verification_status") or request.get("passenger_verification_status")
+    return enriched
+
+
 async def _create_request_notification(request, ride):
     await create_app_notification(
         ride.get("user_id"),
@@ -41,6 +54,8 @@ async def _create_request_notification(request, ride):
 async def _accept_request(existing, ride, user):
     if not await _driver_owns_ride(user, ride):
         api_error("Only the driver can accept this passenger request.", 403)
+    if not is_bookable_public_ride(ride):
+        api_error("This ride has already departed.", 400)
     if not user.get("phone"):
         api_error("Add your phone number before accepting a passenger request.")
     if existing.get("status") != "pending":
@@ -162,6 +177,8 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
     ride = await database.find_one("rides", {"id": payload.ride_id})
     if not ride or not is_public_ride(ride):
         api_error("Ride not found.", 404)
+    if not is_bookable_public_ride(ride):
+        api_error("This ride has already departed.", 400)
     if ride.get("user_id") == user.get("id"):
         api_error("You cannot request a seat on your own ride.", 403)
     if ride.get("status", "open") != "open":
@@ -198,7 +215,8 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
 
 @router.get("/my")
 async def my_requests(user=Depends(get_current_user)):
-    return api_success(await database.find_many("ride_requests", {"user_id": user["id"]}))
+    requests = await database.find_many("ride_requests", {"user_id": user["id"]})
+    return api_success([await _enrich_request_for_user(request, user) for request in requests])
 
 
 @router.get("/driver")
@@ -206,7 +224,8 @@ async def driver_requests(user=Depends(get_current_user)):
     rides = await database.find_many("rides", {"user_id": user["id"]})
     ride_ids = {ride["id"] for ride in rides}
     requests = await database.find_many("ride_requests")
-    return api_success([request for request in requests if request.get("ride_id") in ride_ids and request.get("user_id") != user["id"]])
+    scoped = [request for request in requests if request.get("ride_id") in ride_ids and request.get("user_id") != user["id"]]
+    return api_success([await _enrich_request_for_user(request, user) for request in scoped])
 
 
 @router.patch("/{request_id}")

@@ -1,4 +1,4 @@
-export type RideStatus = "open" | "closed" | "cancelled";
+export type RideStatus = "open" | "closed" | "cancelled" | "departed" | "completed";
 
 export type Ride = {
   id: string;
@@ -19,6 +19,7 @@ export type Ride = {
   price_usd: number;
   available_seats: number;
   status: RideStatus;
+  is_departed?: boolean;
   is_own_ride?: boolean;
   is_demo?: boolean;
   created_at?: string;

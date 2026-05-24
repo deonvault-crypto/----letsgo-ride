@@ -6,7 +6,10 @@ import * as ImagePicker from "expo-image-picker";
 import { Avatar } from "../../components/ui/Avatar";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
+import { LocationPicker } from "../../components/ui/LocationPicker";
 import { Screen } from "../../components/ui/Screen";
+import { StatusBadge } from "../../components/ui/StatusBadge";
+import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
@@ -19,6 +22,7 @@ export default function EditProfileScreen() {
   const { user, reload } = useCurrentUser();
   const role = user?.role === "driver" ? "driver" : "passenger";
   const displayName = displayNameOrFallback(user?.name);
+  const verified = isIdentityVerified(user);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -59,7 +63,6 @@ export default function EditProfileScreen() {
       }
       const updated = await updateCurrentUser({
         name: name.trim() || undefined,
-        email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         city: profileCity.trim() || undefined,
         bio: bio.trim() || undefined,
@@ -69,8 +72,8 @@ export default function EditProfileScreen() {
       });
       fillFormFromUser(updated);
       await reload();
-      setMessage("Profile saved.");
-      setTimeout(() => router.replace("/(shared)/profile" as never), 650);
+      setMessage("Profile saved. Returning to profile...");
+      setTimeout(() => router.replace("/(shared)/profile" as never), 350);
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : "Unable to update profile.");
@@ -112,19 +115,32 @@ export default function EditProfileScreen() {
     <Screen title="Edit profile" showBack fallbackRoute="/(shared)/profile" navRole={role}>
       <View style={styles.card}>
         <View style={styles.photoRow}>
-          <Avatar name={displayName} imageUri={profilePhotoUrl} size={68} />
+          <Avatar name={displayName} imageUri={profilePhotoUrl} size={76} />
           <View style={styles.photoCopy}>
-            <Text style={styles.title}>Profile details</Text>
-            <Text style={styles.body}>{profilePhotoName || "Add a clear account photo if you want."}</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.title}>{displayName}</Text>
+              <VerifiedBadge verified={verified} />
+            </View>
+            <Text style={styles.body}>{email || "Email not set"}</Text>
+            {verified ? <StatusBadge label="Identity verified" tone="success" /> : null}
           </View>
         </View>
         <AppButton title="Update photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} />
       </View>
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Account</Text>
         <AppInput label="Full name" value={name} onChangeText={setName} />
-        <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+        <View style={styles.readOnlyField}>
+          <Text style={styles.readOnlyLabel}>Email</Text>
+          <Text style={styles.readOnlyValue}>{email || "Email not set"}</Text>
+          <Text style={styles.helperText}>Changing a verified email requires a separate re-verification flow.</Text>
+        </View>
         <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263772554186" />
-        <AppInput label="City" value={profileCity} onChangeText={setProfileCity} />
+        <Text style={styles.helperText}>Use country code, for example +263772554186.</Text>
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Travel profile</Text>
+        <LocationPicker label="City" value={profileCity} onChangeText={setProfileCity} />
         <AppInput label="About" value={bio} onChangeText={setBio} multiline />
         <AppInput label="Travel preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline />
         {message ? <Text style={[styles.message, isError && styles.error]}>{message}</Text> : null}
@@ -157,9 +173,43 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 20,
   },
+  sectionTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 17,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexWrap: "wrap",
+  },
   body: {
     color: colors.mutedText,
     lineHeight: 21,
+  },
+  helperText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  readOnlyField: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.elevated,
+    padding: spacing.md,
+    gap: 4,
+  },
+  readOnlyLabel: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  readOnlyValue: {
+    color: colors.whiteText,
+    fontWeight: "900",
   },
   message: {
     color: colors.primaryGreen,

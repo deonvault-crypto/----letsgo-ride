@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Safety Policy | LetsGoRide</title>
+  <meta name="description" content="LetsGoRide safety standards for passengers, drivers, trips, verification, support, and reporting." />
+  <style>
+    :root {
+      --brand-green: #078B3E;
+      --brand-green-soft: #E6F5EC;
+      --ink: #111827;
+      --muted: #5F6875;
+      --line: #E4DED2;
+      --paper: #FBF7EF;
+      --card: #FFFFFF;
+      --shadow: 0 20px 60px rgba(17, 24, 39, 0.08);
+      --radius-lg: 28px;
+      --radius-md: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(7, 139, 62, 0.10), transparent 34rem),
+        linear-gradient(180deg, #FFFBF4 0%, var(--paper) 100%);
+      color: var(--ink);
+      line-height: 1.7;
+    }
+
+    a { color: var(--brand-green); text-decoration: none; font-weight: 750; }
+    a:hover { text-decoration: underline; }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(18px);
+      background: rgba(251, 247, 239, 0.88);
+      border-bottom: 1px solid rgba(228, 222, 210, 0.75);
+    }
+
+    .nav {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 18px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .brand {
+      font-weight: 950;
+      letter-spacing: -0.06em;
+      font-size: clamp(1.55rem, 4vw, 2.1rem);
+      color: var(--ink);
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .brand span { color: var(--brand-green); }
+
+    .nav-links, .footer-links {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      font-size: 0.95rem;
+    }
+
+    .nav-links a { color: var(--muted); font-weight: 800; }
+    .nav-links a:hover { color: var(--brand-green); text-decoration: none; }
+
+    .hero {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: clamp(42px, 8vw, 82px) 0 26px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      background: var(--brand-green-soft);
+      color: #076B32;
+      border: 1px solid rgba(7, 139, 62, 0.18);
+      border-radius: 999px;
+      padding: 9px 14px;
+      font-size: 0.86rem;
+      font-weight: 850;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 7.4vw, 5.9rem);
+      letter-spacing: -0.075em;
+      line-height: 0.95;
+      max-width: 980px;
+    }
+
+    .subtitle {
+      margin: 24px 0 0;
+      max-width: 760px;
+      font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+      color: var(--muted);
+    }
+
+    .effective { margin-top: 22px; color: var(--muted); font-weight: 750; }
+
+    .layout {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 22px 0 70px;
+      display: grid;
+      grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+      gap: 26px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 92px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .toc h2 { margin: 0 0 12px; font-size: 1rem; letter-spacing: -0.03em; }
+
+    .toc a {
+      display: block;
+      padding: 9px 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+      font-weight: 780;
+      border-top: 1px solid rgba(228, 222, 210, 0.55);
+    }
+
+    .toc a:first-of-type { border-top: 0; }
+    .content { display: grid; gap: 18px; }
+
+    section {
+      background: rgba(255, 255, 255, 0.84);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: clamp(22px, 4vw, 34px);
+    }
+
+    section h2 {
+      margin: 0 0 12px;
+      font-size: clamp(1.45rem, 3vw, 2rem);
+      letter-spacing: -0.055em;
+      line-height: 1.05;
+    }
+
+    p { margin: 0 0 14px; color: var(--muted); font-size: 1.03rem; }
+    p:last-child { margin-bottom: 0; }
+    ul { margin: 12px 0 0; padding-left: 1.2rem; color: var(--muted); font-size: 1.03rem; }
+    li { margin: 8px 0; }
+
+    .note {
+      border-left: 4px solid var(--brand-green);
+      background: rgba(7, 139, 62, 0.07);
+      padding: 16px 18px;
+      border-radius: 16px;
+      color: #28513A;
+      font-weight: 700;
+    }
+
+    .contact-card {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 16px;
+    }
+
+    .contact-item {
+      border: 1px solid rgba(7, 139, 62, 0.18);
+      background: var(--brand-green-soft);
+      border-radius: var(--radius-md);
+      padding: 18px;
+    }
+
+    .contact-item strong { display: block; color: var(--ink); margin-bottom: 4px; }
+
+    .site-footer { border-top: 1px solid var(--line); padding: 28px 0 36px; color: var(--muted); }
+
+    .footer-inner {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    @media (max-width: 860px) {
+      .nav { align-items: flex-start; flex-direction: column; }
+      .nav-links { justify-content: flex-start; }
+      .layout { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .contact-card { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="/">Lets<span>Go</span>Ride</a>
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/support">Support</a>
+        <a href="/safety">Safety</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="eyebrow">LetsGoRide safety information</div>
+      <h1>Safety Policy</h1>
+      <p class="subtitle">How LetsGoRide supports safer shared rides, driver review, reporting, and responsible trip coordination.</p>
+      <p class="effective">Effective date: 24 May 2026</p>
+    </div>
+
+    <div class="layout">
+      <aside class="toc">
+        <h2>On this page</h2>
+        <a href="#purpose">1. Purpose</a>
+        <a href="#verification">2. Driver verification</a>
+        <a href="#passengers">3. Passenger responsibility</a>
+        <a href="#drivers">4. Driver responsibility</a>
+        <a href="#trip-records">5. Trip records</a>
+        <a href="#reports">6. Reports and support</a>
+        <a href="#emergency">7. Emergency situations</a>
+        <a href="#limits">8. Important limits</a>
+        <a href="#contact">9. Contact</a>
+      </aside>
+
+      <div class="content">
+        <section id="purpose">
+          <h2>1. Purpose</h2>
+          <p>LetsGoRide helps passengers and drivers coordinate shared rides with clearer trip details, account records, support tools, and manual driver review. Safety is a shared responsibility between LetsGoRide, drivers, passengers, and the wider community.</p>
+        </section>
+
+        <section id="verification">
+          <h2>2. Driver verification</h2>
+          <p>Drivers may need to submit identity and vehicle documents before posting public rides. LetsGoRide reviews driver identity, driver license, vehicle registration or logbook, and optional vehicle photos where applicable. Verification helps build trust, but it does not guarantee that every trip is risk-free.</p>
+          <p class="note">Verification documents are reviewed only by authorized LetsGoRide admins and are not visible to passengers or normal users.</p>
+        </section>
+
+        <section id="passengers">
+          <h2>3. Passenger responsibility</h2>
+          <ul>
+            <li>Use accurate account, booking, and pickup information.</li>
+            <li>Review route, driver, vehicle, pickup, drop-off, price, and seat details before travelling.</li>
+            <li>Use in-app messages for trip coordination where possible.</li>
+            <li>Respect drivers and other passengers.</li>
+            <li>Do not harass, threaten, scam, impersonate, or misuse the platform.</li>
+          </ul>
+        </section>
+
+        <section id="drivers">
+          <h2>4. Driver responsibility</h2>
+          <ul>
+            <li>Post only real trips with accurate route, date, time, seat, price, pickup, and vehicle details.</li>
+            <li>Meet all legal driving and vehicle requirements.</li>
+            <li>Drive safely and follow road laws.</li>
+            <li>Keep passenger contact and trip information private.</li>
+            <li>Do not accept more passengers than available seats.</li>
+            <li>Cancel or update trips responsibly if plans change.</li>
+          </ul>
+        </section>
+
+        <section id="trip-records">
+          <h2>5. Trip records</h2>
+          <p>LetsGoRide keeps ride requests, booking status, messages, support records, and safety reports so passengers, drivers, support, and admins can review what happened when needed. Public ride browsing does not show private phone numbers, emails, or verification documents.</p>
+        </section>
+
+        <section id="reports">
+          <h2>6. Reports and support</h2>
+          <p>Users can report unsafe driving, scams, fake accounts, payment issues, harassment, or other trip problems from inside the app or by contacting support. LetsGoRide may review account records, ride records, messages, and reports to respond to safety concerns.</p>
+        </section>
+
+        <section id="emergency">
+          <h2>7. Emergency situations</h2>
+          <p class="note">LetsGoRide is not an emergency service. For immediate danger, road accidents, threats, crime, or medical emergencies, contact the appropriate local emergency services or law enforcement first. After you are safe, you can also report the issue to LetsGoRide.</p>
+        </section>
+
+        <section id="limits">
+          <h2>8. Important limits</h2>
+          <p>LetsGoRide does not claim government verification, police integration, guaranteed safety, live GPS tracking, or online payment protection unless those features are clearly available in the app. Users should make careful travel decisions and report suspicious activity.</p>
+        </section>
+
+        <section id="contact">
+          <h2>9. Contact</h2>
+          <p>For safety, account, driver verification, ride, or support questions, contact LetsGoRide support.</p>
+          <div class="contact-card">
+            <div class="contact-item">
+              <strong>Email</strong>
+              <a href="mailto:support@letsgoride.site">support@letsgoride.site</a>
+            </div>
+            <div class="contact-item">
+              <strong>Phone / WhatsApp</strong>
+              <a href="tel:+48735123967">+48735123967</a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="brand">Lets<span>Go</span>Ride</div>
+      <div class="footer-links">
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/terms">Terms of Use</a>
+        <a href="/support">Support</a>
+        <a href="/safety">Safety Policy</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { AppButton } from "../../components/ui/AppButton";
@@ -10,18 +11,34 @@ import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedB
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { getMyVerification } from "../../services/verificationService";
+import { VerificationProfile } from "../../types/verification.types";
 import { displayNameOrFallback, firstNameOrFallback } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
+  const [verification, setVerification] = useState<VerificationProfile | null>(null);
   const role = user?.role === "driver" ? "driver" : "passenger";
   const displayName = displayNameOrFallback(user?.name);
   const firstName = firstNameOrFallback(user?.name);
   const contact = user?.phone || user?.email || "Add phone or email";
   const city = user?.city || "Zimbabwe";
-  const verified = isIdentityVerified(user);
+  const verificationStatus = verification?.verification_status || user?.verification_status || "not_started";
+  const verified = verificationStatus === "verified" || isIdentityVerified(user);
+
+  const loadVerification = useCallback(async () => {
+    try {
+      setVerification(await getMyVerification());
+    } catch {
+      setVerification(null);
+    }
+  }, []);
+
+  useLiveRefresh(loadVerification, 30000);
+  const verificationCard = getVerificationCard(verificationStatus);
 
   return (
     <Screen navRole={role}>
@@ -38,16 +55,12 @@ export default function ProfileScreen() {
         <StatusBadge label={user?.role === "admin" ? "Admin" : formatStatus(role)} tone={user?.role === "admin" ? "neutral" : "success"} />
       </View>
 
-      {!verified ? (
-        <View style={styles.card}>
-          <Text style={styles.title}>Get verified</Text>
-          <Text style={styles.body}>
-            Verification builds trust. A verified badge helps other people know
-            your account is real and reviewed by LetsGoRide.
-          </Text>
-          <AppButton title="Start verification" onPress={() => router.push("/(shared)/verification" as never)} />
-        </View>
-      ) : null}
+      <View style={styles.card}>
+        <StatusBadge label={verificationCard.badge} tone={verificationCard.tone} />
+        <Text style={styles.title}>{verificationCard.title}</Text>
+        <Text style={styles.body}>{verificationCard.body}</Text>
+        <AppButton title={verificationCard.button} onPress={() => router.push("/(shared)/verification" as never)} />
+      </View>
 
       <View style={styles.section}>
         {user?.role === "admin" ? (
@@ -125,3 +138,46 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
 });
+
+function getVerificationCard(status: string): {
+  title: string;
+  body: string;
+  badge: string;
+  button: string;
+  tone: "success" | "warning" | "danger" | "neutral";
+} {
+  if (status === "pending" || status === "under_review" || status === "submitted") {
+    return {
+      title: "Verification under review",
+      body: "Your documents have been submitted and are now under review. We'll notify you when your driver verification is approved or if more information is needed.",
+      badge: "Pending",
+      button: "View verification status",
+      tone: "warning",
+    };
+  }
+  if (status === "verified" || status === "approved") {
+    return {
+      title: "Driver verified",
+      body: "Your account has been reviewed by LetsGoRide. Your profile can now show a verified badge.",
+      badge: "Verified",
+      button: "View verification",
+      tone: "success",
+    };
+  }
+  if (status === "rejected" || status === "needs_review") {
+    return {
+      title: "Verification needs attention",
+      body: "Some documents need to be updated before your driver verification can be approved.",
+      badge: "Needs review",
+      button: "Review documents",
+      tone: "warning",
+    };
+  }
+  return {
+    title: "Get verified",
+    body: "Verification builds trust. A verified badge helps other people know your account is real and reviewed by LetsGoRide.",
+    badge: "Not started",
+    button: "Start verification",
+    tone: "neutral",
+  };
+}

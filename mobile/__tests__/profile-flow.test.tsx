@@ -3,8 +3,9 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import EditProfileScreen from "../app/(shared)/edit-profile";
 import ProfileScreen from "../app/(shared)/profile";
 import { updateCurrentUser, uploadProfilePhoto } from "../services/authService";
+import { getMyVerification } from "../services/verificationService";
 import { User } from "../types/user.types";
-import { passengerUser } from "./fixtures";
+import { notStartedProfile, passengerUser, pendingProfile } from "./fixtures";
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -41,10 +42,15 @@ jest.mock("../services/authService", () => ({
   uploadProfilePhoto: jest.fn(),
 }));
 
+jest.mock("../services/verificationService", () => ({
+  getMyVerification: jest.fn(),
+}));
+
 describe("profile update flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCurrentUser = passengerUser;
+    (getMyVerification as jest.Mock).mockResolvedValue(notStartedProfile);
   });
 
   it("shows saved profile data, saves edits, and keeps updated fields visible", async () => {
@@ -62,17 +68,23 @@ describe("profile update flow", () => {
     const summary = render(<ProfileScreen />);
     expect(summary.getByText("Hi, Tendai")).toBeOnTheScreen();
     expect(summary.getByText("+263771234567")).toBeOnTheScreen();
+    await waitFor(() => {
+      expect(summary.getByText("Start verification")).toBeOnTheScreen();
+    });
     fireEvent.press(summary.getByRole("button", { name: "Edit profile" }));
     expect(mockPush).toHaveBeenCalledWith("/(shared)/edit-profile");
+    summary.unmount();
 
     const screen = render(<EditProfileScreen />);
     expect(screen.getByDisplayValue("Tendai Moyo")).toBeOnTheScreen();
     expect(screen.getByDisplayValue("+263771234567")).toBeOnTheScreen();
-    expect(screen.getByDisplayValue("Harare")).toBeOnTheScreen();
+    expect(screen.getByText("Harare")).toBeOnTheScreen();
 
     fireEvent.changeText(screen.getByLabelText("Full name"), "Tendai Chipo");
     fireEvent.changeText(screen.getByLabelText("Phone number"), "+263779999999");
-    fireEvent.changeText(screen.getByLabelText("City"), "Mutare");
+    fireEvent.press(screen.getByRole("button", { name: "City" }));
+    fireEvent.changeText(screen.getByPlaceholderText("Search or type a location"), "Mutare");
+    fireEvent.press(screen.getByText("Mutare"));
     fireEvent.changeText(screen.getByLabelText("About"), "Travels between Harare and Mutare");
     fireEvent.changeText(screen.getByLabelText("Travel preferences"), "Quiet morning trips");
     fireEvent.press(screen.getByRole("button", { name: "Save profile" }));
@@ -86,8 +98,8 @@ describe("profile update flow", () => {
         travel_preferences: "Quiet morning trips",
       }));
       expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
-      expect(screen.getByDisplayValue("Mutare")).toBeOnTheScreen();
-      expect(screen.getByText("Profile saved.")).toBeOnTheScreen();
+      expect(screen.getByText("Mutare")).toBeOnTheScreen();
+      expect(screen.getByText("Profile saved. Returning to profile...")).toBeOnTheScreen();
     });
     jest.runOnlyPendingTimers();
     expect(mockReplace).toHaveBeenCalledWith("/(shared)/profile");
@@ -96,8 +108,21 @@ describe("profile update flow", () => {
     screen.rerender(<EditProfileScreen />);
 
     expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
+    expect(screen.getByText("Mutare")).toBeOnTheScreen();
     expect(screen.queryByDisplayValue("")).not.toBeOnTheScreen();
     jest.useRealTimers();
+  });
+
+  it("shows verification under review instead of start verification after submission", async () => {
+    (getMyVerification as jest.Mock).mockResolvedValueOnce(pendingProfile);
+
+    const screen = render(<ProfileScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Verification under review")).toBeOnTheScreen();
+      expect(screen.getByText("View verification status")).toBeOnTheScreen();
+      expect(screen.queryByText("Start verification")).toBeNull();
+    });
   });
 
   it("stores profile photo metadata and keeps initials as fallback when no photo exists", async () => {

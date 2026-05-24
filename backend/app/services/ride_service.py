@@ -1,7 +1,9 @@
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app.config import get_settings
 from app.database import database
+from app.services.profile_photo_service import absolute_profile_photo_url
 from app.utils import new_id, now_iso
 
 
@@ -73,6 +75,8 @@ DEMO_RIDES: List[Dict[str, Any]] = [
     },
 ]
 
+ZIMBABWE_TZ = timezone(timedelta(hours=2))
+
 
 async def seed_demo_rides() -> None:
     if not get_settings().enable_demo_seed:
@@ -103,18 +107,60 @@ def is_public_ride(ride: Dict[str, Any]) -> bool:
     return ride.get("is_demo") is not True
 
 
+def ride_departure_datetime(ride: Dict[str, Any]) -> Optional[datetime]:
+    date_value = str(ride.get("date") or "").strip()
+    time_value = str(ride.get("time") or "").strip()
+    if not date_value:
+        return None
+    try:
+        parsed_date = datetime.strptime(date_value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    parsed_time = time(23, 59)
+    if time_value:
+        for pattern in ("%H:%M", "%H:%M:%S"):
+            try:
+                parsed_time = datetime.strptime(time_value, pattern).time()
+                break
+            except ValueError:
+                continue
+    return datetime.combine(parsed_date, parsed_time, tzinfo=ZIMBABWE_TZ)
+
+
+def has_ride_departed(ride: Dict[str, Any]) -> bool:
+    departure_at = ride_departure_datetime(ride)
+    return bool(departure_at and departure_at <= datetime.now(ZIMBABWE_TZ))
+
+
+def public_ride_status(ride: Dict[str, Any]) -> str:
+    status = ride.get("status", "open")
+    if status == "open" and has_ride_departed(ride):
+        return "departed"
+    return status
+
+
+def is_bookable_public_ride(ride: Dict[str, Any]) -> bool:
+    return is_public_ride(ride) and public_ride_status(ride) == "open"
+
+
 def _public_driver_photo_url(user: Optional[Dict[str, Any]]) -> Optional[str]:
     if not user:
         return None
     photo_url = user.get("profile_photo_url") or user.get("profile_picture") or user.get("avatar_url") or user.get("photo_url")
     if not photo_url or str(photo_url).startswith("file://"):
         return None
-    return photo_url
+    return absolute_profile_photo_url(str(photo_url))
 
 
 async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     enriched = dict(ride)
-    driver_user = await database.find_one("users", {"id": ride.get("user_id")}) if ride.get("user_id") else None
+    driver_user_id = ride.get("user_id")
+    if not driver_user_id and ride.get("driver_id"):
+        driver_profile = await database.find_one("drivers", {"id": ride.get("driver_id")})
+        driver_user_id = driver_profile.get("user_id") if driver_profile else None
+    driver_user = await database.find_one("users", {"id": driver_user_id}) if driver_user_id else None
+    enriched["status"] = public_ride_status(ride)
+    enriched["is_departed"] = enriched["status"] == "departed"
     if driver_user:
         enriched["driver_user_id"] = driver_user.get("id")
         enriched["driver_name"] = driver_user.get("name") or ride.get("driver_name") or "LetsGo Driver"
@@ -132,7 +178,7 @@ async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any
 
 async def list_public_rides(current_user: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     rides = await database.find_many("rides")
-    return [await enrich_ride(ride, current_user) for ride in rides if is_public_ride(ride)]
+    return [await enrich_ride(ride, current_user) for ride in rides if is_bookable_public_ride(ride)]
 
 
 async def search_rides(
