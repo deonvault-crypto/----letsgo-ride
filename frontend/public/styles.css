@@ -1,4 +1,4 @@
-﻿:root{
+:root{
   --bg:#f5f1e8;
   --card:#ffffff;
   --text:#111;
@@ -164,7 +164,7 @@ textarea{min-height:130px;resize:vertical}
 }
 
 .apple-icon::before {
-  content: "";
+  content: "?";
   font-family: Arial, sans-serif;
   font-size: 1.45rem;
   line-height: 1;
@@ -175,7 +175,7 @@ textarea{min-height:130px;resize:vertical}
 }
 
 .play-icon::before {
-  content: "▶";
+  content: "?";
   font-size: 1.15rem;
   margin-left: 3px;
 }
@@ -472,7 +472,7 @@ textarea{min-height:130px;resize:vertical}
 }
 
 .flag-zw::after {
-  content: "★";
+  content: "?";
   position: absolute;
   left: 2px;
   top: 1px;
@@ -512,7 +512,7 @@ textarea{min-height:130px;resize:vertical}
 }
 
 .car-spin::before {
-  content: "🚗";
+  content: "??";
   position: absolute;
   inset: 0;
   display: grid;
@@ -575,7 +575,7 @@ textarea{min-height:130px;resize:vertical}
 }
 
 .car-spin::before {
-  content: "🚘" !important;
+  content: "??" !important;
   font-size: 54px !important;
   filter: drop-shadow(0 12px 18px rgba(0,0,0,0.14));
 }
@@ -587,7 +587,6 @@ textarea{min-height:130px;resize:vertical}
   margin-bottom: 24px !important;
   border: 0 !important;
   border-radius: 0 !important;
-  background: url("assets/car-icon.svg") center / contain no-repeat !important;
   box-shadow: none !important;
   animation: carTurn3D 3.2s ease-in-out infinite !important;
 }
