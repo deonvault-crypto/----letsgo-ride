@@ -44,5 +44,6 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "800",
     fontSize: 12,
+    letterSpacing: 0,
   },
 });

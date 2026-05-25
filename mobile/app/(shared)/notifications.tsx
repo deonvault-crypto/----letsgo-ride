@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
@@ -75,7 +76,11 @@ export default function NotificationsScreen() {
       {loading ? <LoadingState label="Loading notifications..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && notifications.length === 0 ? (
-        <EmptyState title="No notifications yet" body="Trip updates, support replies, and safety updates will appear here." />
+        <EmptyState
+          title="No notifications yet"
+          body="Trip updates, support replies, and safety updates will appear here."
+          icon="bell-outline"
+        />
       ) : null}
       {!loading && !error && notifications.map((notification) => (
         <Pressable
@@ -84,9 +89,19 @@ export default function NotificationsScreen() {
           onPress={() => openNotification(notification)}
           style={({ pressed }) => [styles.card, !notification.read && styles.unread, pressed && styles.pressed]}
         >
-          <Text style={styles.cardTitle}>{notification.title}</Text>
-          <Text style={styles.body}>{notification.body}</Text>
-          <Text style={styles.time}>{formatTime(notification.created_at)}</Text>
+          <View style={styles.notificationRow}>
+            <View style={styles.iconWrap}>
+              <MaterialCommunityIcons name={iconForNotification(notification.type)} size={20} color={colors.primaryGreen} />
+            </View>
+            <View style={styles.notificationCopy}>
+              <View style={styles.notificationHeader}>
+                <Text style={styles.cardTitle}>{notification.title}</Text>
+                {!notification.read ? <View style={styles.unreadDot} /> : null}
+              </View>
+              <Text style={styles.body}>{notification.body}</Text>
+              <Text style={styles.time}>{formatTime(notification.created_at)}</Text>
+            </View>
+          </View>
         </Pressable>
       ))}
     </Screen>
@@ -97,6 +112,15 @@ function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function iconForNotification(type: string): keyof typeof MaterialCommunityIcons.glyphMap {
+  if (type.includes("message")) return "message-text-outline";
+  if (type.includes("booking") || type.includes("request")) return "ticket-confirmation-outline";
+  if (type.includes("verification")) return "shield-check-outline";
+  if (type.includes("support")) return "lifebuoy";
+  if (type.includes("safety")) return "shield-alert-outline";
+  return "bell-outline";
 }
 
 const styles = StyleSheet.create({
@@ -119,6 +143,33 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
+  notificationRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  iconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(17,139,68,0.1)",
+  },
+  notificationCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  notificationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primaryGreen,
+  },
   unread: {
     borderColor: colors.primaryGreen,
     backgroundColor: colors.elevated,
@@ -127,6 +178,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
   cardTitle: {
+    flex: 1,
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 16,

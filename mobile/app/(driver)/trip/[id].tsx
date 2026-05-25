@@ -19,6 +19,7 @@ import { listConversations } from "../../../services/conversationService";
 import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, driverRideRequests, getRide } from "../../../services/ridesService";
 import { Conversation } from "../../../types/conversation.types";
 import { Ride, RideRequest } from "../../../types/ride.types";
+import { formatTripDate } from "../../../utils/formatDate";
 import { formatStatus } from "../../../utils/formatStatus";
 
 export default function DriverTripDetailScreen() {
@@ -110,7 +111,7 @@ export default function DriverTripDetailScreen() {
       <View style={styles.card}>
         <StatusBadge label={formatStatus(ride.status)} tone="success" />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
-        <Text style={styles.body}>{ride.date} at {ride.time}</Text>
+        <Text style={styles.body}>{formatTripDate(ride.date, ride.time)}</Text>
         <Text style={styles.body}>{ride.available_seats} seats available - US${ride.price_usd} per seat</Text>
       </View>
       <DriverCard
@@ -118,6 +119,7 @@ export default function DriverTripDetailScreen() {
         rating={ride.driver_rating}
         vehicle={ride.vehicle}
         verified={ride.driver_verification_status === "verified"}
+        imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url}
       />
       {!user?.phone ? (
         <View style={styles.card}>

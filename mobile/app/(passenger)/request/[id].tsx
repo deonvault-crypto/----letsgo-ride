@@ -16,6 +16,7 @@ import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { updateCurrentUser } from "../../../services/authService";
 import { getRide, requestSeat } from "../../../services/ridesService";
 import { Ride } from "../../../types/ride.types";
+import { formatTripDate } from "../../../utils/formatDate";
 
 export default function RequestSeatScreen() {
   const router = useRouter();
@@ -123,7 +124,7 @@ export default function RequestSeatScreen() {
         <>
       <View style={styles.card}>
         <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
-          <Text style={styles.body}>{ride?.date} at {ride?.time}</Text>
+          <Text style={styles.body}>{formatTripDate(ride?.date || "", ride?.time)}</Text>
           <Text style={styles.body}>Seat request for {seats} {seats === 1 ? "passenger" : "passengers"}.</Text>
           {hasDeparted ? (
             <StatusBadge label="Departed" tone="warning" />

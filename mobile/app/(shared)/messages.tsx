@@ -38,7 +38,13 @@ export default function MessagesScreen() {
       {loading ? <LoadingState label="Loading conversations..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && conversations.length === 0 ? (
-        <EmptyState title="No messages yet" body="Trip conversations will appear after a seat request is created." />
+        <EmptyState
+          title="No messages yet"
+          body="Trip conversations appear after a seat request is created."
+          icon="message-text-outline"
+          actionLabel="Search rides"
+          onAction={() => router.replace("/(passenger)/search" as never)}
+        />
       ) : null}
       {!loading && !error && conversations.map((conversation) => (
         <Pressable
@@ -49,8 +55,11 @@ export default function MessagesScreen() {
         >
           <Avatar name={conversation.other_user_name || "LetsGoRide user"} imageUri={conversation.other_user_profile_photo_url} size={46} />
           <View style={styles.copy}>
-            <Text style={styles.name}>{conversation.other_user_name || "Trip conversation"}</Text>
-            <Text style={styles.route}>{conversation.ride?.origin || "Ride"} to {conversation.ride?.destination || "destination"}</Text>
+            <View style={styles.cardHeader}>
+              <Text numberOfLines={1} style={styles.name}>{conversation.other_user_name || "Trip conversation"}</Text>
+              {conversation.last_message_at ? <Text style={styles.time}>{formatTime(conversation.last_message_at)}</Text> : null}
+            </View>
+            <Text numberOfLines={1} style={styles.route}>{conversation.ride?.origin || "Ride"} to {conversation.ride?.destination || "destination"}</Text>
             <Text numberOfLines={1} style={styles.body}>{conversation.last_message || "No messages yet."}</Text>
           </View>
         </Pressable>
@@ -82,7 +91,13 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 3,
   },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
   name: {
+    flex: 1,
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 17,
@@ -94,5 +109,15 @@ const styles = StyleSheet.create({
   body: {
     color: colors.mutedText,
   },
+  time: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: "800",
+  },
 });
 
+function formatTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}

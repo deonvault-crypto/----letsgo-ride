@@ -14,7 +14,9 @@ import { spacing } from "../../../constants/spacing";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { getRide } from "../../../services/ridesService";
 import { Ride } from "../../../types/ride.types";
+import { formatTripDate } from "../../../utils/formatDate";
 import { formatUsd } from "../../../utils/formatPrice";
+import { formatStatus } from "../../../utils/formatStatus";
 
 export default function RideDetailScreen() {
   const router = useRouter();
@@ -59,13 +61,13 @@ export default function RideDetailScreen() {
   return (
     <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <View style={styles.headerCard}>
-        <StatusBadge label={hasDeparted ? "DEPARTED" : ride.status.toUpperCase()} tone={hasDeparted ? "warning" : "success"} />
+        <StatusBadge label={hasDeparted ? "Departed" : formatStatus(ride.status)} tone={hasDeparted ? "warning" : "success"} />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
         <Text style={styles.price}>{formatUsd(ride.price_usd)} per seat</Text>
       </View>
 
       <View style={styles.detailCard}>
-        <Info icon="calendar-clock" label="When" value={`${ride.date} at ${ride.time}`} />
+        <Info icon="calendar-clock" label="When" value={formatTripDate(ride.date, ride.time)} />
         <Info icon="map-marker-outline" label="Pickup" value={ride.pickup_note} />
         <Info icon="flag-checkered" label="Drop-off" value={ride.dropoff_note} />
         <Info icon="seat-passenger" label="Seats" value={`${ride.available_seats} available`} />
@@ -100,7 +102,7 @@ export default function RideDetailScreen() {
         </View>
       ) : (
         <AppButton
-          title="Request Seat"
+          title="Request seat"
           onPress={() => router.push(`/(passenger)/request/${ride.id}` as never)}
         />
       )}

@@ -37,7 +37,7 @@ export function Screen({
   showNotifications = true,
   scroll = true,
 }: ScreenProps) {
-  const contentPadding = navRole ? spacing.bottomNavHeight + 56 : spacing.xl;
+  const contentPadding = navRole ? spacing.bottomNavHeight + 72 : spacing.xxl;
   const body = scroll ? (
     <ScrollView
       showsVerticalScrollIndicator={false}

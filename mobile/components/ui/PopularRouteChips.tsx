@@ -29,7 +29,7 @@ export function PopularRouteChips({
 const styles = StyleSheet.create({
   row: {
     gap: spacing.sm,
-    paddingRight: spacing.screen,
+    paddingRight: spacing.screen * 2,
     paddingBottom: spacing.xs,
   },
   chip: {
@@ -39,11 +39,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: colors.border,
-    maxWidth: 240,
+    maxWidth: 260,
   },
   text: {
     color: colors.whiteText,
     fontWeight: "800",
     fontSize: 13,
+    letterSpacing: 0,
   },
 });

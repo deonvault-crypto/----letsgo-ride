@@ -85,7 +85,7 @@ export function AppTopBar({
           <MaterialCommunityIcons name="bell-outline" size={21} color={colors.whiteText} />
           {unreadCount ? (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+              <Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
             </View>
           ) : null}
         </Pressable>
@@ -143,9 +143,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 4,
     right: 4,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.danger,
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: "#FFFFFF",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
   },
   iconSpacer: {

@@ -24,6 +24,13 @@ export default function ResultsScreen() {
     [params.origin, params.destination, params.date, params.seats],
   );
   const { rides, loading, error, reload } = useRides(searchParams);
+  const availableRides = rides.filter((ride) =>
+    !ride.is_departed &&
+    ride.status !== "departed" &&
+    ride.status !== "completed" &&
+    ride.status !== "cancelled" &&
+    Number(ride.available_seats || 0) >= searchParams.seats,
+  );
 
   return (
     <Screen title="Results" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
@@ -31,10 +38,14 @@ export default function ResultsScreen() {
       <Text style={styles.body}>Showing rides with at least {searchParams.seats} seat available.</Text>
       {loading ? <LoadingState label="Searching rides..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
-      {!loading && !error && rides.length === 0 ? (
-        <EmptyState title="No rides yet" body="Try a nearby city, a later date, or fewer seats." />
+      {!loading && !error && availableRides.length === 0 ? (
+        <EmptyState
+          title="No rides yet"
+          body="Try a nearby city, a later date, or fewer seats."
+          icon="map-search-outline"
+        />
       ) : null}
-      {!loading && !error && rides.map((ride) => (
+      {!loading && !error && availableRides.map((ride) => (
         <RideCard
           key={ride.id}
           ride={ride}

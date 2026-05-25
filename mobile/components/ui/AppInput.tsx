@@ -42,14 +42,15 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.mutedText,
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: 13,
+    letterSpacing: 0,
   },
   inputShell: {
-    minHeight: 56,
+    minHeight: 54,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 22,
+    borderRadius: 20,
     backgroundColor: colors.elevated,
     paddingHorizontal: spacing.lg,
     flexDirection: "row",
@@ -60,6 +61,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.whiteText,
     fontSize: 15,
+    letterSpacing: 0,
     paddingVertical: spacing.md,
   },
 });

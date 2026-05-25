@@ -31,15 +31,16 @@ export function AppButton({
   icon,
   style,
 }: AppButtonProps) {
+  const isDisabled = Boolean(disabled || loading);
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={disabled || loading}
+      disabled={isDisabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
         styles[variant],
-        (disabled || loading) && styles.disabled,
+        isDisabled && styles.disabled,
         pressed && !disabled && styles.pressed,
         style,
       ]}
@@ -49,7 +50,12 @@ export function AppButton({
       ) : (
         <View style={styles.content}>
           {icon}
-          <Text style={[styles.text, variant === "primary" && styles.primaryText, variant === "danger" && styles.dangerText]}>
+          <Text style={[
+            styles.text,
+            variant === "primary" && styles.primaryText,
+            variant === "danger" && styles.dangerText,
+            isDisabled && styles.disabledText,
+          ]}>
             {title}
           </Text>
         </View>
@@ -60,7 +66,7 @@ export function AppButton({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 56,
+    minHeight: 54,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
@@ -77,22 +83,24 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   secondary: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.elevated,
     borderColor: colors.border,
   },
   ghost: {
     backgroundColor: "transparent",
-    borderColor: colors.border,
+    borderColor: "rgba(17,139,68,0.16)",
   },
   danger: {
     backgroundColor: "rgba(255,90,95,0.14)",
     borderColor: "rgba(255,90,95,0.35)",
   },
   disabled: {
-    opacity: 0.58,
+    opacity: 1,
+    backgroundColor: "#E6E0D5",
+    borderColor: "#D8CEC0",
   },
   pressed: {
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.985 }],
   },
   content: {
     flexDirection: "row",
@@ -103,11 +111,15 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "800",
     fontSize: 15,
+    letterSpacing: 0,
   },
   primaryText: {
     color: colors.card,
   },
   dangerText: {
     color: colors.danger,
+  },
+  disabledText: {
+    color: "#7A7064",
   },
 });

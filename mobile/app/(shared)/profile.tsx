@@ -68,7 +68,7 @@ export default function ProfileScreen() {
           <ListTile icon="view-dashboard-outline" title="Admin dashboard" subtitle="Users, rides, reports, support, and driver verification" onPress={() => router.replace("/(admin)/dashboard" as never)} />
         ) : null}
         <ListTile icon="account-edit-outline" title="Edit profile" subtitle="Name, photo, phone, city, and travel preferences" onPress={() => router.push("/(shared)/edit-profile" as never)} />
-        <ListTile icon="message-text-outline" title="Trip messages" subtitle="Passenger and driver conversations" onPress={() => router.push("/(shared)/messages" as never)} />
+        <ListTile icon="message-text-outline" title="Trip messages" subtitle="Trip conversations and pickup details" onPress={() => router.push("/(shared)/messages" as never)} />
         <ListTile icon="shield-check-outline" title={verificationMenu.title} subtitle={verificationMenu.subtitle} onPress={() => router.push("/(shared)/verification" as never)} />
         <ListTile icon="cog-outline" title="Settings" subtitle="Account, privacy, and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
         <ListTile icon="shield-alert-outline" title="Safety Center" subtitle="Report issues and review trip safety" onPress={() => router.push("/(shared)/safety" as never)} />

@@ -86,7 +86,7 @@ export default function EmailLoginScreen() {
   return (
     <Screen title="Login" showBack fallbackRoute="/(auth)/welcome" showNotifications={false}>
       <View style={styles.logoWrap}>
-        <BrandLogo size="large" />
+        <BrandLogo size="regular" />
       </View>
       <View style={styles.card}>
         <Text style={styles.title}>Login with email</Text>
@@ -134,7 +134,7 @@ export default function EmailLoginScreen() {
         {biometricReady ? <AppButton title={biometricText} variant="secondary" onPress={biometricLogin} loading={loading} /> : null}
         <AppButton title="Create account" variant="secondary" onPress={() => router.push("/(auth)/email-register" as never)} />
       </View>
-      <Text style={styles.footer}>Proudly Zimbabwean - Built for safer shared rides</Text>
+      <Text style={styles.footer}>Proudly Zimbabwean · Built for safer shared rides</Text>
     </Screen>
   );
 }

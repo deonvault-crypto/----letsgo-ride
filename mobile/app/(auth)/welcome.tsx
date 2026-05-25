@@ -137,13 +137,13 @@ const styles = StyleSheet.create({
   hero: {
     flex: 1,
     justifyContent: "center",
-    gap: spacing.xxl,
+    gap: spacing.xl,
   },
   logoWrap: {
     alignSelf: "flex-start",
   },
   animatedHeroContent: {
-    gap: spacing.xxl,
+    gap: spacing.xl,
   },
   imageCard: {
     height: 210,
@@ -169,12 +169,13 @@ const styles = StyleSheet.create({
     bottom: spacing.lg,
     borderRadius: 18,
     backgroundColor: "rgba(250,247,240,0.88)",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   imageLabel: {
     color: colors.whiteText,
     fontWeight: "900",
+    lineHeight: 19,
   },
   copy: {
     gap: spacing.md,

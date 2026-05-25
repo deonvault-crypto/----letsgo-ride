@@ -14,7 +14,7 @@ export default function SafetyScreen() {
     <Screen title="Safety" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
       <View style={styles.hero}>
         <Text style={styles.title}>Safety Center</Text>
-        <Text style={styles.body}>Safety starts with clear trip details, accountable profiles, and a simple reporting path.</Text>
+        <Text style={styles.body}>Safety starts with accountable profiles, recorded trip details, and a simple reporting path.</Text>
       </View>
       <SafetyCard title="Driver verification" body="Drivers submit identity and vehicle details for manual review before posting public rides." icon="account-check-outline" />
       <SafetyCard title="Trip records" body="Ride requests and status updates stay visible in My Trips." icon="clipboard-text-clock-outline" />

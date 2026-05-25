@@ -39,6 +39,7 @@ import {
 } from "../../services/adminService";
 import { logout } from "../../services/authService";
 import { AdminVerificationListItem, VerificationStatus } from "../../types/verification.types";
+import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
 
 type AdminSection =
@@ -562,7 +563,7 @@ function AdminRideCard({
         {Number(ride.pending_request_count || 0) > 0 ? <StatusBadge label={`${ride.pending_request_count} pending`} tone="warning" /> : null}
       </View>
       <Text style={styles.cardTitle}>{ride.origin} to {ride.destination}</Text>
-      <Text style={styles.body}>{ride.date} at {ride.time} - US${ride.price_usd} - {ride.available_seats} seats available</Text>
+      <Text style={styles.body}>{formatTripDate(ride.date, ride.time)} - US${ride.price_usd} - {ride.available_seats} seats available</Text>
       <Text style={styles.body}>{ride.driver_name} - {ride.vehicle}</Text>
       {expanded ? (
         <View style={styles.detailBlock}>

@@ -33,9 +33,9 @@ const styles = StyleSheet.create({
   avatar: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(29,185,84,0.18)",
+    backgroundColor: "rgba(17,139,68,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(105,240,174,0.35)",
+    borderColor: "rgba(17,139,68,0.22)",
     overflow: "hidden",
   },
   image: {

@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { RideCard } from "../../components/cards/RideCard";
+import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
@@ -52,9 +53,9 @@ export default function DriverHomeScreen() {
             </View>
           </View>
         </View>
-        <Text style={styles.body}>Post trips, review passenger requests, and keep clear records for each ride.</Text>
+        <Text style={styles.body}>Post trips and manage passenger requests with clear trip records.</Text>
         <AppButton title="Post trip" onPress={() => router.replace("/(driver)/post-trip" as never)} />
-        <AppButton title="Driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
+        <AppButton title={identityVerified ? "Verification status" : "Driver verification"} variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
       </View>
       <View style={styles.metrics}>
         <Metric label="Today trips" value={String(ownRides.length)} />
@@ -63,6 +64,15 @@ export default function DriverHomeScreen() {
       <Text style={styles.sectionTitle}>Posted trips</Text>
       {loading ? <LoadingState label="Loading driver trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
+      {!loading && !error && ownRides.length === 0 ? (
+        <EmptyState
+          title="No posted trips"
+          body="Post your first trip when you are ready to accept passenger requests."
+          icon="car-outline"
+          actionLabel="Post trip"
+          onAction={() => router.replace("/(driver)/post-trip" as never)}
+        />
+      ) : null}
       {!loading && !error && ownRides.slice(0, 3).map((ride) => (
         <RideCard
           key={ride.id}
@@ -75,9 +85,11 @@ export default function DriverHomeScreen() {
       {requestsLoading ? <LoadingState label="Loading passenger requests..." /> : null}
       {requestsError ? <ErrorState message={requestsError} onRetry={reloadRequests} /> : null}
       {!requestsLoading && !requestsError && requests.length === 0 ? (
-        <View style={styles.requestCard}>
-          <Text style={styles.body}>No passenger requests yet.</Text>
-        </View>
+        <EmptyState
+          title="No passenger requests"
+          body="New seat requests for your posted rides will appear here."
+          icon="account-clock-outline"
+        />
       ) : requests.slice(0, 4).map((request) => (
         <View key={request.id} style={styles.requestCard}>
           <StatusBadge label={formatStatus(request.status)} tone={request.status === "confirmed" ? "success" : request.status === "declined" ? "danger" : "warning"} />
@@ -91,7 +103,7 @@ export default function DriverHomeScreen() {
             </View>
           </View>
           <Text style={styles.body}>
-            {request.ride_snapshot?.origin || "Ride"} to {request.ride_snapshot?.destination || "destination"} - {request.seats} seat
+            {request.ride_snapshot?.origin || "Ride"} to {request.ride_snapshot?.destination || "destination"} - {request.seats} {request.seats === 1 ? "seat" : "seats"}
           </Text>
         </View>
       ))}

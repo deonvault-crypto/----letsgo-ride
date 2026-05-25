@@ -20,7 +20,13 @@ export default function DriverTripsScreen() {
       {loading ? <LoadingState label="Loading trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {!loading && !error && ownRides.length === 0 ? (
-        <EmptyState title="No driver trips" body="Post a trip to start accepting passenger seat requests." />
+        <EmptyState
+          title="No driver trips"
+          body="Post a trip to start accepting passenger seat requests."
+          icon="car-outline"
+          actionLabel="Post trip"
+          onAction={() => router.replace("/(driver)/post-trip" as never)}
+        />
       ) : null}
       {!loading && !error && ownRides.map((ride) => (
         <RideCard

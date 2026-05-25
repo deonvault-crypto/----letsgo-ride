@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 
 import { RideCard } from "../../components/cards/RideCard";
 import { RouteSearchCard } from "../../components/cards/RouteSearchCard";
+import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
@@ -23,6 +24,13 @@ export default function PassengerHomeScreen() {
   const { rides, loading, error, reload } = useRides();
   const passengerName = firstNameOrFallback(user?.name);
   const verified = isIdentityVerified(user);
+  const upcomingRides = rides.filter((ride) =>
+    !ride.is_departed &&
+    ride.status !== "departed" &&
+    ride.status !== "completed" &&
+    ride.status !== "cancelled" &&
+    Number(ride.available_seats || 0) > 0,
+  );
 
   return (
     <Screen navRole="passenger">
@@ -37,10 +45,7 @@ export default function PassengerHomeScreen() {
             </View>
           </View>
         </View>
-        <Text style={styles.body}>
-          Search verified shared rides across Zimbabwe and reserve a seat with
-          clear trip details.
-        </Text>
+        <Text style={styles.body}>Find verified rides, compare prices, and reserve seats safely.</Text>
       </View>
 
       <RouteSearchCard onPress={() => router.replace("/(passenger)/search" as never)} />
@@ -60,11 +65,20 @@ export default function PassengerHomeScreen() {
       <View style={styles.section}>
         <View style={styles.rowBetween}>
           <Text style={styles.sectionTitle}>Nearby upcoming rides</Text>
-          <AppButton title="Offer ride" variant="ghost" onPress={() => router.push("/(driver)/post-trip" as never)} />
+          <AppButton title="Post trip" variant="ghost" onPress={() => router.push("/(driver)/post-trip" as never)} />
         </View>
         {loading ? <LoadingState label="Loading rides..." /> : null}
         {error ? <ErrorState message={error} onRetry={reload} /> : null}
-        {!loading && !error && rides.slice(0, 3).map((ride) => (
+        {!loading && !error && upcomingRides.length === 0 ? (
+          <EmptyState
+            title="No upcoming rides"
+            body="Try searching a route or check back when drivers post new trips."
+            icon="car-clock"
+            actionLabel="Search rides"
+            onAction={() => router.replace("/(passenger)/search" as never)}
+          />
+        ) : null}
+        {!loading && !error && upcomingRides.slice(0, 3).map((ride) => (
           <RideCard
             key={ride.id}
             ride={ride}
@@ -84,7 +98,8 @@ const styles = StyleSheet.create({
   title: {
     color: colors.whiteText,
     fontWeight: "900",
-    fontSize: 34,
+    fontSize: 32,
+    lineHeight: 38,
   },
   greetingRow: {
     flexDirection: "row",
@@ -104,6 +119,7 @@ const styles = StyleSheet.create({
   body: {
     color: colors.mutedText,
     lineHeight: 22,
+    fontSize: 15,
   },
   section: {
     gap: spacing.md,

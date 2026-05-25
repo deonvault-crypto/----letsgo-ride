@@ -34,8 +34,11 @@ export default function SearchRideScreen() {
 
   return (
     <Screen navRole="passenger">
-      <Text style={styles.title}>Search rides</Text>
-      <View style={styles.form}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Search rides</Text>
+        <Text style={styles.body}>Pick a route, date, and seat count before checking available trips.</Text>
+      </View>
+      <View style={styles.formCard}>
         <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} placeholder="Harare" />
         <Pressable accessibilityRole="button" accessibilityLabel="Swap route" onPress={swapRoute} style={({ pressed }) => [styles.swapButton, pressed && styles.pressed]}>
           <MaterialCommunityIcons name="swap-vertical" size={20} color={colors.primaryGreen} />
@@ -78,10 +81,31 @@ export default function SearchRideScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    gap: spacing.xs,
+  },
   title: {
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 32,
+    lineHeight: 38,
+  },
+  body: {
+    color: colors.mutedText,
+    lineHeight: 21,
+  },
+  formCard: {
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    shadowColor: colors.black,
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   form: {
     gap: spacing.md,

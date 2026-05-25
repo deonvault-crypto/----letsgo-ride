@@ -37,13 +37,13 @@ export function ListTile({ icon, title, subtitle, onPress, danger = false }: Lis
 
 const styles = StyleSheet.create({
   tile: {
-    minHeight: 72,
+    minHeight: 68,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    borderRadius: 24,
+    borderRadius: 22,
     backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: colors.border,
@@ -71,6 +71,7 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 15,
+    letterSpacing: 0,
   },
   dangerText: {
     color: colors.danger,
@@ -79,5 +80,6 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 12,
     lineHeight: 17,
+    letterSpacing: 0,
   },
 });

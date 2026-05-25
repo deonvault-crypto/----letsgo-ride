@@ -207,10 +207,10 @@ export default function SettingsScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete account?</Text>
             <Text style={styles.body}>
-              Are you sure you want to delete your LetsGoRide account? Your account
-              will be deleted from LetsGoRide. Some trip, safety, and admin
-              records may be retained where required for security, dispute
-              handling, or legal reasons.
+              This will permanently delete your LetsGoRide account and remove
+              your access to trips, messages, and profile data. Some trip,
+              safety, and admin records may be retained where required for
+              security, dispute handling, or legal reasons.
             </Text>
             <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
             <TextInput
@@ -236,7 +236,7 @@ export default function SettingsScreen() {
       </Modal>
       <View style={styles.headerCopy}>
         <Text style={styles.title}>Settings</Text>
-        <Text style={styles.body}>Manage your account, privacy, and LetsGoRide update preferences.</Text>
+        <Text style={styles.body}>Manage your account, privacy, notifications, and device security.</Text>
       </View>
 
       <Section title="Account">
@@ -271,7 +271,7 @@ export default function SettingsScreen() {
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Phone notifications: {phoneNotificationEnabled ? "On" : "Off"}</Text>
             <Text style={styles.toggleSubtitle}>
-              Lock-screen push notifications require permission and a registered Expo push token.
+              Phone alerts for trips, messages, support, and safety updates.
             </Text>
             {phoneNotificationMessage ? <Text style={styles.noticeText}>{phoneNotificationMessage}</Text> : null}
           </View>
@@ -305,7 +305,7 @@ export default function SettingsScreen() {
             <Text style={styles.toggleTitle}>Biometric login</Text>
             <Text style={styles.toggleSubtitle}>
               {biometricSupported
-                ? `${biometricText} to unlock LetsGoRide. Face ID prompts may require an installed development or production build.`
+                ? `${biometricText} to unlock LetsGoRide on this device.`
                 : "Biometrics are not available or not enrolled on this device."}
             </Text>
           </View>
@@ -324,9 +324,8 @@ export default function SettingsScreen() {
           <Text style={styles.explainerTitle}>Phone and document privacy</Text>
           <Text style={styles.body}>
             Your phone number is not shown publicly in ride browsing. It is
-            only shared when needed for confirmed trip coordination. Admin may
-            access contact details for safety and support. Verification
-            documents are not visible to passengers or other normal users.
+            only shared when needed for confirmed trip coordination. Verification
+            documents are visible only to authorized admins.
           </Text>
         </View>
         <View style={styles.explainerCard}>
@@ -367,7 +366,7 @@ export default function SettingsScreen() {
         <ListTile icon="shield-outline" title="Safety Policy" onPress={() => openExternalUrl(legalUrls.safety)} />
         <ListTile
           icon="email-outline"
-          title="Support contact"
+          title="Support Contact"
           subtitle={supportEmail}
           onPress={() => openExternalUrl(legalUrls.support)}
         />

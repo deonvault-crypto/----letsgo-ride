@@ -17,6 +17,7 @@ import { updateCurrentUser } from "../../services/authService";
 import { createRide } from "../../services/ridesService";
 import { getMyVerification } from "../../services/verificationService";
 import { VerificationProfile } from "../../types/verification.types";
+import { isValidTripTime } from "../../utils/formatDate";
 import { hasRequiredValues } from "../../utils/validation";
 
 export default function PostTripScreen() {
@@ -75,6 +76,14 @@ export default function PostTripScreen() {
     }
     if (!hasRequiredValues([origin, destination, date, time, String(seats), price, vehicle, pickup, dropoff])) {
       setError("Complete every required trip field.");
+      return;
+    }
+    if (!isValidTripTime(time)) {
+      setError("Enter a valid 24-hour departure time, for example 14:30.");
+      return;
+    }
+    if (Number(price) <= 0) {
+      setError("Enter a valid price per seat.");
       return;
     }
     try {
@@ -145,21 +154,34 @@ export default function PostTripScreen() {
           <Text style={styles.body}>Your account is approved to post public rides.</Text>
         </View>
       ) : null}
-      <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} />
-      <LocationPicker label="Destination" value={destination} onChangeText={setDestination} />
-      <TravelDatePicker label="Date" value={date} onChangeText={setDate} />
-      <AppInput label="Time" value={time} onChangeText={setTime} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Available seats" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
-        <View>
-          <Text style={styles.fieldLabel}>Seats available</Text>
-          <Text style={styles.fieldValue}>{seats} {seats === 1 ? "seat" : "seats"}</Text>
-        </View>
-        <Text style={styles.changeText}>Change</Text>
-      </Pressable>
-      <AppInput label="Price USD per seat" value={price} onChangeText={setPrice} keyboardType="number-pad" />
-      <AppInput label="Vehicle" value={vehicle} onChangeText={setVehicle} />
-      <AppInput label="Pickup note" value={pickup} onChangeText={setPickup} />
-      <AppInput label="Drop-off note" value={dropoff} onChangeText={setDropoff} />
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Route</Text>
+        <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} />
+        <LocationPicker label="Destination" value={destination} onChangeText={setDestination} />
+      </View>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Date and time</Text>
+        <TravelDatePicker label="Date" value={date} onChangeText={setDate} />
+        <AppInput label="Departure time" accessibilityLabel="Time" value={time} onChangeText={setTime} placeholder="14:30" keyboardType="numbers-and-punctuation" />
+        <Text style={styles.helperText}>Use 24-hour time, for example 08:15 or 14:30.</Text>
+      </View>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Seats and price</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Available seats" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
+          <View>
+            <Text style={styles.fieldLabel}>Seats available</Text>
+            <Text style={styles.fieldValue}>{seats} {seats === 1 ? "seat" : "seats"}</Text>
+          </View>
+          <Text style={styles.changeText}>Change</Text>
+        </Pressable>
+        <AppInput label="Price per seat, USD" accessibilityLabel="Price USD per seat" value={price} onChangeText={setPrice} keyboardType="number-pad" placeholder="15" />
+      </View>
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>Vehicle and notes</Text>
+        <AppInput label="Vehicle make/model and color" accessibilityLabel="Vehicle" value={vehicle} onChangeText={setVehicle} placeholder="Toyota Wish, silver" />
+        <AppInput label="Pickup note" value={pickup} onChangeText={setPickup} placeholder="Exact pickup point and timing" />
+        <AppInput label="Drop-off note" value={dropoff} onChangeText={setDropoff} placeholder="Drop-off point or nearby landmark" />
+      </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <AppButton title="Publish trip" loading={saving} onPress={submit} />
       <SeatCounterPicker
@@ -201,6 +223,25 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  sectionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  sectionTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 17,
+  },
+  helperText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
   },
   seatField: {
     minHeight: 64,

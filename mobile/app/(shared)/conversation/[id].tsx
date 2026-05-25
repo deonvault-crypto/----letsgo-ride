@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-import { AppButton } from "../../../components/ui/AppButton";
-import { AppInput } from "../../../components/ui/AppInput";
 import { Avatar } from "../../../components/ui/Avatar";
 import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
@@ -95,8 +94,28 @@ export default function ConversationScreen() {
             })}
           </View>
           <View style={styles.composer}>
-            <AppInput label="Message" value={body} onChangeText={setBody} placeholder="Write a trip message" multiline />
-            <AppButton title="Send message" loading={sending} disabled={!body.trim()} onPress={send} />
+            <TextInput
+              accessibilityLabel="Message"
+              value={body}
+              onChangeText={setBody}
+              placeholder="Write a trip message"
+              placeholderTextColor={colors.mutedText}
+              multiline
+              style={styles.messageInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+              disabled={!body.trim() || sending}
+              onPress={send}
+              style={({ pressed }) => [
+                styles.sendButton,
+                (!body.trim() || sending) && styles.sendDisabled,
+                pressed && body.trim() && !sending && styles.pressed,
+              ]}
+            >
+              <MaterialCommunityIcons name={sending ? "dots-horizontal" : "send"} size={20} color={colors.card} />
+            </Pressable>
           </View>
         </KeyboardAvoidingView>
       ) : null}
@@ -137,6 +156,7 @@ const styles = StyleSheet.create({
   },
   messages: {
     gap: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   empty: {
     color: colors.mutedText,
@@ -175,8 +195,38 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
   },
   composer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: spacing.sm,
-    paddingBottom: spacing.xl,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  messageInput: {
+    flex: 1,
+    minHeight: 44,
+    maxHeight: 112,
+    color: colors.whiteText,
+    fontSize: 15,
+    lineHeight: 21,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primaryGreen,
+  },
+  sendDisabled: {
+    backgroundColor: "#B7AEA1",
+  },
+  pressed: {
+    transform: [{ scale: 0.96 }],
   },
 });
-
