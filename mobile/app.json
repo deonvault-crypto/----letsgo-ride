@@ -2,13 +2,14 @@
   "expo": {
     "name": "LetsGoRide",
     "slug": "letsgoride-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "letsgoride",
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "2",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library.",
         "NSLocationWhenInUseUsageDescription": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers.",
