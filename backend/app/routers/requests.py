@@ -6,7 +6,7 @@ from app.models.request import RideRequestCreateBody, RideRequestUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.conversation_service import ensure_conversation_for_request
 from app.services.notification_service import create_app_notification
-from app.services.ride_service import enrich_ride, is_bookable_public_ride, is_public_ride
+from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, enrich_ride, is_bookable_public_ride, is_public_ride
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -54,7 +54,8 @@ async def _create_request_notification(request, ride):
 async def _accept_request(existing, ride, user):
     if not await _driver_owns_ride(user, ride):
         api_error("Only the driver can accept this passenger request.", 403)
-    if not is_bookable_public_ride(ride):
+    ride = await apply_ride_lifecycle(ride)
+    if canonical_trip_status(ride.get("status")) not in {TRIP_STATUS_SCHEDULED, TRIP_STATUS_BOARDING}:
         api_error("This ride has already departed.", 400)
     if not user.get("phone"):
         api_error("Add your phone number before accepting a passenger request.")
@@ -181,8 +182,6 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
         api_error("This ride has already departed.", 400)
     if ride.get("user_id") == user.get("id"):
         api_error("You cannot request a seat on your own ride.", 403)
-    if ride.get("status", "open") != "open":
-        api_error("This ride is not accepting requests.", 400)
     if payload.seats > int(ride.get("available_seats", 0)):
         api_error("Not enough seats available.", 400)
 
@@ -267,6 +266,32 @@ async def cancel_request(request_id: str, payload: RideRequestUpdateBody | None 
 async def cancel_passenger(request_id: str, payload: RideRequestUpdateBody, user=Depends(get_current_user)):
     existing, ride = await _load_request_and_ride(request_id)
     return api_success(await _cancel_by_driver(existing, ride, user, payload.reason))
+
+
+@router.post("/{request_id}/check-in")
+async def check_in_request(request_id: str, user=Depends(get_current_user)):
+    existing, ride = await _load_request_and_ride(request_id)
+    ride = await apply_ride_lifecycle(ride)
+    if existing.get("user_id") != user.get("id"):
+        api_error("You can only check in for your own booking.", 403)
+    if existing.get("status") != "confirmed":
+        api_error("Only confirmed passengers can check in.", 400)
+    if canonical_trip_status(ride.get("status")) not in {TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}:
+        api_error("Passenger check-in opens when the trip is boarding or in progress.", 400)
+    timestamp = now_iso()
+    updated = await database.update_one(
+        "ride_requests",
+        request_id,
+        {"checked_in": True, "checked_in_at": timestamp, "updated_at": timestamp},
+    )
+    await create_app_notification(
+        ride.get("user_id"),
+        "trip_updates",
+        "Passenger checked in",
+        f"{existing.get('passenger_name') or 'A passenger'} marked themselves in the car.",
+        {"ride_id": ride.get("id"), "request_id": request_id},
+    )
+    return api_success(updated or existing)
 
 
 @router.delete("/{request_id}")

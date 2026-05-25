@@ -7,6 +7,7 @@ import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
 import { AppButton } from "../../../components/ui/AppButton";
 import { Avatar } from "../../../components/ui/Avatar";
+import { LiveTripPanel } from "../../../components/trips/LiveTripPanel";
 import { ProfileCompletionModal } from "../../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
@@ -16,11 +17,12 @@ import { spacing } from "../../../constants/spacing";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { updateCurrentUser } from "../../../services/authService";
 import { listConversations } from "../../../services/conversationService";
-import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, driverRideRequests, getRide } from "../../../services/ridesService";
+import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, driverRideRequests, endTrip, getRide, startTrip } from "../../../services/ridesService";
 import { Conversation } from "../../../types/conversation.types";
 import { Ride, RideRequest } from "../../../types/ride.types";
 import { formatTripDate } from "../../../utils/formatDate";
 import { formatStatus } from "../../../utils/formatStatus";
+import { canonicalRideStatus, departureCountdown, isTripActive, isTripFinal, tripStatusLabel, tripStatusTone } from "../../../utils/tripLifecycle";
 
 export default function DriverTripDetailScreen() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function DriverTripDetailScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [phone, setPhone] = useState("");
   const [busyRequestId, setBusyRequestId] = useState("");
+  const [busyTripAction, setBusyTripAction] = useState<"start" | "end" | "">("");
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -77,6 +80,32 @@ export default function DriverTripDetailScreen() {
     }
   }
 
+  async function startCurrentTrip() {
+    try {
+      setBusyTripAction("start");
+      setError("");
+      setRide(await startTrip(id));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start this trip.");
+    } finally {
+      setBusyTripAction("");
+    }
+  }
+
+  async function endCurrentTrip() {
+    try {
+      setBusyTripAction("end");
+      setError("");
+      setRide(await endTrip(id));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not end this trip.");
+    } finally {
+      setBusyTripAction("");
+    }
+  }
+
   async function savePhone() {
     await updateCurrentUser({ phone });
     await reloadUser();
@@ -99,6 +128,11 @@ export default function DriverTripDetailScreen() {
     );
   }
 
+  const tripStatus = canonicalRideStatus(ride.status);
+  const countdown = departureCountdown(ride);
+  const canAcceptRequests = ["SCHEDULED", "BOARDING"].includes(tripStatus);
+  const tripComplete = isTripFinal(ride);
+
   return (
     <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
       <ProfileCompletionModal
@@ -109,10 +143,21 @@ export default function DriverTripDetailScreen() {
         onClose={() => setShowPhoneModal(false)}
       />
       <View style={styles.card}>
-        <StatusBadge label={formatStatus(ride.status)} tone="success" />
+        <StatusBadge label={tripStatusLabel(tripStatus)} tone={tripStatusTone(tripStatus)} />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
+        {countdown ? <Text style={styles.body}>{countdown}</Text> : null}
         <Text style={styles.body}>{formatTripDate(ride.date, ride.time)}</Text>
         <Text style={styles.body}>{ride.available_seats} seats available - US${ride.price_usd} per seat</Text>
+        {ride.can_start_trip ? (
+          <AppButton title="Start Trip" loading={busyTripAction === "start"} onPress={startCurrentTrip} />
+        ) : null}
+        {ride.can_end_trip || isTripActive(ride) ? (
+          <AppButton title="End Trip" variant="secondary" loading={busyTripAction === "end"} onPress={endCurrentTrip} />
+        ) : null}
+        {!ride.can_start_trip && tripStatus === "SCHEDULED" ? (
+          <Text style={styles.helperText}>Start Trip appears 15 minutes before departure.</Text>
+        ) : null}
+        {tripComplete ? <Text style={styles.helperText}>Completed, expired, or cancelled trips are archived and can no longer be edited.</Text> : null}
       </View>
       <DriverCard
         name={ride.driver_name}
@@ -131,6 +176,7 @@ export default function DriverTripDetailScreen() {
           <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
         </View>
       ) : null}
+      {isTripActive(ride) ? <LiveTripPanel ride={ride} role="driver" onRefresh={load} /> : null}
       <Text style={styles.sectionTitle}>Passenger requests</Text>
       {requests.length === 0 ? (
         <View style={styles.card}>
@@ -153,11 +199,14 @@ export default function DriverTripDetailScreen() {
             {conversationFor(request) ? (
               <AppButton title="Message" variant="secondary" onPress={() => router.push(`/(shared)/conversation/${conversationFor(request)?.id}` as never)} />
             ) : null}
-            {request.status === "pending" ? (
+            {request.status === "pending" && canAcceptRequests ? (
               <>
                 <AppButton title="Accept request" loading={busyRequestId === request.id} onPress={() => setStatus(request.id, "confirmed")} />
                 <AppButton title="Decline" variant="ghost" loading={busyRequestId === request.id} onPress={() => setStatus(request.id, "declined")} />
               </>
+            ) : null}
+            {request.status === "pending" && !canAcceptRequests ? (
+              <Text style={styles.helperText}>This request can no longer be accepted because the trip is not open for boarding.</Text>
             ) : null}
             {request.status === "confirmed" ? (
               <AppButton title="Cancel passenger" variant="danger" loading={busyRequestId === request.id} onPress={() => setStatus(request.id, "cancelled_by_driver")} />
@@ -186,6 +235,12 @@ const styles = StyleSheet.create({
   body: {
     color: colors.mutedText,
     lineHeight: 21,
+  },
+  helperText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   sectionTitle: {
     color: colors.whiteText,

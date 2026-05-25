@@ -14,8 +14,8 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useDriver } from "../../hooks/useDriver";
+import { useDriverRides } from "../../hooks/useDriverRides";
 import { useDriverRequests } from "../../hooks/useDriverRequests";
-import { useRides } from "../../hooks/useRides";
 import { firstNameOrFallback } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
 
@@ -23,8 +23,7 @@ export default function DriverHomeScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
   const { driver } = useDriver();
-  const { rides, loading, error, reload } = useRides();
-  const ownRides = rides.filter((ride) => ride.is_own_ride);
+  const { rides: ownRides, loading, error, reload } = useDriverRides();
   const {
     requests,
     loading: requestsLoading,

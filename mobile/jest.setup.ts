@@ -31,6 +31,26 @@ jest.mock("expo-notifications", () => ({
   getExpoPushTokenAsync: jest.fn(async () => ({ data: "ExpoPushToken[test]" })),
 }));
 
+jest.mock("expo-location", () => ({
+  Accuracy: { Balanced: 3 },
+  getForegroundPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  requestForegroundPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  getCurrentPositionAsync: jest.fn(async () => ({
+    coords: { latitude: -17.8252, longitude: 31.0335, accuracy: 20, heading: null, speed: null },
+  })),
+  watchPositionAsync: jest.fn(async () => ({ remove: jest.fn() })),
+}));
+
+jest.mock("react-native-maps", () => {
+  const { View } = jest.requireActual("react-native");
+  return {
+    __esModule: true,
+    default: View,
+    Marker: View,
+    Polyline: View,
+  };
+});
+
 jest.mock("expo-constants", () => ({
   __esModule: true,
   default: {

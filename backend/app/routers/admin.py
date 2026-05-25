@@ -14,7 +14,7 @@ from app.models.ride import RideUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
-from app.services.ride_service import cleanup_demo_rides
+from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, cleanup_demo_rides
 from app.services.verification_service import apply_admin_verification_status
 from app.utils import api_error, api_success, now_iso
 
@@ -116,10 +116,12 @@ def _request_status_counts(requests: List[Dict[str, Any]]) -> Dict[str, int]:
 
 
 async def _enrich_admin_ride(ride: Dict[str, Any], requests: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    ride = await apply_ride_lifecycle(ride)
     ride_requests = requests if requests is not None else await database.find_many("ride_requests", {"ride_id": ride.get("id")})
     driver = await database.find_one("users", {"id": ride.get("user_id")}) if ride.get("user_id") else None
     conversations = await database.find_many("conversations", {"ride_id": ride.get("id")})
     enriched = dict(ride)
+    enriched["status"] = canonical_trip_status(ride.get("status"))
     enriched["request_count"] = len(ride_requests)
     enriched["pending_request_count"] = len([item for item in ride_requests if item.get("status") == "pending"])
     enriched["confirmed_booking_count"] = len([item for item in ride_requests if item.get("status") == "confirmed"])
@@ -193,7 +195,8 @@ async def overview(admin=Depends(get_admin_user)):
     admin_notifications = await database.find_many("app_notifications", {"user_id": admin["id"]})
     verified_drivers = [driver for driver in drivers if driver.get("verification_status") == "verified"]
     pending_verifications = [driver for driver in drivers if driver.get("verification_status") in {"pending", "needs_review"}]
-    active_rides = [ride for ride in rides if ride.get("status", "open") == "open"]
+    enriched_rides = [await apply_ride_lifecycle(ride) for ride in rides]
+    active_rides = [ride for ride in enriched_rides if canonical_trip_status(ride.get("status")) in {TRIP_STATUS_SCHEDULED, TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}]
     pending_requests = [request for request in requests if request.get("status") == "pending"]
     confirmed_bookings = [request for request in requests if request.get("status") == "confirmed"]
     open_support = [message for message in support_messages if _support_open(message.get("status", "received"))]

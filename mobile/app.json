@@ -11,6 +11,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library.",
+        "NSLocationWhenInUseUsageDescription": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "co.zw.letsgoride"
@@ -25,7 +26,8 @@
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -44,6 +46,12 @@
         "expo-image-picker",
         {
           "photosPermission": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers."
         }
       ]
     ],

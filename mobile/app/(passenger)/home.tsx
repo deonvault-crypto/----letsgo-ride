@@ -17,6 +17,7 @@ import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useRides } from "../../hooks/useRides";
 import { firstNameOrFallback } from "../../utils/displayName";
+import { isRideBookable } from "../../utils/tripLifecycle";
 
 export default function PassengerHomeScreen() {
   const router = useRouter();
@@ -24,13 +25,7 @@ export default function PassengerHomeScreen() {
   const { rides, loading, error, reload } = useRides();
   const passengerName = firstNameOrFallback(user?.name);
   const verified = isIdentityVerified(user);
-  const upcomingRides = rides.filter((ride) =>
-    !ride.is_departed &&
-    ride.status !== "departed" &&
-    ride.status !== "completed" &&
-    ride.status !== "cancelled" &&
-    Number(ride.available_seats || 0) > 0,
-  );
+  const upcomingRides = rides.filter((ride) => isRideBookable(ride));
 
   return (
     <Screen navRole="passenger">

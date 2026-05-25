@@ -41,6 +41,7 @@ import { logout } from "../../services/authService";
 import { AdminVerificationListItem, VerificationStatus } from "../../types/verification.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
+import { canonicalRideStatus, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
 
 type AdminSection =
   | "overview"
@@ -77,7 +78,7 @@ const requestFilters = ["all", "pending", "confirmed", "declined", "cancelled_by
 const verificationFilters: Array<"all" | VerificationStatus> = ["all", "pending", "needs_review", "verified", "rejected"];
 const supportFilters = ["all", "received", "open", "in_review", "resolved", "closed"];
 const reportFilters = ["all", "submitted", "open", "in_review", "resolved", "dismissed"];
-const rideFilters = ["all", "open", "closed", "cancelled", "pending_requests", "full"];
+const rideFilters = ["all", "SCHEDULED", "BOARDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED", "pending_requests", "full"];
 const userFilters = ["all", "passenger", "driver", "admin", "verified", "unverified", "suspended"];
 
 export default function AdminDashboardScreen() {
@@ -180,7 +181,7 @@ export default function AdminDashboardScreen() {
       if (filter === "all") return true;
       if (filter === "pending_requests") return Number(ride.pending_request_count || 0) > 0;
       if (filter === "full") return Number(ride.available_seats || 0) === 0;
-      return ride.status === filter;
+      return canonicalRideStatus(ride.status) === canonicalRideStatus(filter);
     });
   }, [filter, rides, search]);
 
@@ -556,10 +557,12 @@ function AdminRideCard({
   onReopen: () => void;
   onCancel: () => void;
 }) {
+  const status = canonicalRideStatus(ride.status);
+  const canReopen = ["COMPLETED", "EXPIRED", "CANCELLED"].includes(status);
   return (
     <Pressable accessibilityRole="button" onPress={onToggle} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardHeader}>
-        <StatusBadge label={formatStatus(ride.status)} tone={tone(ride.status)} />
+        <StatusBadge label={tripStatusLabel(status)} tone={tripStatusTone(status)} />
         {Number(ride.pending_request_count || 0) > 0 ? <StatusBadge label={`${ride.pending_request_count} pending`} tone="warning" /> : null}
       </View>
       <Text style={styles.cardTitle}>{ride.origin} to {ride.destination}</Text>
@@ -573,9 +576,9 @@ function AdminRideCard({
           <DetailLine label="Driver phone" value={ride.driver_phone || "Not added"} />
           <DetailLine label="Driver email" value={ride.driver_email || "Not added"} />
           <View style={styles.actionRow}>
-            {ride.status === "open" ? <AppButton title="Close ride" variant="secondary" onPress={onClose} style={styles.compactButton} /> : null}
-            {ride.status !== "open" ? <AppButton title="Reopen" variant="secondary" onPress={onReopen} style={styles.compactButton} /> : null}
-            {ride.status !== "cancelled" ? <AppButton title="Cancel for safety" variant="danger" onPress={onCancel} style={styles.compactButton} /> : null}
+            {status === "SCHEDULED" || status === "BOARDING" || status === "IN_PROGRESS" ? <AppButton title="Mark completed" variant="secondary" onPress={onClose} style={styles.compactButton} /> : null}
+            {canReopen ? <AppButton title="Reopen" variant="secondary" onPress={onReopen} style={styles.compactButton} /> : null}
+            {status !== "CANCELLED" ? <AppButton title="Cancel for safety" variant="danger" onPress={onCancel} style={styles.compactButton} /> : null}
           </View>
         </View>
       ) : null}

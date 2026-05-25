@@ -7,12 +7,11 @@ import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
-import { useRides } from "../../hooks/useRides";
+import { useDriverRides } from "../../hooks/useDriverRides";
 
 export default function DriverTripsScreen() {
   const router = useRouter();
-  const { rides, loading, error, reload } = useRides();
-  const ownRides = rides.filter((ride) => ride.is_own_ride);
+  const { rides: ownRides, loading, error, reload } = useDriverRides();
 
   return (
     <Screen title="Trips" navRole="driver">

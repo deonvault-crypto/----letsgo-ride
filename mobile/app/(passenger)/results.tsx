@@ -10,6 +10,7 @@ import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useRides } from "../../hooks/useRides";
+import { isRideBookable } from "../../utils/tripLifecycle";
 
 export default function ResultsScreen() {
   const router = useRouter();
@@ -24,13 +25,7 @@ export default function ResultsScreen() {
     [params.origin, params.destination, params.date, params.seats],
   );
   const { rides, loading, error, reload } = useRides(searchParams);
-  const availableRides = rides.filter((ride) =>
-    !ride.is_departed &&
-    ride.status !== "departed" &&
-    ride.status !== "completed" &&
-    ride.status !== "cancelled" &&
-    Number(ride.available_seats || 0) >= searchParams.seats,
-  );
+  const availableRides = rides.filter((ride) => isRideBookable(ride) && Number(ride.available_seats || 0) >= searchParams.seats);
 
   return (
     <Screen title="Results" showBack fallbackRoute="/(passenger)/search" navRole="passenger">

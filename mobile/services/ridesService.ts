@@ -1,8 +1,12 @@
-import { Ride, RideRequest, RideSearchParams } from "../types/ride.types";
+import { LiveTripLocation, LiveTripState, Ride, RideRequest, RideSearchParams } from "../types/ride.types";
 import { requestData } from "./api";
 
 export async function listRides() {
   return requestData<Ride[]>({ method: "GET", url: "/rides" });
+}
+
+export async function myRides() {
+  return requestData<Ride[]>({ method: "GET", url: "/rides/my" });
 }
 
 export async function searchRides(params: RideSearchParams) {
@@ -24,6 +28,30 @@ export async function getRide(id: string) {
 
 export async function createRide(data: Partial<Ride>) {
   return requestData<Ride>({ method: "POST", url: "/rides", data });
+}
+
+export async function startTrip(id: string) {
+  return requestData<Ride>({ method: "POST", url: `/rides/${id}/start` });
+}
+
+export async function endTrip(id: string) {
+  return requestData<Ride>({ method: "POST", url: `/rides/${id}/end` });
+}
+
+export async function getLiveTripState(id: string) {
+  return requestData<LiveTripState>({ method: "GET", url: `/rides/${id}/live` });
+}
+
+export async function updateLiveTripLocation(id: string, location: LiveTripLocation) {
+  return requestData<{ ride_id: string; location: LiveTripLocation; live_tracking_enabled: boolean }>({
+    method: "POST",
+    url: `/rides/${id}/live-location`,
+    data: location,
+  });
+}
+
+export async function disableLiveTripLocation(id: string) {
+  return requestData<Ride>({ method: "POST", url: `/rides/${id}/live-location/disable` });
 }
 
 export async function requestSeat(data: {
@@ -78,4 +106,8 @@ export async function cancelPassengerRideRequest(id: string, reason: string) {
     url: `/requests/${id}/cancel-passenger`,
     data: { status: "cancelled_by_driver", reason },
   });
+}
+
+export async function checkInRideRequest(id: string) {
+  return requestData<RideRequest>({ method: "POST", url: `/requests/${id}/check-in` });
 }

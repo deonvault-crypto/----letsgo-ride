@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,11 +9,13 @@ from app.config import get_settings
 from app.database import database
 from app.routers import admin, auth, conversations, drivers, health, media, notifications, reports, requests, rides, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
-from app.services.ride_service import seed_demo_rides
+from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 
 
 settings = get_settings()
 app = FastAPI(title="LetsGoRide API", version="0.1.0")
+ride_lifecycle_stop_event: asyncio.Event | None = None
+ride_lifecycle_task: asyncio.Task | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,14 +46,22 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 
 @app.on_event("startup")
 async def on_startup():
+    global ride_lifecycle_stop_event, ride_lifecycle_task
     await database.connect()
     await ensure_admin_seed_user()
     if settings.enable_demo_seed:
         await seed_demo_rides()
+    ride_lifecycle_stop_event = asyncio.Event()
+    ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    global ride_lifecycle_stop_event, ride_lifecycle_task
+    if ride_lifecycle_stop_event:
+        ride_lifecycle_stop_event.set()
+    if ride_lifecycle_task:
+        ride_lifecycle_task.cancel()
     await database.close()
 
 

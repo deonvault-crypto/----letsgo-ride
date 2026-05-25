@@ -13,6 +13,8 @@ This note captures the current launch checkpoint for the LetsGoRide mobile app a
 
 - Email and password login with email verification and password reset.
 - Passenger ride request flow, driver accept or decline, passenger cancellation, and seat updates.
+- Trip lifecycle statuses for scheduled, boarding, in-progress, completed, cancelled, and expired rides.
+- Driver Start Trip and End Trip actions, passenger check-in, and automatic lifecycle fallback rules.
 - In-app ride request messaging between authorized passenger and driver accounts.
 - Driver manual verification with admin-only document review.
 - Admin operations dashboard for users, rides, requests, verification, support, safety reports, and audit review.
@@ -59,17 +61,22 @@ This note captures the current launch checkpoint for the LetsGoRide mobile app a
 - Biometric login is optional and is only enabled after a user chooses it in Settings.
 - Phone number is optional during signup and login. It is required before booking a seat or posting a ride for trip coordination and safety.
 - LetsGoRide does not currently process online or in-app payments.
-- LetsGoRide does not currently request contacts access, microphone access, advertising tracking, or GPS location tracking.
+- Location permission is requested only when a driver chooses to share live progress during an active trip. LetsGoRide should not request continuous background tracking for normal browsing, login, search, or account management.
+- LetsGoRide does not currently request contacts access, microphone access, advertising tracking, or always-on GPS tracking.
 - Verification documents are not visible to passengers or normal drivers. Admin access is required for document review.
 - Some trip, safety, support, and admin records may be retained after account deletion where legally or operationally required.
 
-## Ride Lifecycle Notes
+## Ride Lifecycle And Live Trip Notes
 
-- Public ride lists and search results should show only bookable rides with departure date and time still in the future.
-- Ride detail can show a past ride as departed, but passengers should not be able to request a seat after departure.
-- Current launch behavior uses the posted departure date and time, not GPS or live trip tracking.
-- Scheduled "ride departure time reached" notifications are future work. Current launch behavior blocks new bookings after departure time, but it does not run a scheduler that wakes users exactly at departure time.
-- Future versions can add driver start/completion actions, passenger trip completion confirmation, and automatic completion after departure time plus an estimated route duration.
+- Public ride lists and search results show only bookable `SCHEDULED` rides with departure date and time still in the future.
+- Driver screens use an authenticated trip feed so scheduled, boarding, in-progress, completed, cancelled, and expired trips remain visible to the owner.
+- Start Trip appears to the driver 15 minutes before departure. If the driver does not start the trip manually, the backend lifecycle sweeper moves it to `IN_PROGRESS` after departure time.
+- End Trip marks the trip `COMPLETED`, archives it in history, and disables live sharing.
+- Trips auto-complete after estimated arrival time plus a 60 minute grace buffer.
+- Passenger check-in stores a timestamp on the confirmed ride request and is available during boarding or in-progress trips.
+- Optional live trip sharing uses foreground location only while a trip is `IN_PROGRESS`. Drivers can disable sharing, and sharing stops when the trip completes.
+- Real background location should remain future work unless App Store and Play Store review requirements are handled with a dedicated privacy pass.
+- Later versions can add driver/passenger completion confirmation, trusted-contact sharing links, and route-specific ETA services.
 
 ## Final Regression Guardrails
 

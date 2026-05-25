@@ -3,6 +3,9 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+TripStatus = str
+
+
 class RideCreateBody(BaseModel):
     origin: str = Field(min_length=2)
     destination: str = Field(min_length=2)
@@ -15,6 +18,7 @@ class RideCreateBody(BaseModel):
     vehicle: str = Field(min_length=2)
     driver_name: str = Field(default="LetsGo Driver", min_length=2)
     driver_rating: float = Field(default=4.8, ge=0, le=5)
+    estimated_duration_minutes: int = Field(default=240, ge=15, le=1440)
 
 
 class RideUpdateBody(BaseModel):
@@ -27,3 +31,16 @@ class RideUpdateBody(BaseModel):
     price_usd: Optional[float] = Field(default=None, ge=0)
     available_seats: Optional[int] = Field(default=None, ge=0, le=20)
     status: Optional[str] = None
+    estimated_duration_minutes: Optional[int] = Field(default=None, ge=15, le=1440)
+
+
+class LiveLocationBody(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy: Optional[float] = Field(default=None, ge=0)
+    heading: Optional[float] = Field(default=None, ge=0, le=360)
+    speed: Optional[float] = None
+
+
+class LiveSharingBody(BaseModel):
+    enabled: bool = True

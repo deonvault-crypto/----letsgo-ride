@@ -28,6 +28,7 @@ export default function PostTripScreen() {
   const [destination, setDestination] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  const [durationHours, setDurationHours] = useState("4");
   const [seats, setSeats] = useState(1);
   const [seatPickerOpen, setSeatPickerOpen] = useState(false);
   const [price, setPrice] = useState("");
@@ -86,6 +87,11 @@ export default function PostTripScreen() {
       setError("Enter a valid price per seat.");
       return;
     }
+    const estimatedHours = Number(durationHours);
+    if (!Number.isFinite(estimatedHours) || estimatedHours <= 0 || estimatedHours > 24) {
+      setError("Enter a realistic estimated trip duration.");
+      return;
+    }
     try {
       setSaving(true);
       const ride = await createRide({
@@ -95,6 +101,7 @@ export default function PostTripScreen() {
         time,
         available_seats: seats,
         price_usd: Number(price),
+        estimated_duration_minutes: Math.round(estimatedHours * 60),
         vehicle,
         pickup_note: pickup,
         dropoff_note: dropoff,
@@ -164,6 +171,8 @@ export default function PostTripScreen() {
         <TravelDatePicker label="Date" value={date} onChangeText={setDate} />
         <AppInput label="Departure time" accessibilityLabel="Time" value={time} onChangeText={setTime} placeholder="14:30" keyboardType="numbers-and-punctuation" />
         <Text style={styles.helperText}>Use 24-hour time, for example 08:15 or 14:30.</Text>
+        <AppInput label="Estimated trip duration, hours" accessibilityLabel="Estimated trip duration hours" value={durationHours} onChangeText={setDurationHours} placeholder="4" keyboardType="decimal-pad" />
+        <Text style={styles.helperText}>LetsGoRide can archive the trip automatically after the expected arrival time plus a safety buffer.</Text>
       </View>
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Seats and price</Text>

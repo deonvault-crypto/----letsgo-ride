@@ -6,12 +6,14 @@ import { spacing } from "../../constants/spacing";
 import { Ride } from "../../types/ride.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatUsd } from "../../utils/formatPrice";
+import { canonicalRideStatus, isRideBookable, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
 import { Avatar } from "../ui/Avatar";
 import { StatusBadge } from "../ui/StatusBadge";
 import { VerifiedBadge } from "../ui/VerifiedBadge";
 
 export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }) {
-  const hasDeparted = Boolean(ride.is_departed || ride.status === "departed" || ride.status === "completed");
+  const status = canonicalRideStatus(ride.status);
+  const isBookable = isRideBookable(ride);
   const isFull = Number(ride.available_seats || 0) <= 0;
   const rating = Number.isFinite(ride.driver_rating) ? ride.driver_rating.toFixed(1) : "4.8";
   return (
@@ -47,10 +49,12 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
         <Text style={styles.meta}>{ride.vehicle}</Text>
       </View>
       <View style={styles.footer}>
-        {hasDeparted ? (
-          <StatusBadge label="Departed" tone="warning" />
+        {status !== "SCHEDULED" ? (
+          <StatusBadge label={tripStatusLabel(status)} tone={tripStatusTone(status)} />
         ) : isFull ? (
           <StatusBadge label="Full" tone="neutral" />
+        ) : !isBookable ? (
+          <StatusBadge label="Not bookable" tone="neutral" />
         ) : (
           <StatusBadge label={`${ride.available_seats} seats available`} tone="success" />
         )}

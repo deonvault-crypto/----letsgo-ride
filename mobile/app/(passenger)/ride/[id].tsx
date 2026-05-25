@@ -16,7 +16,7 @@ import { getRide } from "../../../services/ridesService";
 import { Ride } from "../../../types/ride.types";
 import { formatTripDate } from "../../../utils/formatDate";
 import { formatUsd } from "../../../utils/formatPrice";
-import { formatStatus } from "../../../utils/formatStatus";
+import { departureCountdown, isRideBookable, tripStatusLabel, tripStatusTone } from "../../../utils/tripLifecycle";
 
 export default function RideDetailScreen() {
   const router = useRouter();
@@ -56,13 +56,15 @@ export default function RideDetailScreen() {
     );
   }
   const isOwnRide = Boolean(ride.is_own_ride || (user?.id && ride.driver_user_id === user.id));
-  const hasDeparted = ride.is_departed || ride.status === "departed" || ride.status === "completed";
+  const bookable = isRideBookable(ride);
+  const countdown = departureCountdown(ride);
 
   return (
     <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
       <View style={styles.headerCard}>
-        <StatusBadge label={hasDeparted ? "Departed" : formatStatus(ride.status)} tone={hasDeparted ? "warning" : "success"} />
+        <StatusBadge label={tripStatusLabel(ride.status)} tone={tripStatusTone(ride.status)} />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
+        {countdown ? <Text style={styles.body}>{countdown}</Text> : null}
         <Text style={styles.price}>{formatUsd(ride.price_usd)} per seat</Text>
       </View>
 
@@ -89,10 +91,12 @@ export default function RideDetailScreen() {
         </Text>
       </View>
 
-      {hasDeparted ? (
+      {!bookable && !isOwnRide ? (
         <View style={styles.detailCard}>
-          <StatusBadge label="Departed" tone="warning" />
-          <Text style={styles.body}>This ride has already departed.</Text>
+          <StatusBadge label={tripStatusLabel(ride.status)} tone={tripStatusTone(ride.status)} />
+          <Text style={styles.body}>
+            {ride.status === "IN_PROGRESS" ? "This ride is already in progress." : "This ride is no longer available for new bookings."}
+          </Text>
         </View>
       ) : isOwnRide ? (
         <View style={styles.detailCard}>
@@ -103,6 +107,7 @@ export default function RideDetailScreen() {
       ) : (
         <AppButton
           title="Request seat"
+          disabled={!bookable}
           onPress={() => router.push(`/(passenger)/request/${ride.id}` as never)}
         />
       )}

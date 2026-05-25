@@ -4,8 +4,22 @@ from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user, get_optional_current_user
 from app.database import database
-from app.models.ride import RideCreateBody, RideUpdateBody
-from app.services.ride_service import create_ride, enrich_ride, is_public_ride, list_public_rides, search_rides
+from app.models.ride import LiveLocationBody, RideCreateBody, RideUpdateBody
+from app.services.ride_service import (
+    create_ride,
+    disable_live_location,
+    end_trip,
+    enrich_ride,
+    apply_ride_lifecycle,
+    is_final_trip_status,
+    is_public_ride,
+    live_trip_state,
+    list_public_rides,
+    list_user_rides,
+    search_rides,
+    start_trip,
+    update_live_location,
+)
 from app.utils import api_error, api_success, now_iso
 
 
@@ -26,6 +40,11 @@ async def search(
     user=Depends(get_optional_current_user),
 ):
     return api_success(await search_rides(origin, destination, seats, date, user))
+
+
+@router.get("/my")
+async def my_rides(user=Depends(get_current_user)):
+    return api_success(await list_user_rides(user))
 
 
 @router.get("/{ride_id}")
@@ -67,14 +86,67 @@ async def update_ride(ride_id: str, payload: RideUpdateBody, user=Depends(get_cu
     existing = await database.find_one("rides", {"id": ride_id})
     if not existing or not is_public_ride(existing):
         api_error("Ride not found.", 404)
+    existing = await apply_ride_lifecycle(existing)
     if user.get("role") != "admin" and existing.get("user_id") != user.get("id"):
         api_error("You can only update trips connected to your account.", 403)
+    if is_final_trip_status(existing.get("status")):
+        api_error("Completed, expired, or cancelled trips can no longer be edited.", 400)
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     updates["updated_at"] = now_iso()
     ride = await database.update_one("rides", ride_id, updates)
     if not ride:
         api_error("Ride not found.", 404)
     return api_success(ride)
+
+
+@router.post("/{ride_id}/start")
+async def start_trip_route(ride_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await start_trip(ride_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/{ride_id}/end")
+async def end_trip_route(ride_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await end_trip(ride_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.get("/{ride_id}/live")
+async def get_live_trip(ride_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await live_trip_state(ride_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 404)
+
+
+@router.post("/{ride_id}/live-location")
+async def update_live_trip_location(ride_id: str, payload: LiveLocationBody, user=Depends(get_current_user)):
+    try:
+        return api_success(await update_live_location(ride_id, user, payload.model_dump()))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/{ride_id}/live-location/disable")
+async def disable_live_trip_location(ride_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await disable_live_location(ride_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
 
 
 @router.delete("/{ride_id}")

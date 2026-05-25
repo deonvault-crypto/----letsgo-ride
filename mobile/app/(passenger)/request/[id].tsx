@@ -17,6 +17,7 @@ import { updateCurrentUser } from "../../../services/authService";
 import { getRide, requestSeat } from "../../../services/ridesService";
 import { Ride } from "../../../types/ride.types";
 import { formatTripDate } from "../../../utils/formatDate";
+import { isRideBookable, tripStatusLabel, tripStatusTone } from "../../../utils/tripLifecycle";
 
 export default function RequestSeatScreen() {
   const router = useRouter();
@@ -47,7 +48,7 @@ export default function RequestSeatScreen() {
   }, [id]);
 
   async function submit() {
-    if (ride?.is_departed || ride?.status === "departed" || ride?.status === "completed") {
+    if (!isRideBookable(ride)) {
       setError("This ride has already departed.");
       return;
     }
@@ -99,7 +100,7 @@ export default function RequestSeatScreen() {
     );
   }
 
-  const hasDeparted = Boolean(ride?.is_departed || ride?.status === "departed" || ride?.status === "completed");
+  const bookable = isRideBookable(ride);
   const isOwnRide = Boolean(ride?.is_own_ride || (user?.id && ride?.driver_user_id === user.id));
 
   return (
@@ -126,16 +127,16 @@ export default function RequestSeatScreen() {
         <Text style={styles.title}>{ride?.origin} to {ride?.destination}</Text>
           <Text style={styles.body}>{formatTripDate(ride?.date || "", ride?.time)}</Text>
           <Text style={styles.body}>Seat request for {seats} {seats === 1 ? "passenger" : "passengers"}.</Text>
-          {hasDeparted ? (
-            <StatusBadge label="Departed" tone="warning" />
+          {!bookable ? (
+            <StatusBadge label={tripStatusLabel(ride?.status)} tone={tripStatusTone(ride?.status)} />
           ) : null}
           {isOwnRide ? (
             <StatusBadge label="Your ride" tone="neutral" />
           ) : null}
         </View>
-          {hasDeparted ? (
+          {!bookable ? (
             <View style={styles.card}>
-              <StatusBadge label="Departed" tone="warning" />
+              <StatusBadge label={tripStatusLabel(ride?.status)} tone={tripStatusTone(ride?.status)} />
               <Text style={styles.body}>This ride has already departed.</Text>
             </View>
           ) : null}
@@ -155,7 +156,7 @@ export default function RequestSeatScreen() {
               <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
             </View>
           ) : null}
-          {!hasDeparted ? (
+          {bookable ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Seats needed" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
             <View>
               <Text style={styles.fieldLabel}>Seats needed</Text>
@@ -164,7 +165,7 @@ export default function RequestSeatScreen() {
             <Text style={styles.changeText}>Change</Text>
           </Pressable>
           ) : null}
-          {!hasDeparted ? (
+          {bookable ? (
           <AppInput
             label="Message to driver"
             value={note}
@@ -174,9 +175,9 @@ export default function RequestSeatScreen() {
           />
           ) : null}
           <AppButton
-            title={hasDeparted ? "Ride departed" : isOwnRide ? "You cannot book your own ride" : "Confirm request"}
+            title={!bookable ? "Ride departed" : isOwnRide ? "You cannot book your own ride" : "Confirm request"}
             loading={saving}
-            disabled={Boolean(hasDeparted || isOwnRide)}
+            disabled={Boolean(!bookable || isOwnRide)}
             onPress={submit}
           />
           <SeatCounterPicker

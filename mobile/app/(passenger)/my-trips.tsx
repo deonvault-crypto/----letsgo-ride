@@ -9,16 +9,18 @@ import { AppButton } from "../../components/ui/AppButton";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
+import { LiveTripPanel } from "../../components/trips/LiveTripPanel";
 import { VerifiedBadge } from "../../components/ui/VerifiedBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useTrips } from "../../hooks/useTrips";
 import { listConversations } from "../../services/conversationService";
-import { cancelMyRideRequest } from "../../services/ridesService";
+import { cancelMyRideRequest, checkInRideRequest } from "../../services/ridesService";
 import { Conversation } from "../../types/conversation.types";
 import { RideRequest } from "../../types/ride.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
+import { canonicalRideStatus, isTripActive, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
 
 export default function MyTripsScreen() {
   const router = useRouter();
@@ -37,7 +39,17 @@ export default function MyTripsScreen() {
 
   function tripDeparted(trip: RideRequest) {
     const ride = trip.ride_snapshot;
-    return Boolean(ride?.is_departed || ride?.status === "departed" || ride?.status === "completed");
+    return ["IN_PROGRESS", "COMPLETED", "EXPIRED", "CANCELLED"].includes(canonicalRideStatus(ride?.status));
+  }
+
+  function canCancelTrip(trip: RideRequest) {
+    const rideStatus = canonicalRideStatus(trip.ride_snapshot?.status);
+    return trip.status === "pending" || (trip.status === "confirmed" && ["SCHEDULED", "BOARDING"].includes(rideStatus));
+  }
+
+  function canCheckIn(trip: RideRequest) {
+    const rideStatus = canonicalRideStatus(trip.ride_snapshot?.status);
+    return trip.status === "confirmed" && !trip.checked_in && ["BOARDING", "IN_PROGRESS"].includes(rideStatus);
   }
 
   async function cancelTrip(trip: RideRequest) {
@@ -49,6 +61,19 @@ export default function MyTripsScreen() {
       setConversations(await listConversations());
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Could not cancel booking.");
+    } finally {
+      setBusyRequestId("");
+    }
+  }
+
+  async function checkIn(trip: RideRequest) {
+    try {
+      setBusyRequestId(trip.id);
+      setActionError("");
+      await checkInRideRequest(trip.id);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Could not check in for this trip.");
     } finally {
       setBusyRequestId("");
     }
@@ -71,9 +96,11 @@ export default function MyTripsScreen() {
       ) : null}
       {!loading && !error && trips.map((trip) => {
         const departed = tripDeparted(trip);
+        const rideStatus = canonicalRideStatus(trip.ride_snapshot?.status);
         return (
         <View key={trip.id} style={[styles.card, departed && styles.departedCard]}>
           <StatusBadge label={formatStatus(trip.status)} tone={trip.status === "confirmed" ? "success" : trip.status === "declined" ? "danger" : "warning"} />
+          {trip.ride_snapshot ? <StatusBadge label={tripStatusLabel(rideStatus)} tone={tripStatusTone(rideStatus)} /> : null}
           <View style={styles.driverRow}>
             <Avatar name={trip.ride_snapshot?.driver_name || "Driver"} imageUri={trip.ride_snapshot?.driver_profile_photo_url || undefined} size={42} />
             <View style={styles.driverCopy}>
@@ -90,14 +117,20 @@ export default function MyTripsScreen() {
           <Text style={styles.body}>
             {formatTripDate(trip.ride_snapshot?.date || "", trip.ride_snapshot?.time)} - {trip.seats} {trip.seats === 1 ? "seat" : "seats"}
           </Text>
-          {departed ? <StatusBadge label="Trip departed" tone="neutral" /> : null}
+          {trip.checked_in ? <StatusBadge label="Checked in" tone="success" /> : null}
           {trip.passenger_note ? <Text style={styles.body}>{trip.passenger_note}</Text> : null}
+          {trip.ride_snapshot && isTripActive(trip.ride_snapshot) && trip.status === "confirmed" ? (
+            <LiveTripPanel ride={trip.ride_snapshot} role="passenger" onRefresh={reload} />
+          ) : null}
           {trip.status === "pending" || trip.status === "confirmed" ? (
             <View style={styles.actions}>
+              {canCheckIn(trip) ? (
+                <AppButton title="I'm in the car" loading={busyRequestId === trip.id} onPress={() => checkIn(trip)} />
+              ) : null}
               {conversationFor(trip) ? (
                 <AppButton title="Message driver" variant="secondary" onPress={() => router.push(`/(shared)/conversation/${conversationFor(trip)?.id}` as never)} />
               ) : null}
-              {!departed ? (
+              {canCancelTrip(trip) ? (
                 <AppButton title={trip.status === "pending" ? "Cancel request" : "Cancel booking"} variant="danger" loading={busyRequestId === trip.id} onPress={() => cancelTrip(trip)} />
               ) : null}
             </View>
