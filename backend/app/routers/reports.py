@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from app.auth import get_current_user
 from app.database import database
 from app.models.report import ReportCreateBody
+from app.services.notification_service import notify_admins
 from app.utils import api_success, new_id, now_iso
 
 
@@ -24,7 +25,14 @@ async def create_report(payload: ReportCreateBody, user=Depends(get_current_user
         "updated_at": timestamp,
         **payload.model_dump(),
     }
-    return api_success(await database.insert_one("reports", report))
+    created = await database.insert_one("reports", report)
+    await notify_admins(
+        "safety_report",
+        "New safety report",
+        "A safety report needs review.",
+        {"report_id": created["id"]},
+    )
+    return api_success(created)
 
 
 @router.get("/my")

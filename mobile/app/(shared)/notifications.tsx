@@ -41,6 +41,18 @@ export default function NotificationsScreen() {
       router.push(`/(shared)/conversation/${data.conversation_id}` as never);
       return;
     }
+    if (notification.type === "driver_verification" || typeof data.verification_status === "string") {
+      router.push("/(shared)/verification" as never);
+      return;
+    }
+    if (typeof data.support_message_id === "string") {
+      router.push("/(shared)/support" as never);
+      return;
+    }
+    if (typeof data.report_id === "string") {
+      router.push("/(shared)/safety" as never);
+      return;
+    }
     if (typeof data.ride_id === "string") {
       router.push(`/(passenger)/ride/${data.ride_id}` as never);
     }

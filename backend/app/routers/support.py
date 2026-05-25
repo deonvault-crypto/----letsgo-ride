@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from app.auth import get_current_user
 from app.database import database
 from app.models.report import SupportMessageBody
+from app.services.notification_service import notify_admins
 from app.utils import api_success, new_id, now_iso
 
 
@@ -24,7 +25,14 @@ async def create_message(payload: SupportMessageBody, user=Depends(get_current_u
         "updated_at": timestamp,
         **payload.model_dump(),
     }
-    return api_success(await database.insert_one("support_messages", message))
+    created = await database.insert_one("support_messages", message)
+    await notify_admins(
+        "support_message",
+        "New support message",
+        f"{user.get('name') or 'A user'} sent a support message.",
+        {"support_message_id": created["id"]},
+    )
+    return api_success(created)
 
 
 @router.get("/messages/my")

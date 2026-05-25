@@ -22,3 +22,19 @@ jest.mock("expo-secure-store", () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
 }));
+
+jest.mock("expo-notifications", () => ({
+  setNotificationHandler: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  getExpoPushTokenAsync: jest.fn(async () => ({ data: "ExpoPushToken[test]" })),
+}));
+
+jest.mock("expo-constants", () => ({
+  __esModule: true,
+  default: {
+    expoConfig: { version: "1.0.0", extra: { eas: { projectId: "test-project" } } },
+    easConfig: { projectId: "test-project" },
+  },
+}));

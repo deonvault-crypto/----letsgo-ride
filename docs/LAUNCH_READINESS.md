@@ -55,6 +55,7 @@ This note captures the current launch checkpoint for the LetsGoRide mobile app a
 - Photo library access is used when a user chooses a profile photo or verification document from their device.
 - Document upload is used for manual driver verification.
 - Notifications are used for ride updates, booking requests, messages, support replies, and safety alerts.
+- Real lock-screen push notifications require device permission, a registered Expo push token, and development or production build testing. Expo Go can verify in-app notification records and most permission/token wiring, but final push behavior must be tested in an installed build.
 - Biometric login is optional and is only enabled after a user chooses it in Settings.
 - Phone number is optional during signup and login. It is required before booking a seat or posting a ride for trip coordination and safety.
 - LetsGoRide does not currently process online or in-app payments.
@@ -67,6 +68,7 @@ This note captures the current launch checkpoint for the LetsGoRide mobile app a
 - Public ride lists and search results should show only bookable rides with departure date and time still in the future.
 - Ride detail can show a past ride as departed, but passengers should not be able to request a seat after departure.
 - Current launch behavior uses the posted departure date and time, not GPS or live trip tracking.
+- Scheduled "ride departure time reached" notifications are future work. Current launch behavior blocks new bookings after departure time, but it does not run a scheduler that wakes users exactly at departure time.
 - Future versions can add driver start/completion actions, passenger trip completion confirmation, and automatic completion after departure time plus an estimated route duration.
 
 ## Final Regression Guardrails

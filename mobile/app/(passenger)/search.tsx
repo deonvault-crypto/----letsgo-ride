@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { AppButton } from "../../components/ui/AppButton";
 import { LocationPicker } from "../../components/ui/LocationPicker";
@@ -26,11 +27,19 @@ export default function SearchRideScreen() {
     } as never);
   }
 
+  function swapRoute() {
+    setOrigin(destination);
+    setDestination(origin);
+  }
+
   return (
     <Screen navRole="passenger">
       <Text style={styles.title}>Search rides</Text>
       <View style={styles.form}>
         <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} placeholder="Harare" />
+        <Pressable accessibilityRole="button" accessibilityLabel="Swap route" onPress={swapRoute} style={({ pressed }) => [styles.swapButton, pressed && styles.pressed]}>
+          <MaterialCommunityIcons name="swap-vertical" size={20} color={colors.primaryGreen} />
+        </Pressable>
         <LocationPicker label="Destination" value={destination} onChangeText={setDestination} placeholder="Bulawayo" />
         <TravelDatePicker label="Travel date" value={date} onChangeText={setDate} />
         <Pressable accessibilityRole="button" accessibilityLabel="Seats" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}>
@@ -76,6 +85,18 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: spacing.md,
+  },
+  swapButton: {
+    alignSelf: "center",
+    width: 42,
+    height: 42,
+    marginVertical: -6,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.elevated,
   },
   seatField: {
     minHeight: 64,

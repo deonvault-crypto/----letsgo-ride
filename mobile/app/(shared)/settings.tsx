@@ -1,14 +1,15 @@
-import { Alert, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Modal, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ReactNode, useEffect, useState } from "react";
 
+import { AppButton } from "../../components/ui/AppButton";
 import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { legalUrls, supportEmail } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { deleteAccount, logout, updateCurrentUser } from "../../services/authService";
+import { deleteAccount, logout } from "../../services/authService";
 import {
   biometricAvailable,
   biometricLabel,
@@ -16,43 +17,60 @@ import {
   enableBiometricLogin,
   isBiometricEnabled,
 } from "../../services/biometricService";
+import { getNotificationPreferences, updateNotificationPreferences } from "../../services/notificationService";
+import { enablePhoneNotifications, phoneNotificationStatus } from "../../services/pushNotificationService";
+import { NotificationPreferences } from "../../types/notification.types";
 import { formatStatus } from "../../utils/formatStatus";
 import { openExternalUrl } from "../../utils/openExternalUrl";
 
 type PreferenceKey =
-  | "notification_trip_updates"
-  | "notification_booking_requests"
-  | "notification_support_replies"
-  | "notification_safety_alerts"
-  | "notification_marketing";
+  | "trip_updates"
+  | "booking_requests"
+  | "messages"
+  | "verification_updates"
+  | "support_replies"
+  | "safety_alerts"
+  | "marketing_messages";
 
 const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: string; defaultValue: boolean }> = [
   {
-    key: "notification_trip_updates",
+    key: "trip_updates",
     title: "Trip updates",
     subtitle: "Ride status and trip record updates.",
     defaultValue: true,
   },
   {
-    key: "notification_booking_requests",
+    key: "booking_requests",
     title: "Booking requests",
     subtitle: "Seat request and driver response updates.",
     defaultValue: true,
   },
   {
-    key: "notification_support_replies",
+    key: "messages",
+    title: "Messages",
+    subtitle: "New trip conversation messages.",
+    defaultValue: true,
+  },
+  {
+    key: "verification_updates",
+    title: "Verification updates",
+    subtitle: "Driver verification approval or review updates.",
+    defaultValue: true,
+  },
+  {
+    key: "support_replies",
     title: "Support replies",
     subtitle: "Updates from LetsGoRide support.",
     defaultValue: true,
   },
   {
-    key: "notification_safety_alerts",
+    key: "safety_alerts",
     title: "Safety alerts",
     subtitle: "Important account and trip safety notices.",
     defaultValue: true,
   },
   {
-    key: "notification_marketing",
+    key: "marketing_messages",
     title: "Marketing messages",
     subtitle: "Occasional product and route updates.",
     defaultValue: false,
@@ -61,13 +79,21 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, reload } = useCurrentUser();
+  const { user } = useCurrentUser();
   const role = user?.role === "driver" ? "driver" : "passenger";
   const verificationStatus = user?.verification_status || "not_started";
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricText, setBiometricText] = useState("Use biometrics");
   const [biometricSaving, setBiometricSaving] = useState(false);
+  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
+  const [preferenceSaving, setPreferenceSaving] = useState<PreferenceKey | "">("");
+  const [phoneNotificationEnabled, setPhoneNotificationEnabled] = useState(false);
+  const [phoneNotificationMessage, setPhoneNotificationMessage] = useState("");
+  const [pushSaving, setPushSaving] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   useEffect(() => {
     async function loadBiometricState() {
@@ -79,11 +105,35 @@ export default function SettingsScreen() {
       setBiometricSupported(false);
       setBiometricEnabled(false);
     });
+    getNotificationPreferences().then(setPreferences).catch(() => undefined);
+    phoneNotificationStatus()
+      .then((state) => setPhoneNotificationEnabled(state.enabled))
+      .catch(() => setPhoneNotificationEnabled(false));
   }, []);
 
   async function updatePreference(key: PreferenceKey, value: boolean) {
-    await updateCurrentUser({ [key]: value });
-    await reload();
+    try {
+      setPreferenceSaving(key);
+      const updated = await updateNotificationPreferences({ [key]: value });
+      setPreferences(updated);
+    } finally {
+      setPreferenceSaving("");
+    }
+  }
+
+  async function enableNotifications() {
+    try {
+      setPushSaving(true);
+      setPhoneNotificationMessage("");
+      const state = await enablePhoneNotifications();
+      setPhoneNotificationEnabled(state.enabled);
+      setPhoneNotificationMessage(state.message || (state.enabled ? "Phone notifications are enabled." : ""));
+    } catch (err) {
+      setPhoneNotificationEnabled(false);
+      setPhoneNotificationMessage(err instanceof Error ? err.message : "Could not enable phone notifications.");
+    } finally {
+      setPushSaving(false);
+    }
   }
 
   function confirmLogout() {
@@ -93,7 +143,6 @@ export default function SettingsScreen() {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
-          await disableBiometricLogin();
           await logout();
           router.replace("/(auth)/welcome" as never);
         },
@@ -101,24 +150,20 @@ export default function SettingsScreen() {
     ]);
   }
 
-  function confirmDeleteAccount() {
-    Alert.alert(
-      "Request account deletion",
-      "Your account will be marked for deletion. Some trip and safety records may be retained where legally or operationally required.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          style: "destructive",
-          onPress: async () => {
-            await deleteAccount();
-            await disableBiometricLogin();
-            Alert.alert("Account deletion requested", "Your LetsGoRide account has been updated.");
-            router.replace("/(auth)/welcome" as never);
-          },
-        },
-      ],
-    );
+  async function confirmDeleteAccount() {
+    if (deleteText.trim().toUpperCase() !== "DELETE") return;
+    try {
+      setDeleteSaving(true);
+      await deleteAccount();
+      await disableBiometricLogin();
+      setDeleteModalOpen(false);
+      Alert.alert("Account deleted", "Your LetsGoRide account has been deleted.");
+      router.replace("/(auth)/welcome" as never);
+    } catch {
+      Alert.alert("Delete account", "Could not delete your account. Please try again or contact support.");
+    } finally {
+      setDeleteSaving(false);
+    }
   }
 
   async function toggleBiometrics(nextValue: boolean) {
@@ -157,6 +202,38 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Settings" showBack fallbackRoute="/(shared)/profile" navRole={role}>
+      <Modal visible={deleteModalOpen} transparent animationType="fade" onRequestClose={() => setDeleteModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete account?</Text>
+            <Text style={styles.body}>
+              Are you sure you want to delete your LetsGoRide account? Your account
+              will be deleted from LetsGoRide. Some trip, safety, and admin
+              records may be retained where required for security, dispute
+              handling, or legal reasons.
+            </Text>
+            <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
+            <TextInput
+              value={deleteText}
+              onChangeText={setDeleteText}
+              autoCapitalize="characters"
+              placeholder="DELETE"
+              placeholderTextColor={colors.mutedText}
+              style={styles.confirmInput}
+            />
+            <View style={styles.modalActions}>
+              <AppButton title="Cancel" variant="secondary" onPress={() => setDeleteModalOpen(false)} />
+              <AppButton
+                title="Delete account"
+                variant="danger"
+                loading={deleteSaving}
+                disabled={deleteText.trim().toUpperCase() !== "DELETE"}
+                onPress={confirmDeleteAccount}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.headerCopy}>
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.body}>Manage your account, privacy, and LetsGoRide update preferences.</Text>
@@ -190,8 +267,20 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Notifications" subtitle="Choose which updates LetsGoRide should send you.">
+        <View style={styles.notificationStatus}>
+          <View style={styles.toggleCopy}>
+            <Text style={styles.toggleTitle}>Phone notifications: {phoneNotificationEnabled ? "On" : "Off"}</Text>
+            <Text style={styles.toggleSubtitle}>
+              Lock-screen push notifications require permission and a registered Expo push token.
+            </Text>
+            {phoneNotificationMessage ? <Text style={styles.noticeText}>{phoneNotificationMessage}</Text> : null}
+          </View>
+          {!phoneNotificationEnabled ? (
+            <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} />
+          ) : null}
+        </View>
         {preferenceRows.map((row) => {
-          const value = user?.[row.key] ?? row.defaultValue;
+          const value = preferences?.[row.key] ?? row.defaultValue;
           return (
             <View key={row.key} style={styles.toggleRow}>
               <View style={styles.toggleCopy}>
@@ -200,6 +289,7 @@ export default function SettingsScreen() {
               </View>
               <Switch
                 value={value}
+                disabled={preferenceSaving === row.key}
                 onValueChange={(next) => updatePreference(row.key, next)}
                 trackColor={{ false: "#D9D0C3", true: "rgba(17,139,68,0.36)" }}
                 thumbColor={value ? colors.primaryGreen : "#FFFDF8"}
@@ -287,15 +377,18 @@ export default function SettingsScreen() {
         <ListTile
           icon="logout"
           title="Logout"
-          subtitle="Sign out and clear this account from the device"
+          subtitle="Sign out of this LetsGoRide account"
           onPress={confirmLogout}
           danger
         />
         <ListTile
           icon="delete-outline"
-          title="Request account deletion"
-          subtitle="Delete your LetsGoRide account"
-          onPress={confirmDeleteAccount}
+          title="Delete account"
+          subtitle="Permanently delete your LetsGoRide account"
+          onPress={() => {
+            setDeleteText("");
+            setDeleteModalOpen(true);
+          }}
           danger
         />
       </Section>
@@ -357,6 +450,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.elevated,
   },
+  notificationStatus: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.elevated,
+  },
+  noticeText: {
+    color: colors.primaryGreen,
+    fontSize: 12,
+    fontWeight: "800",
+  },
   toggleCopy: {
     flex: 1,
     gap: 3,
@@ -382,5 +489,42 @@ const styles = StyleSheet.create({
   explainerTitle: {
     color: colors.whiteText,
     fontWeight: "900",
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.xl,
+    backgroundColor: "rgba(17,20,23,0.26)",
+  },
+  modalCard: {
+    gap: spacing.md,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.xl,
+  },
+  modalTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 24,
+  },
+  modalHelper: {
+    color: colors.whiteText,
+    fontWeight: "800",
+  },
+  confirmInput: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    backgroundColor: colors.elevated,
+    paddingHorizontal: spacing.lg,
+    color: colors.whiteText,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  modalActions: {
+    gap: spacing.sm,
   },
 });

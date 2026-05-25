@@ -14,8 +14,17 @@ export type AppNotification = {
 export type NotificationPreferences = {
   trip_updates: boolean;
   booking_requests: boolean;
+  messages: boolean;
+  verification_updates: boolean;
   support_replies: boolean;
   safety_alerts: boolean;
   marketing_messages: boolean;
 };
 
+export type PushTokenRegistration = {
+  expo_push_token: string;
+  platform: string;
+  device_name?: string;
+  app_version?: string;
+  active?: boolean;
+};

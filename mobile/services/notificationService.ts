@@ -1,4 +1,4 @@
-import { AppNotification, NotificationPreferences } from "../types/notification.types";
+import { AppNotification, NotificationPreferences, PushTokenRegistration } from "../types/notification.types";
 import { requestData } from "./api";
 
 export async function listNotifications() {
@@ -21,7 +21,14 @@ export async function updateNotificationPreferences(data: Partial<NotificationPr
   return requestData<NotificationPreferences>({ method: "PUT", url: "/notifications/preferences", data });
 }
 
+export async function registerPushToken(data: PushTokenRegistration) {
+  return requestData<PushTokenRegistration>({ method: "POST", url: "/notifications/register-token", data });
+}
+
+export async function unregisterPushToken(data: PushTokenRegistration) {
+  return requestData<{ active: boolean }>({ method: "DELETE", url: "/notifications/unregister-token", data });
+}
+
 export async function createTestNotification() {
   return requestData<AppNotification>({ method: "POST", url: "/notifications/test" });
 }
-

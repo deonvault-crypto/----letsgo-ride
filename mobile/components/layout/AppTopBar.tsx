@@ -1,9 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { getToken } from "../../services/api";
+import { listNotifications } from "../../services/notificationService";
 import { BrandLogo } from "./BrandLogo";
 
 type AppTopBarProps = {
@@ -20,6 +23,31 @@ export function AppTopBar({
   showNotifications = true,
 }: AppTopBarProps) {
   const router = useRouter();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    let active = true;
+    async function loadUnread() {
+      try {
+        const token = await getToken();
+        if (!token) {
+          if (active) setUnreadCount(0);
+          return;
+        }
+        const notifications = await listNotifications();
+        if (active) setUnreadCount(notifications.filter((notification) => !notification.read).length);
+      } catch {
+        if (active) setUnreadCount(0);
+      }
+    }
+    loadUnread();
+    const interval = setInterval(loadUnread, 30000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [showNotifications]);
 
   function goBack() {
     if (router.canGoBack()) {
@@ -55,6 +83,11 @@ export function AppTopBar({
           style={styles.iconButton}
         >
           <MaterialCommunityIcons name="bell-outline" size={21} color={colors.whiteText} />
+          {unreadCount ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+            </View>
+          ) : null}
         </Pressable>
       ) : (
         <View style={styles.iconSpacer} />
@@ -105,6 +138,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  badge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.danger,
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "900",
   },
   iconSpacer: {
     width: 42,

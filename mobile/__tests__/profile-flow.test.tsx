@@ -5,7 +5,7 @@ import ProfileScreen from "../app/(shared)/profile";
 import { updateCurrentUser, uploadProfilePhoto } from "../services/authService";
 import { getMyVerification } from "../services/verificationService";
 import { User } from "../types/user.types";
-import { notStartedProfile, passengerUser, pendingProfile } from "./fixtures";
+import { notStartedProfile, passengerUser, pendingProfile, verifiedProfile } from "./fixtures";
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -119,9 +119,22 @@ describe("profile update flow", () => {
     const screen = render(<ProfileScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText("Verification under review")).toBeOnTheScreen();
+      expect(screen.getAllByText("Verification under review").length).toBeGreaterThan(0);
       expect(screen.getByText("View verification status")).toBeOnTheScreen();
       expect(screen.queryByText("Start verification")).toBeNull();
+    });
+  });
+
+  it("uses approved verification wording once the driver is verified", async () => {
+    (getMyVerification as jest.Mock).mockResolvedValueOnce(verifiedProfile);
+
+    const screen = render(<ProfileScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Driver verified")).toBeOnTheScreen();
+      expect(screen.getByText("Verification status")).toBeOnTheScreen();
+      expect(screen.getByText("Your driver account is verified")).toBeOnTheScreen();
+      expect(screen.queryByText("Verify your identity before posting rides")).toBeNull();
     });
   });
 

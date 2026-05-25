@@ -22,6 +22,8 @@ class PushTokenBody(BaseModel):
 class NotificationPreferencesBody(BaseModel):
     trip_updates: Optional[bool] = None
     booking_requests: Optional[bool] = None
+    messages: Optional[bool] = None
+    verification_updates: Optional[bool] = None
     support_replies: Optional[bool] = None
     safety_alerts: Optional[bool] = None
     marketing_messages: Optional[bool] = None
@@ -66,14 +68,6 @@ async def list_notifications(user=Depends(get_current_user)):
     return api_success(notifications)
 
 
-@router.post("/{notification_id}/read")
-async def mark_notification_read(notification_id: str, user=Depends(get_current_user)):
-    notification = await database.find_one("app_notifications", {"id": notification_id})
-    if not notification or notification.get("user_id") != user["id"]:
-        api_error("Notification not found.", 404)
-    return api_success(await database.update_one("app_notifications", notification_id, {"read": True, "updated_at": now_iso()}))
-
-
 @router.post("/read-all")
 async def mark_all_read(user=Depends(get_current_user)):
     notifications = await database.find_many("app_notifications", {"user_id": user["id"]})
@@ -81,6 +75,14 @@ async def mark_all_read(user=Depends(get_current_user)):
         if not notification.get("read"):
             await database.update_one("app_notifications", notification["id"], {"read": True, "updated_at": now_iso()})
     return api_success({"read": True})
+
+
+@router.post("/{notification_id}/read")
+async def mark_notification_read(notification_id: str, user=Depends(get_current_user)):
+    notification = await database.find_one("app_notifications", {"id": notification_id})
+    if not notification or notification.get("user_id") != user["id"]:
+        api_error("Notification not found.", 404)
+    return api_success(await database.update_one("app_notifications", notification_id, {"read": True, "updated_at": now_iso()}))
 
 
 @router.get("/preferences")
@@ -109,4 +111,3 @@ async def create_test_notification(user=Depends(get_current_user)):
             {"screen": "notifications"},
         )
     )
-

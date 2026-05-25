@@ -107,12 +107,12 @@ async def send_message(conversation: Dict[str, Any], sender: Dict[str, Any], bod
 
     recipients = _participant_ids(conversation) - {sender["id"]}
     for recipient_id in recipients:
+        title = f"New message from {sender.get('name') or 'LetsGoRide user'}"
         await create_app_notification(
             recipient_id,
             "message",
-            "New trip message",
-            f"{sender.get('name') or 'LetsGoRide user'} sent a message about your trip.",
+            title,
+            "Open LetsGoRide to reply.",
             {"conversation_id": conversation["id"], "ride_id": conversation.get("ride_id"), "request_id": conversation.get("request_id")},
         )
     return created
-

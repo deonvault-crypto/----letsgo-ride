@@ -13,6 +13,7 @@ from app.models.request import RideRequestUpdateBody
 from app.models.ride import RideUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
+from app.services.notification_service import create_app_notification
 from app.services.ride_service import cleanup_demo_rides
 from app.services.verification_service import apply_admin_verification_status
 from app.utils import api_error, api_success, now_iso
@@ -503,6 +504,14 @@ async def update_request_status(request_id: str, payload: RideRequestUpdateBody,
         request_id,
         {"status": "cancelled_by_admin", "admin_cancellation_reason": payload.reason, "updated_at": now_iso()},
     )
+    if existing.get("user_id"):
+        await create_app_notification(
+            existing["user_id"],
+            "admin_booking_update",
+            "Booking updated",
+            "Your booking was updated by LetsGoRide support. Open the app for details.",
+            {"ride_id": existing.get("ride_id"), "request_id": request_id},
+        )
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),
@@ -563,6 +572,14 @@ async def update_support_message_status(
     message = await database.update_one("support_messages", message_id, updates)
     if not message:
         api_error("Support message not found.", 404)
+    if message.get("user_id"):
+        await create_app_notification(
+            message["user_id"],
+            "support_reply",
+            "Support replied",
+            "LetsGoRide support replied to your message." if admin_notes else "Your support case status has been updated.",
+            {"support_message_id": message_id},
+        )
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),
@@ -625,6 +642,14 @@ async def update_report_status(
     report = await database.update_one("reports", report_id, updates)
     if not report:
         api_error("Report not found.", 404)
+    if report.get("user_id"):
+        await create_app_notification(
+            report["user_id"],
+            "safety_report_updated",
+            "Safety report updated",
+            "Your safety report status has been updated.",
+            {"report_id": report_id},
+        )
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),

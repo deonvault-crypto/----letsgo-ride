@@ -30,6 +30,7 @@ const styles = StyleSheet.create({
   row: {
     gap: spacing.sm,
     paddingRight: spacing.screen,
+    paddingBottom: spacing.xs,
   },
   chip: {
     paddingHorizontal: spacing.md,
@@ -38,7 +39,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.elevated,
     borderWidth: 1,
     borderColor: colors.border,
-    maxWidth: 190,
+    maxWidth: 240,
   },
   text: {
     color: colors.whiteText,

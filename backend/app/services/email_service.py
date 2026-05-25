@@ -171,6 +171,32 @@ async def send_password_reset_email(to_email: str, code: str) -> bool:
         return False
 
 
+async def send_driver_verification_status_email(to_email: str, approved: bool) -> bool:
+    subject = "Driver verification approved" if approved else "Verification needs attention"
+    title = subject
+    message = (
+        "Your driver verification has been approved. You can now post rides on LetsGoRide."
+        if approved
+        else "Please review your driver verification documents and resubmit them in LetsGoRide."
+    )
+    text = f"{title}\n\n{message}\n\nLetsGoRide Support"
+    html = branded_notice_email(
+        title=title,
+        preheader=message,
+        message=message,
+        security_note="Verification documents are reviewed only by authorized LetsGoRide admins.",
+        footer="LetsGoRide Support",
+    )
+    try:
+        return await asyncio.to_thread(_send_resend_email, to_email, subject, html, text, "send_driver_verification_status_email")
+    except Exception:
+        logger.warning(
+            "Driver verification email failed: Resend request rejected %s",
+            _resend_log_context("send_driver_verification_status_email", message="unexpected email service error"),
+        )
+        return False
+
+
 def branded_code_email(title: str, preheader: str, message: str, code: str, security_note: str, footer: str) -> str:
     safe_title = escape(title)
     safe_preheader = escape(preheader)
@@ -211,6 +237,46 @@ def branded_code_email(title: str, preheader: str, message: str, code: str, secu
               <td style="padding:8px 28px 26px 28px;">
                 <p style="margin:0;font-size:14px;line-height:1.5;color:#64707D;">This code expires in 15 minutes.</p>
                 <p style="margin:12px 0 0 0;font-size:13px;line-height:1.5;color:#64707D;">{safe_security}</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:18px 0 0 0;font-size:12px;color:#64707D;">{safe_footer}</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
+def branded_notice_email(title: str, preheader: str, message: str, security_note: str, footer: str) -> str:
+    safe_title = escape(title)
+    safe_preheader = escape(preheader)
+    safe_message = escape(message)
+    safe_security = escape(security_note)
+    safe_footer = escape(footer)
+    return f"""<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{safe_title}</title>
+  </head>
+  <body style="margin:0;background:#FAF7F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#15191D;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{safe_preheader}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FAF7F0;padding:28px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#FFFFFF;border:1px solid #E5DED4;border-radius:28px;overflow:hidden;">
+            <tr>
+              <td style="padding:30px 28px 14px 28px;">
+                <div style="font-size:28px;font-weight:900;letter-spacing:0;color:#15191D;">Lets<span style="color:#118B44;">Go</span>Ride</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 28px 26px 28px;">
+                <h1 style="margin:0;font-size:25px;line-height:1.2;color:#15191D;">{safe_title}</h1>
+                <p style="margin:14px 0 0 0;font-size:15px;line-height:1.55;color:#64707D;">{safe_message}</p>
+                <p style="margin:18px 0 0 0;font-size:13px;line-height:1.5;color:#64707D;">{safe_security}</p>
               </td>
             </tr>
           </table>

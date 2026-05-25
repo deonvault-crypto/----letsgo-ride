@@ -81,7 +81,7 @@ async def _accept_request(existing, ride, user):
         existing.get("user_id"),
         "booking_confirmed",
         "Ride request accepted",
-        f"Your request for {ride.get('origin')} to {ride.get('destination')} was accepted.",
+        f"Your ride from {ride.get('origin')} to {ride.get('destination')} was accepted.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
     await write_audit_log(
@@ -109,7 +109,7 @@ async def _decline_request(existing, ride, user, reason=None):
         existing.get("user_id"),
         "booking_declined",
         "Ride request declined",
-        f"Your request for {ride.get('origin')} to {ride.get('destination')} was declined.",
+        f"Your ride request from {ride.get('origin')} to {ride.get('destination')} was declined.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
     return updated_request or existing
@@ -134,7 +134,7 @@ async def _cancel_by_passenger(existing, ride, user, reason=None):
     await create_app_notification(
         ride.get("user_id"),
         "booking_cancelled",
-        "Passenger cancelled booking",
+        "Booking cancelled",
         f"{existing.get('passenger_name') or 'A passenger'} cancelled a booking for {ride.get('origin')} to {ride.get('destination')}.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
@@ -163,8 +163,8 @@ async def _cancel_by_driver(existing, ride, user, reason=None):
     await create_app_notification(
         existing.get("user_id"),
         "booking_cancelled",
-        "Driver cancelled booking",
-        f"Your booking for {ride.get('origin')} to {ride.get('destination')} was cancelled by the driver.",
+        "Booking cancelled by driver",
+        f"Your booking for {ride.get('origin')} to {ride.get('destination')} was cancelled. Open LetsGoRide for details.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
     return updated_request or existing

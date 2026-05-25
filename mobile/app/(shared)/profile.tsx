@@ -39,6 +39,7 @@ export default function ProfileScreen() {
 
   useLiveRefresh(loadVerification, 30000);
   const verificationCard = getVerificationCard(verificationStatus);
+  const verificationMenu = getVerificationMenuCopy(verificationStatus);
 
   return (
     <Screen navRole={role}>
@@ -68,7 +69,7 @@ export default function ProfileScreen() {
         ) : null}
         <ListTile icon="account-edit-outline" title="Edit profile" subtitle="Name, photo, phone, city, and travel preferences" onPress={() => router.push("/(shared)/edit-profile" as never)} />
         <ListTile icon="message-text-outline" title="Trip messages" subtitle="Passenger and driver conversations" onPress={() => router.push("/(shared)/messages" as never)} />
-        <ListTile icon="shield-check-outline" title="Driver verification" subtitle="Verify your identity before posting rides" onPress={() => router.push("/(shared)/verification" as never)} />
+        <ListTile icon="shield-check-outline" title={verificationMenu.title} subtitle={verificationMenu.subtitle} onPress={() => router.push("/(shared)/verification" as never)} />
         <ListTile icon="cog-outline" title="Settings" subtitle="Account, privacy, and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
         <ListTile icon="shield-alert-outline" title="Safety Center" subtitle="Report issues and review trip safety" onPress={() => router.push("/(shared)/safety" as never)} />
         <ListTile icon="lifebuoy" title="Support" subtitle="Contact LetsGoRide support" onPress={() => router.push("/(shared)/support" as never)} />
@@ -138,6 +139,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
 });
+
+function getVerificationMenuCopy(status: string): { title: string; subtitle: string } {
+  if (status === "verified" || status === "approved") {
+    return { title: "Verification status", subtitle: "Your driver account is verified" };
+  }
+  if (status === "pending" || status === "under_review" || status === "submitted") {
+    return { title: "Driver verification", subtitle: "Verification under review" };
+  }
+  if (status === "rejected" || status === "needs_review") {
+    return { title: "Driver verification", subtitle: "Action needed, review your documents" };
+  }
+  return { title: "Driver verification", subtitle: "Verify your identity before posting rides" };
+}
 
 function getVerificationCard(status: string): {
   title: string;

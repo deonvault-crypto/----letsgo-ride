@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import UploadFile
 
 from app.database import database
+from app.services.email_service import send_driver_verification_status_email
 from app.services.notification_service import create_app_notification, notify_admins
 from app.services.audit_service import write_audit_log
 from app.utils import new_id, now_iso
@@ -306,4 +307,7 @@ async def apply_admin_verification_status(
             body,
             {"driver_id": driver["id"], "verification_status": status},
         )
+        user = await database.find_one("users", {"id": driver["user_id"]})
+        if user and user.get("email"):
+            await send_driver_verification_status_email(user["email"], status == "verified")
     return updated

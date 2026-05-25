@@ -55,7 +55,7 @@ export default function MyTripsScreen() {
       {loading ? <LoadingState label="Loading trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {!loading && !error && trips.length === 0 ? (
-        <EmptyState title="No trips yet" body="Your ride requests will appear here." />
+        <EmptyState title="No trips yet" body="Your ride requests and bookings will appear here after you reserve a seat." />
       ) : null}
       {!loading && !error && trips.map((trip) => (
         <View key={trip.id} style={styles.card}>
@@ -73,8 +73,8 @@ export default function MyTripsScreen() {
           <Text style={styles.route}>
             {trip.ride_snapshot?.origin || "Ride"} to {trip.ride_snapshot?.destination || "destination"}
           </Text>
-          <Text style={styles.body}>{trip.ride_snapshot?.date} at {trip.ride_snapshot?.time} - {trip.seats} seat</Text>
-          <Text style={styles.body}>{trip.passenger_note || "No passenger note added."}</Text>
+          <Text style={styles.body}>{trip.ride_snapshot?.date} at {trip.ride_snapshot?.time} - {trip.seats} {trip.seats === 1 ? "seat" : "seats"}</Text>
+          {trip.passenger_note ? <Text style={styles.body}>{trip.passenger_note}</Text> : null}
           {trip.status === "pending" || trip.status === "confirmed" ? (
             <View style={styles.actions}>
               {conversationFor(trip) ? (

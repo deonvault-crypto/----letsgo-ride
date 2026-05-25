@@ -38,7 +38,6 @@ import {
   updateAdminUserStatus,
 } from "../../services/adminService";
 import { logout } from "../../services/authService";
-import { disableBiometricLogin } from "../../services/biometricService";
 import { AdminVerificationListItem, VerificationStatus } from "../../types/verification.types";
 import { formatStatus } from "../../utils/formatStatus";
 
@@ -144,7 +143,6 @@ export default function AdminDashboardScreen() {
   }
 
   async function handleLogout() {
-    await disableBiometricLogin();
     await logout();
     router.replace("/(auth)/welcome" as never);
   }
