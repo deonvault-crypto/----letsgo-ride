@@ -125,15 +125,16 @@ describe("profile update flow", () => {
     });
   });
 
-  it("uses approved verification wording once the driver is verified", async () => {
+  it("uses compact approved verification wording once the driver is verified", async () => {
     (getMyVerification as jest.Mock).mockResolvedValueOnce(verifiedProfile);
 
     const screen = render(<ProfileScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText("Driver verified")).toBeOnTheScreen();
       expect(screen.getByText("Verification status")).toBeOnTheScreen();
       expect(screen.getByText("Your driver account is verified")).toBeOnTheScreen();
+      expect(screen.queryByText("Driver verified")).toBeNull();
+      expect(screen.queryByText("View verification")).toBeNull();
       expect(screen.queryByText("Verify your identity before posting rides")).toBeNull();
     });
   });

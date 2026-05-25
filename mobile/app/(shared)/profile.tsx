@@ -28,6 +28,7 @@ export default function ProfileScreen() {
   const city = user?.city || "Zimbabwe";
   const verificationStatus = verification?.verification_status || user?.verification_status || "not_started";
   const verified = verificationStatus === "verified" || isIdentityVerified(user);
+  const shouldShowVerificationCard = !["verified", "approved"].includes(verificationStatus);
 
   const loadVerification = useCallback(async () => {
     try {
@@ -56,12 +57,14 @@ export default function ProfileScreen() {
         <StatusBadge label={user?.role === "admin" ? "Admin" : formatStatus(role)} tone={user?.role === "admin" ? "neutral" : "success"} />
       </View>
 
-      <View style={styles.card}>
-        <StatusBadge label={verificationCard.badge} tone={verificationCard.tone} />
-        <Text style={styles.title}>{verificationCard.title}</Text>
-        <Text style={styles.body}>{verificationCard.body}</Text>
-        <AppButton title={verificationCard.button} onPress={() => router.push("/(shared)/verification" as never)} />
-      </View>
+      {shouldShowVerificationCard ? (
+        <View style={styles.card}>
+          <StatusBadge label={verificationCard.badge} tone={verificationCard.tone} />
+          <Text style={styles.title}>{verificationCard.title}</Text>
+          <Text style={styles.body}>{verificationCard.body}</Text>
+          <AppButton title={verificationCard.button} onPress={() => router.push("/(shared)/verification" as never)} />
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         {user?.role === "admin" ? (
