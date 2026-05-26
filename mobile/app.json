@@ -57,14 +57,15 @@
           "locationWhenInUsePermission": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers."
         }
       ],
-      "./plugins/withFaceTec"
+      "./plugins/withFaceTec",
+      "expo-font"
     ],
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FAF7F0"
     },
-    "runtimeVersion": "exposdk:54.0",
+    "runtimeVersion": "exposdk:54.0.0",
     "extra": {
       "router": {},
       "eas": {
