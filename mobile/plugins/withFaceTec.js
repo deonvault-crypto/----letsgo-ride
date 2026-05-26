@@ -38,19 +38,14 @@ const withIosFaceTec = (config) => {
     const frameworkFullPath = path.join(frameworkDir, frameworkName);
 
     if (fs.existsSync(frameworkFullPath)) {
-      if (!project.pbxFileByComment(frameworkName)) {
-        const file = project.addFramework(frameworkFullPath, {
-          target: targetUuid,
-          customFramework: true,
-          embed: true,
-          sign: true,
-        });
-        
-        if (file) {
-          file.uuid = project.generateUuid();
-          file.fileRef = project.generateUuid();
-        }
-      }
+      // Add framework to Xcode project
+      // The xcode library handles UUID generation and pbxproj structure internally
+      project.addFramework(frameworkFullPath, {
+        target: targetUuid,
+        customFramework: true,
+        embed: true,
+        sign: true,
+      });
     }
 
     return config;
