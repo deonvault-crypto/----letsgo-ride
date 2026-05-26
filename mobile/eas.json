@@ -12,10 +12,20 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "ios": {
+        "buildNumber": "8"
+      },
+      "android": {
+        "buildType": "release"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "asciiOnlyMetadata": true
+      }
+    }
   }
 }
