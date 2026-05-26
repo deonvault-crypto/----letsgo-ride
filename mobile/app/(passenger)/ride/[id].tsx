@@ -17,6 +17,7 @@ import { Ride } from "../../../types/ride.types";
 import { formatTripDate } from "../../../utils/formatDate";
 import { formatUsd } from "../../../utils/formatPrice";
 import { departureCountdown, isRideBookable, tripStatusLabel, tripStatusTone } from "../../../utils/tripLifecycle";
+import { isVerifiedStatus } from "../../../utils/verificationStatus";
 
 export default function RideDetailScreen() {
   const router = useRouter();
@@ -79,7 +80,7 @@ export default function RideDetailScreen() {
         name={ride.driver_name}
         rating={ride.driver_rating}
         vehicle={ride.vehicle}
-        verified={ride.driver_verification_status === "verified"}
+        verified={isVerifiedStatus(ride.driver_verification_status)}
         imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url}
       />
 

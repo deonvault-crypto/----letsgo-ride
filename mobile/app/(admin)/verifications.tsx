@@ -15,6 +15,7 @@ import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { listAdminVerifications } from "../../services/adminService";
 import { AdminVerificationListItem } from "../../types/verification.types";
 import { formatStatus } from "../../utils/formatStatus";
+import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../utils/verificationStatus";
 
 export default function AdminVerificationsScreen() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function AdminVerificationsScreen() {
 
   useLiveRefresh(load, 15000);
 
-  const pendingCount = items.filter((item) => item.verification_status === "pending").length;
+  const pendingCount = items.filter((item) => isPendingVerificationStatus(item.verification_status) || item.verification_status === "flagged_for_review").length;
   const filteredItems = useMemo(
     () =>
       items.filter((item) => {
@@ -66,7 +67,7 @@ export default function AdminVerificationsScreen() {
         <>
           <AppInput label="Search" value={search} onChangeText={setSearch} leftIcon="magnify" placeholder="Search by name, email, phone, city, or status" />
           <View style={styles.filters}>
-            {["all", "pending", "needs_review", "verified", "rejected"].map((value) => (
+            {["all", "pending", "processing_biometrics", "flagged_for_review", "needs_review", "verified", "active", "rejected"].map((value) => (
               <Pressable
                 key={value}
                 accessibilityRole="button"
@@ -102,9 +103,9 @@ export default function AdminVerificationsScreen() {
 }
 
 function statusTone(status: AdminVerificationListItem["verification_status"]): "success" | "warning" | "danger" | "neutral" {
-  if (status === "verified") return "success";
+  if (isVerifiedStatus(status)) return "success";
   if (status === "rejected") return "danger";
-  if (status === "pending" || status === "needs_review") return "warning";
+  if (isPendingVerificationStatus(status) || needsVerificationReview(status)) return "warning";
   return "neutral";
 }
 

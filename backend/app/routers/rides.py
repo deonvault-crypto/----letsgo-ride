@@ -65,7 +65,7 @@ async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
         api_error("Complete driver verification before posting a trip.")
     if driver.get("status") not in ("approved", "verified") or not driver.get("verified"):
         api_error("Complete driver verification before posting a trip.")
-    if driver.get("verification_status") != "verified":
+    if driver.get("verification_status") not in {"verified", "active"}:
         api_error("Complete driver verification before posting a trip.")
 
     data = payload.model_dump()

@@ -9,6 +9,16 @@ VerificationStatus = Literal[
     "needs_review",
     "verified",
     "rejected",
+    "processing_biometrics",
+    "active",
+    "flagged_for_review",
+]
+
+IdentityVerificationState = Literal[
+    "pending_verification",
+    "processing_biometrics",
+    "active",
+    "flagged_for_review",
 ]
 
 DocumentType = Literal[
@@ -42,3 +52,16 @@ class VerificationStatusUpdateBody(BaseModel):
     rejection_reason: Optional[str] = None
     document_id: Optional[str] = None
     document_status: Optional[DocumentStatus] = None
+
+
+class FaceTecVerifyUserBody(BaseModel):
+    session_id: Optional[str] = Field(default=None, max_length=160)
+    external_database_ref_id: Optional[str] = Field(default=None, max_length=160)
+    device_key_identifier: Optional[str] = Field(default=None, max_length=160)
+    face_scan: str = Field(min_length=100, max_length=6_000_000)
+    audit_trail_image: Optional[str] = Field(default=None, max_length=2_500_000)
+    low_quality_audit_trail_image: Optional[str] = Field(default=None, max_length=2_500_000)
+    id_scan: str = Field(min_length=100, max_length=6_000_000)
+    id_scan_front_image: Optional[str] = Field(default=None, max_length=3_000_000)
+    id_scan_back_image: Optional[str] = Field(default=None, max_length=3_000_000)
+    min_match_level: Optional[int] = Field(default=None, ge=1, le=6)

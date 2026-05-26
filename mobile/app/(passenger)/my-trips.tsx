@@ -21,6 +21,7 @@ import { RideRequest } from "../../types/ride.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
 import { canonicalRideStatus, isTripActive, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
+import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 export default function MyTripsScreen() {
   const router = useRouter();
@@ -106,7 +107,7 @@ export default function MyTripsScreen() {
             <View style={styles.driverCopy}>
               <View style={styles.nameRow}>
                 <Text style={styles.driverName}>{trip.ride_snapshot?.driver_name || "Driver"}</Text>
-                <VerifiedBadge verified={trip.ride_snapshot?.driver_verification_status === "verified"} />
+                <VerifiedBadge verified={isVerifiedStatus(trip.ride_snapshot?.driver_verification_status)} />
               </View>
               <Text style={styles.body}>{trip.ride_snapshot?.vehicle || "Vehicle details in trip"}</Text>
             </View>

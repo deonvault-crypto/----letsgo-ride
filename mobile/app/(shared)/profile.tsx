@@ -16,6 +16,7 @@ import { getMyVerification } from "../../services/verificationService";
 import { VerificationProfile } from "../../types/verification.types";
 import { displayNameOrFallback, firstNameOrFallback } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
+import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../utils/verificationStatus";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -27,8 +28,8 @@ export default function ProfileScreen() {
   const contact = user?.phone || user?.email || "Add phone or email";
   const city = user?.city || "Zimbabwe";
   const verificationStatus = verification?.verification_status || user?.verification_status || "not_started";
-  const verified = verificationStatus === "verified" || isIdentityVerified(user);
-  const shouldShowVerificationCard = !["verified", "approved"].includes(verificationStatus);
+  const verified = isVerifiedStatus(verificationStatus) || isIdentityVerified(user);
+  const shouldShowVerificationCard = !isVerifiedStatus(verificationStatus);
 
   const loadVerification = useCallback(async () => {
     try {
@@ -144,13 +145,13 @@ const styles = StyleSheet.create({
 });
 
 function getVerificationMenuCopy(status: string): { title: string; subtitle: string } {
-  if (status === "verified" || status === "approved") {
+  if (isVerifiedStatus(status)) {
     return { title: "Verification status", subtitle: "Your driver account is verified" };
   }
-  if (status === "pending" || status === "under_review" || status === "submitted") {
+  if (isPendingVerificationStatus(status)) {
     return { title: "Driver verification", subtitle: "Verification under review" };
   }
-  if (status === "rejected" || status === "needs_review") {
+  if (needsVerificationReview(status)) {
     return { title: "Driver verification", subtitle: "Action needed, review your documents" };
   }
   return { title: "Driver verification", subtitle: "Verify your identity before posting rides" };
@@ -163,7 +164,7 @@ function getVerificationCard(status: string): {
   button: string;
   tone: "success" | "warning" | "danger" | "neutral";
 } {
-  if (status === "pending" || status === "under_review" || status === "submitted") {
+  if (isPendingVerificationStatus(status)) {
     return {
       title: "Verification under review",
       body: "Your documents have been submitted and are now under review. We'll notify you when your driver verification is approved or if more information is needed.",
@@ -172,7 +173,7 @@ function getVerificationCard(status: string): {
       tone: "warning",
     };
   }
-  if (status === "verified" || status === "approved") {
+  if (isVerifiedStatus(status)) {
     return {
       title: "Driver verified",
       body: "Your account has been reviewed by LetsGoRide. Your profile can now show a verified badge.",
@@ -181,7 +182,7 @@ function getVerificationCard(status: string): {
       tone: "success",
     };
   }
-  if (status === "rejected" || status === "needs_review") {
+  if (needsVerificationReview(status)) {
     return {
       title: "Verification needs attention",
       body: "Some documents need to be updated before your driver verification can be approved.",

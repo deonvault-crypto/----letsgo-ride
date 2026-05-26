@@ -18,6 +18,7 @@ import { useDriverRides } from "../../hooks/useDriverRides";
 import { useDriverRequests } from "../../hooks/useDriverRequests";
 import { firstNameOrFallback } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
+import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 export default function DriverHomeScreen() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function DriverHomeScreen() {
       : formatStatus(driver?.verification_status || driver?.status || "pending_verification");
 
   const firstName = firstNameOrFallback(user?.name);
-  const identityVerified = isIdentityVerified(user) || driver?.verification_status === "verified";
+  const identityVerified = isIdentityVerified(user) || isVerifiedStatus(driver?.verification_status);
 
   return (
     <Screen navRole="driver">
@@ -97,7 +98,7 @@ export default function DriverHomeScreen() {
             <View style={styles.passengerCopy}>
               <View style={styles.nameRow}>
                 <Text style={styles.requestTitle}>{request.passenger_name}</Text>
-                <VerifiedBadge verified={request.passenger_verification_status === "verified"} />
+                <VerifiedBadge verified={isVerifiedStatus(request.passenger_verification_status)} />
               </View>
             </View>
           </View>

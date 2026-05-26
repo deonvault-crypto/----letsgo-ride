@@ -23,6 +23,7 @@ import { Ride, RideRequest } from "../../../types/ride.types";
 import { formatTripDate } from "../../../utils/formatDate";
 import { formatStatus } from "../../../utils/formatStatus";
 import { canonicalRideStatus, departureCountdown, isTripActive, isTripFinal, tripStatusLabel, tripStatusTone } from "../../../utils/tripLifecycle";
+import { isVerifiedStatus } from "../../../utils/verificationStatus";
 
 export default function DriverTripDetailScreen() {
   const router = useRouter();
@@ -163,7 +164,7 @@ export default function DriverTripDetailScreen() {
         name={ride.driver_name}
         rating={ride.driver_rating}
         vehicle={ride.vehicle}
-        verified={ride.driver_verification_status === "verified"}
+        verified={isVerifiedStatus(ride.driver_verification_status)}
         imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url}
       />
       {!user?.phone ? (
@@ -190,7 +191,7 @@ export default function DriverTripDetailScreen() {
             <View style={styles.passengerCopy}>
               <View style={styles.nameRow}>
                 <Text style={styles.requestName}>{request.passenger_name}</Text>
-                <VerifiedBadge verified={request.passenger_verification_status === "verified"} />
+                <VerifiedBadge verified={isVerifiedStatus(request.passenger_verification_status)} />
               </View>
             </View>
           </View>

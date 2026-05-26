@@ -18,6 +18,7 @@ import {
 } from "../../../services/adminService";
 import { AdminVerificationDetail, VerificationStatus } from "../../../types/verification.types";
 import { formatStatus } from "../../../utils/formatStatus";
+import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../../utils/verificationStatus";
 
 export default function AdminVerificationDetailScreen() {
   const router = useRouter();
@@ -196,9 +197,9 @@ function friendlyVerificationError(message: string) {
 }
 
 function statusTone(status: VerificationStatus): "success" | "warning" | "danger" | "neutral" {
-  if (status === "verified") return "success";
+  if (isVerifiedStatus(status)) return "success";
   if (status === "rejected") return "danger";
-  if (status === "pending" || status === "needs_review") return "warning";
+  if (isPendingVerificationStatus(status) || needsVerificationReview(status)) return "warning";
   return "neutral";
 }
 

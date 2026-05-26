@@ -72,7 +72,7 @@ def _status_tone(status: Optional[str]) -> str:
         return "success"
     if status in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
         return "danger"
-    if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed"}:
+    if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed", "processing_biometrics", "flagged_for_review"}:
         return "warning"
     return "neutral"
 
@@ -193,8 +193,8 @@ async def overview(admin=Depends(get_admin_user)):
     support_messages = await database.find_many("support_messages")
     reports = await database.find_many("reports")
     admin_notifications = await database.find_many("app_notifications", {"user_id": admin["id"]})
-    verified_drivers = [driver for driver in drivers if driver.get("verification_status") == "verified"]
-    pending_verifications = [driver for driver in drivers if driver.get("verification_status") in {"pending", "needs_review"}]
+    verified_drivers = [driver for driver in drivers if driver.get("verification_status") in {"verified", "active"}]
+    pending_verifications = [driver for driver in drivers if driver.get("verification_status") in {"pending", "needs_review", "processing_biometrics", "flagged_for_review"}]
     enriched_rides = [await apply_ride_lifecycle(ride) for ride in rides]
     active_rides = [ride for ride in enriched_rides if canonical_trip_status(ride.get("status")) in {TRIP_STATUS_SCHEDULED, TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}]
     pending_requests = [request for request in requests if request.get("status") == "pending"]
@@ -216,7 +216,7 @@ async def overview(admin=Depends(get_admin_user)):
             )
         )
     for driver in _sort_recent(drivers, 8):
-        if driver.get("verification_status") in {"pending", "needs_review", "rejected", "verified"}:
+        if driver.get("verification_status") in {"pending", "needs_review", "processing_biometrics", "flagged_for_review", "rejected", "verified", "active"}:
             activities.append(
                 _activity_item(
                     kind="verification",
@@ -717,7 +717,7 @@ async def list_verifications(
         if not _contains_search(row, search, ["name", "email", "phone", "city", "verification_status"]):
             continue
         rows.append(row)
-    status_order = {"pending": 0, "needs_review": 1, "rejected": 2, "verified": 3, "not_started": 4}
+    status_order = {"flagged_for_review": 0, "processing_biometrics": 1, "pending": 2, "needs_review": 3, "rejected": 4, "verified": 5, "active": 6, "not_started": 7}
     rows = sorted(
         rows,
         key=lambda item: (

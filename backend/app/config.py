@@ -29,6 +29,14 @@ class Settings:
             "RESEND_REPLY_TO_EMAIL",
             "RESEND_REPLY_TO",
         )
+        self.facetec_server_url = self._get_env_first(
+            "FACETEC_SERVER_URL",
+            "FACETEC_CORE_SERVER_URL",
+        ).rstrip("/")
+        self.facetec_device_key_identifier = self._get_env_first("FACETEC_DEVICE_KEY_IDENTIFIER")
+        self.facetec_server_key_identifier = self._get_env_first("FACETEC_SERVER_KEY_IDENTIFIER")
+        self.facetec_min_match_level = self._parse_int(os.getenv("FACETEC_MIN_MATCH_LEVEL", "4"), 4)
+        self.facetec_high_confidence_threshold = self._parse_float(os.getenv("FACETEC_HIGH_CONFIDENCE_THRESHOLD", "0.98"), 0.98)
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",
@@ -44,6 +52,20 @@ class Settings:
     @staticmethod
     def _parse_bool(value: str) -> bool:
         return value.strip().lower() in ("1", "true", "yes", "on")
+
+    @staticmethod
+    def _parse_int(value: str, fallback: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    @staticmethod
+    def _parse_float(value: str, fallback: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return fallback
 
     @staticmethod
     def _get_env_first(*names: str) -> str:
@@ -68,6 +90,10 @@ class Settings:
     @property
     def resend_configured(self) -> bool:
         return bool(self.resend_api_key and self.resend_from_email)
+
+    @property
+    def facetec_configured(self) -> bool:
+        return bool(self.facetec_server_url and self.facetec_device_key_identifier)
 
 
 @lru_cache

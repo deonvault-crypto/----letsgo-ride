@@ -4,9 +4,10 @@ import { useState } from "react";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 export function isIdentityVerified(user?: { verification_status?: string } | null) {
-  return user?.verification_status === "verified";
+  return isVerifiedStatus(user?.verification_status);
 }
 
 export function VerifiedBadge({

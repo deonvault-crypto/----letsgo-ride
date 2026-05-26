@@ -42,6 +42,7 @@ import { AdminVerificationListItem, VerificationStatus } from "../../types/verif
 import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
 import { canonicalRideStatus, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
+import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 type AdminSection =
   | "overview"
@@ -75,7 +76,7 @@ const sections: Array<{ key: AdminSection; label: string; icon: keyof typeof Mat
 ];
 
 const requestFilters = ["all", "pending", "confirmed", "declined", "cancelled_by_passenger", "cancelled_by_driver", "cancelled_by_admin"];
-const verificationFilters: Array<"all" | VerificationStatus> = ["all", "pending", "needs_review", "verified", "rejected"];
+const verificationFilters: Array<"all" | VerificationStatus> = ["all", "pending", "processing_biometrics", "flagged_for_review", "needs_review", "verified", "active", "rejected"];
 const supportFilters = ["all", "received", "open", "in_review", "resolved", "closed"];
 const reportFilters = ["all", "submitted", "open", "in_review", "resolved", "dismissed"];
 const rideFilters = ["all", "SCHEDULED", "BOARDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED", "pending_requests", "full"];
@@ -168,8 +169,8 @@ export default function AdminDashboardScreen() {
     return users.filter((user) => {
       if (!matchesSearch(user, search, ["name", "email", "phone", "city", "role", "status"])) return false;
       if (filter === "all") return true;
-      if (filter === "verified") return user.driver_verification_status === "verified" || user.verification_status === "verified";
-      if (filter === "unverified") return (user.driver_verification_status || user.verification_status || "not_started") !== "verified";
+      if (filter === "verified") return isVerifiedStatus(user.driver_verification_status) || isVerifiedStatus(user.verification_status);
+      if (filter === "unverified") return !isVerifiedStatus(user.driver_verification_status || user.verification_status);
       if (filter === "suspended") return user.status === "suspended";
       return user.role === filter;
     });

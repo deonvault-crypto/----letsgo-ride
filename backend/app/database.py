@@ -27,6 +27,7 @@ COLLECTION_NAMES = [
     "device_push_tokens",
     "notification_preferences",
     "trip_events",
+    "verification_events",
 ]
 
 

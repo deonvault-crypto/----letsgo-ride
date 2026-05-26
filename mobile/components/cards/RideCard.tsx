@@ -7,6 +7,7 @@ import { Ride } from "../../types/ride.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatUsd } from "../../utils/formatPrice";
 import { canonicalRideStatus, isRideBookable, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
+import { isVerifiedStatus } from "../../utils/verificationStatus";
 import { Avatar } from "../ui/Avatar";
 import { StatusBadge } from "../ui/StatusBadge";
 import { VerifiedBadge } from "../ui/VerifiedBadge";
@@ -35,7 +36,7 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
         <View style={styles.driverCopy}>
           <View style={styles.driverNameRow}>
             <Text style={styles.driver}>{ride.driver_name}</Text>
-            <VerifiedBadge verified={ride.driver_verification_status === "verified"} />
+            <VerifiedBadge verified={isVerifiedStatus(ride.driver_verification_status)} />
             {ride.is_own_ride ? <StatusBadge label="Your ride" tone="neutral" /> : null}
           </View>
           <View style={styles.inlineRow}>

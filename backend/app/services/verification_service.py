@@ -18,7 +18,16 @@ REQUIRED_DOCUMENTS = [
 ]
 
 DOCUMENT_STATUSES = {"pending", "accepted", "rejected"}
-VERIFICATION_STATUSES = {"not_started", "pending", "needs_review", "verified", "rejected"}
+VERIFICATION_STATUSES = {
+    "not_started",
+    "pending",
+    "needs_review",
+    "verified",
+    "rejected",
+    "processing_biometrics",
+    "active",
+    "flagged_for_review",
+}
 STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "verification_documents"
 
 
@@ -30,6 +39,7 @@ def default_verification_fields() -> Dict[str, Any]:
         "verification_checked_at": None,
         "verification_notes": None,
         "admin_verification_notes": None,
+        "identity_verification_state": "pending_verification",
         "documents": [],
     }
 
@@ -62,6 +72,7 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "verification_submitted_at": driver.get("verification_submitted_at"),
         "verification_checked_at": driver.get("verification_checked_at"),
         "verification_notes": driver.get("verification_notes"),
+        "identity_verification_state": driver.get("identity_verification_state"),
         "documents": documents,
         "required_documents": REQUIRED_DOCUMENTS,
     }
@@ -145,6 +156,7 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
     updates = {
         "verification_provider": "manual",
         "verification_status": "pending",
+        "identity_verification_state": "pending_verification",
         "verification_submitted_at": timestamp,
         "verification_notes": payload.get("verification_notes"),
         "documents": documents,
@@ -157,6 +169,7 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
         {
             "verification_status": "pending",
             "verification_provider": "manual",
+            "identity_verification_state": "pending_verification",
             "updated_at": timestamp,
         },
     )
@@ -207,13 +220,15 @@ async def save_uploaded_document(
         "rejection_reason": None,
     }
     documents = [*driver.get("documents", []), document]
+    next_status = "needs_review" if driver.get("verification_status") == "rejected" else driver.get("verification_status", "not_started")
     updated = await database.update_one(
         "drivers",
         driver["id"],
         {
             "documents": documents,
             "verification_provider": "manual",
-            "verification_status": "needs_review" if driver.get("verification_status") == "rejected" else driver.get("verification_status", "not_started"),
+            "verification_status": next_status,
+            "identity_verification_state": "flagged_for_review" if next_status == "needs_review" else "pending_verification",
             "updated_at": timestamp,
         },
     )
@@ -221,8 +236,9 @@ async def save_uploaded_document(
         "users",
         user["id"],
         {
-            "verification_status": "needs_review" if driver.get("verification_status") == "rejected" else driver.get("verification_status", "not_started"),
+            "verification_status": next_status,
             "verification_provider": "manual",
+            "identity_verification_state": "flagged_for_review" if next_status == "needs_review" else "pending_verification",
             "updated_at": timestamp,
         },
     )
@@ -247,6 +263,8 @@ async def apply_admin_verification_status(
     document_status: Optional[str],
 ) -> Dict[str, Any]:
     timestamp = now_iso()
+    provider = driver.get("verification_provider", "manual")
+    identity_state = "active" if status == "verified" else "flagged_for_review"
     documents = [dict(document) for document in driver.get("documents", [])]
     if document_id and document_status:
         for document in documents:
@@ -265,6 +283,7 @@ async def apply_admin_verification_status(
 
     updates = {
         "verification_status": status,
+        "identity_verification_state": identity_state,
         "verification_checked_at": timestamp,
         "admin_verification_notes": admin_notes,
         "documents": documents,
@@ -279,7 +298,8 @@ async def apply_admin_verification_status(
             driver["user_id"],
             {
                 "verification_status": status,
-                "verification_provider": "manual",
+                "verification_provider": provider,
+                "identity_verification_state": identity_state,
                 "updated_at": timestamp,
             },
         )

@@ -22,6 +22,7 @@ import { enablePhoneNotifications, phoneNotificationStatus } from "../../service
 import { NotificationPreferences } from "../../types/notification.types";
 import { formatStatus } from "../../utils/formatStatus";
 import { openExternalUrl } from "../../utils/openExternalUrl";
+import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 type PreferenceKey =
   | "trip_updates"
@@ -193,7 +194,7 @@ export default function SettingsScreen() {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: verificationStatus === "verified" ? "View status" : "Start verification",
+          text: isVerifiedStatus(verificationStatus) ? "View status" : "Start verification",
           onPress: () => router.push("/(shared)/verification" as never),
         },
       ],
