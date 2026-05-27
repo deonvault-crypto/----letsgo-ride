@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "LetsGoRide uses the camera during identity verification to scan your face and driver documents.",
+        "NSCameraUsageDescription": "LetsGoRide may use the camera to capture profile photos and driver verification documents.",
         "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library.",
         "NSLocationWhenInUseUsageDescription": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers.",
         "ITSAppUsesNonExemptEncryption": false
@@ -57,8 +57,7 @@
         {
           "locationWhenInUsePermission": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers."
         }
-      ],
-      "./plugins/withFaceTec"
+      ]
     ],
     "splash": {
       "image": "./assets/images/splash-icon.png",

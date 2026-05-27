@@ -40,7 +40,7 @@ export default function AdminVerificationsScreen() {
 
   useLiveRefresh(load, 15000);
 
-  const pendingCount = items.filter((item) => isPendingVerificationStatus(item.verification_status) || item.verification_status === "flagged_for_review").length;
+  const pendingCount = items.filter((item) => isPendingVerificationStatus(item.verification_status) || needsVerificationReview(item.verification_status)).length;
   const filteredItems = useMemo(
     () =>
       items.filter((item) => {
@@ -67,7 +67,7 @@ export default function AdminVerificationsScreen() {
         <>
           <AppInput label="Search" value={search} onChangeText={setSearch} leftIcon="magnify" placeholder="Search by name, email, phone, city, or status" />
           <View style={styles.filters}>
-            {["all", "pending", "processing_biometrics", "flagged_for_review", "needs_review", "verified", "active", "rejected"].map((value) => (
+            {["all", "pending", "needs_review", "verified", "active", "rejected"].map((value) => (
               <Pressable
                 key={value}
                 accessibilityRole="button"

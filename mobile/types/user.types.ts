@@ -11,7 +11,7 @@ export type User = {
   profile_photo_url?: string;
   profile_photo_name?: string;
   profile_photo_verified?: boolean;
-  verification_status?: "not_started" | "pending" | "needs_review" | "verified" | "rejected" | "processing_biometrics" | "active" | "flagged_for_review";
+  verification_status?: "not_started" | "pending" | "needs_review" | "verified" | "rejected" | "active";
   email_verified?: boolean;
   notification_trip_updates?: boolean;
   notification_booking_requests?: boolean;

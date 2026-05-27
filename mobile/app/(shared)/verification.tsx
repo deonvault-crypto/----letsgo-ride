@@ -4,7 +4,6 @@ import * as DocumentPicker from "expo-document-picker";
 
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
-import { FaceTecVerificationCard } from "../../components/verification/FaceTecVerificationCard";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
@@ -17,14 +16,13 @@ import {
   submitManualVerification,
   uploadVerificationDocument,
 } from "../../services/verificationService";
-import { startFaceTecVerification } from "../../services/facetecService";
 import {
   VerificationDocument,
   VerificationDocumentType,
   VerificationProfile,
 } from "../../types/verification.types";
 import { formatStatus } from "../../utils/formatStatus";
-import { canStartVerification, isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../utils/verificationStatus";
+import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../utils/verificationStatus";
 
 const manualDocumentTypes: VerificationDocumentType[] = [
   "identity_document",
@@ -35,13 +33,9 @@ const manualDocumentTypes: VerificationDocumentType[] = [
 
 const documentLabels: Partial<Record<VerificationDocumentType, string>> = {
   identity_document: "Identity document",
-  driver_license: "Driver license",
+  driver_license: "Driver licence",
   vehicle_registration_or_logbook: "Vehicle registration or logbook",
   vehicle_photo_optional: "Vehicle photo optional",
-  facetec_audit_trail: "FaceTec audit trail",
-  facetec_low_quality_audit_trail: "FaceTec low-light audit trail",
-  facetec_id_front: "FaceTec ID front",
-  facetec_id_back: "FaceTec ID back",
 };
 
 export default function DriverVerificationScreen() {
@@ -50,7 +44,6 @@ export default function DriverVerificationScreen() {
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [biometricSaving, setBiometricSaving] = useState(false);
   const [uploading, setUploading] = useState<VerificationDocumentType | null>(null);
   const [error, setError] = useState("");
   const hasLoaded = useRef(false);
@@ -110,24 +103,10 @@ export default function DriverVerificationScreen() {
     }
   }
 
-  async function startBiometricVerification() {
-    try {
-      setBiometricSaving(true);
-      setError("");
-      setProfile(await startFaceTecVerification());
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Biometric verification could not be completed. You can still use manual review.");
-    } finally {
-      setBiometricSaving(false);
-    }
-  }
-
   const status = profile?.verification_status || "not_started";
   const uploadedDocuments = profile?.documents || [];
   const requiredDocuments = (profile?.required_documents || manualDocumentTypes).filter((item) => manualDocumentTypes.includes(item));
   const showManualForm = status === "not_started" || needsVerificationReview(status);
-  const showBiometricCard = canStartVerification(status);
   const showSubmittedState = isPendingVerificationStatus(status) || isVerifiedStatus(status);
 
   return (
@@ -136,24 +115,15 @@ export default function DriverVerificationScreen() {
         <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
         <Text style={styles.title}>Driver verification</Text>
         <Text style={styles.body}>
-          Verify your identity before posting public rides. FaceTec can approve
-          high-confidence checks quickly, while manual review remains available
-          when documents or lighting need a human look.
+          Verify your identity before posting public rides.
         </Text>
+        <Text style={styles.body}>Upload your identity document, driver licence, selfie, and vehicle details. LetsGoRide checks your documents automatically and may request manual review if needed.</Text>
       </View>
 
       {loading ? <LoadingState label="Loading verification..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
 
       {!loading && status !== "not_started" ? <StatusCopy status={status} /> : null}
-
-      {!loading && showBiometricCard ? (
-        <FaceTecVerificationCard
-          loading={biometricSaving}
-          onStart={startBiometricVerification}
-          onUseManual={() => setError("")}
-        />
-      ) : null}
 
       {!loading && showSubmittedState ? (
         <SubmittedState status={status} documents={uploadedDocuments} />
@@ -163,10 +133,7 @@ export default function DriverVerificationScreen() {
         <>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Manual review documents</Text>
-            <Text style={styles.body}>
-              Use manual review if biometric verification is unavailable or if
-              LetsGoRide asks you to update documents.
-            </Text>
+            <Text style={styles.body}>Upload or replace your verification documents when LetsGoRide asks you for more information.</Text>
             {requiredDocuments.map((documentType) => (
               <DocumentRow
                 key={documentType}
@@ -253,19 +220,16 @@ function SubmittedState({
   documents: VerificationDocument[];
 }) {
   const success = isVerifiedStatus(status);
-  const processing = status === "processing_biometrics";
   const rows = uploadedDocumentSummaryRows(documents);
 
   return (
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>
-        {success ? "Driver verification approved" : processing ? "Biometric verification processing" : "Verification submitted"}
+        {success ? "Driver verification approved" : "Verification submitted"}
       </Text>
       <Text style={styles.body}>
         {success
           ? "Your driver verification is approved. You can now post rides."
-          : processing
-            ? "Your biometric verification is being processed. If it needs a human review, LetsGoRide will move it to the manual queue."
           : "Your documents have been submitted and are now under review. We will notify you when your driver verification is approved or if more information is needed."}
       </Text>
       {rows.length > 0 ? (
@@ -299,9 +263,7 @@ function SubmittedState({
 function StatusCopy({ status }: { status: VerificationProfile["verification_status"] }) {
   const copy = {
     pending: "Your verification is under review.",
-    processing_biometrics: "Your biometric verification is being processed.",
     active: "Your driver verification is approved.",
-    flagged_for_review: "FaceTec needs a human review. You can submit or update manual documents below.",
     needs_review: "We need more information. Please check the note and update your documents.",
     verified: "Your driver verification is approved.",
     rejected: "Your verification was not approved. Review the note or contact support.",

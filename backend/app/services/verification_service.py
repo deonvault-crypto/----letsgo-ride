@@ -24,11 +24,10 @@ VERIFICATION_STATUSES = {
     "needs_review",
     "verified",
     "rejected",
-    "processing_biometrics",
     "active",
-    "flagged_for_review",
 }
 STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "verification_documents"
+REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS)
 
 
 def default_verification_fields() -> Dict[str, Any]:
@@ -44,6 +43,31 @@ def default_verification_fields() -> Dict[str, Any]:
     }
 
 
+def manual_verification_documents(documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        document
+        for document in documents or []
+        if document.get("document_type") in REQUIRED_DOCUMENT_TYPES
+    ]
+
+
+def public_verification_status(record: Optional[Dict[str, Any]]) -> str:
+    if not record:
+        return "not_started"
+    status = record.get("verification_status")
+    if status in VERIFICATION_STATUSES:
+        return status
+    if record.get("verified"):
+        return "verified"
+    if manual_verification_documents(record.get("documents", [])):
+        return "needs_review"
+    return "not_started"
+
+
+def public_identity_verification_state(status: str) -> str:
+    return "active" if status in {"verified", "active"} else "pending_verification"
+
+
 def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not driver:
         return {
@@ -51,6 +75,7 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             "required_documents": REQUIRED_DOCUMENTS,
         }
 
+    status = public_verification_status(driver)
     documents = [
         {
             "id": document.get("id"),
@@ -60,19 +85,19 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             "status": document.get("status", "pending"),
             "rejection_reason": document.get("rejection_reason"),
         }
-        for document in driver.get("documents", [])
+        for document in manual_verification_documents(driver.get("documents", []))
     ]
 
     return {
         "driver_id": driver.get("id"),
         "driver_status": driver.get("status"),
         "verified": driver.get("verified", False),
-        "verification_status": driver.get("verification_status", "not_started"),
-        "verification_provider": driver.get("verification_provider", "manual"),
+        "verification_status": status,
+        "verification_provider": "manual",
         "verification_submitted_at": driver.get("verification_submitted_at"),
         "verification_checked_at": driver.get("verification_checked_at"),
         "verification_notes": driver.get("verification_notes"),
-        "identity_verification_state": driver.get("identity_verification_state"),
+        "identity_verification_state": public_identity_verification_state(status),
         "documents": documents,
         "required_documents": REQUIRED_DOCUMENTS,
     }
@@ -228,7 +253,7 @@ async def save_uploaded_document(
             "documents": documents,
             "verification_provider": "manual",
             "verification_status": next_status,
-            "identity_verification_state": "flagged_for_review" if next_status == "needs_review" else "pending_verification",
+            "identity_verification_state": "pending_verification",
             "updated_at": timestamp,
         },
     )
@@ -238,7 +263,7 @@ async def save_uploaded_document(
         {
             "verification_status": next_status,
             "verification_provider": "manual",
-            "identity_verification_state": "flagged_for_review" if next_status == "needs_review" else "pending_verification",
+            "identity_verification_state": "pending_verification",
             "updated_at": timestamp,
         },
     )
@@ -263,8 +288,7 @@ async def apply_admin_verification_status(
     document_status: Optional[str],
 ) -> Dict[str, Any]:
     timestamp = now_iso()
-    provider = driver.get("verification_provider", "manual")
-    identity_state = "active" if status == "verified" else "flagged_for_review"
+    provider = "manual"
     documents = [dict(document) for document in driver.get("documents", [])]
     if document_id and document_status:
         for document in documents:
@@ -283,7 +307,7 @@ async def apply_admin_verification_status(
 
     updates = {
         "verification_status": status,
-        "identity_verification_state": identity_state,
+        "identity_verification_state": "active" if status == "verified" else "pending_verification",
         "verification_checked_at": timestamp,
         "admin_verification_notes": admin_notes,
         "documents": documents,
@@ -299,7 +323,7 @@ async def apply_admin_verification_status(
             {
                 "verification_status": status,
                 "verification_provider": provider,
-                "identity_verification_state": identity_state,
+                "identity_verification_state": "active" if status == "verified" else "pending_verification",
                 "updated_at": timestamp,
             },
         )

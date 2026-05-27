@@ -15,7 +15,11 @@ from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
 from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, cleanup_demo_rides
-from app.services.verification_service import apply_admin_verification_status
+from app.services.verification_service import (
+    apply_admin_verification_status,
+    manual_verification_documents,
+    public_verification_status,
+)
 from app.utils import api_error, api_success, now_iso
 
 
@@ -72,7 +76,7 @@ def _status_tone(status: Optional[str]) -> str:
         return "success"
     if status in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
         return "danger"
-    if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed", "processing_biometrics", "flagged_for_review"}:
+    if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed"}:
         return "warning"
     return "neutral"
 
@@ -134,7 +138,7 @@ async def _enrich_admin_ride(ride: Dict[str, Any], requests: Optional[List[Dict[
         enriched["driver_phone"] = driver.get("phone")
         enriched["driver_city"] = driver.get("city")
         enriched["driver_account_status"] = driver.get("status")
-        enriched["driver_identity_status"] = driver.get("verification_status")
+        enriched["driver_identity_status"] = public_verification_status(driver)
     return enriched
 
 
@@ -171,7 +175,7 @@ async def _enrich_admin_user(user: Dict[str, Any]) -> Dict[str, Any]:
     public["confirmed_bookings_count"] = len([request for request in requests if request.get("status") == "confirmed"])
     public["support_cases_count"] = len(support_cases)
     public["safety_reports_count"] = len(reports)
-    public["driver_verification_status"] = (driver or {}).get("verification_status", user.get("verification_status", "not_started"))
+    public["driver_verification_status"] = public_verification_status(driver or user)
     public["driver_status"] = (driver or {}).get("status")
     return public
 
@@ -193,8 +197,8 @@ async def overview(admin=Depends(get_admin_user)):
     support_messages = await database.find_many("support_messages")
     reports = await database.find_many("reports")
     admin_notifications = await database.find_many("app_notifications", {"user_id": admin["id"]})
-    verified_drivers = [driver for driver in drivers if driver.get("verification_status") in {"verified", "active"}]
-    pending_verifications = [driver for driver in drivers if driver.get("verification_status") in {"pending", "needs_review", "processing_biometrics", "flagged_for_review"}]
+    verified_drivers = [driver for driver in drivers if public_verification_status(driver) in {"verified", "active"}]
+    pending_verifications = [driver for driver in drivers if public_verification_status(driver) in {"pending", "needs_review"}]
     enriched_rides = [await apply_ride_lifecycle(ride) for ride in rides]
     active_rides = [ride for ride in enriched_rides if canonical_trip_status(ride.get("status")) in {TRIP_STATUS_SCHEDULED, TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}]
     pending_requests = [request for request in requests if request.get("status") == "pending"]
@@ -216,13 +220,14 @@ async def overview(admin=Depends(get_admin_user)):
             )
         )
     for driver in _sort_recent(drivers, 8):
-        if driver.get("verification_status") in {"pending", "needs_review", "processing_biometrics", "flagged_for_review", "rejected", "verified", "active"}:
+        verification_status = public_verification_status(driver)
+        if verification_status in {"pending", "needs_review", "rejected", "verified", "active"}:
             activities.append(
                 _activity_item(
                     kind="verification",
                     title=f"{driver.get('name') or 'Driver'} verification",
-                    subtitle=f"{len(driver.get('documents', []))} documents submitted",
-                    status=driver.get("verification_status"),
+                    subtitle=f"{len(manual_verification_documents(driver.get('documents', [])))} documents submitted",
+                    status=verification_status,
                     target_type="driver",
                     target_id=driver.get("id", ""),
                     created_at=driver.get("verification_submitted_at") or driver.get("updated_at") or driver.get("created_at"),
@@ -694,12 +699,13 @@ async def list_verifications(
     search: Optional[str] = Query(default=None),
     admin=Depends(get_admin_user),
 ):
-    filters = {}
-    if status:
-        filters["verification_status"] = status
-    drivers = await database.find_many("drivers", filters)
+    drivers = await database.find_many("drivers")
     rows = []
     for driver in drivers:
+        verification_status = public_verification_status(driver)
+        if status and verification_status != status:
+            continue
+        documents = manual_verification_documents(driver.get("documents", []))
         row = {
             "driver_id": driver.get("id"),
             "name": driver.get("name"),
@@ -707,17 +713,17 @@ async def list_verifications(
             "email": driver.get("email"),
             "city": driver.get("city"),
             "driver_status": driver.get("status"),
-            "verification_status": driver.get("verification_status", "not_started"),
-            "verification_provider": driver.get("verification_provider", "manual"),
+            "verification_status": verification_status,
+            "verification_provider": "manual",
             "verification_submitted_at": driver.get("verification_submitted_at"),
-            "document_count": len(driver.get("documents", [])),
+            "document_count": len(documents),
             "created_at": driver.get("created_at"),
             "updated_at": driver.get("updated_at"),
         }
         if not _contains_search(row, search, ["name", "email", "phone", "city", "verification_status"]):
             continue
         rows.append(row)
-    status_order = {"flagged_for_review": 0, "processing_biometrics": 1, "pending": 2, "needs_review": 3, "rejected": 4, "verified": 5, "active": 6, "not_started": 7}
+    status_order = {"pending": 0, "needs_review": 1, "rejected": 2, "verified": 3, "active": 4, "not_started": 5}
     rows = sorted(
         rows,
         key=lambda item: (
@@ -736,9 +742,11 @@ async def verification_detail(driver_id: str, admin=Depends(get_admin_user)):
         api_error("Verification submission not found.", 404)
     user = await database.find_one("users", {"id": driver.get("user_id")}) if driver.get("user_id") else None
     vehicles = await database.find_many("vehicles", {"driver_id": driver_id})
-    documents = [_public_document(document) for document in driver.get("documents", [])]
+    documents = [_public_document(document) for document in manual_verification_documents(driver.get("documents", []))]
     public_driver = dict(driver)
     public_driver["documents"] = documents
+    public_driver["verification_status"] = public_verification_status(driver)
+    public_driver["verification_provider"] = "manual"
     return api_success(
         {
             "driver": public_driver,
@@ -776,7 +784,7 @@ async def verification_document(driver_id: str, document_id: str, admin=Depends(
     if not driver:
         logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
         api_error("Verification submission not found.", 404)
-    document = next((item for item in driver.get("documents", []) if item.get("id") == document_id), None)
+    document = next((item for item in manual_verification_documents(driver.get("documents", [])) if item.get("id") == document_id), None)
     if not document:
         logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
         api_error("Document not found.", 404)

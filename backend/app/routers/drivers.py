@@ -4,6 +4,7 @@ from app.auth import get_current_user, get_optional_current_user
 from app.database import database
 from app.models.driver import DriverApplicationBody, VehicleBody
 from app.services.driver_service import create_driver_application
+from app.services.verification_service import public_identity_verification_state, public_verification_status
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -19,7 +20,12 @@ def public_driver_profile(driver):
         "email",
         "user_id",
     }
-    return {key: value for key, value in driver.items() if key not in hidden}
+    public = {key: value for key, value in driver.items() if key not in hidden}
+    status = public_verification_status(driver)
+    public["verification_status"] = status
+    public["verification_provider"] = "manual"
+    public["identity_verification_state"] = public_identity_verification_state(status)
+    return public
 
 
 @router.post("/apply")
@@ -48,7 +54,7 @@ async def my_driver_profile(user=Depends(get_optional_current_user)):
                 "message": "Driver profile has not been created yet.",
             }
         )
-    return api_success(profile)
+    return api_success(public_driver_profile(profile))
 
 
 @router.post("/vehicle")

@@ -47,94 +47,61 @@ https://letsgoride-backend.onrender.com
 - No real payments yet.
 - No maps SDK yet.
 - No KYC provider yet.
-- Driver verification uses manual LetsGoRide admin review.
-
----
+- Driver verification uses LetsGoRide document review.
 
 ## iOS Build & EAS Deployment
 
 ### Build Requirements
 
-- **macOS or Linux** required to build iOS native code
-- **Xcode** 15.0+ for iOS 15+ support
-- **CocoaPods** for native dependency management
+- macOS or Linux required to build iOS native code
+- Xcode 15.0+ for iOS 15+ support
+- CocoaPods for native dependency management
 - EAS CLI: `npm install -g eas-cli`
 
 ### iOS Prebuild Process
 
 1. On macOS, run:
+
    ```bash
    npx expo prebuild --platform ios --clean
    ```
-   This generates the native iOS project with the FaceTec plugin integration.
+
+   This generates the native iOS project with the configured Expo plugins.
 
 2. Validate the build:
+
    ```bash
    npx eas build --platform ios --profile development
    ```
 
 3. For production releases:
+
    ```bash
    npx eas build --platform ios --profile production
    ```
 
-### FaceTec Native Integration
+### Driver Verification
 
-#### Architecture
+All drivers can submit identity and vehicle documents for LetsGoRide review:
 
-- **FaceTecSDK.framework** located at `mobile/vendor/facetec/ios/`
-- Native module: `LetsGoRideFaceTec` (defined in Xcode native build)
-- JavaScript bridge via `facetecService.ts`
-
-> Note: With EAS remote versioning enabled, `ios.buildNumber` in `app.json` is ignored. EAS manages the build number automatically during production builds.
-
-#### How It Works
-
-1. **iOS build includes** the FaceTec framework and native module automatically during `expo prebuild`
-2. **At runtime**, the service checks `isFaceTecNativeAvailable()` before offering biometric verification
-3. **Fallback path**: If native module unavailable or verification fails, users fall back to manual document review
-
-#### Manual Document Review (Always Available)
-
-All drivers can submit identity and vehicle documents for manual review by LetsGoRide admins, regardless of biometric availability:
-
-- Identity document (government-issued)
-- Driver license
+- Identity document
+- Driver licence
 - Vehicle registration or logbook
 - Optional vehicle photos
 
-This ensures verification is always possible even if FaceTec native is unavailable.
-
-#### Testing FaceTec Locally
-
-On **Expo Go** (development builds):
-- FaceTec biometric is **unavailable** (native modules require native build)
-- Manual document review UI still functions
-- Use manual review for QA testing
-
-On **EAS cloud builds** (iOS):
-- FaceTec native is available if the framework is properly linked during prebuild
-- Biometric flow should succeed for eligible users
-- Fall back to manual review if needed
+With EAS remote versioning enabled, `ios.buildNumber` in `app.json` is ignored. EAS manages the build number automatically during production builds.
 
 #### Verification Status Flow
 
-1. User navigates to "Driver verification"
-2. App checks `isFaceTecNativeAvailable()`
-   - If **true**: Show FaceTec biometric option + manual review option
-   - If **false**: Show manual review only
-3. User chooses biometric or manual
-4. On success: `verification_status` → `processing_biometrics` or `pending_manual_review`
-5. Admin reviews and sets final status: `verified` or `rejected`
+1. User navigates to "Driver verification".
+2. User uploads the required verification documents.
+3. User submits the verification form for review.
+4. Admin reviews and sets final status: `verified`, `needs_review`, or `rejected`.
 
 #### Error Handling
 
-- **Native module missing**: Gracefully hidden; manual review offered
-- **Biometric cancelled**: User can retry or switch to manual
-- **API failure**: Clear error message with retry option
-- **Document upload failure**: Validation and retry guidance provided
-
----
+- API failure: clear error message with retry option.
+- Document upload failure: validation and retry guidance provided.
 
 ## Build Validation Checklist
 
@@ -143,9 +110,9 @@ Before submitting to App Store:
 - [ ] `npx expo-doctor` shows 18/18 checks passed
 - [ ] `npm run typecheck` passes with no errors
 - [ ] `npx expo prebuild --platform android --clean` succeeds
-- [ ] `npx expo prebuild --platform ios --clean` succeeds (on macOS)
+- [ ] `npx expo prebuild --platform ios --clean` succeeds on macOS
 - [ ] `npx eas build --platform ios --profile production` completes successfully
-- [ ] FaceTec manual document upload works in QA build
+- [ ] Driver verification document upload works in QA build
 - [ ] Passenger booking flow completes end-to-end
 - [ ] Driver post trip and request management flows work
-- [ ] Notifications (push & in-app) trigger correctly
+- [ ] Notifications, push and in-app, trigger correctly

@@ -76,7 +76,7 @@ const sections: Array<{ key: AdminSection; label: string; icon: keyof typeof Mat
 ];
 
 const requestFilters = ["all", "pending", "confirmed", "declined", "cancelled_by_passenger", "cancelled_by_driver", "cancelled_by_admin"];
-const verificationFilters: Array<"all" | VerificationStatus> = ["all", "pending", "processing_biometrics", "flagged_for_review", "needs_review", "verified", "active", "rejected"];
+const verificationFilters: Array<"all" | VerificationStatus> = ["all", "pending", "needs_review", "verified", "active", "rejected"];
 const supportFilters = ["all", "received", "open", "in_review", "resolved", "closed"];
 const reportFilters = ["all", "submitted", "open", "in_review", "resolved", "dismissed"];
 const rideFilters = ["all", "SCHEDULED", "BOARDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED", "pending_requests", "full"];

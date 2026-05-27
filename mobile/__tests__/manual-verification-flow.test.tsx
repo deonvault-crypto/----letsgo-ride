@@ -49,8 +49,8 @@ describe("manual driver verification flow", () => {
     const screen = render(<DriverVerificationScreen />);
 
     expect(await screen.findAllByText("Driver verification")).toHaveLength(2);
-    expect(screen.getByText("Verify your identity before posting public rides. FaceTec can approve high-confidence checks quickly, while manual review remains available when documents or lighting need a human look.")).toBeOnTheScreen();
-    expect(screen.getByText("Verify with FaceTec")).toBeOnTheScreen();
+    expect(screen.getByText("Verify your identity before posting public rides.")).toBeOnTheScreen();
+    expect(screen.getByText("Upload your identity document, driver licence, selfie, and vehicle details. LetsGoRide checks your documents automatically and may request manual review if needed.")).toBeOnTheScreen();
 
     fireEvent.press(screen.getAllByRole("button", { name: "Upload" })[0]);
 

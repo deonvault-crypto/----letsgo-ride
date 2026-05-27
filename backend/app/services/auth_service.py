@@ -18,6 +18,16 @@ class ExistingUnverifiedEmailError(Exception):
     pass
 
 
+PUBLIC_VERIFICATION_STATUSES = {
+    "not_started",
+    "pending",
+    "needs_review",
+    "verified",
+    "rejected",
+    "active",
+}
+
+
 async def find_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
     return await database.find_one("users", {"phone": phone})
 
@@ -41,7 +51,12 @@ def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
         "reset_salt",
         "token",
     }
-    return {key: value for key, value in user.items() if key not in hidden}
+    public = {key: value for key, value in user.items() if key not in hidden}
+    if public.get("verification_provider"):
+        public["verification_provider"] = "manual"
+    if public.get("verification_status") not in PUBLIC_VERIFICATION_STATUSES:
+        public["verification_status"] = "needs_review" if public.get("verification_status") else "not_started"
+    return public
 
 
 def hash_password(password: str, salt: str) -> str:
