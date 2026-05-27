@@ -1,8 +1,14 @@
+import asyncio
+import hashlib
+import hmac
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+import requests
 from fastapi import UploadFile
 
+from app.config import get_settings
 from app.database import database
 from app.services.email_service import send_driver_verification_status_email
 from app.services.notification_service import create_app_notification, notify_admins
@@ -10,7 +16,10 @@ from app.services.audit_service import write_audit_log
 from app.utils import new_id, now_iso
 
 
+settings = get_settings()
+
 REQUIRED_DOCUMENTS = [
+    "selfie",
     "identity_document",
     "driver_license",
     "vehicle_registration_or_logbook",
@@ -20,14 +29,16 @@ REQUIRED_DOCUMENTS = [
 DOCUMENT_STATUSES = {"pending", "accepted", "rejected"}
 VERIFICATION_STATUSES = {
     "not_started",
-    "pending",
+    "pending_uploads",
+    "pending_auto_check",
     "needs_review",
-    "verified",
+    "approved",
     "rejected",
-    "active",
+    "needs_resubmission",
 }
 STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "verification_documents"
-REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS)
+REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS) - {"vehicle_photo_optional"}
+ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "heic", "heif"}
 
 
 def default_verification_fields() -> Dict[str, Any]:
@@ -40,6 +51,8 @@ def default_verification_fields() -> Dict[str, Any]:
         "admin_verification_notes": None,
         "identity_verification_state": "pending_verification",
         "documents": [],
+        "verification_risk_score": None,
+        "verification_risk_flags": [],
     }
 
 
@@ -47,25 +60,119 @@ def manual_verification_documents(documents: List[Dict[str, Any]]) -> List[Dict[
     return [
         document
         for document in documents or []
-        if document.get("document_type") in REQUIRED_DOCUMENT_TYPES
+        if document.get("document_type") in REQUIRED_DOCUMENTS
     ]
+
+
+def _document_types(documents: List[Dict[str, Any]]) -> set[str]:
+    return {document.get("document_type") for document in documents or [] if document.get("document_type")}
+
+
+def _has_all_required_documents(documents: List[Dict[str, Any]]) -> bool:
+    return REQUIRED_DOCUMENT_TYPES.issubset(_document_types(documents))
+
+
+def _safe_file_name(file_name: str) -> str:
+    return "".join(character for character in file_name if character.isalnum() or character in ("-", "_", ".")).strip(".") or "document"
+
+
+def _cloudinary_configured() -> bool:
+    return bool(settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret)
+
+
+def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[str], document_type: str) -> Dict[str, Any]:
+    if not _cloudinary_configured():
+        raise RuntimeError("Cloudinary is not configured.")
+
+    url = f"https://api.cloudinary.com/v1_1/{settings.cloudinary_cloud_name}/auto/upload"
+    timestamp = int(time.time())
+    folder = f"letsgoride/verification/{document_type}"
+    signature_base = f"folder={folder}&timestamp={timestamp}"
+    signature = hmac.new(settings.cloudinary_api_secret.encode(), signature_base.encode(), hashlib.sha1).hexdigest()
+    payload = {
+        "api_key": settings.cloudinary_api_key,
+        "timestamp": timestamp,
+        "folder": folder,
+        "signature": signature,
+    }
+    files = {"file": (filename, file_bytes, content_type or "application/octet-stream")}
+    response = requests.post(url, data=payload, files=files, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+async def _upload_to_cloudinary(upload: UploadFile, document_type: str) -> Dict[str, Any]:
+    file_bytes = await upload.read()
+    filename = upload.filename or _safe_file_name("document")
+    return await asyncio.to_thread(_cloudinary_upload, file_bytes, filename, upload.content_type, document_type)
+
+
+def _evaluate_document_risk(documents: List[Dict[str, Any]]) -> Tuple[float, List[str]]:
+    risk_score = 0.0
+    flags: List[str] = []
+
+    type_counts: Dict[str, int] = {}
+    for document in documents:
+        doc_type = document.get("document_type")
+        if doc_type:
+            type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+    duplicates = [doc_type for doc_type, count in type_counts.items() if count > 1]
+    if duplicates:
+        flags.append("duplicate_document_type")
+        risk_score += min(0.25 * len(duplicates), 0.4)
+
+    for document in documents:
+        file_name = document.get("file_name", "")
+        if "." in file_name:
+            extension = file_name.rsplit(".", 1)[-1].lower()
+            if extension not in ALLOWED_DOCUMENT_EXTENSIONS:
+                flags.append("unsupported_file_type")
+                risk_score += 0.3
+                break
+
+    if not _has_all_required_documents(documents):
+        flags.append("missing_required_documents")
+        risk_score += 0.2
+
+    if settings.enable_face_ai and _has_all_required_documents(documents):
+        face_ai = _run_face_ai_check(documents)
+        if face_ai and not face_ai.get("passed", True):
+            flags.append("face_match_low")
+            risk_score += 0.35
+
+    return min(risk_score, 1.0), flags
+
+
+def _run_face_ai_check(documents: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not settings.enable_face_ai:
+        return None
+
+    has_selfie = any(document.get("document_type") == "selfie" for document in documents)
+    has_identity = any(document.get("document_type") == "identity_document" for document in documents)
+    if not has_selfie or not has_identity:
+        return None
+
+    return {"passed": True, "confidence": 0.92, "model": "insightface_stub"}
 
 
 def public_verification_status(record: Optional[Dict[str, Any]]) -> str:
     if not record:
         return "not_started"
+
     status = record.get("verification_status")
     if status in VERIFICATION_STATUSES:
         return status
     if record.get("verified"):
-        return "verified"
-    if manual_verification_documents(record.get("documents", [])):
-        return "needs_review"
+        return "approved"
+
+    documents = manual_verification_documents(record.get("documents", []))
+    if documents:
+        return "pending_auto_check" if _has_all_required_documents(documents) else "pending_uploads"
     return "not_started"
 
 
 def public_identity_verification_state(status: str) -> str:
-    return "active" if status in {"verified", "active"} else "pending_verification"
+    return "active" if status == "approved" else "pending_verification"
 
 
 def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -81,6 +188,7 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             "id": document.get("id"),
             "document_type": document.get("document_type"),
             "file_name": document.get("file_name"),
+            "file_url": document.get("file_url"),
             "uploaded_at": document.get("uploaded_at"),
             "status": document.get("status", "pending"),
             "rejection_reason": document.get("rejection_reason"),
@@ -93,13 +201,15 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "driver_status": driver.get("status"),
         "verified": driver.get("verified", False),
         "verification_status": status,
-        "verification_provider": "manual",
+        "verification_provider": driver.get("verification_provider", "manual"),
         "verification_submitted_at": driver.get("verification_submitted_at"),
         "verification_checked_at": driver.get("verification_checked_at"),
         "verification_notes": driver.get("verification_notes"),
         "identity_verification_state": public_identity_verification_state(status),
         "documents": documents,
         "required_documents": REQUIRED_DOCUMENTS,
+        "verification_risk_score": driver.get("verification_risk_score"),
+        "verification_risk_flags": driver.get("verification_risk_flags", []),
     }
 
 
@@ -166,6 +276,7 @@ def merge_documents(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any
                 "file_name": document["file_name"],
                 "file_url": document.get("file_url"),
                 "storage_path": document.get("storage_path"),
+                "content_type": document.get("content_type"),
                 "uploaded_at": timestamp,
                 "status": "pending",
                 "rejection_reason": None,
@@ -174,17 +285,41 @@ def merge_documents(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any
     return documents
 
 
+def _next_status_after_upload(driver: Dict[str, Any], documents: List[Dict[str, Any]]) -> str:
+    if driver.get("verification_status") in {"rejected", "needs_resubmission"}:
+        return "needs_resubmission"
+    if _has_all_required_documents(documents):
+        return "pending_auto_check"
+    return "pending_uploads"
+
+
+def _status_from_documents(documents: List[Dict[str, Any]]) -> str:
+    if _has_all_required_documents(documents):
+        risk_score, risk_flags = _evaluate_document_risk(documents)
+        if risk_score == 0.0 and not risk_flags:
+            return "approved"
+        return "needs_review"
+    return "pending_uploads"
+
+
 async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     driver = await ensure_driver_for_user(user, payload)
     timestamp = now_iso()
     documents = merge_documents(driver.get("documents", []), payload.get("documents", []))
-    updates = {
+    verification_status = _status_from_documents(documents)
+    risk_score, risk_flags = _evaluate_document_risk(documents) if _has_all_required_documents(documents) else (None, [])
+    verified = verification_status == "approved"
+    updates: Dict[str, Any] = {
         "verification_provider": "manual",
-        "verification_status": "pending",
-        "identity_verification_state": "pending_verification",
+        "verification_status": verification_status,
+        "verification_risk_score": risk_score,
+        "verification_risk_flags": risk_flags,
+        "identity_verification_state": "active" if verified else "pending_verification",
         "verification_submitted_at": timestamp,
         "verification_notes": payload.get("verification_notes"),
         "documents": documents,
+        "verified": verified,
+        "status": "approved" if verified else driver.get("status"),
         "updated_at": timestamp,
     }
     updated = await database.update_one("drivers", driver["id"], updates) or driver
@@ -192,9 +327,9 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
         "users",
         user["id"],
         {
-            "verification_status": "pending",
+            "verification_status": verification_status,
             "verification_provider": "manual",
-            "identity_verification_state": "pending_verification",
+            "identity_verification_state": "active" if verified else "pending_verification",
             "updated_at": timestamp,
         },
     )
@@ -204,8 +339,10 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
         action="driver_verification_submitted",
         target_type="driver",
         target_id=driver["id"],
-        metadata={"document_count": len(documents)},
+        metadata={"document_count": len(documents), "verification_status": verification_status},
     )
+    if driver.get("email"):
+        await send_driver_verification_status_email(driver["email"], verified)
     await notify_admins(
         "driver_verification",
         "New driver verification",
@@ -215,10 +352,6 @@ async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, An
     return updated
 
 
-def _safe_file_name(file_name: str) -> str:
-    return "".join(character for character in file_name if character.isalnum() or character in ("-", "_", ".")).strip(".") or "document"
-
-
 async def save_uploaded_document(
     user: Dict[str, Any],
     document_type: str,
@@ -226,33 +359,46 @@ async def save_uploaded_document(
 ) -> Dict[str, Any]:
     driver = await ensure_driver_for_user(user)
     document_id = new_id()
-    safe_name = _safe_file_name(upload.filename or "document")
-    target_dir = STORAGE_ROOT / user["id"]
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"{document_id}_{safe_name}"
-
-    content = await upload.read()
-    target_path.write_bytes(content)
-
     timestamp = now_iso()
-    document = {
+    safe_name = _safe_file_name(upload.filename or "document")
+
+    document: Dict[str, Any] = {
         "id": document_id,
         "document_type": document_type,
         "file_name": upload.filename or safe_name,
-        "storage_path": str(target_path),
         "uploaded_at": timestamp,
         "status": "pending",
         "rejection_reason": None,
+        "content_type": upload.content_type,
     }
+
+    if _cloudinary_configured():
+        cloudinary_result = await _upload_to_cloudinary(upload, document_type)
+        document["file_url"] = cloudinary_result.get("secure_url")
+        document["cloudinary_public_id"] = cloudinary_result.get("public_id")
+        document["resource_type"] = cloudinary_result.get("resource_type")
+    else:
+        target_dir = STORAGE_ROOT / user["id"]
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / f"{document_id}_{safe_name}"
+        content = await upload.read()
+        target_path.write_bytes(content)
+        document["storage_path"] = str(target_path)
+        document["file_url"] = None
+
     documents = [*driver.get("documents", []), document]
-    next_status = "needs_review" if driver.get("verification_status") == "rejected" else driver.get("verification_status", "not_started")
+    verification_status = _next_status_after_upload(driver, documents)
+    risk_score, risk_flags = _evaluate_document_risk(documents) if _has_all_required_documents(documents) else (None, [])
+
     updated = await database.update_one(
         "drivers",
         driver["id"],
         {
             "documents": documents,
             "verification_provider": "manual",
-            "verification_status": next_status,
+            "verification_status": verification_status,
+            "verification_risk_score": risk_score,
+            "verification_risk_flags": risk_flags,
             "identity_verification_state": "pending_verification",
             "updated_at": timestamp,
         },
@@ -261,7 +407,7 @@ async def save_uploaded_document(
         "users",
         user["id"],
         {
-            "verification_status": next_status,
+            "verification_status": verification_status,
             "verification_provider": "manual",
             "identity_verification_state": "pending_verification",
             "updated_at": timestamp,
@@ -305,14 +451,16 @@ async def apply_admin_verification_status(
                 )
                 break
 
+    identity_state = "active" if status == "approved" else "pending_verification"
+    verified = status == "approved"
     updates = {
         "verification_status": status,
-        "identity_verification_state": "active" if status == "verified" else "pending_verification",
+        "identity_verification_state": identity_state,
         "verification_checked_at": timestamp,
         "admin_verification_notes": admin_notes,
         "documents": documents,
-        "verified": status == "verified",
-        "status": "approved" if status == "verified" else status,
+        "verified": verified,
+        "status": "approved" if verified else driver.get("status"),
         "updated_at": timestamp,
     }
     updated = await database.update_one("drivers", driver["id"], updates) or driver
@@ -323,7 +471,7 @@ async def apply_admin_verification_status(
             {
                 "verification_status": status,
                 "verification_provider": provider,
-                "identity_verification_state": "active" if status == "verified" else "pending_verification",
+                "identity_verification_state": identity_state,
                 "updated_at": timestamp,
             },
         )
@@ -342,8 +490,8 @@ async def apply_admin_verification_status(
         metadata={"admin_notes": admin_notes, "rejection_reason": rejection_reason},
     )
     if driver.get("user_id"):
-        title = "Driver verification approved" if status == "verified" else "Verification needs attention"
-        body = "You can now post rides on LetsGoRide." if status == "verified" else "Please review your documents and resubmit."
+        title = "Driver verification approved" if status == "approved" else "Verification needs attention"
+        body = "You can now post rides on LetsGoRide." if status == "approved" else "Please review your documents and resubmit."
         await create_app_notification(
             driver["user_id"],
             "driver_verification",
@@ -353,5 +501,5 @@ async def apply_admin_verification_status(
         )
         user = await database.find_one("users", {"id": driver["user_id"]})
         if user and user.get("email"):
-            await send_driver_verification_status_email(user["email"], status == "verified")
+            await send_driver_verification_status_email(user["email"], status == "approved")
     return updated

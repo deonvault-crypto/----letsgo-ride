@@ -723,7 +723,16 @@ async def list_verifications(
         if not _contains_search(row, search, ["name", "email", "phone", "city", "verification_status"]):
             continue
         rows.append(row)
-    status_order = {"pending": 0, "needs_review": 1, "rejected": 2, "verified": 3, "active": 4, "not_started": 5}
+    status_order = {
+        "pending_uploads": 0,
+        "pending_auto_check": 1,
+        "needs_review": 2,
+        "needs_resubmission": 3,
+        "rejected": 4,
+        "approved": 5,
+        "active": 6,
+        "not_started": 7,
+    }
     rows = sorted(
         rows,
         key=lambda item: (

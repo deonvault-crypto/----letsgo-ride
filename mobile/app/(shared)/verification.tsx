@@ -25,6 +25,7 @@ import { formatStatus } from "../../utils/formatStatus";
 import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../utils/verificationStatus";
 
 const manualDocumentTypes: VerificationDocumentType[] = [
+  "selfie",
   "identity_document",
   "driver_license",
   "vehicle_registration_or_logbook",
@@ -32,6 +33,7 @@ const manualDocumentTypes: VerificationDocumentType[] = [
 ];
 
 const documentLabels: Partial<Record<VerificationDocumentType, string>> = {
+  selfie: "Selfie photo",
   identity_document: "Identity document",
   driver_license: "Driver licence",
   vehicle_registration_or_logbook: "Vehicle registration or logbook",
@@ -106,8 +108,13 @@ export default function DriverVerificationScreen() {
   const status = profile?.verification_status || "not_started";
   const uploadedDocuments = profile?.documents || [];
   const requiredDocuments = (profile?.required_documents || manualDocumentTypes).filter((item) => manualDocumentTypes.includes(item));
-  const showManualForm = status === "not_started" || needsVerificationReview(status);
-  const showSubmittedState = isPendingVerificationStatus(status) || isVerifiedStatus(status);
+  const showManualForm =
+    status === "not_started" ||
+    status === "pending_uploads" ||
+    status === "needs_review" ||
+    status === "rejected" ||
+    status === "needs_resubmission";
+  const showSubmittedState = status !== "not_started";
 
   return (
     <Screen title="Driver verification" showBack fallbackRoute="/(shared)/profile" navRole="driver">
@@ -132,8 +139,8 @@ export default function DriverVerificationScreen() {
       {!loading && showManualForm ? (
         <>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Manual review documents</Text>
-            <Text style={styles.body}>Upload or replace your verification documents when LetsGoRide asks you for more information.</Text>
+            <Text style={styles.sectionTitle}>Verification documents</Text>
+            <Text style={styles.body}>Upload or replace any required documents to continue your driver verification.</Text>
             {requiredDocuments.map((documentType) => (
               <DocumentRow
                 key={documentType}
@@ -262,10 +269,11 @@ function SubmittedState({
 
 function StatusCopy({ status }: { status: VerificationProfile["verification_status"] }) {
   const copy = {
-    pending: "Your verification is under review.",
-    active: "Your driver verification is approved.",
+    pending_uploads: "Upload the remaining documents so LetsGoRide can review your driver verification.",
+    pending_auto_check: "Your documents are being checked automatically.",
     needs_review: "We need more information. Please check the note and update your documents.",
-    verified: "Your driver verification is approved.",
+    needs_resubmission: "Your verification requires a resubmission. Upload updated documents and submit again.",
+    approved: "Your driver verification is approved.",
     rejected: "Your verification was not approved. Review the note or contact support.",
     not_started: "",
   }[status];

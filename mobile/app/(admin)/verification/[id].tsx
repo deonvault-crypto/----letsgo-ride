@@ -46,7 +46,7 @@ export default function AdminVerificationDetailScreen() {
 
   useLiveRefresh(load, 15000);
 
-  async function updateStatus(status: Extract<VerificationStatus, "needs_review" | "verified" | "rejected">) {
+  async function updateStatus(status: Extract<VerificationStatus, "needs_review" | "approved" | "rejected">) {
     if (!id) return;
     if (status === "rejected" && !rejectionReason.trim()) {
       setError("Rejection reason is required.");
@@ -173,7 +173,7 @@ export default function AdminVerificationDetailScreen() {
           placeholder="Required when rejecting"
           multiline
         />
-        <AppButton title="Approve verification" loading={saving === "verified"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("verified")} />
+        <AppButton title="Approve verification" loading={saving === "approved"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("approved")} />
         <AppButton title="Needs review" variant="secondary" loading={saving === "needs_review"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("needs_review")} />
         <AppButton title="Reject verification" variant="danger" loading={saving === "rejected"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("rejected")} />
       </View>

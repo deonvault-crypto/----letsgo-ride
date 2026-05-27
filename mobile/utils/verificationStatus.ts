@@ -1,8 +1,8 @@
-export const approvedVerificationStatuses = new Set<string>(["verified", "approved", "active"]);
+export const approvedVerificationStatuses = new Set<string>(["approved"]);
 export const pendingVerificationStatuses = new Set<string>([
-  "pending",
-  "submitted",
-  "under_review",
+  "pending_uploads",
+  "pending_auto_check",
+  "needs_resubmission",
 ]);
 export const reviewVerificationStatuses = new Set<string>([
   "needs_review",

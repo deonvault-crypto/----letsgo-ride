@@ -36,3 +36,13 @@ async def upload_manual_document(
 ):
     uploaded = await save_uploaded_document(user, document_type, file)
     return api_success(uploaded)
+
+
+@router.post("/upload")
+async def upload_document(
+    document_type: DocumentType = Form(...),
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    uploaded = await save_uploaded_document(user, document_type, file)
+    return api_success(uploaded)

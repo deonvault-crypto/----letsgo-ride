@@ -63,9 +63,9 @@ async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
         api_error("Complete driver verification before posting a trip.")
-    if driver.get("status") not in ("approved", "verified") or not driver.get("verified"):
+    if not driver.get("verified"):
         api_error("Complete driver verification before posting a trip.")
-    if driver.get("verification_status") not in {"verified", "active"}:
+    if driver.get("verification_status") != "approved":
         api_error("Complete driver verification before posting a trip.")
 
     data = payload.model_dump()

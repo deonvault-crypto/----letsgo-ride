@@ -1,16 +1,18 @@
 export type VerificationStatus =
   | "not_started"
-  | "pending"
+  | "pending_uploads"
+  | "pending_auto_check"
   | "needs_review"
-  | "verified"
+  | "approved"
   | "rejected"
-  | "active";
+  | "needs_resubmission";
 
 export type IdentityVerificationState =
   | "pending_verification"
   | "active";
 
 export type VerificationDocumentType =
+  | "selfie"
   | "identity_document"
   | "driver_license"
   | "vehicle_registration_or_logbook"

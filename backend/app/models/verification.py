@@ -5,11 +5,12 @@ from pydantic import BaseModel, Field
 
 VerificationStatus = Literal[
     "not_started",
-    "pending",
+    "pending_uploads",
+    "pending_auto_check",
     "needs_review",
-    "verified",
+    "approved",
     "rejected",
-    "active",
+    "needs_resubmission",
 ]
 
 IdentityVerificationState = Literal[
@@ -18,6 +19,7 @@ IdentityVerificationState = Literal[
 ]
 
 DocumentType = Literal[
+    "selfie",
     "identity_document",
     "driver_license",
     "vehicle_registration_or_logbook",
@@ -32,6 +34,7 @@ class VerificationDocumentMetadata(BaseModel):
     file_name: str = Field(min_length=1)
     file_url: Optional[str] = None
     storage_path: Optional[str] = None
+    content_type: Optional[str] = None
 
 
 class VerificationSubmitBody(BaseModel):
@@ -43,7 +46,7 @@ class VerificationSubmitBody(BaseModel):
 
 
 class VerificationStatusUpdateBody(BaseModel):
-    status: Literal["needs_review", "verified", "rejected"]
+    status: Literal["needs_review", "approved", "rejected", "needs_resubmission"]
     admin_verification_notes: Optional[str] = None
     rejection_reason: Optional[str] = None
     document_id: Optional[str] = None

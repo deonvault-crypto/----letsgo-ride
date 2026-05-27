@@ -29,6 +29,10 @@ class Settings:
             "RESEND_REPLY_TO_EMAIL",
             "RESEND_REPLY_TO",
         )
+        self.cloudinary_cloud_name = self._get_env_first("CLOUDINARY_CLOUD_NAME")
+        self.cloudinary_api_key = self._get_env_first("CLOUDINARY_API_KEY")
+        self.cloudinary_api_secret = self._get_env_first("CLOUDINARY_API_SECRET")
+        self.enable_face_ai = self._parse_bool(os.getenv("ENABLE_FACE_AI", "false"))
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",
