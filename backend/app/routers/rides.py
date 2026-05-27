@@ -77,7 +77,6 @@ async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
             "driver_id": driver["id"],
             "user_id": user["id"],
             "driver_name": driver.get("name") or user.get("name") or data.get("driver_name"),
-            "driver_rating": driver.get("rating", data.get("driver_rating", 4.8)),
             "driver_verification_status": driver.get("verification_status"),
             "driver_profile_photo_url": profile_photo_url,
         }

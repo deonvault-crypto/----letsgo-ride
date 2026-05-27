@@ -26,7 +26,7 @@ export type Ride = {
   driver_id?: string;
   driver_user_id?: string;
   driver_name: string;
-  driver_rating: number;
+  driver_rating?: number | null;
   driver_verification_status?: string;
   driver_profile_photo_url?: string | null;
   driver_avatar_url?: string | null;

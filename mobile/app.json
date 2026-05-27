@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "LetsGoRide may use the camera to capture profile photos and driver verification documents.",
-        "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library.",
+        "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos from your photo library.",
         "NSLocationWhenInUseUsageDescription": "LetsGoRide uses your location only during active trips to share live trip progress with confirmed passengers.",
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -49,7 +49,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library."
+          "photosPermission": "LetsGoRide lets you choose profile photos from your photo library."
         }
       ],
       [

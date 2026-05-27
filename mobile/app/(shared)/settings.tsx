@@ -127,7 +127,7 @@ export default function SettingsScreen() {
         } catch {
           if (active) {
             setPhoneNotificationEnabled(false);
-            setPhoneNotificationMessage("Phone notifications are off.");
+            setPhoneNotificationMessage("Enable notifications in device settings");
           }
         }
       }
@@ -140,6 +140,7 @@ export default function SettingsScreen() {
   );
 
   async function updatePreference(key: PreferenceKey, value: boolean) {
+    if (!phoneNotificationEnabled) return;
     try {
       setPreferenceSaving(key);
       const updated = await updateNotificationPreferences({ [key]: value });
@@ -335,23 +336,30 @@ export default function SettingsScreen() {
             <Text style={styles.toggleSubtitle}>
               Phone alerts for trips, messages, support, and safety updates.
             </Text>
-            {phoneNotificationMessage ? <Text style={styles.noticeText}>{phoneNotificationMessage}</Text> : null}
+            {phoneNotificationMessage ? (
+              <Text style={[styles.noticeText, !phoneNotificationEnabled && styles.offNoticeText]}>
+                {phoneNotificationMessage}
+              </Text>
+            ) : null}
           </View>
           {!phoneNotificationEnabled ? (
             <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} />
           ) : null}
         </View>
         {preferenceRows.map((row) => {
-          const value = preferences?.[row.key] ?? row.defaultValue;
+          const value = phoneNotificationEnabled ? preferences?.[row.key] ?? row.defaultValue : false;
+          const disabled = !phoneNotificationEnabled || preferenceSaving === row.key;
           return (
-            <View key={row.key} style={styles.toggleRow}>
+            <View key={row.key} style={[styles.toggleRow, disabled && styles.disabledToggleRow]}>
               <View style={styles.toggleCopy}>
                 <Text style={styles.toggleTitle}>{row.title}</Text>
                 <Text style={styles.toggleSubtitle}>{row.subtitle}</Text>
               </View>
               <Switch
+                accessibilityLabel={row.title}
+                accessibilityState={{ disabled, checked: value }}
                 value={value}
-                disabled={preferenceSaving === row.key}
+                disabled={disabled}
                 onValueChange={(next) => updatePreference(row.key, next)}
                 trackColor={{ false: "#D9D0C3", true: "rgba(17,139,68,0.36)" }}
                 thumbColor={value ? colors.primaryGreen : "#FFFDF8"}
@@ -511,6 +519,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.elevated,
   },
+  disabledToggleRow: {
+    opacity: 0.58,
+  },
   notificationStatus: {
     gap: spacing.md,
     paddingHorizontal: spacing.md,
@@ -524,6 +535,9 @@ const styles = StyleSheet.create({
     color: colors.primaryGreen,
     fontSize: 12,
     fontWeight: "800",
+  },
+  offNoticeText: {
+    color: colors.mutedText,
   },
   toggleCopy: {
     flex: 1,

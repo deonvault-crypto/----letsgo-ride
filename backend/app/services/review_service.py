@@ -62,7 +62,7 @@ async def completed_trips_count_for_user(user_id: str, role: Optional[str] = Non
 
 async def public_reviews_for_user(user_id: str, limit: int = SAFE_PUBLIC_REVIEW_LIMIT) -> List[Dict[str, Any]]:
     reviews = await database.find_many("reviews", {"reviewee_id": user_id})
-    safe_reviews = [review for review in reviews if _is_safe_public_review(review)]
+    safe_reviews = await _completed_public_reviews(reviews)
     safe_reviews.sort(key=lambda item: item.get("created_at") or "", reverse=True)
 
     public: List[Dict[str, Any]] = []
@@ -86,7 +86,7 @@ async def public_reviews_for_user(user_id: str, limit: int = SAFE_PUBLIC_REVIEW_
 
 async def public_review_summary_for_user(user_id: str, include_latest: bool = True) -> Dict[str, Any]:
     reviews = await database.find_many("reviews", {"reviewee_id": user_id})
-    visible_reviews = [review for review in reviews if _is_safe_public_review(review)]
+    visible_reviews = await _completed_public_reviews(reviews)
     ratings = [float(review.get("rating")) for review in visible_reviews if review.get("rating")]
     average = round(sum(ratings) / len(ratings), 2) if ratings else None
     summary = {
@@ -96,6 +96,22 @@ async def public_review_summary_for_user(user_id: str, include_latest: bool = Tr
         "completed_trips_count": await completed_trips_count_for_user(user_id),
     }
     return summary
+
+
+async def _completed_public_reviews(reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status, is_public_ride
+
+    visible_reviews: List[Dict[str, Any]] = []
+    for review in reviews:
+        if not _is_safe_public_review(review):
+            continue
+        ride = await database.find_one("rides", {"id": review.get("trip_id")})
+        if not ride or not is_public_ride(ride):
+            continue
+        ride = await apply_ride_lifecycle(ride)
+        if canonical_trip_status(ride.get("status")) == TRIP_STATUS_COMPLETED:
+            visible_reviews.append(review)
+    return visible_reviews
 
 
 async def _recalculate_user_average(user_id: str) -> Dict[str, Any]:

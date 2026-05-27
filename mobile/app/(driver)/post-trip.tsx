@@ -113,7 +113,6 @@ export default function PostTripScreen() {
         pickup_note: pickup,
         dropoff_note: dropoff,
         driver_name: user?.name || "LetsGoRide Driver",
-        driver_rating: 4.8,
       });
       router.replace(`/(driver)/trip/${ride.id}` as never);
     } catch (err) {

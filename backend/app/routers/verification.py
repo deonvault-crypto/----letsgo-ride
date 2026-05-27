@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from requests import RequestException
 
 from app.auth import get_current_user
 from app.models.verification import DocumentType, VerificationSubmitBody
@@ -34,7 +35,10 @@ async def upload_manual_document(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    uploaded = await save_uploaded_document(user, document_type, file)
+    try:
+        uploaded = await save_uploaded_document(user, document_type, file)
+    except (RequestException, RuntimeError):
+        api_error("Verification document upload failed. Please try again.", 502)
     return api_success(uploaded)
 
 
@@ -44,5 +48,8 @@ async def upload_document(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    uploaded = await save_uploaded_document(user, document_type, file)
+    try:
+        uploaded = await save_uploaded_document(user, document_type, file)
+    except (RequestException, RuntimeError):
+        api_error("Verification document upload failed. Please try again.", 502)
     return api_success(uploaded)

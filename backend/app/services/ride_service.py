@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 DEMO_RIDES: List[Dict[str, Any]] = [
     {
         "driver_name": "Tafadzwa M.",
-        "driver_rating": 4.9,
         "vehicle": "Toyota Wish, silver",
         "origin": "Harare",
         "destination": "Bulawayo",
@@ -29,7 +28,6 @@ DEMO_RIDES: List[Dict[str, Any]] = [
     },
     {
         "driver_name": "Nyasha K.",
-        "driver_rating": 4.8,
         "vehicle": "Honda Fit, black",
         "origin": "Harare",
         "destination": "Mutare",
@@ -42,7 +40,6 @@ DEMO_RIDES: List[Dict[str, Any]] = [
     },
     {
         "driver_name": "Kudzai R.",
-        "driver_rating": 4.7,
         "vehicle": "Nissan Note, white",
         "origin": "Gweru",
         "destination": "Harare",
@@ -55,7 +52,6 @@ DEMO_RIDES: List[Dict[str, Any]] = [
     },
     {
         "driver_name": "Farai D.",
-        "driver_rating": 4.9,
         "vehicle": "Toyota Noah, charcoal",
         "origin": "Bulawayo",
         "destination": "Victoria Falls",
@@ -68,7 +64,6 @@ DEMO_RIDES: List[Dict[str, Any]] = [
     },
     {
         "driver_name": "Rudo S.",
-        "driver_rating": 4.8,
         "vehicle": "Mazda Premacy, green",
         "origin": "Kwekwe",
         "destination": "Harare",
@@ -392,7 +387,7 @@ async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any
         enriched["driver_profile_photo_url"] = _public_driver_photo_url(driver_user)
         enriched["driver_avatar_url"] = enriched["driver_profile_photo_url"]
         enriched["driver_verification_status"] = driver_user.get("verification_status") or ride.get("driver_verification_status")
-        enriched["driver_rating"] = review_summary["average_rating"] or driver_user.get("rating") or ride.get("driver_rating", 4.8)
+        enriched["driver_rating"] = review_summary["average_rating"] if review_summary["review_count"] > 0 else None
         enriched["driver_review_count"] = review_summary["review_count"]
         enriched["driver_completed_trips_count"] = completed_trips_count
     else:

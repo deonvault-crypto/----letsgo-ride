@@ -53,7 +53,8 @@ export default function PassengerPublicProfileScreen() {
     );
   }
 
-  const rating = summary.average_rating;
+  const hasReviews = summary.review_count > 0 && typeof summary.average_rating === "number" && Number.isFinite(summary.average_rating);
+  const ratingText = hasReviews ? `${Number(summary.average_rating).toFixed(1)} (${summary.review_count})` : "No reviews yet";
   const completedTrips = summary.completed_trips_count || 0;
 
   return (
@@ -67,7 +68,7 @@ export default function PassengerPublicProfileScreen() {
       </View>
 
       <View style={styles.metrics}>
-        <Metric icon="star" label="Average rating" value={rating ? `${Number(rating).toFixed(1)} (${summary.review_count})` : "No reviews yet"} />
+        <Metric icon="star" label="Average rating" value={ratingText} />
         <Metric icon="check-circle-outline" label="Completed ride trust score" value={completedTrips ? String(completedTrips) : "New"} />
       </View>
 

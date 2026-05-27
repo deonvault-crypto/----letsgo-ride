@@ -18,7 +18,7 @@ export function DriverCard({
   completedTripsCount,
 }: {
   name: string;
-  rating?: number;
+  rating?: number | null;
   vehicle?: string;
   verified?: boolean;
   imageUri?: string | null;
@@ -26,6 +26,7 @@ export function DriverCard({
   reviewCount?: number;
   completedTripsCount?: number;
 }) {
+  const hasReviews = Number(reviewCount || 0) > 0 && typeof rating === "number" && Number.isFinite(rating);
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
@@ -40,12 +41,16 @@ export function DriverCard({
           <Text style={styles.name}>{name}</Text>
           <VerifiedBadge verified={verified} />
         </View>
-        <View style={styles.row}>
-          <MaterialCommunityIcons name="star" size={16} color={colors.warning} />
-          <Text style={styles.meta}>
-            {rating ? rating.toFixed(1) : "New driver"}{reviewCount ? ` (${reviewCount})` : ""}
-          </Text>
-        </View>
+        {hasReviews ? (
+          <View style={styles.row}>
+            <MaterialCommunityIcons name="star" size={16} color={colors.warning} />
+            <Text style={styles.meta}>
+              {rating.toFixed(1)} · {reviewCount} {reviewCount === 1 ? "review" : "reviews"}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.meta}>No reviews yet</Text>
+        )}
         {completedTripsCount ? <Text style={styles.meta}>{completedTripsCount} completed trips</Text> : null}
         {vehicle ? <Text style={styles.meta}>{vehicle}</Text> : null}
       </View>

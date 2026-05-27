@@ -40,7 +40,7 @@ async def public_driver_profile(driver):
     user_id = driver.get("user_id")
     review_summary = await public_review_summary_for_user(user_id) if user_id else {"average_rating": None, "review_count": 0, "latest_reviews": [], "completed_trips_count": 0}
     completed_trips_count = await completed_trips_count_for_user(user_id, "driver") if user_id else 0
-    rating = review_summary["average_rating"] or driver.get("rating") or (user or {}).get("rating")
+    rating = review_summary["average_rating"] if review_summary["review_count"] > 0 else None
 
     return {
         "id": driver.get("id"),

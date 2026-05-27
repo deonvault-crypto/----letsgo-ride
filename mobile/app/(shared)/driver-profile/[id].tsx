@@ -56,8 +56,9 @@ export default function DriverPublicProfileScreen() {
     );
   }
 
-  const rating = profile.average_rating || profile.rating;
   const reviewCount = profile.review_count || 0;
+  const hasReviews = reviewCount > 0 && typeof profile.average_rating === "number" && Number.isFinite(profile.average_rating);
+  const ratingText = hasReviews ? `${Number(profile.average_rating).toFixed(1)} (${reviewCount})` : "No reviews yet";
   const completedTrips = profile.completed_trips_count || 0;
 
   return (
@@ -77,7 +78,7 @@ export default function DriverPublicProfileScreen() {
       </View>
 
       <View style={styles.metrics}>
-        <Metric icon="star" label="Rating" value={rating ? `${Number(rating).toFixed(1)} (${reviewCount})` : "No reviews yet"} />
+        <Metric icon="star" label="Rating" value={ratingText} />
         <Metric icon="check-circle-outline" label="Completed trips" value={completedTrips ? String(completedTrips) : "New"} />
       </View>
 

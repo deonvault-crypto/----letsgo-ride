@@ -16,8 +16,8 @@ export function RideCard({ ride, onPress, onDriverPress }: { ride: Ride; onPress
   const status = canonicalRideStatus(ride.status);
   const isBookable = isRideBookable(ride);
   const isFull = Number(ride.available_seats || 0) <= 0;
-  const rating = Number.isFinite(ride.driver_rating) ? ride.driver_rating.toFixed(1) : "4.8";
   const reviewCount = Number(ride.driver_review_count || 0);
+  const hasReviews = reviewCount > 0 && typeof ride.driver_rating === "number" && Number.isFinite(ride.driver_rating);
   function handleDriverPress(event: GestureResponderEvent) {
     event.stopPropagation();
     onDriverPress?.();
@@ -58,11 +58,14 @@ export function RideCard({ ride, onPress, onDriverPress }: { ride: Ride; onPress
             <VerifiedBadge verified={isVerifiedStatus(ride.driver_verification_status)} />
             {ride.is_own_ride ? <StatusBadge label="Your ride" tone="neutral" /> : null}
           </Pressable>
-          <View style={styles.inlineRow}>
-            <MaterialCommunityIcons name="star" size={15} color={colors.warning} />
-            <Text style={styles.meta}>{rating}</Text>
-            <Text style={styles.meta}>{reviewCount > 0 ? `${reviewCount} reviews` : "No reviews yet"}</Text>
-          </View>
+          {hasReviews ? (
+            <View style={styles.inlineRow}>
+              <MaterialCommunityIcons name="star" size={15} color={colors.warning} />
+              <Text style={styles.meta}>{ride.driver_rating!.toFixed(1)} · {reviewCount} {reviewCount === 1 ? "review" : "reviews"}</Text>
+            </View>
+          ) : (
+            <Text style={styles.meta}>No reviews yet</Text>
+          )}
         </View>
       </View>
       <View style={styles.row}>

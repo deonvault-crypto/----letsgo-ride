@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import * as DocumentPicker from "expo-document-picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
@@ -33,11 +34,27 @@ const manualDocumentTypes: VerificationDocumentType[] = [
 ];
 
 const documentLabels: Partial<Record<VerificationDocumentType, string>> = {
-  selfie: "Selfie photo",
+  selfie: "Selfie",
   identity_document: "Identity document",
   driver_license: "Driver licence",
-  vehicle_registration_or_logbook: "Vehicle registration or logbook",
-  vehicle_photo_optional: "Vehicle photo optional",
+  vehicle_registration_or_logbook: "Registration or logbook",
+  vehicle_photo_optional: "Vehicle photo",
+};
+
+const documentDescriptions: Partial<Record<VerificationDocumentType, string>> = {
+  selfie: "Use the front camera in good light so your face is clear.",
+  identity_document: "Capture the photo page or national ID details clearly.",
+  driver_license: "Scan the front of your valid driver licence.",
+  vehicle_registration_or_logbook: "Capture the vehicle registration or logbook details.",
+  vehicle_photo_optional: "Take a clear exterior photo of the vehicle passengers will see.",
+};
+
+const captureLabels: Partial<Record<VerificationDocumentType, string>> = {
+  selfie: "Take selfie",
+  identity_document: "Scan identity document",
+  driver_license: "Scan driver licence",
+  vehicle_registration_or_logbook: "Scan registration/logbook",
+  vehicle_photo_optional: "Take vehicle photo",
 };
 
 export default function DriverVerificationScreen() {
@@ -47,17 +64,25 @@ export default function DriverVerificationScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<VerificationDocumentType | null>(null);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
   const hasLoaded = useRef(false);
 
   const load = useCallback(async () => {
     try {
       if (!hasLoaded.current) setLoading(true);
-      setError("");
-      setProfile(await getMyVerification());
+      setLoadError("");
+      const nextProfile = await getMyVerification();
+      setProfile(nextProfile);
+      setActionError("");
       hasLoaded.current = true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load verification.");
+      const message = err instanceof Error ? err.message : "Unable to load verification.";
+      if (!hasLoaded.current) {
+        setLoadError(message);
+      } else {
+        setActionError("Verification status could not refresh. Try again in a moment.");
+      }
     } finally {
       setLoading(false);
     }
@@ -65,25 +90,34 @@ export default function DriverVerificationScreen() {
 
   useLiveRefresh(load, 15000);
 
-  async function pickDocument(documentType: VerificationDocumentType) {
+  async function captureDocument(documentType: VerificationDocumentType) {
     try {
       setUploading(documentType);
-      setError("");
-      const result = await DocumentPicker.getDocumentAsync({
-        copyToCacheDirectory: true,
-        multiple: false,
+      setActionError("");
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error("Camera permission is required to complete driver verification.");
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: documentType === "selfie" ? [1, 1] : [4, 3],
+        cameraType: documentType === "selfie" ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
+        mediaTypes: ["images"],
+        quality: documentType === "selfie" ? 0.82 : 0.88,
       });
       if (result.canceled || !result.assets[0]) return;
       const asset = result.assets[0];
+      const fallbackName = `${documentType}-${Date.now()}.jpg`;
       await uploadVerificationDocument({
         documentType,
         uri: asset.uri,
-        name: asset.name,
-        mimeType: asset.mimeType,
+        name: asset.fileName || fallbackName,
+        mimeType: asset.mimeType || "image/jpeg",
       });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to upload document.");
+      setActionError(err instanceof Error ? err.message : "Unable to capture document.");
     } finally {
       setUploading(null);
     }
@@ -92,14 +126,14 @@ export default function DriverVerificationScreen() {
   async function submit() {
     try {
       setSaving(true);
-      setError("");
+      setActionError("");
       const updated = await submitManualVerification({
         consent,
         verification_notes: notes,
       });
       setProfile(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to submit verification.");
+      setActionError(err instanceof Error ? err.message : "Unable to submit verification.");
     } finally {
       setSaving(false);
     }
@@ -108,46 +142,52 @@ export default function DriverVerificationScreen() {
   const status = profile?.verification_status || "not_started";
   const uploadedDocuments = profile?.documents || [];
   const requiredDocuments = (profile?.required_documents || manualDocumentTypes).filter((item) => manualDocumentTypes.includes(item));
-  const showManualForm =
+  const canRenderVerification = Boolean(profile && !loadError);
+  const showManualForm = canRenderVerification && (
     status === "not_started" ||
     status === "pending_uploads" ||
     status === "needs_review" ||
     status === "rejected" ||
-    status === "needs_resubmission";
-  const showSubmittedState = status !== "not_started";
+    status === "needs_resubmission"
+  );
+  const showSubmittedState = status === "pending_auto_check" || status === "approved";
 
   return (
     <Screen title="Driver verification" showBack fallbackRoute="/(shared)/profile" navRole="driver">
-      <View style={styles.card}>
-        <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
-        <Text style={styles.title}>Driver verification</Text>
-        <Text style={styles.body}>
-          Verify your identity before posting public rides.
-        </Text>
-        <Text style={styles.body}>Upload your identity document, driver licence, selfie, and vehicle details. LetsGoRide checks your documents automatically and may request manual review if needed.</Text>
-      </View>
-
       {loading ? <LoadingState label="Loading verification..." /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {!loading && loadError ? <ErrorState message={loadError} onRetry={load} /> : null}
 
-      {!loading && status !== "not_started" ? <StatusCopy status={status} /> : null}
+      {canRenderVerification ? (
+        <View style={styles.card}>
+          <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
+          <Text style={styles.title}>Driver verification</Text>
+          <Text style={styles.body}>
+            Complete a camera-based identity check before posting public rides.
+          </Text>
+          <Text style={styles.body}>
+            LetsGoRide uses live capture for your selfie, identity document, driver licence, and vehicle record. If automated checks need help, the same captured documents move to manual review.
+          </Text>
+        </View>
+      ) : null}
 
-      {!loading && showSubmittedState ? (
+      {canRenderVerification && status !== "not_started" ? <StatusCopy status={status} /> : null}
+
+      {canRenderVerification && showSubmittedState ? (
         <SubmittedState status={status} documents={uploadedDocuments} />
       ) : null}
 
-      {!loading && showManualForm ? (
+      {canRenderVerification && showManualForm ? (
         <>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Verification documents</Text>
-            <Text style={styles.body}>Upload or replace any required documents to continue your driver verification.</Text>
+            <Text style={styles.sectionTitle}>Capture documents</Text>
+            <Text style={styles.body}>Use the camera for each check. Make sure names, faces, licence numbers, and vehicle details are sharp and readable.</Text>
             {requiredDocuments.map((documentType) => (
               <DocumentRow
                 key={documentType}
                 documentType={documentType}
                 documents={uploadedDocuments}
                 uploading={uploading === documentType}
-                onUpload={() => pickDocument(documentType)}
+                onCapture={() => captureDocument(documentType)}
               />
             ))}
           </View>
@@ -175,6 +215,7 @@ export default function DriverVerificationScreen() {
                 prevention.
               </Text>
             </Pressable>
+            {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
             <AppButton
               title={status === "not_started" ? "Submit for review" : "Resubmit for review"}
               loading={saving}
@@ -192,27 +233,33 @@ function DocumentRow({
   documentType,
   documents,
   uploading,
-  onUpload,
+  onCapture,
 }: {
   documentType: VerificationDocumentType;
   documents: VerificationDocument[];
   uploading: boolean;
-  onUpload: () => void;
+  onCapture: () => void;
 }) {
-  const document = documents.find((item) => item.document_type === documentType);
+  const document = findLatestDocument(documents, documentType);
+  const required = documentType !== "vehicle_photo_optional";
   return (
     <View style={styles.documentRow}>
       <View style={styles.documentCopy}>
-        <Text style={styles.documentTitle}>{documentLabels[documentType] || formatStatus(documentType)}</Text>
+        <Text style={styles.documentTitle}>
+          {documentLabels[documentType] || formatStatus(documentType)}
+          {required ? "" : " (optional)"}
+        </Text>
+        <Text style={styles.body}>{documentDescriptions[documentType]}</Text>
         <Text numberOfLines={1} style={styles.body}>
-          {document ? `${document.file_name} - ${formatStatus(document.status || "pending")}` : "Not uploaded"}
+          {document ? `${document.file_name || "Captured document"} - ${formatStatus(document.status || "pending")}` : "Not captured"}
         </Text>
       </View>
       <AppButton
-        title={document ? "Replace" : "Upload"}
+        title={captureLabels[documentType] || "Capture document"}
         variant="secondary"
         loading={uploading}
-        onPress={onUpload}
+        onPress={onCapture}
+        icon={<MaterialCommunityIcons name="camera-outline" size={18} color={colors.whiteText} />}
         style={styles.smallButton}
       />
     </View>
@@ -243,7 +290,7 @@ function SubmittedState({
         <View style={styles.summaryCard}>
           <Text style={styles.documentTitle}>Submitted documents</Text>
           {rows.map((documentType) => {
-            const document = documents.find((item) => item.document_type === documentType);
+            const document = findLatestDocument(documents, documentType);
             return (
               <View key={documentType} style={styles.summaryRow}>
                 <Text numberOfLines={1} style={styles.summaryLabel}>{documentLabels[documentType] || formatStatus(documentType)}</Text>
@@ -267,12 +314,16 @@ function SubmittedState({
   );
 }
 
+function findLatestDocument(documents: VerificationDocument[], documentType: VerificationDocumentType) {
+  return [...documents].reverse().find((item) => item.document_type === documentType);
+}
+
 function StatusCopy({ status }: { status: VerificationProfile["verification_status"] }) {
   const copy = {
-    pending_uploads: "Upload the remaining documents so LetsGoRide can review your driver verification.",
+    pending_uploads: "Capture the remaining documents so LetsGoRide can review your driver verification.",
     pending_auto_check: "Your documents are being checked automatically.",
     needs_review: "We need more information. Please check the note and update your documents.",
-    needs_resubmission: "Your verification requires a resubmission. Upload updated documents and submit again.",
+    needs_resubmission: "Your verification requires a resubmission. Capture updated documents and submit again.",
     approved: "Your driver verification is approved.",
     rejected: "Your verification was not approved. Review the note or contact support.",
     not_started: "",
@@ -329,6 +380,11 @@ const styles = StyleSheet.create({
   body: {
     color: colors.mutedText,
     lineHeight: 22,
+  },
+  errorText: {
+    color: colors.danger,
+    fontWeight: "800",
+    lineHeight: 20,
   },
   documentRow: {
     gap: spacing.md,

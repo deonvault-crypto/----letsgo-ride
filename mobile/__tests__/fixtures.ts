@@ -11,7 +11,7 @@ export const passengerUser: User = {
   bio: "Regular intercity passenger",
   travel_preferences: "Window seat where possible",
   role: "passenger",
-  rating: 4.8,
+  rating: 0,
 };
 
 export const driverUser: User = {
@@ -21,7 +21,7 @@ export const driverUser: User = {
   phone: "+263772222222",
   city: "Bulawayo",
   role: "driver",
-  rating: 4.9,
+  rating: 0,
   profile_photo_url: "https://example.com/deon.jpg",
 };
 
@@ -71,7 +71,7 @@ export const pendingProfile: VerificationProfile = {
   driver_id: "driver-1",
   driver_status: "pending_review",
   verified: false,
-  verification_status: "pending_uploads",
+  verification_status: "pending_auto_check",
   verification_provider: "manual",
   documents: [],
   required_documents: ["identity_document", "driver_license", "selfie", "vehicle_registration_or_logbook", "vehicle_photo_optional"],

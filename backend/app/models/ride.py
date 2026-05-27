@@ -17,7 +17,7 @@ class RideCreateBody(BaseModel):
     available_seats: int = Field(ge=1, le=20)
     vehicle: str = Field(min_length=2)
     driver_name: str = Field(default="LetsGo Driver", min_length=2)
-    driver_rating: float = Field(default=4.8, ge=0, le=5)
+    driver_rating: Optional[float] = Field(default=None, ge=0, le=5)
     estimated_duration_minutes: int = Field(default=240, ge=15, le=1440)
 
 

@@ -3,7 +3,7 @@ import hashlib
 import hmac
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import requests
 from fastapi import UploadFile
@@ -39,6 +39,31 @@ VERIFICATION_STATUSES = {
 STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "verification_documents"
 REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS) - {"vehicle_photo_optional"}
 ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "heic", "heif"}
+STATUS_ALIASES = {
+    "active": "approved",
+    "complete": "approved",
+    "completed": "approved",
+    "declined": "rejected",
+    "denied": "rejected",
+    "manual_review": "needs_review",
+    "review": "needs_review",
+    "resubmission_required": "needs_resubmission",
+    "verified": "approved",
+}
+DOCUMENT_TYPE_ALIASES = {
+    "driver_licence": "driver_license",
+    "drivers_license": "driver_license",
+    "drivers_licence": "driver_license",
+    "id": "identity_document",
+    "id_document": "identity_document",
+    "identity": "identity_document",
+    "licence": "driver_license",
+    "license": "driver_license",
+    "registration": "vehicle_registration_or_logbook",
+    "registration_logbook": "vehicle_registration_or_logbook",
+    "vehicle_logbook": "vehicle_registration_or_logbook",
+    "vehicle_photo": "vehicle_photo_optional",
+}
 
 
 def default_verification_fields() -> Dict[str, Any]:
@@ -56,16 +81,93 @@ def default_verification_fields() -> Dict[str, Any]:
     }
 
 
-def manual_verification_documents(documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [
-        document
-        for document in documents or []
-        if document.get("document_type") in REQUIRED_DOCUMENTS
-    ]
+def manual_verification_documents(documents: Any) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for document in _iter_document_items(documents):
+        normalized_document = _normalize_document(document)
+        if normalized_document:
+            normalized.append(normalized_document)
+    return normalized
+
+
+def _iter_document_items(documents: Any) -> List[Dict[str, Any]]:
+    if not documents:
+        return []
+    if isinstance(documents, Mapping):
+        items: List[Dict[str, Any]] = []
+        for document_type, value in documents.items():
+            if isinstance(value, Mapping):
+                item = dict(value)
+                item.setdefault("document_type", document_type)
+                items.append(item)
+            elif value:
+                file_url = str(value)
+                items.append(
+                    {
+                        "document_type": document_type,
+                        "file_url": file_url,
+                        "file_name": _file_name_from_url(file_url, str(document_type)),
+                    }
+                )
+        return items
+    if isinstance(documents, (list, tuple)):
+        return [dict(document) for document in documents if isinstance(document, Mapping)]
+    return []
+
+
+def _normalize_document_type(document_type: Any) -> Optional[str]:
+    normalized = str(document_type or "").strip().lower().replace("-", "_").replace(" ", "_")
+    normalized = DOCUMENT_TYPE_ALIASES.get(normalized, normalized)
+    return normalized if normalized in REQUIRED_DOCUMENTS else None
+
+
+def _normalize_document_status(status: Any) -> str:
+    normalized = str(status or "").strip().lower()
+    return normalized if normalized in DOCUMENT_STATUSES else "pending"
+
+
+def _file_name_from_url(file_url: str, document_type: str) -> str:
+    file_name = Path(file_url.split("?", 1)[0]).name
+    return _safe_file_name(file_name) if file_name else f"{document_type}.jpg"
+
+
+def _normalize_document(document: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    document_type = _normalize_document_type(
+        document.get("document_type") or document.get("type") or document.get("kind")
+    )
+    if not document_type:
+        return None
+
+    file_url = document.get("file_url") or document.get("url") or document.get("secure_url")
+    file_name = (
+        document.get("file_name")
+        or document.get("filename")
+        or document.get("name")
+        or (_file_name_from_url(str(file_url), document_type) if file_url else f"{document_type}.jpg")
+    )
+    normalized = dict(document)
+    normalized.update(
+        {
+            "document_type": document_type,
+            "file_name": str(file_name),
+            "file_url": file_url,
+            "status": _normalize_document_status(document.get("status")),
+            "rejection_reason": document.get("rejection_reason"),
+        }
+    )
+    return normalized
+
+
+def normalize_verification_status(status: Any, documents: Optional[List[Dict[str, Any]]] = None) -> str:
+    normalized = str(status or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"pending", "submitted"}:
+        return "pending_auto_check" if documents and _has_all_required_documents(documents) else "pending_uploads"
+    normalized = STATUS_ALIASES.get(normalized, normalized)
+    return normalized if normalized in VERIFICATION_STATUSES else "not_started"
 
 
 def _document_types(documents: List[Dict[str, Any]]) -> set[str]:
-    return {document.get("document_type") for document in documents or [] if document.get("document_type")}
+    return {document.get("document_type") for document in manual_verification_documents(documents)}
 
 
 def _has_all_required_documents(documents: List[Dict[str, Any]]) -> bool:
@@ -110,6 +212,7 @@ async def _upload_to_cloudinary(upload: UploadFile, document_type: str) -> Dict[
 def _evaluate_document_risk(documents: List[Dict[str, Any]]) -> Tuple[float, List[str]]:
     risk_score = 0.0
     flags: List[str] = []
+    documents = manual_verification_documents(documents)
 
     type_counts: Dict[str, int] = {}
     for document in documents:
@@ -146,6 +249,7 @@ def _evaluate_document_risk(documents: List[Dict[str, Any]]) -> Tuple[float, Lis
 def _run_face_ai_check(documents: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not settings.enable_face_ai:
         return None
+    documents = manual_verification_documents(documents)
 
     has_selfie = any(document.get("document_type") == "selfie" for document in documents)
     has_identity = any(document.get("document_type") == "identity_document" for document in documents)
@@ -159,13 +263,13 @@ def public_verification_status(record: Optional[Dict[str, Any]]) -> str:
     if not record:
         return "not_started"
 
-    status = record.get("verification_status")
-    if status in VERIFICATION_STATUSES:
+    documents = manual_verification_documents(record.get("documents", []))
+    status = normalize_verification_status(record.get("verification_status"), documents)
+    if status != "not_started":
         return status
     if record.get("verified"):
         return "approved"
 
-    documents = manual_verification_documents(record.get("documents", []))
     if documents:
         return "pending_auto_check" if _has_all_required_documents(documents) else "pending_uploads"
     return "not_started"
@@ -266,9 +370,9 @@ async def ensure_driver_for_user(user: Dict[str, Any], payload: Optional[Dict[st
 
 
 def merge_documents(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    documents = [dict(document) for document in existing]
+    documents = manual_verification_documents(existing)
     timestamp = now_iso()
-    for document in incoming:
+    for document in manual_verification_documents(incoming):
         documents.append(
             {
                 "id": new_id(),
@@ -286,7 +390,8 @@ def merge_documents(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any
 
 
 def _next_status_after_upload(driver: Dict[str, Any], documents: List[Dict[str, Any]]) -> str:
-    if driver.get("verification_status") in {"rejected", "needs_resubmission"}:
+    current_status = normalize_verification_status(driver.get("verification_status"), documents)
+    if current_status in {"rejected", "needs_resubmission"}:
         return "needs_resubmission"
     if _has_all_required_documents(documents):
         return "pending_auto_check"
@@ -386,7 +491,7 @@ async def save_uploaded_document(
         document["storage_path"] = str(target_path)
         document["file_url"] = None
 
-    documents = [*driver.get("documents", []), document]
+    documents = [*manual_verification_documents(driver.get("documents", [])), document]
     verification_status = _next_status_after_upload(driver, documents)
     risk_score, risk_flags = _evaluate_document_risk(documents) if _has_all_required_documents(documents) else (None, [])
 
@@ -435,7 +540,7 @@ async def apply_admin_verification_status(
 ) -> Dict[str, Any]:
     timestamp = now_iso()
     provider = "manual"
-    documents = [dict(document) for document in driver.get("documents", [])]
+    documents = manual_verification_documents(driver.get("documents", []))
     if document_id and document_status:
         for document in documents:
             if document.get("id") == document_id:

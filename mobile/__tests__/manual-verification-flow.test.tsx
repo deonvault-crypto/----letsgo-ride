@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 
 import DriverVerificationScreen from "../app/(shared)/verification";
 import {
@@ -18,8 +18,10 @@ jest.mock("expo-router", () => ({
   },
 }));
 
-jest.mock("expo-document-picker", () => ({
-  getDocumentAsync: jest.fn(),
+jest.mock("expo-image-picker", () => ({
+  CameraType: { back: "back", front: "front" },
+  launchCameraAsync: jest.fn(),
+  requestCameraPermissionsAsync: jest.fn(),
 }));
 
 jest.mock("../services/verificationService", () => ({
@@ -34,32 +36,33 @@ describe("manual driver verification flow", () => {
     (getMyVerification as jest.Mock).mockResolvedValue(notStartedProfile);
     (uploadVerificationDocument as jest.Mock).mockResolvedValue({
       id: "doc-1",
-      document_type: "identity_document",
-      file_name: "id.pdf",
+      document_type: "selfie",
+      file_name: "selfie.jpg",
       status: "pending",
     });
     (submitManualVerification as jest.Mock).mockResolvedValue(verifiedProfile);
-    (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
+    (ImagePicker.requestCameraPermissionsAsync as jest.Mock).mockResolvedValue({ granted: true });
+    (ImagePicker.launchCameraAsync as jest.Mock).mockResolvedValue({
       canceled: false,
-      assets: [{ uri: "file:///id.pdf", name: "id.pdf", mimeType: "application/pdf" }],
+      assets: [{ uri: "file:///selfie.jpg", fileName: "selfie.jpg", mimeType: "image/jpeg" }],
     });
   });
 
-  it("opens verification, uploads a required document, and submits for review", async () => {
+  it("opens verification, captures a required document, and submits for review", async () => {
     const screen = render(<DriverVerificationScreen />);
 
-    expect(await screen.findAllByText("Driver verification")).toHaveLength(2);
-    expect(screen.getByText("Verify your identity before posting public rides.")).toBeOnTheScreen();
-    expect(screen.getByText("Upload your identity document, driver licence, selfie, and vehicle details. LetsGoRide checks your documents automatically and may request manual review if needed.")).toBeOnTheScreen();
+    expect(await screen.findByText("Driver verification")).toBeOnTheScreen();
+    expect(screen.getByText("Complete a camera-based identity check before posting public rides.")).toBeOnTheScreen();
+    expect(screen.getByText("LetsGoRide uses live capture for your selfie, identity document, driver licence, and vehicle record. If automated checks need help, the same captured documents move to manual review.")).toBeOnTheScreen();
 
-    fireEvent.press(screen.getAllByRole("button", { name: "Upload" })[0]);
+    fireEvent.press(screen.getByRole("button", { name: /Take selfie/ }));
 
     await waitFor(() => {
       expect(uploadVerificationDocument).toHaveBeenCalledWith({
-        documentType: "identity_document",
-        uri: "file:///id.pdf",
-        name: "id.pdf",
-        mimeType: "application/pdf",
+        documentType: "selfie",
+        uri: "file:///selfie.jpg",
+        name: "selfie.jpg",
+        mimeType: "image/jpeg",
       });
     });
 
@@ -84,5 +87,17 @@ describe("manual driver verification flow", () => {
     expect(await screen.findByText("Verification submitted")).toBeOnTheScreen();
     expect(screen.getByText("Submitted documents")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Submit for review" })).toBeNull();
+  });
+
+  it("shows only the retry card when verification status fails to load", async () => {
+    (getMyVerification as jest.Mock).mockRejectedValueOnce(new Error("Something went wrong. Please try again."));
+
+    const screen = render(<DriverVerificationScreen />);
+
+    expect(await screen.findByText("Unable to load data")).toBeOnTheScreen();
+    expect(screen.getByText("Something went wrong. Please try again.")).toBeOnTheScreen();
+    expect(screen.queryByText("Capture documents")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Take selfie/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeOnTheScreen();
   });
 });

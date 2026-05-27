@@ -15,6 +15,8 @@ type PushRegistrationState = {
   message?: string;
 };
 
+const DEVICE_SETTINGS_MESSAGE = "Enable notifications in device settings";
+
 function projectId() {
   const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
   return extra?.eas?.projectId || Constants.easConfig?.projectId;
@@ -117,7 +119,7 @@ async function registerCurrentPushToken(): Promise<PushRegistrationState> {
     return {
       enabled: false,
       status: "off",
-      message: "Notifications are disabled in phone settings. Enable them to receive LetsGoRide updates.",
+      message: DEVICE_SETTINGS_MESSAGE,
     };
   }
 
@@ -136,16 +138,13 @@ async function registerCurrentPushToken(): Promise<PushRegistrationState> {
   }
 
   try {
-    const savedToken = await getStoredPushToken();
-    if (expoPushToken !== savedToken) {
-      await registerPushToken({
-        expo_push_token: expoPushToken,
-        platform: Platform.OS,
-        app_version: Constants.expoConfig?.version,
-        device_name: Constants.deviceName || undefined,
-      });
-      await saveStoredPushToken(expoPushToken);
-    }
+    await registerPushToken({
+      expo_push_token: expoPushToken,
+      platform: Platform.OS,
+      app_version: Constants.expoConfig?.version,
+      device_name: Constants.deviceName || undefined,
+    });
+    await saveStoredPushToken(expoPushToken);
 
     return {
       enabled: true,
@@ -153,10 +152,11 @@ async function registerCurrentPushToken(): Promise<PushRegistrationState> {
       message: "Phone notifications are enabled.",
     };
   } catch {
+    await removeStoredPushToken();
     return {
-      enabled: true,
-      status: "on",
-      message: "Notifications are enabled in settings, but LetsGoRide could not register this device. Please try again.",
+      enabled: false,
+      status: "off",
+      message: "Phone notification permission is on, but LetsGoRide could not register this device. Please try again.",
     };
   }
 }
@@ -172,7 +172,7 @@ export async function enablePhoneNotifications(): Promise<PushRegistrationState>
     return {
       enabled: false,
       status: "off",
-      message: "Notifications are off. You can enable them in phone settings.",
+      message: DEVICE_SETTINGS_MESSAGE,
     };
   }
   const permissions = current.granted ? current : await Notifications.requestPermissionsAsync();
@@ -184,7 +184,7 @@ export async function enablePhoneNotifications(): Promise<PushRegistrationState>
     return {
       enabled: false,
       status: "off",
-      message: "Notifications are off. You can enable them in phone settings.",
+      message: DEVICE_SETTINGS_MESSAGE,
     };
   }
 

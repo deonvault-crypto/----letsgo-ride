@@ -20,11 +20,18 @@ class ExistingUnverifiedEmailError(Exception):
 
 PUBLIC_VERIFICATION_STATUSES = {
     "not_started",
-    "pending",
+    "pending_uploads",
+    "pending_auto_check",
     "needs_review",
-    "verified",
+    "approved",
     "rejected",
-    "active",
+    "needs_resubmission",
+}
+
+PUBLIC_VERIFICATION_STATUS_ALIASES = {
+    "active": "approved",
+    "pending": "pending_uploads",
+    "verified": "approved",
 }
 
 
@@ -54,8 +61,10 @@ def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
     public = {key: value for key, value in user.items() if key not in hidden}
     if public.get("verification_provider"):
         public["verification_provider"] = "manual"
+    status = str(public.get("verification_status") or "").strip().lower().replace("-", "_").replace(" ", "_")
+    public["verification_status"] = PUBLIC_VERIFICATION_STATUS_ALIASES.get(status, status)
     if public.get("verification_status") not in PUBLIC_VERIFICATION_STATUSES:
-        public["verification_status"] = "needs_review" if public.get("verification_status") else "not_started"
+        public["verification_status"] = "not_started"
     return public
 
 
@@ -151,7 +160,7 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
         "city": "Harare",
         "role": role,
         "email_verified": False,
-        "rating": 4.8,
+        "rating": 0,
         "token": token,
         "is_demo": False,
         "created_at": timestamp,
@@ -188,7 +197,7 @@ async def create_email_user(
         "role": role,
         "email_verified": False,
         "email_verified_at": None,
-        "rating": 4.8,
+        "rating": 0,
         "token": token,
         **password_record,
         "status": "active",

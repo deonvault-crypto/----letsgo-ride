@@ -1,6 +1,7 @@
 from functools import lru_cache
 import os
 from typing import List
+from urllib.parse import unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -29,9 +30,10 @@ class Settings:
             "RESEND_REPLY_TO_EMAIL",
             "RESEND_REPLY_TO",
         )
-        self.cloudinary_cloud_name = self._get_env_first("CLOUDINARY_CLOUD_NAME")
-        self.cloudinary_api_key = self._get_env_first("CLOUDINARY_API_KEY")
-        self.cloudinary_api_secret = self._get_env_first("CLOUDINARY_API_SECRET")
+        cloudinary_url_config = self._parse_cloudinary_url(self._get_env_first("CLOUDINARY_URL"))
+        self.cloudinary_cloud_name = self._get_env_first("CLOUDINARY_CLOUD_NAME") or cloudinary_url_config.get("cloud_name", "")
+        self.cloudinary_api_key = self._get_env_first("CLOUDINARY_API_KEY") or cloudinary_url_config.get("api_key", "")
+        self.cloudinary_api_secret = self._get_env_first("CLOUDINARY_API_SECRET") or cloudinary_url_config.get("api_secret", "")
         self.enable_face_ai = self._parse_bool(os.getenv("ENABLE_FACE_AI", "false"))
         self.cors_origins = self._parse_origins(
             os.getenv(
@@ -56,6 +58,19 @@ class Settings:
             if value and value.strip():
                 return value.strip()
         return ""
+
+    @staticmethod
+    def _parse_cloudinary_url(value: str) -> dict[str, str]:
+        if not value:
+            return {}
+        parsed = urlparse(value)
+        if parsed.scheme != "cloudinary":
+            return {}
+        return {
+            "cloud_name": parsed.hostname or "",
+            "api_key": unquote(parsed.username or ""),
+            "api_secret": unquote(parsed.password or ""),
+        }
 
     @property
     def resend_api_key_present(self) -> bool:

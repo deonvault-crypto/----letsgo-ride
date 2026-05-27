@@ -71,8 +71,9 @@ describe("profile update flow", () => {
     await waitFor(() => {
       expect(summary.getByText("Start verification")).toBeOnTheScreen();
     });
-    fireEvent.press(summary.getByRole("button", { name: "Edit profile" }));
-    expect(mockPush).toHaveBeenCalledWith("/(shared)/edit-profile");
+    expect(summary.queryByRole("button", { name: "Edit profile" })).toBeNull();
+    fireEvent.press(summary.getByRole("button", { name: "Settings" }));
+    expect(mockPush).toHaveBeenCalledWith("/(shared)/settings");
     summary.unmount();
 
     const screen = render(<EditProfileScreen />);

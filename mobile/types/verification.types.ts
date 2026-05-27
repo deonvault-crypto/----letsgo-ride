@@ -24,6 +24,7 @@ export type VerificationDocument = {
   id?: string;
   document_type: VerificationDocumentType;
   file_name: string;
+  file_url?: string;
   uploaded_at?: string;
   status?: VerificationDocumentStatus;
   rejection_reason?: string;

@@ -9,6 +9,11 @@ import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { resendEmailVerification, verifyEmail } from "../../services/authService";
+import {
+  enablePhoneNotifications,
+  hasSeenNotificationExplanation,
+  markNotificationExplanationSeen,
+} from "../../services/pushNotificationService";
 import { normalizeEmail } from "../../utils/passwordRules";
 
 export default function EmailVerificationScreen() {
@@ -21,6 +26,9 @@ export default function EmailVerificationScreen() {
   const [verificationComplete, setVerificationComplete] = useState(false);
   const [verifiedRole, setVerifiedRole] = useState<string | null>(null);
   const [verifiedWithSession, setVerifiedWithSession] = useState(false);
+  const [notificationIntroOpen, setNotificationIntroOpen] = useState(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  const [pendingRole, setPendingRole] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -28,6 +36,36 @@ export default function EmailVerificationScreen() {
     if (role === "admin") router.replace("/(admin)/dashboard" as never);
     else if (role === "driver") router.replace("/(driver)/home" as never);
     else router.replace("/(passenger)/home" as never);
+  }
+
+  async function continueAfterVerification(role?: string | null) {
+    try {
+      if (!(await hasSeenNotificationExplanation())) {
+        setPendingRole(role || null);
+        setVerificationComplete(false);
+        setNotificationIntroOpen(true);
+        return;
+      }
+    } catch {
+      // Continue account activation even if local notification state cannot be read.
+    }
+    routeForRole(role);
+  }
+
+  async function finishNotificationIntro(enableNotifications: boolean) {
+    try {
+      setNotificationSaving(true);
+      await markNotificationExplanationSeen();
+      if (enableNotifications) {
+        await enablePhoneNotifications();
+      }
+    } catch {
+      // Notification setup can be retried from Settings after the user enters the app.
+    } finally {
+      setNotificationSaving(false);
+      setNotificationIntroOpen(false);
+      routeForRole(pendingRole);
+    }
   }
 
   async function submit() {
@@ -84,10 +122,24 @@ export default function EmailVerificationScreen() {
             <AppButton
               title={verifiedWithSession ? "Continue" : "Continue to login"}
               onPress={() => {
-                if (verifiedWithSession) routeForRole(verifiedRole);
+                if (verifiedWithSession) continueAfterVerification(verifiedRole);
                 else router.replace({ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email) } } as never);
               }}
             />
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={notificationIntroOpen} transparent animationType="fade" onRequestClose={() => finishNotificationIntro(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enable notifications?</Text>
+            <Text style={styles.modalBody}>
+              LetsGoRide sends phone alerts for booking requests, trip updates, messages, verification reviews, support replies, and safety notices.
+            </Text>
+            <View style={styles.modalActions}>
+              <AppButton title="Enable notifications" loading={notificationSaving} onPress={() => finishNotificationIntro(true)} />
+              <AppButton title="Not now" variant="secondary" onPress={() => finishNotificationIntro(false)} />
+            </View>
           </View>
         </View>
       </Modal>
@@ -126,5 +178,9 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     textAlign: "center",
     lineHeight: 22,
+  },
+  modalActions: {
+    alignSelf: "stretch",
+    gap: spacing.sm,
   },
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { BrandLogo } from "../../components/layout/BrandLogo";
@@ -10,6 +10,11 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { emailLogin, resendEmailVerification } from "../../services/authService";
 import { biometricLabel, isBiometricEnabled, loginWithBiometrics } from "../../services/biometricService";
+import {
+  enablePhoneNotifications,
+  hasSeenNotificationExplanation,
+  markNotificationExplanationSeen,
+} from "../../services/pushNotificationService";
 import { normalizeEmail } from "../../utils/passwordRules";
 
 export default function EmailLoginScreen() {
@@ -22,6 +27,9 @@ export default function EmailLoginScreen() {
   const [resending, setResending] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
   const [biometricText, setBiometricText] = useState("Use biometrics");
+  const [notificationIntroOpen, setNotificationIntroOpen] = useState(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  const [pendingRole, setPendingRole] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -33,10 +41,39 @@ export default function EmailLoginScreen() {
     loadBiometrics().catch(() => setBiometricReady(false));
   }, []);
 
-  function routeForRole(role?: string) {
+  function routeForRole(role?: string | null) {
     if (role === "admin") router.replace("/(admin)/dashboard" as never);
     else if (role === "driver") router.replace("/(driver)/home" as never);
     else router.replace("/(passenger)/home" as never);
+  }
+
+  async function continueAfterAuth(role?: string | null) {
+    try {
+      if (!(await hasSeenNotificationExplanation())) {
+        setPendingRole(role || null);
+        setNotificationIntroOpen(true);
+        return;
+      }
+    } catch {
+      // If local storage fails, continue login instead of blocking access.
+    }
+    routeForRole(role);
+  }
+
+  async function finishNotificationIntro(enableNotifications: boolean) {
+    try {
+      setNotificationSaving(true);
+      await markNotificationExplanationSeen();
+      if (enableNotifications) {
+        await enablePhoneNotifications();
+      }
+    } catch {
+      // The user is logged in; notification setup can be retried from Settings.
+    } finally {
+      setNotificationSaving(false);
+      setNotificationIntroOpen(false);
+      routeForRole(pendingRole);
+    }
   }
 
   async function submit() {
@@ -45,7 +82,7 @@ export default function EmailLoginScreen() {
       setError("");
       setMessage("");
       const result = await emailLogin(normalizeEmail(email), password);
-      routeForRole(result.user.role);
+      await continueAfterAuth(result.user.role);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not connect to LetsGoRide. Please try again.");
     } finally {
@@ -58,7 +95,7 @@ export default function EmailLoginScreen() {
       setLoading(true);
       setError("");
       const user = await loginWithBiometrics();
-      routeForRole(user.role);
+      await continueAfterAuth(user.role);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Please log in with your password again.");
     } finally {
@@ -85,6 +122,20 @@ export default function EmailLoginScreen() {
 
   return (
     <Screen title="Login" showBack fallbackRoute="/(auth)/welcome" showNotifications={false}>
+      <Modal visible={notificationIntroOpen} transparent animationType="fade" onRequestClose={() => finishNotificationIntro(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enable notifications?</Text>
+            <Text style={styles.body}>
+              LetsGoRide sends phone alerts for booking requests, trip updates, messages, verification reviews, support replies, and safety notices.
+            </Text>
+            <View style={styles.modalActions}>
+              <AppButton title="Enable notifications" loading={notificationSaving} onPress={() => finishNotificationIntro(true)} />
+              <AppButton title="Not now" variant="secondary" onPress={() => finishNotificationIntro(false)} />
+            </View>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.logoWrap}>
         <BrandLogo size="regular" />
       </View>
@@ -191,5 +242,27 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 12,
     paddingBottom: spacing.md,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.xl,
+    backgroundColor: "rgba(17,20,23,0.26)",
+  },
+  modalCard: {
+    gap: spacing.md,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    padding: spacing.xl,
+  },
+  modalTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 24,
+  },
+  modalActions: {
+    gap: spacing.sm,
   },
 });
