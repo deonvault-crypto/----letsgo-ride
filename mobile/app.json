@@ -9,7 +9,6 @@
     "scheme": "letsgoride",
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "7",
       "infoPlist": {
         "NSCameraUsageDescription": "LetsGoRide uses the camera during identity verification to scan your face and driver documents.",
         "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos and driver verification documents from your photo library.",
