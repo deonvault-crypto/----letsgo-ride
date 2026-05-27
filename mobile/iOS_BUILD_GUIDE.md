@@ -65,15 +65,9 @@ Once built, test on a real device or simulator:
 
 ## Step 4: App Store Submission
 
-### Build Number Increment
+### Build Number Handling
 
-Before submission, increment build number in `app.json`:
-
-```json
-"ios": {
-  "buildNumber": "8"
-}
-```
+When using EAS remote versioning, `ios.buildNumber` in `app.json` is ignored for production builds. EAS auto-increments the build number during the build process, so keep your app version in `expo.version` and rely on EAS-managed build versioning.
 
 ### Create App Store Connect Record
 

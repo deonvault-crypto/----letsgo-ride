@@ -86,6 +86,8 @@ https://letsgoride-backend.onrender.com
 - Native module: `LetsGoRideFaceTec` (defined in Xcode native build)
 - JavaScript bridge via `facetecService.ts`
 
+> Note: With EAS remote versioning enabled, `ios.buildNumber` in `app.json` is ignored. EAS manages the build number automatically during production builds.
+
 #### How It Works
 
 1. **iOS build includes** the FaceTec framework and native module automatically during `expo prebuild`
