@@ -14,18 +14,14 @@
     "production": {
       "autoIncrement": true,
       "ios": {
-        "buildNumber": "8"
+        "simulator": false
       },
       "android": {
-        "buildType": "release"
+        "buildType": "app-bundle"
       }
     }
   },
   "submit": {
-    "production": {
-      "ios": {
-        "asciiOnlyMetadata": true
-      }
-    }
+    "production": {}
   }
 }
