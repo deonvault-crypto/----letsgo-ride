@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { DriverCard } from "../../../components/cards/DriverCard";
+import { ReviewPromptCard } from "../../../components/reviews/ReviewPromptCard";
 import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
 import { AppButton } from "../../../components/ui/AppButton";
@@ -17,9 +18,11 @@ import { spacing } from "../../../constants/spacing";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { updateCurrentUser } from "../../../services/authService";
 import { listConversations } from "../../../services/conversationService";
+import { listPendingReviews } from "../../../services/reviewService";
 import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, driverRideRequests, endTrip, getRide, startTrip } from "../../../services/ridesService";
 import { Conversation } from "../../../types/conversation.types";
 import { Ride, RideRequest } from "../../../types/ride.types";
+import { PendingReview } from "../../../types/review.types";
 import { formatTripDate } from "../../../utils/formatDate";
 import { formatStatus } from "../../../utils/formatStatus";
 import { canonicalRideStatus, departureCountdown, isTripActive, isTripFinal, tripStatusLabel, tripStatusTone } from "../../../utils/tripLifecycle";
@@ -32,6 +35,7 @@ export default function DriverTripDetailScreen() {
   const [ride, setRide] = useState<Ride | null>(null);
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [phone, setPhone] = useState("");
   const [busyRequestId, setBusyRequestId] = useState("");
   const [busyTripAction, setBusyTripAction] = useState<"start" | "end" | "">("");
@@ -42,10 +46,11 @@ export default function DriverTripDetailScreen() {
   async function load() {
     try {
       setLoading(true);
-      const [rideData, requestData, conversationData] = await Promise.all([getRide(id), driverRideRequests(), listConversations()]);
+      const [rideData, requestData, conversationData, pendingReviewData] = await Promise.all([getRide(id), driverRideRequests(), listConversations(), listPendingReviews()]);
       setRide(rideData);
       setRequests(requestData.filter((request) => request.ride_id === id));
       setConversations(conversationData);
+      setPendingReviews(pendingReviewData.filter((review) => review.trip_id === id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load trip.");
     } finally {
@@ -59,6 +64,32 @@ export default function DriverTripDetailScreen() {
 
   function conversationFor(request: RideRequest) {
     return conversations.find((conversation) => conversation.request_id === request.id);
+  }
+
+  function openReview(review: PendingReview) {
+    router.push({
+      pathname: "/(shared)/review",
+      params: {
+        tripId: review.trip_id,
+        revieweeId: review.reviewee_id,
+        revieweeName: review.reviewee_name,
+        reviewerRole: review.reviewer_role,
+        revieweeRole: review.reviewee_role,
+      },
+    } as never);
+  }
+
+  function openPassengerProfile(request: RideRequest) {
+    if (!request.user_id) return;
+    router.push({
+      pathname: "/(shared)/passenger-profile/[id]",
+      params: {
+        id: request.user_id,
+        name: request.passenger_name,
+        photo: request.passenger_profile_photo_url || "",
+        rideId: ride?.id || "",
+      },
+    } as never);
   }
 
   async function setStatus(requestId: string, status: "confirmed" | "declined" | "cancelled_by_driver") {
@@ -166,7 +197,12 @@ export default function DriverTripDetailScreen() {
         vehicle={ride.vehicle}
         verified={isVerifiedStatus(ride.driver_verification_status)}
         imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url}
+        reviewCount={ride.driver_review_count}
+        completedTripsCount={ride.driver_completed_trips_count}
       />
+      {pendingReviews.map((review) => (
+        <ReviewPromptCard key={`${review.trip_id}-${review.reviewee_id}`} review={review} onPress={() => openReview(review)} />
+      ))}
       {!user?.phone ? (
         <View style={styles.card}>
           <StatusBadge label="Phone required" tone="warning" />
@@ -186,7 +222,13 @@ export default function DriverTripDetailScreen() {
       ) : requests.map((request) => (
         <View key={request.id} style={styles.card}>
           <StatusBadge label={formatStatus(request.status)} tone={request.status === "confirmed" ? "success" : "warning"} />
-          <View style={styles.passengerRow}>
+          <Pressable
+            accessibilityRole={request.user_id ? "button" : undefined}
+            accessibilityLabel={request.user_id ? `Open ${request.passenger_name}'s profile` : undefined}
+            disabled={!request.user_id}
+            onPress={() => openPassengerProfile(request)}
+            style={({ pressed }) => [styles.passengerRow, pressed && styles.linkPressed]}
+          >
             <Avatar name={request.passenger_name} imageUri={request.passenger_profile_photo_url} size={42} />
             <View style={styles.passengerCopy}>
               <View style={styles.nameRow}>
@@ -194,7 +236,7 @@ export default function DriverTripDetailScreen() {
                 <VerifiedBadge verified={isVerifiedStatus(request.passenger_verification_status)} />
               </View>
             </View>
-          </View>
+          </Pressable>
           <Text style={styles.body}>{request.passenger_note || "No note from passenger."}</Text>
           <View style={styles.actions}>
             {conversationFor(request) ? (
@@ -269,5 +311,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     flexWrap: "wrap",
+  },
+  linkPressed: {
+    opacity: 0.75,
   },
 });

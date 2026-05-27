@@ -59,6 +59,9 @@ async def ride_detail(ride_id: str, user=Depends(get_optional_current_user)):
 async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
     if not user.get("phone"):
         api_error("Add your phone number before posting a trip.")
+    profile_photo_url = str(user.get("profile_photo_url") or "").strip()
+    if not profile_photo_url or profile_photo_url.startswith("file://"):
+        api_error("Please add a clear profile photo before posting rides. This helps passengers know who they are travelling with.")
 
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
@@ -76,6 +79,7 @@ async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
             "driver_name": driver.get("name") or user.get("name") or data.get("driver_name"),
             "driver_rating": driver.get("rating", data.get("driver_rating", 4.8)),
             "driver_verification_status": driver.get("verification_status"),
+            "driver_profile_photo_url": profile_photo_url,
         }
     )
     return api_success(await create_ride(data))

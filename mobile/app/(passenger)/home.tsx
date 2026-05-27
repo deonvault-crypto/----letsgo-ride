@@ -26,6 +26,10 @@ export default function PassengerHomeScreen() {
   const passengerName = firstNameOrFallback(user?.name);
   const verified = isIdentityVerified(user);
   const upcomingRides = rides.filter((ride) => isRideBookable(ride));
+  function openDriverProfile(driverId: string | undefined, rideId: string) {
+    if (!driverId) return;
+    router.push(`/(shared)/driver-profile/${driverId}?rideId=${rideId}` as never);
+  }
 
   return (
     <Screen navRole="passenger">
@@ -78,6 +82,7 @@ export default function PassengerHomeScreen() {
             key={ride.id}
             ride={ride}
             onPress={() => router.push(`/(passenger)/ride/${ride.id}` as never)}
+            onDriverPress={() => openDriverProfile(ride.driver_id, ride.id)}
           />
         ))}
       </View>

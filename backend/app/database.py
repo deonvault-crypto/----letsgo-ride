@@ -16,6 +16,7 @@ COLLECTION_NAMES = [
     "ride_requests",
     "trips",
     "reports",
+    "reviews",
     "support_messages",
     "waitlist",
     "passenger_interests",

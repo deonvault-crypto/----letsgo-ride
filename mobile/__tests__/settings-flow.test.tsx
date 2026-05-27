@@ -55,6 +55,8 @@ jest.mock("../services/notificationService", () => ({
 
 jest.mock("../services/pushNotificationService", () => ({
   enablePhoneNotifications: jest.fn(),
+  hasSeenNotificationExplanation: jest.fn(async () => true),
+  markNotificationExplanationSeen: jest.fn(),
   phoneNotificationStatus: jest.fn(async () => ({ enabled: false, status: "off" })),
 }));
 

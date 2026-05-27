@@ -22,13 +22,18 @@ export const driverUser: User = {
   city: "Bulawayo",
   role: "driver",
   rating: 4.9,
+  profile_photo_url: "https://example.com/deon.jpg",
 };
 
 export const ride: Ride = {
   id: "ride-1",
   driver_id: "driver-1",
+  driver_user_id: "user-driver",
   driver_name: "Deon Ncube",
   driver_rating: 4.9,
+  driver_profile_photo_url: "https://example.com/deon.jpg",
+  driver_review_count: 2,
+  driver_completed_trips_count: 8,
   vehicle: "Toyota Wish, silver",
   origin: "Harare",
   destination: "Bulawayo",
@@ -59,7 +64,7 @@ export const verifiedProfile: VerificationProfile = {
   verification_status: "approved",
   verification_provider: "manual",
   documents: [],
-  required_documents: ["identity_document", "driver_license", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
+  required_documents: ["identity_document", "driver_license", "selfie", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
 };
 
 export const pendingProfile: VerificationProfile = {
@@ -69,7 +74,7 @@ export const pendingProfile: VerificationProfile = {
   verification_status: "pending_uploads",
   verification_provider: "manual",
   documents: [],
-  required_documents: ["identity_document", "driver_license", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
+  required_documents: ["identity_document", "driver_license", "selfie", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
 };
 
 export const notStartedProfile: VerificationProfile = {
@@ -79,5 +84,5 @@ export const notStartedProfile: VerificationProfile = {
   verification_status: "not_started",
   verification_provider: "manual",
   documents: [],
-  required_documents: ["identity_document", "driver_license", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
+  required_documents: ["identity_document", "driver_license", "selfie", "vehicle_registration_or_logbook", "vehicle_photo_optional"],
 };

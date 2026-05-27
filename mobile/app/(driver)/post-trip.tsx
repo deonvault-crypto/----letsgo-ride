@@ -21,6 +21,8 @@ import { isValidTripTime } from "../../utils/formatDate";
 import { hasRequiredValues } from "../../utils/validation";
 import { isVerifiedStatus } from "../../utils/verificationStatus";
 
+const PROFILE_PHOTO_REQUIRED_MESSAGE = "Please add a clear profile photo before posting rides. This helps passengers know who they are travelling with.";
+
 export default function PostTripScreen() {
   const router = useRouter();
   const { user, loading: userLoading, error: userError, reload: reloadUser } = useCurrentUser();
@@ -72,7 +74,11 @@ export default function PostTripScreen() {
       setShowPhoneModal(true);
       return;
     }
-    if (!isVerifiedStatus(verification?.verification_status)) {
+    if (!user?.profile_photo_url) {
+      setError(PROFILE_PHOTO_REQUIRED_MESSAGE);
+      return;
+    }
+    if (!verification?.verified || !isVerifiedStatus(verification?.verification_status)) {
       setError("Complete driver verification before posting a trip.");
       return;
     }
@@ -145,7 +151,15 @@ export default function PostTripScreen() {
           <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
         </View>
       ) : null}
-      {user?.phone && !isVerifiedStatus(verification?.verification_status) ? (
+      {user?.phone && !user.profile_photo_url ? (
+        <View style={styles.notice}>
+          <StatusBadge label="Profile photo required" tone="warning" />
+          <Text style={styles.body}>{PROFILE_PHOTO_REQUIRED_MESSAGE}</Text>
+          <Text style={styles.helperText}>Use a clear face photo rather than a logo, car, cartoon, or blank image.</Text>
+          <AppButton title="Add profile photo" variant="secondary" onPress={() => router.push("/(shared)/edit-profile" as never)} />
+        </View>
+      ) : null}
+      {user?.phone && user.profile_photo_url && !isVerifiedStatus(verification?.verification_status) ? (
         <View style={styles.notice}>
           <StatusBadge label="Verification required" tone="warning" />
           <Text style={styles.body}>
@@ -156,7 +170,7 @@ export default function PostTripScreen() {
           <AppButton title="Open driver verification" variant="secondary" onPress={() => router.push("/(shared)/verification" as never)} />
         </View>
       ) : null}
-      {user?.phone && isVerifiedStatus(verification?.verification_status) ? (
+      {user?.phone && user.profile_photo_url && isVerifiedStatus(verification?.verification_status) ? (
         <View style={styles.notice}>
           <StatusBadge label="Driver verified" tone="success" />
           <Text style={styles.body}>Your account is approved to post public rides.</Text>

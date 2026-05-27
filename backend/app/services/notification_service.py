@@ -35,6 +35,7 @@ PREFERENCE_FOR_TYPE = {
     "safety_report_updated": "safety_alerts",
     "admin_booking_update": "safety_alerts",
     "ride_departure": "trip_updates",
+    "trip_review": "trip_updates",
 }
 
 

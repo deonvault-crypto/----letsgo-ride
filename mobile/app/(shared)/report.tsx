@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 
 import { EmptyState } from "../../components/states/EmptyState";
 import { AppButton } from "../../components/ui/AppButton";
@@ -15,6 +16,7 @@ import { formatStatus } from "../../utils/formatStatus";
 const reportTypes = ["Unsafe ride", "Scam", "Driver", "Passenger", "Payment issue", "Other"];
 
 export default function ReportIssueScreen() {
+  const { rideId } = useLocalSearchParams<{ rideId?: string }>();
   const [reportType, setReportType] = useState(reportTypes[0]);
   const [message, setMessage] = useState("");
   const [reports, setReports] = useState<SafetyReport[]>([]);
@@ -36,7 +38,7 @@ export default function ReportIssueScreen() {
     try {
       setSaving(true);
       setError("");
-      await createReport({ report_type: reportType, message });
+      await createReport({ report_type: reportType, message, ride_id: rideId || undefined });
       setSubmitted(true);
       setMessage("");
       await loadReports();

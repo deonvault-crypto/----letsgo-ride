@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { GestureResponderEvent, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { colors } from "../../constants/colors";
@@ -12,11 +12,16 @@ import { Avatar } from "../ui/Avatar";
 import { StatusBadge } from "../ui/StatusBadge";
 import { VerifiedBadge } from "../ui/VerifiedBadge";
 
-export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }) {
+export function RideCard({ ride, onPress, onDriverPress }: { ride: Ride; onPress?: () => void; onDriverPress?: () => void }) {
   const status = canonicalRideStatus(ride.status);
   const isBookable = isRideBookable(ride);
   const isFull = Number(ride.available_seats || 0) <= 0;
   const rating = Number.isFinite(ride.driver_rating) ? ride.driver_rating.toFixed(1) : "4.8";
+  const reviewCount = Number(ride.driver_review_count || 0);
+  function handleDriverPress(event: GestureResponderEvent) {
+    event.stopPropagation();
+    onDriverPress?.();
+  }
   return (
     <Pressable
       accessibilityRole="button"
@@ -28,20 +33,35 @@ export function RideCard({ ride, onPress }: { ride: Ride; onPress?: () => void }
         <View style={styles.routeCopy}>
           <Text style={styles.route}>{ride.origin} to {ride.destination}</Text>
           <Text style={styles.meta}>{formatTripDate(ride.date, ride.time)}</Text>
+          <Text style={styles.price}>{formatUsd(ride.price_usd)}</Text>
         </View>
-        <Text style={styles.price}>{formatUsd(ride.price_usd)}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${ride.driver_name}'s profile`}
+          disabled={!onDriverPress}
+          onPress={handleDriverPress}
+          style={({ pressed }) => [styles.driverPreview, pressed && styles.driverPreviewPressed]}
+        >
+          <Avatar name={ride.driver_name} imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url || undefined} size={64} />
+        </Pressable>
       </View>
       <View style={styles.row}>
-        <Avatar name={ride.driver_name} imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url || undefined} size={38} />
         <View style={styles.driverCopy}>
-          <View style={styles.driverNameRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${ride.driver_name}'s profile`}
+            disabled={!onDriverPress}
+            onPress={handleDriverPress}
+            style={({ pressed }) => [styles.driverNameRow, pressed && styles.linkPressed]}
+          >
             <Text style={styles.driver}>{ride.driver_name}</Text>
             <VerifiedBadge verified={isVerifiedStatus(ride.driver_verification_status)} />
             {ride.is_own_ride ? <StatusBadge label="Your ride" tone="neutral" /> : null}
-          </View>
+          </Pressable>
           <View style={styles.inlineRow}>
             <MaterialCommunityIcons name="star" size={15} color={colors.warning} />
             <Text style={styles.meta}>{rating}</Text>
+            <Text style={styles.meta}>{reviewCount > 0 ? `${reviewCount} reviews` : "No reviews yet"}</Text>
           </View>
         </View>
       </View>
@@ -84,6 +104,7 @@ const styles = StyleSheet.create({
   top: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: spacing.md,
   },
   routeCopy: {
@@ -100,7 +121,20 @@ const styles = StyleSheet.create({
     color: colors.softGreen,
     fontSize: 20,
     fontWeight: "900",
-    textAlign: "right",
+    marginTop: spacing.xs,
+  },
+  driverPreview: {
+    width: 76,
+    height: 76,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.elevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  driverPreviewPressed: {
+    transform: [{ scale: 0.97 }],
   },
   meta: {
     color: colors.mutedText,
@@ -126,6 +160,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
     flexWrap: "wrap",
+  },
+  linkPressed: {
+    opacity: 0.75,
   },
   driver: {
     color: colors.whiteText,

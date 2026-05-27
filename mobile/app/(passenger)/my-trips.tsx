@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
+import { ReviewPromptCard } from "../../components/reviews/ReviewPromptCard";
 import { AppButton } from "../../components/ui/AppButton";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
@@ -15,9 +16,11 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useTrips } from "../../hooks/useTrips";
 import { listConversations } from "../../services/conversationService";
+import { listPendingReviews } from "../../services/reviewService";
 import { cancelMyRideRequest, checkInRideRequest } from "../../services/ridesService";
 import { Conversation } from "../../types/conversation.types";
 import { RideRequest } from "../../types/ride.types";
+import { PendingReview } from "../../types/review.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
 import { canonicalRideStatus, isTripActive, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
@@ -27,12 +30,27 @@ export default function MyTripsScreen() {
   const router = useRouter();
   const { trips, loading, error, reload } = useTrips();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [busyRequestId, setBusyRequestId] = useState("");
   const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     listConversations().then(setConversations).catch(() => undefined);
+    listPendingReviews().then(setPendingReviews).catch(() => undefined);
   }, [trips.length]);
+
+  function openReview(review: PendingReview) {
+    router.push({
+      pathname: "/(shared)/review",
+      params: {
+        tripId: review.trip_id,
+        revieweeId: review.reviewee_id,
+        revieweeName: review.reviewee_name,
+        reviewerRole: review.reviewer_role,
+        revieweeRole: review.reviewee_role,
+      },
+    } as never);
+  }
 
   function conversationFor(trip: RideRequest) {
     return conversations.find((conversation) => conversation.request_id === trip.id);
@@ -84,6 +102,9 @@ export default function MyTripsScreen() {
     <Screen title="Trips" navRole="passenger">
       <Text style={styles.title}>My trips</Text>
       {actionError ? <ErrorState message={actionError} onRetry={reload} /> : null}
+      {pendingReviews.slice(0, 2).map((review) => (
+        <ReviewPromptCard key={`${review.trip_id}-${review.reviewee_id}`} review={review} onPress={() => openReview(review)} />
+      ))}
       {loading ? <LoadingState label="Loading trips..." /> : null}
       {error ? <ErrorState message={error} onRetry={reload} /> : null}
       {!loading && !error && trips.length === 0 ? (

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -59,6 +59,13 @@ export default function RideDetailScreen() {
   const isOwnRide = Boolean(ride.is_own_ride || (user?.id && ride.driver_user_id === user.id));
   const bookable = isRideBookable(ride);
   const countdown = departureCountdown(ride);
+  const driverReviewCount = Number(ride.driver_review_count || 0);
+  const driverId = ride.driver_id;
+  const rideId = ride.id;
+  function openDriverProfile() {
+    if (!driverId) return;
+    router.push(`/(shared)/driver-profile/${driverId}?rideId=${rideId}` as never);
+  }
 
   return (
     <Screen title="Ride" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
@@ -82,7 +89,22 @@ export default function RideDetailScreen() {
         vehicle={ride.vehicle}
         verified={isVerifiedStatus(ride.driver_verification_status)}
         imageUri={ride.driver_profile_photo_url || ride.driver_avatar_url}
+        onPress={openDriverProfile}
+        reviewCount={driverReviewCount}
+        completedTripsCount={ride.driver_completed_trips_count}
       />
+
+      <View style={styles.detailCard}>
+        <View style={styles.driverInfoHeader}>
+          <Text style={styles.sectionTitle}>Driver profile</Text>
+          <Pressable accessibilityRole="button" onPress={openDriverProfile} style={({ pressed }) => pressed && styles.linkPressed}>
+            <Text style={styles.reviewLink}>{driverReviewCount > 0 ? "Read reviews" : "No reviews yet"}</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.body}>
+          View verified identity status, completed trips, vehicle details, and public reviews before requesting a seat.
+        </Text>
+      </View>
 
       <View style={styles.detailCard}>
         <Text style={styles.sectionTitle}>Safety notes</Text>
@@ -176,6 +198,19 @@ const styles = StyleSheet.create({
     color: colors.whiteText,
     fontWeight: "900",
     fontSize: 18,
+  },
+  driverInfoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  reviewLink: {
+    color: colors.primaryGreen,
+    fontWeight: "900",
+  },
+  linkPressed: {
+    opacity: 0.75,
   },
   body: {
     color: colors.mutedText,

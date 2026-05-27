@@ -26,6 +26,10 @@ export default function ResultsScreen() {
   );
   const { rides, loading, error, reload } = useRides(searchParams);
   const availableRides = rides.filter((ride) => isRideBookable(ride) && Number(ride.available_seats || 0) >= searchParams.seats);
+  function openDriverProfile(driverId: string | undefined, rideId: string) {
+    if (!driverId) return;
+    router.push(`/(shared)/driver-profile/${driverId}?rideId=${rideId}` as never);
+  }
 
   return (
     <Screen title="Results" showBack fallbackRoute="/(passenger)/search" navRole="passenger">
@@ -45,6 +49,7 @@ export default function ResultsScreen() {
           key={ride.id}
           ride={ride}
           onPress={() => router.push(`/(passenger)/ride/${ride.id}` as never)}
+          onDriverPress={() => openDriverProfile(ride.driver_id, ride.id)}
         />
       ))}
     </Screen>

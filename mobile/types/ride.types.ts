@@ -30,6 +30,8 @@ export type Ride = {
   driver_verification_status?: string;
   driver_profile_photo_url?: string | null;
   driver_avatar_url?: string | null;
+  driver_review_count?: number;
+  driver_completed_trips_count?: number;
   vehicle: string;
   origin: string;
   destination: string;
@@ -61,6 +63,7 @@ export type Ride = {
 export type RideRequest = {
   id: string;
   ride_id: string;
+  user_id?: string;
   passenger_name: string;
   passenger_phone?: string;
   passenger_profile_photo_url?: string;

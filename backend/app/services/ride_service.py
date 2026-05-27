@@ -8,6 +8,7 @@ from app.database import database
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification, notify_users
 from app.services.profile_photo_service import absolute_profile_photo_url
+from app.services.review_service import completed_trips_count_for_user, public_review_summary_for_user
 from app.utils import new_id, now_iso
 
 
@@ -230,6 +231,18 @@ async def _notify_confirmed_passengers(ride: Dict[str, Any], notification_type: 
     )
 
 
+async def _notify_review_unlocked(ride: Dict[str, Any]) -> None:
+    passenger_ids = await confirmed_passenger_user_ids(ride["id"])
+    recipient_ids = [ride.get("user_id"), *passenger_ids]
+    await notify_users(
+        recipient_ids,
+        "trip_review",
+        "How was your trip?",
+        f"Your ride from {ride.get('origin')} to {ride.get('destination')} is complete. Leave a quick review.",
+        {"ride_id": ride.get("id"), "trip_status": TRIP_STATUS_COMPLETED},
+    )
+
+
 async def apply_ride_lifecycle(ride: Dict[str, Any], *, persist: bool = True) -> Dict[str, Any]:
     next_status = await derive_trip_status(ride)
     current_status = canonical_trip_status(ride.get("status"))
@@ -270,6 +283,9 @@ async def apply_ride_lifecycle(ride: Dict[str, Any], *, persist: bool = True) ->
                 "Ride completed",
                 f"Your ride from {ride.get('origin')} to {ride.get('destination')} has been completed.",
             )
+        if next_status == TRIP_STATUS_COMPLETED and not ride.get("review_prompt_notification_sent_at"):
+            await database.update_one("rides", ride["id"], {"review_prompt_notification_sent_at": now_iso()})
+            await _notify_review_unlocked(ride)
 
     return {**ride, **updates}
 
@@ -369,11 +385,16 @@ async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any
     enriched["live_tracking_active"] = bool(status == TRIP_STATUS_IN_PROGRESS and ride.get("live_tracking_enabled"))
     enriched["last_driver_location"] = ride.get("last_driver_location") if status == TRIP_STATUS_IN_PROGRESS else None
     if driver_user:
+        review_summary = await public_review_summary_for_user(driver_user["id"], include_latest=False)
+        completed_trips_count = await completed_trips_count_for_user(driver_user["id"], "driver")
         enriched["driver_user_id"] = driver_user.get("id")
         enriched["driver_name"] = driver_user.get("name") or ride.get("driver_name") or "LetsGo Driver"
         enriched["driver_profile_photo_url"] = _public_driver_photo_url(driver_user)
         enriched["driver_avatar_url"] = enriched["driver_profile_photo_url"]
         enriched["driver_verification_status"] = driver_user.get("verification_status") or ride.get("driver_verification_status")
+        enriched["driver_rating"] = review_summary["average_rating"] or driver_user.get("rating") or ride.get("driver_rating", 4.8)
+        enriched["driver_review_count"] = review_summary["review_count"]
+        enriched["driver_completed_trips_count"] = completed_trips_count
     else:
         enriched["driver_profile_photo_url"] = None
         enriched["driver_avatar_url"] = None
@@ -553,6 +574,9 @@ async def end_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
         f"Your ride from {updated.get('origin')} to {updated.get('destination')} has been completed.",
     )
     await database.update_one("rides", ride_id, {"completed_notification_sent_at": timestamp})
+    if not updated.get("review_prompt_notification_sent_at"):
+        await _notify_review_unlocked(updated)
+        await database.update_one("rides", ride_id, {"review_prompt_notification_sent_at": timestamp})
     await write_audit_log(
         actor_user_id=user["id"],
         actor_role=user.get("role"),

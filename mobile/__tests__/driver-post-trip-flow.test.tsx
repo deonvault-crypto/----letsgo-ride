@@ -104,6 +104,18 @@ describe("driver post-trip flow", () => {
     expect(createRide).not.toHaveBeenCalled();
   });
 
+  it("requires a clear profile photo before posting", async () => {
+    mockUser = { ...driverUser, profile_photo_url: "" };
+
+    const screen = render(<PostTripScreen />);
+
+    expect(await screen.findByText("Profile photo required")).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole("button", { name: "Publish trip" }));
+
+    expect(screen.getAllByText("Please add a clear profile photo before posting rides. This helps passengers know who they are travelling with.").length).toBeGreaterThan(0);
+    expect(createRide).not.toHaveBeenCalled();
+  });
+
   it("lets a verified driver post a trip successfully", async () => {
     (createRide as jest.Mock).mockResolvedValueOnce(ride);
 

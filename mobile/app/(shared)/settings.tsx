@@ -1,6 +1,6 @@
 import { Alert, Modal, StyleSheet, Switch, Text, TextInput, View } from "react-native";
-import { useRouter } from "expo-router";
-import { ReactNode, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { ReactNode, useCallback, useState } from "react";
 
 import { AppButton } from "../../components/ui/AppButton";
 import { ListTile } from "../../components/ui/ListTile";
@@ -18,7 +18,12 @@ import {
   isBiometricEnabled,
 } from "../../services/biometricService";
 import { getNotificationPreferences, updateNotificationPreferences } from "../../services/notificationService";
-import { enablePhoneNotifications, phoneNotificationStatus } from "../../services/pushNotificationService";
+import {
+  enablePhoneNotifications,
+  hasSeenNotificationExplanation,
+  markNotificationExplanationSeen,
+  phoneNotificationStatus,
+} from "../../services/pushNotificationService";
 import { NotificationPreferences } from "../../types/notification.types";
 import { formatStatus } from "../../utils/formatStatus";
 import { openExternalUrl } from "../../utils/openExternalUrl";
@@ -91,26 +96,48 @@ export default function SettingsScreen() {
   const [preferenceSaving, setPreferenceSaving] = useState<PreferenceKey | "">("");
   const [phoneNotificationEnabled, setPhoneNotificationEnabled] = useState(false);
   const [phoneNotificationMessage, setPhoneNotificationMessage] = useState("");
+  const [notificationExplanationOpen, setNotificationExplanationOpen] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [deleteSaving, setDeleteSaving] = useState(false);
 
-  useEffect(() => {
-    async function loadBiometricState() {
-      setBiometricSupported(await biometricAvailable());
-      setBiometricEnabled(await isBiometricEnabled());
-      setBiometricText(await biometricLabel());
-    }
-    loadBiometricState().catch(() => {
-      setBiometricSupported(false);
-      setBiometricEnabled(false);
-    });
-    getNotificationPreferences().then(setPreferences).catch(() => undefined);
-    phoneNotificationStatus()
-      .then((state) => setPhoneNotificationEnabled(state.enabled))
-      .catch(() => setPhoneNotificationEnabled(false));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      async function loadSettingsState() {
+        try {
+          setBiometricSupported(await biometricAvailable());
+          setBiometricEnabled(await isBiometricEnabled());
+          setBiometricText(await biometricLabel());
+        } catch {
+          setBiometricSupported(false);
+          setBiometricEnabled(false);
+        }
+
+        getNotificationPreferences().then((data) => active && setPreferences(data)).catch(() => undefined);
+        try {
+          const state = await phoneNotificationStatus();
+          if (!active) return;
+          setPhoneNotificationEnabled(state.enabled);
+          setPhoneNotificationMessage(
+            state.message || (state.enabled ? "Phone notifications are enabled." : "Phone notifications are off."),
+          );
+        } catch {
+          if (active) {
+            setPhoneNotificationEnabled(false);
+            setPhoneNotificationMessage("Phone notifications are off.");
+          }
+        }
+      }
+
+      loadSettingsState();
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   async function updatePreference(key: PreferenceKey, value: boolean) {
     try {
@@ -122,7 +149,7 @@ export default function SettingsScreen() {
     }
   }
 
-  async function enableNotifications() {
+  async function requestPhoneNotifications() {
     try {
       setPushSaving(true);
       setPhoneNotificationMessage("");
@@ -135,6 +162,26 @@ export default function SettingsScreen() {
     } finally {
       setPushSaving(false);
     }
+  }
+
+  async function enableNotifications() {
+    if (!(await hasSeenNotificationExplanation())) {
+      setNotificationExplanationOpen(true);
+      return;
+    }
+    await requestPhoneNotifications();
+  }
+
+  async function confirmNotificationExplanation() {
+    await markNotificationExplanationSeen();
+    setNotificationExplanationOpen(false);
+    await requestPhoneNotifications();
+  }
+
+  async function skipNotificationExplanation() {
+    await markNotificationExplanationSeen();
+    setNotificationExplanationOpen(false);
+    setPhoneNotificationMessage("You can enable phone notifications later from Settings.");
   }
 
   function confirmLogout() {
@@ -231,6 +278,20 @@ export default function SettingsScreen() {
                 disabled={deleteText.trim().toUpperCase() !== "DELETE"}
                 onPress={confirmDeleteAccount}
               />
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={notificationExplanationOpen} transparent animationType="fade" onRequestClose={skipNotificationExplanation}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enable notifications?</Text>
+            <Text style={styles.body}>
+              LetsGoRide uses notifications for booking requests, trip updates, messages, verification updates, support replies, and safety alerts.
+            </Text>
+            <View style={styles.modalActions}>
+              <AppButton title="Enable notifications" loading={pushSaving} onPress={confirmNotificationExplanation} />
+              <AppButton title="Not now" variant="secondary" onPress={skipNotificationExplanation} />
             </View>
           </View>
         </View>

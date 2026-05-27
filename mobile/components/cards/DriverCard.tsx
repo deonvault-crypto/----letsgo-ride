@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { colors } from "../../constants/colors";
@@ -13,15 +13,27 @@ export function DriverCard({
   vehicle,
   verified = false,
   imageUri,
+  onPress,
+  reviewCount = 0,
+  completedTripsCount,
 }: {
   name: string;
   rating?: number;
   vehicle?: string;
   verified?: boolean;
   imageUri?: string | null;
+  onPress?: () => void;
+  reviewCount?: number;
+  completedTripsCount?: number;
 }) {
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={onPress ? `Open ${name}'s profile` : undefined}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
       <Avatar name={name} imageUri={imageUri || undefined} />
       <View style={styles.body}>
         <View style={styles.nameRow}>
@@ -30,12 +42,15 @@ export function DriverCard({
         </View>
         <View style={styles.row}>
           <MaterialCommunityIcons name="star" size={16} color={colors.warning} />
-          <Text style={styles.meta}>{rating ? rating.toFixed(1) : "New driver"}</Text>
+          <Text style={styles.meta}>
+            {rating ? rating.toFixed(1) : "New driver"}{reviewCount ? ` (${reviewCount})` : ""}
+          </Text>
         </View>
+        {completedTripsCount ? <Text style={styles.meta}>{completedTripsCount} completed trips</Text> : null}
         {vehicle ? <Text style={styles.meta}>{vehicle}</Text> : null}
       </View>
       {verified ? <StatusBadge label="Identity verified" tone="neutral" /> : <StatusBadge label="Pending" tone="warning" />}
-    </View>
+    </Pressable>
   );
 }
 
@@ -49,6 +64,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 22,
     padding: spacing.lg,
+  },
+  pressed: {
+    transform: [{ scale: 0.99 }],
   },
   body: {
     flex: 1,
