@@ -32,6 +32,10 @@ export async function isBiometricEnabled() {
   return biometricAvailable();
 }
 
+export async function hasBiometricLoginCredential() {
+  return isBiometricEnabled();
+}
+
 export async function enableBiometricLogin() {
   if (!await biometricAvailable()) {
     throw new Error("Biometrics are not available or not enrolled on this device.");

@@ -32,7 +32,9 @@ export default function EditProfileScreen() {
   const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
   const [profilePhotoName, setProfilePhotoName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savedAndLeaving, setSavedAndLeaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [phoneMessage, setPhoneMessage] = useState("");
   const [isError, setIsError] = useState(false);
 
   function fillFormFromUser(nextUser: typeof user) {
@@ -56,11 +58,13 @@ export default function EditProfileScreen() {
       setSaving(true);
       setIsError(false);
       setMessage("");
+      setPhoneMessage("");
       if (phone.trim() && !isValidPhone(phone)) {
         setIsError(true);
         setMessage("Enter your phone number with country code, for example +263772554186.");
         return;
       }
+      const phoneChanged = phone.trim() !== (user?.phone || "");
       const updated = await updateCurrentUser({
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -72,8 +76,12 @@ export default function EditProfileScreen() {
       });
       fillFormFromUser(updated);
       await reload();
+      setSavedAndLeaving(true);
       setMessage("Profile saved. Returning to profile...");
-      setTimeout(() => router.replace("/(shared)/profile" as never), 350);
+      if (phoneChanged) {
+        setPhoneMessage("Phone number saved. Verification may be required before booking or posting rides.");
+      }
+      setTimeout(() => router.replace("/(shared)/profile" as never), 900);
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : "Unable to update profile.");
@@ -87,6 +95,7 @@ export default function EditProfileScreen() {
       setSaving(true);
       setIsError(false);
       setMessage("");
+      setPhoneMessage("");
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [1, 1],
@@ -125,26 +134,27 @@ export default function EditProfileScreen() {
             {verified ? <StatusBadge label="Identity verified" tone="success" /> : null}
           </View>
         </View>
-        <AppButton title="Update photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} />
+        <AppButton title="Update photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} disabled={savedAndLeaving} />
       </View>
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Account</Text>
-        <AppInput label="Full name" value={name} onChangeText={setName} />
+        <AppInput label="Full name" value={name} onChangeText={setName} editable={!savedAndLeaving} />
         <View style={styles.readOnlyField}>
           <Text style={styles.readOnlyLabel}>Email</Text>
           <Text style={styles.readOnlyValue}>{email || "Email not set"}</Text>
           <Text style={styles.helperText}>Changing a verified email requires a separate re-verification flow.</Text>
         </View>
-        <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263772554186" />
+        <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263772554186" editable={!savedAndLeaving} />
         <Text style={styles.helperText}>Use country code, for example +263772554186.</Text>
       </View>
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Travel profile</Text>
-        <LocationPicker label="City" value={profileCity} onChangeText={setProfileCity} />
-        <AppInput label="About" value={bio} onChangeText={setBio} multiline />
-        <AppInput label="Travel preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline />
+        <LocationPicker label="City" value={profileCity} onChangeText={setProfileCity} disabled={savedAndLeaving} />
+        <AppInput label="About" value={bio} onChangeText={setBio} multiline editable={!savedAndLeaving} />
+        <AppInput label="Travel preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline editable={!savedAndLeaving} />
         {message ? <Text style={[styles.message, isError && styles.error]}>{message}</Text> : null}
-        <AppButton title="Save profile" loading={saving} onPress={saveProfile} />
+        {phoneMessage ? <Text style={styles.phoneNotice}>{phoneMessage}</Text> : null}
+        <AppButton title="Save profile" loading={saving} disabled={savedAndLeaving} onPress={saveProfile} />
       </View>
     </Screen>
   );
@@ -214,6 +224,12 @@ const styles = StyleSheet.create({
   message: {
     color: colors.primaryGreen,
     fontWeight: "900",
+  },
+  phoneNotice: {
+    color: colors.primaryGreen,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "800",
   },
   error: {
     color: colors.danger,

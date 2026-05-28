@@ -67,7 +67,7 @@ describe("manual driver verification flow", () => {
         name: "selfie.jpg",
         mimeType: "image/jpeg",
       });
-      expect(screen.getAllByText("Captured - Pending").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("✓ Captured - Pending").length).toBeGreaterThan(0);
     });
 
     fireEvent.press(screen.getByRole("button", { name: /Scan identity document/ }));
@@ -82,7 +82,7 @@ describe("manual driver verification flow", () => {
 
     await waitFor(() => {
       expect(uploadVerificationDocument).toHaveBeenCalledTimes(4);
-      expect(screen.getAllByText("Captured - Pending").length).toBe(4);
+      expect(screen.getAllByText("✓ Captured - Pending").length).toBe(4);
     });
 
     fireEvent.press(screen.getByRole("checkbox", { name: "Driver verification consent" }));

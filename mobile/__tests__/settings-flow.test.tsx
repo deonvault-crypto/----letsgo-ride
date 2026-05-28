@@ -106,6 +106,7 @@ describe("settings account controls", () => {
     expect(screen.getByText("Account Control")).toBeOnTheScreen();
     expect(screen.queryByText("Phone and document privacy")).toBeNull();
     expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change phone number" })).toBeNull();
 
     const tripUpdatesSwitch = screen.getByLabelText("Trip updates");
     expect(tripUpdatesSwitch.props.value).toBe(false);

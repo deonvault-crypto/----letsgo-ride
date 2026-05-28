@@ -101,6 +101,7 @@ describe("profile update flow", () => {
       expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
       expect(screen.getByText("Mutare")).toBeOnTheScreen();
       expect(screen.getByText("Profile saved. Returning to profile...")).toBeOnTheScreen();
+      expect(screen.getByText("Phone number saved. Verification may be required before booking or posting rides.")).toBeOnTheScreen();
     });
     jest.runOnlyPendingTimers();
     expect(mockReplace).toHaveBeenCalledWith("/(shared)/profile");

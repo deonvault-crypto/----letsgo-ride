@@ -9,7 +9,7 @@ import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { emailLogin, resendEmailVerification } from "../../services/authService";
-import { biometricLabel, isBiometricEnabled, loginWithBiometrics } from "../../services/biometricService";
+import { biometricLabel, hasBiometricLoginCredential, loginWithBiometrics } from "../../services/biometricService";
 import {
   enablePhoneNotifications,
   hasSeenNotificationExplanation,
@@ -35,7 +35,7 @@ export default function EmailLoginScreen() {
 
   useEffect(() => {
     async function loadBiometrics() {
-      setBiometricReady(await isBiometricEnabled());
+      setBiometricReady(await hasBiometricLoginCredential());
       setBiometricText(await biometricLabel());
     }
     loadBiometrics().catch(() => setBiometricReady(false));

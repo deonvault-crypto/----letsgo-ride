@@ -336,12 +336,6 @@ export default function SettingsScreen() {
           onPress={() => router.push("/(shared)/edit-profile" as never)}
         />
         <ListTile
-          icon="cellphone"
-          title="Change phone number"
-          subtitle="Use country code format, for example +263772554186"
-          onPress={() => router.push("/(shared)/edit-profile" as never)}
-        />
-        <ListTile
           icon="account-switch-outline"
           title="Manage passenger and driver mode"
           subtitle="Open the app section that matches how you are travelling"

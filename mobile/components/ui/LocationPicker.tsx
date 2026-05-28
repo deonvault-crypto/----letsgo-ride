@@ -11,9 +11,10 @@ type LocationPickerProps = {
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 };
 
-export function LocationPicker({ label, value, onChangeText, placeholder }: LocationPickerProps) {
+export function LocationPicker({ label, value, onChangeText, placeholder, disabled }: LocationPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const filteredCities = useMemo(() => {
@@ -29,10 +30,17 @@ export function LocationPicker({ label, value, onChangeText, placeholder }: Loca
 
   return (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel={label} style={styles.field} onPress={() => {
-        setQuery("");
-        setOpen(true);
-      }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled: Boolean(disabled) }}
+        disabled={disabled}
+        style={[styles.field, disabled && styles.disabledField]}
+        onPress={() => {
+          setQuery("");
+          setOpen(true);
+        }}
+      >
         <Text style={styles.label}>{label}</Text>
         <Text style={[styles.value, !value && styles.placeholder]}>{value || placeholder || "Select location"}</Text>
       </Pressable>
@@ -86,6 +94,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     gap: 4,
+  },
+  disabledField: {
+    opacity: 0.68,
   },
   label: {
     color: colors.mutedText,

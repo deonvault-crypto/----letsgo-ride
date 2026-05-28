@@ -264,9 +264,10 @@ function DocumentRow({
 }) {
   const document = findLatestDocument(documents, documentType);
   const required = documentType !== "vehicle_photo_optional";
+  const state = documentCaptureState(document, uploading);
   const captureStatus = uploading
     ? "Uploading photo..."
-    : document ? `Captured - ${formatStatus(document.status || "pending")}` : "Not captured";
+    : document ? `${state.icon} Captured - ${formatStatus(document.status || "pending")}` : "Not captured";
   return (
     <View style={styles.documentRow}>
       <View style={styles.documentCopy}>
@@ -275,9 +276,14 @@ function DocumentRow({
           {required ? "" : " (optional)"}
         </Text>
         <Text style={styles.body}>{documentDescriptions[documentType]}</Text>
-        <Text numberOfLines={1} style={styles.body}>
-          {captureStatus}
-        </Text>
+        <View style={styles.captureStatusRow}>
+          {document && !uploading ? (
+            <MaterialCommunityIcons name={state.iconName} size={16} color={state.color} />
+          ) : null}
+          <Text numberOfLines={1} style={[styles.body, styles.captureStatusText, { color: state.color }]}>
+            {captureStatus}
+          </Text>
+        </View>
       </View>
       <AppButton
         title={captureLabels[documentType] || "Capture document"}
@@ -290,6 +296,19 @@ function DocumentRow({
       />
     </View>
   );
+}
+
+function documentCaptureState(document: VerificationDocument | undefined, uploading: boolean) {
+  if (uploading) {
+    return { color: colors.mutedText, icon: "", iconName: "progress-upload" as const };
+  }
+  if (!document) {
+    return { color: colors.mutedText, icon: "", iconName: "checkbox-blank-circle-outline" as const };
+  }
+  if (document.status === "rejected") {
+    return { color: colors.danger, icon: "!", iconName: "alert-circle-outline" as const };
+  }
+  return { color: colors.primaryGreen, icon: "✓", iconName: "check-circle-outline" as const };
 }
 
 function SubmittedState({
@@ -473,6 +492,16 @@ const styles = StyleSheet.create({
   },
   documentTitle: {
     color: colors.whiteText,
+    fontWeight: "900",
+  },
+  captureStatusRow: {
+    minHeight: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  captureStatusText: {
+    flex: 1,
     fontWeight: "900",
   },
   smallButton: {

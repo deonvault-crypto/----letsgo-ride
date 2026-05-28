@@ -2,7 +2,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import EmailLoginScreen from "../app/(auth)/email-login";
 import { emailLogin } from "../services/authService";
-import { isBiometricEnabled, loginWithBiometrics } from "../services/biometricService";
+import { hasBiometricLoginCredential, loginWithBiometrics } from "../services/biometricService";
 import {
   enablePhoneNotifications,
   hasSeenNotificationExplanation,
@@ -30,7 +30,7 @@ jest.mock("../services/authService", () => ({
 
 jest.mock("../services/biometricService", () => ({
   biometricLabel: jest.fn(async () => "Use Face ID"),
-  isBiometricEnabled: jest.fn(async () => false),
+  hasBiometricLoginCredential: jest.fn(async () => false),
   loginWithBiometrics: jest.fn(),
 }));
 
@@ -43,9 +43,19 @@ jest.mock("../services/pushNotificationService", () => ({
 describe("email login flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (isBiometricEnabled as jest.Mock).mockResolvedValue(false);
+    (hasBiometricLoginCredential as jest.Mock).mockResolvedValue(false);
     (enablePhoneNotifications as jest.Mock).mockResolvedValue({ enabled: true, status: "on" });
     (hasSeenNotificationExplanation as jest.Mock).mockResolvedValue(true);
+  });
+
+  it("hides Face ID until biometric login was enabled on this device", async () => {
+    const screen = render(<EmailLoginScreen />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Use Face ID" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Login" })).toBeOnTheScreen();
+      expect(screen.getByRole("button", { name: "Create account" })).toBeOnTheScreen();
+    });
   });
 
   it("accepts credentials, sends login request, stores session through auth service, and opens passenger home", async () => {
@@ -106,7 +116,7 @@ describe("email login flow", () => {
   });
 
   it("shows biometric login after it was enabled and routes after successful unlock", async () => {
-    (isBiometricEnabled as jest.Mock).mockResolvedValueOnce(true);
+    (hasBiometricLoginCredential as jest.Mock).mockResolvedValueOnce(true);
     (loginWithBiometrics as jest.Mock).mockResolvedValueOnce(passengerUser);
 
     const screen = render(<EmailLoginScreen />);
@@ -117,6 +127,21 @@ describe("email login flow", () => {
     await waitFor(() => {
       expect(loginWithBiometrics).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith("/(passenger)/home");
+    });
+  });
+
+  it("falls back to email and password when Face ID unlock fails", async () => {
+    (hasBiometricLoginCredential as jest.Mock).mockResolvedValueOnce(true);
+    (loginWithBiometrics as jest.Mock).mockRejectedValueOnce(new Error("Please log in with your password again."));
+
+    const screen = render(<EmailLoginScreen />);
+
+    fireEvent.press(await screen.findByRole("button", { name: "Use Face ID" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Please log in with your password again.")).toBeOnTheScreen();
+      expect(screen.getByRole("button", { name: "Login" })).toBeOnTheScreen();
+      expect(mockReplace).not.toHaveBeenCalled();
     });
   });
 });

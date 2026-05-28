@@ -44,7 +44,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+      <Stack screenOptions={{ headerShown: false, animation: "none", animationTypeForReplace: "pop" }} />
     </SafeAreaProvider>
   );
 }
