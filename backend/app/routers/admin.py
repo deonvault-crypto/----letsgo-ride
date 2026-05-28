@@ -55,6 +55,7 @@ def _public_document(document):
         "status": document.get("status", "pending"),
         "rejection_reason": document.get("rejection_reason"),
         "content_type": document.get("content_type") or mimetypes.guess_type(document.get("file_name") or "")[0],
+        "ocr": document.get("ocr") if isinstance(document.get("ocr"), dict) else None,
     }
 
 
@@ -719,6 +720,12 @@ async def list_verifications(
             "verification_provider": "manual",
             "verification_submitted_at": driver.get("verification_submitted_at"),
             "document_count": len(documents),
+            "risk_score": driver.get("risk_score", driver.get("verification_risk_score")),
+            "risk_level": driver.get("risk_level"),
+            "risk_flags": driver.get("risk_flags", driver.get("verification_risk_flags", [])),
+            "duplicate_flags": driver.get("duplicate_flags", []),
+            "review_reasons": driver.get("review_reasons", []),
+            "face_match_status": driver.get("face_match_status"),
             "created_at": driver.get("created_at"),
             "updated_at": driver.get("updated_at"),
         }

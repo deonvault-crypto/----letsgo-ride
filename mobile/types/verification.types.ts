@@ -20,6 +20,14 @@ export type VerificationDocumentType =
 
 export type VerificationDocumentStatus = "pending" | "accepted" | "rejected";
 
+export type VerificationOcrResult = {
+  provider: string;
+  status: string;
+  extracted_fields: Record<string, string | number | null | undefined>;
+  confidence: number;
+  reason?: string | null;
+};
+
 export type VerificationDocument = {
   id?: string;
   document_type: VerificationDocumentType;
@@ -30,6 +38,7 @@ export type VerificationDocument = {
   status?: VerificationDocumentStatus;
   rejection_reason?: string;
   content_type?: string | null;
+  ocr?: VerificationOcrResult | null;
 };
 
 export type VerificationProfile = {
@@ -42,6 +51,8 @@ export type VerificationProfile = {
   verification_submitted_at?: string | null;
   verification_checked_at?: string | null;
   verification_notes?: string | null;
+  challenge_code?: string | null;
+  challenge_created_at?: string | null;
   documents: VerificationDocument[];
   required_documents: VerificationDocumentType[];
 };
@@ -57,10 +68,34 @@ export type AdminVerificationListItem = {
   verification_provider: "manual";
   verification_submitted_at?: string | null;
   document_count: number;
+  risk_score?: number | null;
+  risk_level?: "low" | "medium" | "high" | string | null;
+  risk_flags?: string[];
+  duplicate_flags?: string[];
+  review_reasons?: string[];
+  face_match_status?: string | null;
 };
 
 export type AdminVerificationDetail = {
-  driver: Record<string, unknown>;
+  driver: Record<string, unknown> & {
+    risk_score?: number | null;
+    verification_risk_score?: number | null;
+    risk_level?: "low" | "medium" | "high" | string | null;
+    risk_flags?: string[];
+    verification_risk_flags?: string[];
+    duplicate_flags?: string[];
+    review_reasons?: string[];
+    ocr_provider?: string | null;
+    ocr_extracted_fields?: Record<string, string | number | null | undefined>;
+    ocr_confidence?: number | null;
+    face_match_score?: number | null;
+    face_match_status?: string | null;
+    face_match_reason?: string | null;
+    face_embedding_duplicate_status?: string | null;
+    challenge_code?: string | null;
+    challenge_created_at?: string | null;
+    auto_approval_eligible?: boolean;
+  };
   user?: Record<string, unknown> | null;
   vehicles: Record<string, unknown>[];
   documents: VerificationDocument[];

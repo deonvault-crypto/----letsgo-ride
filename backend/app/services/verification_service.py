@@ -1,6 +1,9 @@
 import asyncio
 import io
 import logging
+import secrets
+import string
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -11,6 +14,8 @@ from fastapi import UploadFile
 from app.config import get_settings
 from app.database import database
 from app.services.email_service import send_driver_verification_status_email
+from app.services.verification_face_service import compare_selfie_to_identity
+from app.services.verification_ocr_service import EXTRACTABLE_FIELDS, extract_verification_fields
 from app.services.notification_service import create_app_notification, notify_admins
 from app.services.audit_service import write_audit_log
 from app.utils import new_id, now_iso
@@ -66,6 +71,9 @@ DOCUMENT_TYPE_ALIASES = {
     "vehicle_photo": "vehicle_photo_optional",
 }
 
+LOW_RISK_MAX = 0.34
+MEDIUM_RISK_MAX = 0.69
+
 
 class VerificationUploadError(RuntimeError):
     def __init__(
@@ -92,6 +100,23 @@ def default_verification_fields() -> Dict[str, Any]:
         "admin_verification_notes": None,
         "identity_verification_state": "pending_verification",
         "documents": [],
+        "ocr_provider": "disabled",
+        "ocr_extracted_fields": {},
+        "ocr_confidence": 0,
+        "ocr_documents": {},
+        "face_match_score": None,
+        "face_match_status": "not_required",
+        "face_match_reason": "Face matching is disabled.",
+        "face_match_provider": "disabled",
+        "challenge_code": None,
+        "challenge_created_at": None,
+        "duplicate_flags": [],
+        "face_embedding_duplicate_status": "not_implemented",
+        "risk_score": 0,
+        "risk_level": "low",
+        "risk_flags": [],
+        "review_reasons": [],
+        "auto_approval_eligible": False,
         "verification_risk_score": None,
         "verification_risk_flags": [],
     }
@@ -188,6 +213,11 @@ def _document_types(documents: List[Dict[str, Any]]) -> set[str]:
 
 def _has_all_required_documents(documents: List[Dict[str, Any]]) -> bool:
     return REQUIRED_DOCUMENT_TYPES.issubset(_document_types(documents))
+
+
+def _generate_challenge_code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(6))
 
 
 def _safe_file_name(file_name: str) -> str:
@@ -301,9 +331,180 @@ async def _read_upload_bytes(upload: UploadFile, document_type: str) -> bytes:
     return file_bytes
 
 
-def _evaluate_document_risk(documents: List[Dict[str, Any]]) -> Tuple[float, List[str]]:
-    risk_score = 0.0
+def _latest_document(documents: List[Dict[str, Any]], document_type: str) -> Optional[Dict[str, Any]]:
+    for document in reversed(manual_verification_documents(documents)):
+        if document.get("document_type") == document_type:
+            return document
+    return None
+
+
+def _collect_ocr_documents(documents: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    ocr_documents: Dict[str, Dict[str, Any]] = {}
+    for document in manual_verification_documents(documents):
+        result = document.get("ocr")
+        if isinstance(result, Mapping):
+            ocr_documents[str(document.get("document_type"))] = dict(result)
+    return ocr_documents
+
+
+def _collect_ocr_fields(documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    fields: Dict[str, Any] = {}
+    for result in _collect_ocr_documents(documents).values():
+        extracted = result.get("extracted_fields")
+        if not isinstance(extracted, Mapping):
+            continue
+        for key, value in extracted.items():
+            if key in EXTRACTABLE_FIELDS and value not in (None, ""):
+                fields[key] = value
+    return fields
+
+
+def _ocr_provider_summary(ocr_documents: Dict[str, Dict[str, Any]]) -> str:
+    for result in ocr_documents.values():
+        provider = str(result.get("provider") or "")
+        if provider and provider not in {"not_required", "disabled"}:
+            return provider
+    return "disabled"
+
+
+def _ocr_confidence_summary(ocr_documents: Dict[str, Dict[str, Any]]) -> float:
+    confidences = [
+        float(result.get("confidence") or 0)
+        for result in ocr_documents.values()
+        if str(result.get("status") or "") not in {"not_required", "disabled"}
+    ]
+    if not confidences:
+        return 0
+    return round(sum(confidences) / len(confidences), 4)
+
+
+def _normalized_tokens(value: Any) -> set[str]:
+    return {
+        token
+        for token in "".join(character.lower() if character.isalnum() else " " for character in str(value or "")).split()
+        if len(token) > 1
+    }
+
+
+def _profile_name_matches_ocr(profile_name: Any, extracted_name: Any) -> bool:
+    profile_tokens = _normalized_tokens(profile_name)
+    extracted_tokens = _normalized_tokens(extracted_name)
+    if not profile_tokens or not extracted_tokens:
+        return True
+    return bool(profile_tokens & extracted_tokens)
+
+
+def _parse_date(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    formats = ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%Y/%m/%d")
+    for date_format in formats:
+        try:
+            return datetime.strptime(text, date_format).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _risk_level(score: float) -> str:
+    if score <= LOW_RISK_MAX:
+        return "low"
+    if score <= MEDIUM_RISK_MAX:
+        return "medium"
+    return "high"
+
+
+def _dedupe_flags(flags: List[str]) -> List[str]:
+    return list(dict.fromkeys(flag for flag in flags if flag))
+
+
+async def _detect_duplicate_flags(
+    *,
+    user: Dict[str, Any],
+    driver: Dict[str, Any],
+    documents: List[Dict[str, Any]],
+    extracted_fields: Dict[str, Any],
+) -> List[str]:
+    if not settings.verification_duplicate_detection_enabled:
+        return []
+
     flags: List[str] = []
+    phone = str(user.get("phone") or driver.get("phone") or "").strip()
+    email = str(user.get("email") or driver.get("email") or "").strip().lower()
+
+    users = await database.find_many("users")
+    for other in users:
+        if other.get("id") == user.get("id"):
+            continue
+        if phone and str(other.get("phone") or "").strip() == phone:
+            flags.append("duplicate_phone")
+        if email and str(other.get("email") or "").strip().lower() == email:
+            flags.append("duplicate_email")
+
+    drivers = await database.find_many("drivers")
+    current_public_ids = {
+        document.get("cloudinary_public_id")
+        for document in documents
+        if document.get("cloudinary_public_id")
+    }
+    identity_number = str(extracted_fields.get("document_number") or "").strip().lower()
+    licence_number = str(extracted_fields.get("licence_number") or "").strip().lower()
+    plate_number = str(extracted_fields.get("plate_number") or "").strip().lower()
+
+    for other in drivers:
+        if other.get("id") == driver.get("id"):
+            continue
+        if phone and str(other.get("phone") or "").strip() == phone:
+            flags.append("duplicate_phone")
+        if email and str(other.get("email") or "").strip().lower() == email:
+            flags.append("duplicate_email")
+        for other_document in manual_verification_documents(other.get("documents", [])):
+            public_id = other_document.get("cloudinary_public_id")
+            if public_id and public_id in current_public_ids:
+                flags.append("duplicate_cloudinary_public_id")
+            other_ocr = other_document.get("ocr")
+            if not isinstance(other_ocr, Mapping):
+                continue
+            other_fields = other_ocr.get("extracted_fields")
+            if not isinstance(other_fields, Mapping):
+                continue
+            if identity_number and str(other_fields.get("document_number") or "").strip().lower() == identity_number:
+                flags.append("duplicate_identity_document_number")
+            if licence_number and str(other_fields.get("licence_number") or "").strip().lower() == licence_number:
+                flags.append("duplicate_driver_licence_number")
+            if plate_number and str(other_fields.get("plate_number") or "").strip().lower() == plate_number:
+                flags.append("duplicate_vehicle_plate")
+
+    return _dedupe_flags(flags)
+
+
+def _calculate_risk(
+    *,
+    user: Dict[str, Any],
+    driver: Dict[str, Any],
+    documents: List[Dict[str, Any]],
+    extracted_fields: Dict[str, Any],
+    ocr_confidence: float,
+    duplicate_flags: List[str],
+    face_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not settings.verification_risk_scoring_enabled:
+        return {
+            "risk_score": 0,
+            "risk_level": "low",
+            "risk_flags": [],
+            "review_reasons": [],
+            "auto_approval_eligible": False,
+        }
+
+    score = 0.0
+    flags: List[str] = []
+    review_reasons: List[str] = []
     documents = manual_verification_documents(documents)
 
     type_counts: Dict[str, int] = {}
@@ -311,44 +512,177 @@ def _evaluate_document_risk(documents: List[Dict[str, Any]]) -> Tuple[float, Lis
         doc_type = document.get("document_type")
         if doc_type:
             type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
-    duplicates = [doc_type for doc_type, count in type_counts.items() if count > 1]
-    if duplicates:
-        flags.append("duplicate_document_type")
-        risk_score += min(0.25 * len(duplicates), 0.4)
-
-    for document in documents:
         file_name = document.get("file_name", "")
         if "." in file_name:
             extension = file_name.rsplit(".", 1)[-1].lower()
             if extension not in ALLOWED_DOCUMENT_EXTENSIONS:
                 flags.append("unsupported_file_type")
-                risk_score += 0.3
-                break
+                review_reasons.append("One document has an unsupported file type.")
+                score += 0.25
 
-    if not _has_all_required_documents(documents):
+    duplicate_document_types = [doc_type for doc_type, count in type_counts.items() if count > 1]
+    if duplicate_document_types:
+        flags.append("duplicate_document_type")
+        review_reasons.append("One or more document types were uploaded more than once.")
+        score += min(0.1 * len(duplicate_document_types), 0.2)
+
+    missing_required = sorted(REQUIRED_DOCUMENT_TYPES - _document_types(documents))
+    if missing_required:
         flags.append("missing_required_documents")
-        risk_score += 0.2
+        review_reasons.append("Required verification documents are still missing.")
+        score += 0.35
 
-    if settings.enable_face_ai and _has_all_required_documents(documents):
-        face_ai = _run_face_ai_check(documents)
-        if face_ai and not face_ai.get("passed", True):
-            flags.append("face_match_low")
-            risk_score += 0.35
+    expiry_date = _parse_date(extracted_fields.get("expiry_date"))
+    if expiry_date and expiry_date < datetime.now(timezone.utc):
+        flags.append("expired_document")
+        review_reasons.append("An extracted document expiry date appears to be expired.")
+        score += 0.35
 
-    return min(risk_score, 1.0), flags
+    if duplicate_flags:
+        flags.extend(duplicate_flags)
+        review_reasons.append("Possible duplicate account, document, or vehicle information was detected.")
+        score += min(0.2 + 0.1 * len(duplicate_flags), 0.45)
+
+    extracted_name = extracted_fields.get("full_name")
+    profile_name = user.get("name") or driver.get("name")
+    if extracted_name and not _profile_name_matches_ocr(profile_name, extracted_name):
+        flags.append("ocr_name_mismatch")
+        review_reasons.append("The extracted document name does not clearly match the profile name.")
+        score += 0.2
+
+    if settings.verification_ocr_enabled and 0 < ocr_confidence < 0.65:
+        flags.append("poor_ocr_confidence")
+        review_reasons.append("Document text extraction confidence is low.")
+        score += 0.2
+
+    if settings.verification_face_match_enabled and face_result.get("face_match_status") == "fail":
+        flags.append("face_mismatch")
+        review_reasons.append("Face matching did not pass.")
+        score += 0.35
+
+    if normalize_verification_status(driver.get("verification_status"), documents) in {"rejected", "needs_resubmission"}:
+        flags.append("previous_rejected_verification")
+        review_reasons.append("This verification was previously rejected or requested for resubmission.")
+        score += 0.15
+
+    score = round(min(score, 1.0), 4)
+    flags = _dedupe_flags(flags)
+    return {
+        "risk_score": score,
+        "risk_level": _risk_level(score),
+        "risk_flags": flags,
+        "review_reasons": _dedupe_flags(review_reasons),
+        "auto_approval_eligible": False,
+    }
 
 
-def _run_face_ai_check(documents: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not settings.enable_face_ai:
-        return None
+def _auto_approval_eligible(
+    *,
+    documents: List[Dict[str, Any]],
+    duplicate_flags: List[str],
+    risk: Dict[str, Any],
+    face_result: Dict[str, Any],
+) -> bool:
+    if not settings.verification_auto_approval_enabled:
+        return False
+    if risk.get("risk_level") != "low":
+        return False
+    if not _has_all_required_documents(documents):
+        return False
+    if duplicate_flags:
+        return False
+    if any(flag in risk.get("risk_flags", []) for flag in {"expired_document", "unsupported_file_type"}):
+        return False
+    if face_result.get("face_match_status") not in {"pass", "not_required"}:
+        return False
+    if settings.verification_ocr_enabled:
+        ocr_confidence = float(risk.get("ocr_confidence") or 0)
+        if ocr_confidence and ocr_confidence < 0.75:
+            return False
+    return True
+
+
+async def _build_verification_intelligence(
+    *,
+    user: Dict[str, Any],
+    driver: Dict[str, Any],
+    documents: List[Dict[str, Any]],
+) -> Dict[str, Any]:
     documents = manual_verification_documents(documents)
-
-    has_selfie = any(document.get("document_type") == "selfie" for document in documents)
-    has_identity = any(document.get("document_type") == "identity_document" for document in documents)
-    if not has_selfie or not has_identity:
-        return None
-
-    return {"passed": True, "confidence": 0.92, "model": "insightface_stub"}
+    ocr_documents = _collect_ocr_documents(documents)
+    extracted_fields = _collect_ocr_fields(documents)
+    ocr_confidence = _ocr_confidence_summary(ocr_documents)
+    try:
+        face_result = await compare_selfie_to_identity(
+            selfie_document=_latest_document(documents, "selfie"),
+            identity_document=_latest_document(documents, "identity_document"),
+        )
+    except Exception as exc:
+        logger.exception(
+            "verification_intelligence stage=face_match_failed user_id=%s driver_id=%s error=%s",
+            user.get("id"),
+            driver.get("id"),
+            str(exc),
+        )
+        face_result = {
+            "face_match_score": None,
+            "face_match_status": "not_available",
+            "face_match_reason": "Face matching failed and the verification was sent to manual review.",
+            "face_match_provider": "disabled",
+        }
+    try:
+        duplicate_flags = await _detect_duplicate_flags(
+            user=user,
+            driver=driver,
+            documents=documents,
+            extracted_fields=extracted_fields,
+        )
+    except Exception as exc:
+        logger.exception(
+            "verification_intelligence stage=duplicate_detection_failed user_id=%s driver_id=%s error=%s",
+            user.get("id"),
+            driver.get("id"),
+            str(exc),
+        )
+        duplicate_flags = ["duplicate_detection_unavailable"]
+    risk = _calculate_risk(
+        user=user,
+        driver=driver,
+        documents=documents,
+        extracted_fields=extracted_fields,
+        ocr_confidence=ocr_confidence,
+        duplicate_flags=duplicate_flags,
+        face_result=face_result,
+    )
+    risk["ocr_confidence"] = ocr_confidence
+    auto_approval_eligible = _auto_approval_eligible(
+        documents=documents,
+        duplicate_flags=duplicate_flags,
+        risk=risk,
+        face_result=face_result,
+    )
+    review_reasons = list(risk.get("review_reasons", []))
+    if not auto_approval_eligible and _has_all_required_documents(documents) and not review_reasons:
+        review_reasons.append("Manual review is required before this driver can be approved.")
+    return {
+        "ocr_provider": _ocr_provider_summary(ocr_documents),
+        "ocr_extracted_fields": extracted_fields,
+        "ocr_confidence": ocr_confidence,
+        "ocr_documents": ocr_documents,
+        "face_match_score": face_result.get("face_match_score"),
+        "face_match_status": face_result.get("face_match_status"),
+        "face_match_reason": face_result.get("face_match_reason"),
+        "face_match_provider": face_result.get("face_match_provider"),
+        "duplicate_flags": duplicate_flags,
+        "face_embedding_duplicate_status": "not_implemented",
+        "risk_score": risk["risk_score"],
+        "risk_level": risk["risk_level"],
+        "risk_flags": risk["risk_flags"],
+        "review_reasons": review_reasons,
+        "auto_approval_eligible": auto_approval_eligible,
+        "verification_risk_score": risk["risk_score"],
+        "verification_risk_flags": risk["risk_flags"],
+    }
 
 
 def public_verification_status(record: Optional[Dict[str, Any]]) -> str:
@@ -373,10 +707,28 @@ def public_identity_verification_state(status: str) -> str:
 
 def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not driver:
-        return {
-            **default_verification_fields(),
-            "required_documents": REQUIRED_DOCUMENTS,
-        }
+        fields = default_verification_fields()
+        for key in (
+            "ocr_provider",
+            "ocr_extracted_fields",
+            "ocr_confidence",
+            "ocr_documents",
+            "face_match_score",
+            "face_match_status",
+            "face_match_reason",
+            "face_match_provider",
+            "duplicate_flags",
+            "face_embedding_duplicate_status",
+            "risk_score",
+            "risk_level",
+            "risk_flags",
+            "review_reasons",
+            "auto_approval_eligible",
+            "verification_risk_score",
+            "verification_risk_flags",
+        ):
+            fields.pop(key, None)
+        return {**fields, "required_documents": REQUIRED_DOCUMENTS}
 
     status = public_verification_status(driver)
     documents = [
@@ -404,10 +756,10 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "verification_checked_at": driver.get("verification_checked_at"),
         "verification_notes": driver.get("verification_notes"),
         "identity_verification_state": public_identity_verification_state(status),
+        "challenge_code": driver.get("challenge_code"),
+        "challenge_created_at": driver.get("challenge_created_at"),
         "documents": documents,
         "required_documents": REQUIRED_DOCUMENTS,
-        "verification_risk_score": driver.get("verification_risk_score"),
-        "verification_risk_flags": driver.get("verification_risk_flags", []),
     }
 
 
@@ -463,6 +815,23 @@ async def ensure_driver_for_user(user: Dict[str, Any], payload: Optional[Dict[st
     return await database.insert_one("drivers", driver)
 
 
+async def get_or_create_liveness_challenge(user: Dict[str, Any]) -> Dict[str, Any]:
+    driver = await ensure_driver_for_user(user)
+    if driver.get("challenge_code") and driver.get("challenge_created_at"):
+        return {
+            "challenge_code": driver.get("challenge_code"),
+            "challenge_created_at": driver.get("challenge_created_at"),
+        }
+    timestamp = now_iso()
+    challenge = {
+        "challenge_code": _generate_challenge_code(),
+        "challenge_created_at": timestamp,
+    }
+    await database.update_one("drivers", driver["id"], {**challenge, "updated_at": timestamp})
+    await database.update_one("users", user["id"], {**challenge, "updated_at": timestamp})
+    return challenge
+
+
 def merge_documents(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     documents = manual_verification_documents(existing)
     timestamp = now_iso()
@@ -496,18 +865,29 @@ def _status_from_documents(documents: List[Dict[str, Any]]) -> str:
     return "pending_uploads"
 
 
+def _status_from_intelligence(documents: List[Dict[str, Any]], intelligence: Dict[str, Any]) -> str:
+    if not _has_all_required_documents(documents):
+        return "pending_uploads"
+    if intelligence.get("auto_approval_eligible"):
+        return "approved"
+    if intelligence.get("risk_level") in {"medium", "high"}:
+        return "needs_review"
+    if intelligence.get("duplicate_flags"):
+        return "needs_review"
+    return "pending_auto_check"
+
+
 async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     driver = await ensure_driver_for_user(user, payload)
     timestamp = now_iso()
     documents = merge_documents(driver.get("documents", []), payload.get("documents", []))
-    verification_status = _status_from_documents(documents)
-    risk_score, risk_flags = _evaluate_document_risk(documents) if _has_all_required_documents(documents) else (None, [])
+    intelligence = await _build_verification_intelligence(user=user, driver=driver, documents=documents)
+    verification_status = _status_from_intelligence(documents, intelligence)
     verified = verification_status == "approved"
     updates: Dict[str, Any] = {
         "verification_provider": "manual",
         "verification_status": verification_status,
-        "verification_risk_score": risk_score,
-        "verification_risk_flags": risk_flags,
+        **intelligence,
         "identity_verification_state": "active" if verified else "pending_verification",
         "verification_submitted_at": timestamp,
         "verification_notes": payload.get("verification_notes"),
@@ -580,10 +960,37 @@ async def save_uploaded_document(
     document["file_url"] = cloudinary_result.get("secure_url")
     document["cloudinary_public_id"] = cloudinary_result.get("public_id")
     document["resource_type"] = cloudinary_result.get("resource_type")
+    try:
+        document["ocr"] = await extract_verification_fields(
+            document_type=document_type,
+            document=document,
+            file_bytes=file_bytes,
+        )
+    except Exception as exc:
+        logger.exception(
+            "verification_intelligence stage=ocr_failed user_id=%s document_id=%s document_type=%s error=%s",
+            user.get("id"),
+            document_id,
+            document_type,
+            str(exc),
+        )
+        document["ocr"] = {
+            "provider": "disabled",
+            "status": "failed",
+            "extracted_fields": {},
+            "confidence": 0,
+            "reason": "OCR extraction failed and the document was sent to manual review.",
+        }
 
     documents = [*manual_verification_documents(driver.get("documents", [])), document]
     verification_status = _next_status_after_upload(driver, documents)
-    risk_score, risk_flags = _evaluate_document_risk(documents) if _has_all_required_documents(documents) else (None, [])
+    intelligence = await _build_verification_intelligence(user=user, driver=driver, documents=documents)
+    challenge_updates: Dict[str, Any] = {}
+    if document_type == "selfie":
+        challenge_updates = {
+            "challenge_code": driver.get("challenge_code") or _generate_challenge_code(),
+            "challenge_created_at": driver.get("challenge_created_at") or timestamp,
+        }
 
     logger.info(
         "verification_upload stage=mongodb_save_start user_id=%s driver_id=%s document_id=%s document_type=%s verification_status=%s",
@@ -601,8 +1008,8 @@ async def save_uploaded_document(
                 "documents": documents,
                 "verification_provider": "manual",
                 "verification_status": verification_status,
-                "verification_risk_score": risk_score,
-                "verification_risk_flags": risk_flags,
+                **intelligence,
+                **challenge_updates,
                 "identity_verification_state": "pending_verification",
                 "updated_at": timestamp,
             },
@@ -616,6 +1023,7 @@ async def save_uploaded_document(
                 "verification_status": verification_status,
                 "verification_provider": "manual",
                 "identity_verification_state": "pending_verification",
+                **challenge_updates,
                 "updated_at": timestamp,
             },
         )

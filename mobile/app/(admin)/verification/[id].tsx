@@ -46,7 +46,7 @@ export default function AdminVerificationDetailScreen() {
 
   useLiveRefresh(load, 15000);
 
-  async function updateStatus(status: Extract<VerificationStatus, "needs_review" | "approved" | "rejected">) {
+  async function updateStatus(status: Extract<VerificationStatus, "needs_review" | "approved" | "rejected" | "needs_resubmission">) {
     if (!id) return;
     if (status === "rejected" && !rejectionReason.trim()) {
       setError("Rejection reason is required.");
@@ -140,12 +140,44 @@ export default function AdminVerificationDetailScreen() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Verification intelligence</Text>
+        <MetricRow label="Risk level" value={formatStatus(String(driver.risk_level || "low"))} />
+        <MetricRow label="Risk score" value={formatRiskScore(driver.risk_score ?? driver.verification_risk_score)} />
+        <MetricRow label="Face match" value={formatStatus(String(driver.face_match_status || "not_required"))} />
+        <MetricRow label="OCR provider" value={formatStatus(String(driver.ocr_provider || "disabled"))} />
+        <MetricRow label="OCR confidence" value={formatRiskScore(driver.ocr_confidence)} />
+        <MetricRow label="Face duplicate check" value={formatStatus(String(driver.face_embedding_duplicate_status || "not_implemented"))} />
+        <FlagList title="Review reasons" values={arrayOfStrings(driver.review_reasons)} emptyLabel="No review reasons recorded." />
+        <FlagList title="Duplicate flags" values={arrayOfStrings(driver.duplicate_flags)} emptyLabel="No duplicate flags detected." />
+        <FlagList title="Risk flags" values={arrayOfStrings(driver.risk_flags || driver.verification_risk_flags)} emptyLabel="No risk flags detected." />
+        {driver.face_match_reason ? <Text style={styles.body}>{String(driver.face_match_reason)}</Text> : null}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Extracted fields</Text>
+        {objectEntries(driver.ocr_extracted_fields).length ? (
+          objectEntries(driver.ocr_extracted_fields).map(([key, value]) => (
+            <MetricRow key={key} label={formatStatus(key)} value={String(value)} />
+          ))
+        ) : (
+          <Text style={styles.body}>No OCR fields extracted.</Text>
+        )}
+        <MetricRow label="Liveness challenge" value={driver.challenge_code ? String(driver.challenge_code) : "Not generated"} />
+        <MetricRow label="Challenge created" value={driver.challenge_created_at ? String(driver.challenge_created_at) : "Not generated"} />
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.sectionTitle}>Documents</Text>
         {(detail?.documents || []).map((document) => (
           <View key={document.id || document.file_name} style={styles.documentRow}>
             <Text style={styles.documentTitle}>{formatStatus(document.document_type)}</Text>
             <Text numberOfLines={1} style={styles.body}>{decodeFileName(document.file_name)}</Text>
             <StatusBadge label={formatStatus(document.status || "pending")} tone={document.status === "rejected" ? "danger" : document.status === "accepted" ? "success" : "warning"} />
+            {document.ocr ? (
+              <Text style={styles.body}>
+                OCR: {formatStatus(document.ocr.status)} - {Math.round((document.ocr.confidence || 0) * 100)}%
+              </Text>
+            ) : null}
             {document.id ? (
               <View style={styles.documentActions}>
                 <AppButton title="View document" onPress={() => viewDocument(document.id as string, document.file_name, document.content_type)} />
@@ -175,6 +207,7 @@ export default function AdminVerificationDetailScreen() {
         />
         <AppButton title="Approve verification" loading={saving === "approved"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("approved")} />
         <AppButton title="Needs review" variant="secondary" loading={saving === "needs_review"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("needs_review")} />
+        <AppButton title="Request resubmission" variant="secondary" loading={saving === "needs_resubmission"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("needs_resubmission")} />
         <AppButton title="Reject verification" variant="danger" loading={saving === "rejected"} disabled={!detail || Boolean(saving)} onPress={() => updateStatus("rejected")} />
       </View>
     </Screen>
@@ -187,6 +220,49 @@ function decodeFileName(fileName: string) {
   } catch {
     return fileName;
   }
+}
+
+function MetricRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metricRow}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function FlagList({ title, values, emptyLabel }: { title: string; values: string[]; emptyLabel: string }) {
+  return (
+    <View style={styles.flagGroup}>
+      <Text style={styles.documentTitle}>{title}</Text>
+      {values.length ? (
+        <View style={styles.flagWrap}>
+          {values.map((value) => (
+            <View key={value} style={styles.flagPill}>
+              <Text style={styles.flagText}>{formatStatus(value)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.body}>{emptyLabel}</Text>
+      )}
+    </View>
+  );
+}
+
+function arrayOfStrings(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function objectEntries(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== null && item !== undefined && item !== "");
+}
+
+function formatRiskScore(value: unknown) {
+  const score = typeof value === "number" ? value : Number(value || 0);
+  if (!Number.isFinite(score)) return "0%";
+  return `${Math.round(score * 100)}%`;
 }
 
 function friendlyVerificationError(message: string) {
@@ -238,6 +314,43 @@ const styles = StyleSheet.create({
   },
   documentActions: {
     gap: spacing.sm,
+  },
+  metricRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  metricLabel: {
+    flex: 1,
+    color: colors.mutedText,
+    lineHeight: 20,
+  },
+  metricValue: {
+    flex: 1,
+    color: colors.whiteText,
+    fontWeight: "800",
+    lineHeight: 20,
+    textAlign: "right",
+  },
+  flagGroup: {
+    gap: spacing.sm,
+  },
+  flagWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  flagPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  flagText: {
+    color: colors.whiteText,
+    fontWeight: "800",
   },
   previewBackdrop: {
     flex: 1,

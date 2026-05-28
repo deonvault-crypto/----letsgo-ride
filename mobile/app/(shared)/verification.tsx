@@ -173,7 +173,7 @@ export default function DriverVerificationScreen() {
 
       {canRenderVerification ? (
         <View style={styles.card}>
-          <StatusBadge label={formatStatus(status)} tone={statusTone(status)} />
+          <StatusBadge label={userStatusLabel(status)} tone={statusTone(status)} />
           <Text style={styles.title}>Driver verification</Text>
           <Text style={styles.body}>
             Complete a camera-based identity check before posting public rides.
@@ -309,9 +309,10 @@ function SubmittedState({
       </Text>
       <Text style={styles.body}>
         {success
-          ? "Your driver verification is approved. You can now post rides."
+          ? "Your driver verification is approved."
           : "Your documents have been submitted and are now under review. We will notify you when your driver verification is approved or if more information is needed."}
       </Text>
+      {success ? <Text style={styles.body}>You can now post rides.</Text> : null}
       {rows.length > 0 ? (
         <View style={styles.summaryCard}>
           <Text style={styles.documentTitle}>Submitted documents</Text>
@@ -387,11 +388,11 @@ function StatusCopy({ status, readyToSubmit }: { status: VerificationProfile["ve
     pending_uploads: readyToSubmit
       ? "All required captures are attached. Review the consent statement and submit them for LetsGoRide review."
       : "Capture the remaining documents so LetsGoRide can review your driver verification.",
-    pending_auto_check: "Your documents are being checked automatically.",
-    needs_review: "We need more information. Please check the note and update your documents.",
-    needs_resubmission: "Your verification requires a resubmission. Capture updated documents and submit again.",
-    approved: "Your driver verification is approved.",
-    rejected: "Your verification was not approved. Review the note or contact support.",
+    pending_auto_check: "Checking documents. We will notify you when review is complete.",
+    needs_review: "Needs review. Please check the note and update your documents if requested.",
+    needs_resubmission: "More information needed. Capture updated documents and submit again.",
+    approved: "Approved. Your driver verification is complete.",
+    rejected: "More information needed. Review the note or contact support.",
     not_started: "",
   }[status];
 
@@ -401,6 +402,15 @@ function StatusCopy({ status, readyToSubmit }: { status: VerificationProfile["ve
       <Text style={styles.body}>{copy}</Text>
     </View>
   );
+}
+
+function userStatusLabel(status: VerificationProfile["verification_status"]) {
+  if (status === "pending_auto_check") return "Checking documents";
+  if (status === "needs_review") return "Needs review";
+  if (status === "approved") return "Approved";
+  if (status === "rejected" || status === "needs_resubmission") return "More information needed";
+  if (status === "pending_uploads") return "More information needed";
+  return formatStatus(status);
 }
 
 function statusTone(status: VerificationProfile["verification_status"]): "success" | "warning" | "danger" | "neutral" {

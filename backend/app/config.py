@@ -38,6 +38,13 @@ class Settings:
         self.cloudinary_api_key = self._get_env_first("CLOUDINARY_API_KEY") or cloudinary_url_config.get("api_key", "")
         self.cloudinary_api_secret = self._get_env_first("CLOUDINARY_API_SECRET") or cloudinary_url_config.get("api_secret", "")
         self.enable_face_ai = self._parse_bool(os.getenv("ENABLE_FACE_AI", "false"))
+        self.verification_ocr_enabled = self._parse_bool(os.getenv("VERIFICATION_OCR_ENABLED", "false"))
+        self.verification_ocr_provider = self._get_env_first("VERIFICATION_OCR_PROVIDER")
+        self.verification_face_match_enabled = self._parse_bool(os.getenv("VERIFICATION_FACE_MATCH_ENABLED", "false"))
+        self.verification_face_match_provider = self._get_env_first("VERIFICATION_FACE_MATCH_PROVIDER")
+        self.verification_auto_approval_enabled = self._parse_bool(os.getenv("VERIFICATION_AUTO_APPROVAL_ENABLED", "false"))
+        self.verification_duplicate_detection_enabled = self._parse_bool(os.getenv("VERIFICATION_DUPLICATE_DETECTION_ENABLED", "true"))
+        self.verification_risk_scoring_enabled = self._parse_bool(os.getenv("VERIFICATION_RISK_SCORING_ENABLED", "true"))
         self.cors_origins = self._parse_origins(
             os.getenv(
                 "CORS_ORIGINS",

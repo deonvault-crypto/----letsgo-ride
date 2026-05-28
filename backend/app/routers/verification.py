@@ -9,6 +9,7 @@ from app.services.verification_service import (
     VerificationUploadError,
     cloudinary_configuration_status,
     get_driver_for_user,
+    get_or_create_liveness_challenge,
     public_verification,
     save_uploaded_document,
     submit_manual_verification,
@@ -42,6 +43,11 @@ async def verification_cloudinary_status(user=Depends(get_current_user)):
         status["api_secret_present"],
     )
     return api_success(status)
+
+
+@router.post("/liveness/challenge")
+async def liveness_challenge(user=Depends(get_current_user)):
+    return api_success(await get_or_create_liveness_challenge(user))
 
 
 @router.post("/manual/submit")

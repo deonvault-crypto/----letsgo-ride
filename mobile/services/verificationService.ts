@@ -185,6 +185,8 @@ function normalizeVerificationProfile(data: Partial<VerificationProfile> | null 
     verification_submitted_at: typeof data?.verification_submitted_at === "string" ? data.verification_submitted_at : null,
     verification_checked_at: typeof data?.verification_checked_at === "string" ? data.verification_checked_at : null,
     verification_notes: typeof data?.verification_notes === "string" ? data.verification_notes : null,
+    challenge_code: typeof data?.challenge_code === "string" ? data.challenge_code : null,
+    challenge_created_at: typeof data?.challenge_created_at === "string" ? data.challenge_created_at : null,
     documents,
     required_documents: requiredDocuments.length ? requiredDocuments : verificationDocumentTypes,
   };
@@ -206,6 +208,21 @@ function normalizeVerificationDocument(document: unknown): VerificationDocument 
     status: raw.status === "accepted" || raw.status === "rejected" ? raw.status : "pending",
     rejection_reason: typeof raw.rejection_reason === "string" ? raw.rejection_reason : undefined,
     content_type: typeof raw.content_type === "string" ? raw.content_type : null,
+    ocr: normalizeOcrResult(raw.ocr),
+  };
+}
+
+function normalizeOcrResult(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  return {
+    provider: String(raw.provider || "disabled"),
+    status: String(raw.status || "disabled"),
+    extracted_fields: raw.extracted_fields && typeof raw.extracted_fields === "object"
+      ? raw.extracted_fields as Record<string, string | number | null | undefined>
+      : {},
+    confidence: typeof raw.confidence === "number" ? raw.confidence : Number(raw.confidence || 0),
+    reason: typeof raw.reason === "string" ? raw.reason : null,
   };
 }
 

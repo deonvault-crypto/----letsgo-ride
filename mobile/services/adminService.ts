@@ -211,7 +211,7 @@ export async function getAdminVerification(driverId: string) {
 
 export async function updateAdminVerificationStatus(data: {
   driverId: string;
-  status: Extract<VerificationStatus, "needs_review" | "approved" | "rejected">;
+  status: Extract<VerificationStatus, "needs_review" | "approved" | "rejected" | "needs_resubmission">;
   admin_verification_notes?: string;
   rejection_reason?: string;
   document_id?: string;
