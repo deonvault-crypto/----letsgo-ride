@@ -81,7 +81,7 @@ describe("driver post-trip flow", () => {
     fireEvent.press(screen.getByText("Tomorrow"));
     fireEvent.changeText(screen.getByLabelText("Time"), "07:30");
     fireEvent.changeText(screen.getByLabelText("Price USD per seat"), "12");
-    fireEvent.changeText(screen.getByLabelText("Vehicle"), "Toyota Wish, silver");
+    fireEvent.changeText(screen.getByLabelText("Vehicle"), "Example sedan, grey");
     fireEvent.changeText(screen.getByLabelText("Pickup note"), "Harare CBD");
     fireEvent.changeText(screen.getByLabelText("Drop-off note"), "Bulawayo City Hall");
     fireEvent.press(screen.getByRole("button", { name: "Publish trip" }));
@@ -134,7 +134,7 @@ describe("driver post-trip flow", () => {
     fireEvent.press(screen.getByRole("button", { name: "Increase seats" }));
     fireEvent.press(screen.getByRole("button", { name: "Confirm" }));
     fireEvent.changeText(screen.getByLabelText("Price USD per seat"), "12");
-    fireEvent.changeText(screen.getByLabelText("Vehicle"), "Toyota Wish, silver");
+    fireEvent.changeText(screen.getByLabelText("Vehicle"), "Example sedan, grey");
     fireEvent.changeText(screen.getByLabelText("Pickup note"), "Harare CBD");
     fireEvent.changeText(screen.getByLabelText("Drop-off note"), "Bulawayo City Hall");
     fireEvent.press(screen.getByRole("button", { name: "Publish trip" }));

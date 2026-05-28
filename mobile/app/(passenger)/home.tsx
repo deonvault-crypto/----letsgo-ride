@@ -70,11 +70,9 @@ export default function PassengerHomeScreen() {
         {error ? <ErrorState message={error} onRetry={reload} /> : null}
         {!loading && !error && upcomingRides.length === 0 ? (
           <EmptyState
-            title="No upcoming rides"
-            body="Try searching a route or check back when drivers post new trips."
+            title="No upcoming rides yet"
+            body="Check again later or post a trip."
             icon="car-clock"
-            actionLabel="Search rides"
-            onAction={() => router.replace("/(passenger)/search" as never)}
           />
         ) : null}
         {!loading && !error && upcomingRides.slice(0, 3).map((ride) => (

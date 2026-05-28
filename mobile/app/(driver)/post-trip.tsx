@@ -201,7 +201,7 @@ export default function PostTripScreen() {
       </View>
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Vehicle and notes</Text>
-        <AppInput label="Vehicle make/model and color" accessibilityLabel="Vehicle" value={vehicle} onChangeText={setVehicle} placeholder="Toyota Wish, silver" />
+        <AppInput label="Vehicle make/model and color" accessibilityLabel="Vehicle" value={vehicle} onChangeText={setVehicle} placeholder="Vehicle make/model, color" />
         <AppInput label="Pickup note" value={pickup} onChangeText={setPickup} placeholder="Exact pickup point and timing" />
         <AppInput label="Drop-off note" value={dropoff} onChangeText={setDropoff} placeholder="Drop-off point or nearby landmark" />
       </View>

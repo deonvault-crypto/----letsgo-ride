@@ -34,7 +34,7 @@ export const ride: Ride = {
   driver_profile_photo_url: "https://example.com/deon.jpg",
   driver_review_count: 2,
   driver_completed_trips_count: 8,
-  vehicle: "Toyota Wish, silver",
+  vehicle: "Example sedan, grey",
   origin: "Harare",
   destination: "Bulawayo",
   pickup_note: "Harare CBD",

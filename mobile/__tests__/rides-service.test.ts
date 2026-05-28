@@ -68,7 +68,7 @@ describe("rides service", () => {
       time: "07:30",
       available_seats: 3,
       price_usd: 12,
-      vehicle: "Toyota Wish, silver",
+      vehicle: "Example sedan, grey",
     });
 
     expect(mockRequestData).toHaveBeenCalledWith({

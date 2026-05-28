@@ -61,7 +61,7 @@ export default function EditProfileScreen() {
       setPhoneMessage("");
       if (phone.trim() && !isValidPhone(phone)) {
         setIsError(true);
-        setMessage("Enter your phone number with country code, for example +263772554186.");
+        setMessage("Enter your phone number with country code, for example +263700000000.");
         return;
       }
       const phoneChanged = phone.trim() !== (user?.phone || "");
@@ -144,8 +144,8 @@ export default function EditProfileScreen() {
           <Text style={styles.readOnlyValue}>{email || "Email not set"}</Text>
           <Text style={styles.helperText}>Changing a verified email requires a separate re-verification flow.</Text>
         </View>
-        <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263772554186" editable={!savedAndLeaving} />
-        <Text style={styles.helperText}>Use country code, for example +263772554186.</Text>
+        <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263700000000" editable={!savedAndLeaving} />
+        <Text style={styles.helperText}>Use country code, for example +263700000000.</Text>
       </View>
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Travel profile</Text>

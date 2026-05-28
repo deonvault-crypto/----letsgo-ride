@@ -35,9 +35,9 @@ export function ProfileCompletionModal({
             value={phone}
             onChangeText={onChangePhone}
             keyboardType="phone-pad"
-            placeholder="+263772554186"
+            placeholder="+263700000000"
           />
-          <Text style={styles.hint}>Use country code format, for example +263772554186.</Text>
+          <Text style={styles.hint}>Use country code format, for example +263700000000.</Text>
           <AppButton title="Save phone number" loading={saving} disabled={!isValidPhone(phone)} onPress={onSave} />
           <AppButton title="Not now" variant="ghost" onPress={onClose} />
         </View>

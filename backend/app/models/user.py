@@ -16,7 +16,7 @@ def validate_international_phone(phone: Optional[str]) -> Optional[str]:
         return phone
     normalized = phone.strip().replace(" ", "")
     if not PHONE_PATTERN.match(normalized):
-        raise ValueError("Enter your phone number with country code, for example +263772554186.")
+        raise ValueError("Enter your phone number with country code, for example +263700000000.")
     return normalized
 
 

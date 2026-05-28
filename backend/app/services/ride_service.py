@@ -3,7 +3,6 @@ import logging
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from app.config import get_settings
 from app.database import database
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification, notify_users
@@ -13,68 +12,14 @@ from app.utils import new_id, now_iso
 
 
 logger = logging.getLogger(__name__)
-DEMO_RIDES: List[Dict[str, Any]] = [
-    {
-        "driver_name": "Tafadzwa M.",
-        "vehicle": "Toyota Wish, silver",
-        "origin": "Harare",
-        "destination": "Bulawayo",
-        "pickup_note": "Harare CBD, Fourth Street pickup point",
-        "dropoff_note": "Bulawayo City Hall",
-        "date": "2026-06-03",
-        "time": "07:30",
-        "price_usd": 12,
-        "available_seats": 3,
-    },
-    {
-        "driver_name": "Nyasha K.",
-        "vehicle": "Honda Fit, black",
-        "origin": "Harare",
-        "destination": "Mutare",
-        "pickup_note": "Eastgate Mall entrance",
-        "dropoff_note": "Mutare CBD",
-        "date": "2026-06-04",
-        "time": "08:15",
-        "price_usd": 10,
-        "available_seats": 2,
-    },
-    {
-        "driver_name": "Kudzai R.",
-        "vehicle": "Nissan Note, white",
-        "origin": "Gweru",
-        "destination": "Harare",
-        "pickup_note": "Gweru city centre",
-        "dropoff_note": "Mbare Musika taxi rank area",
-        "date": "2026-06-05",
-        "time": "06:45",
-        "price_usd": 11,
-        "available_seats": 4,
-    },
-    {
-        "driver_name": "Farai D.",
-        "vehicle": "Toyota Noah, charcoal",
-        "origin": "Bulawayo",
-        "destination": "Victoria Falls",
-        "pickup_note": "Bulawayo City Hall",
-        "dropoff_note": "Victoria Falls town centre",
-        "date": "2026-06-06",
-        "time": "09:00",
-        "price_usd": 18,
-        "available_seats": 5,
-    },
-    {
-        "driver_name": "Rudo S.",
-        "vehicle": "Mazda Premacy, green",
-        "origin": "Kwekwe",
-        "destination": "Harare",
-        "pickup_note": "Kwekwe main bus stop area",
-        "dropoff_note": "Harare CBD, Copacabana",
-        "date": "2026-06-07",
-        "time": "10:30",
-        "price_usd": 9,
-        "available_seats": 3,
-    },
-]
+LEGACY_DEMO_RIDE_SIGNATURES = {
+    ("local driver", "toyota wish, silver", "harare", "bulawayo", 12),
+    ("tafadzwa m.", "toyota wish, silver", "harare", "bulawayo", 12),
+    ("nyasha k.", "honda fit, black", "harare", "mutare", 10),
+    ("kudzai r.", "nissan note, white", "gweru", "harare", 11),
+    ("farai d.", "toyota noah, charcoal", "bulawayo", "victoria falls", 18),
+    ("rudo s.", "mazda premacy, green", "kwekwe", "harare", 9),
+}
 
 ZIMBABWE_TZ = timezone(timedelta(hours=2))
 TRIP_STATUS_DRAFT = "DRAFT"
@@ -91,28 +36,7 @@ DEFAULT_ESTIMATED_DURATION_MINUTES = 240
 
 
 async def seed_demo_rides() -> None:
-    if not get_settings().enable_demo_seed:
-        return
-
-    rides = await database.find_many("rides")
-    if rides:
-        return
-
-    seeded = []
-    for ride in DEMO_RIDES:
-        timestamp = now_iso()
-        seeded.append(
-            {
-                "id": new_id(),
-                "driver_id": new_id(),
-                "status": "open",
-                "is_demo": True,
-                "created_at": timestamp,
-                "updated_at": timestamp,
-                **ride,
-            }
-        )
-    await database.replace_collection("rides", seeded)
+    logger.info("demo_ride_seed_skipped")
 
 
 def canonical_trip_status(status: Optional[str]) -> str:
@@ -134,8 +58,25 @@ def is_final_trip_status(status: Optional[str]) -> bool:
     return canonical_trip_status(status) in FINAL_TRIP_STATUSES
 
 
+def is_legacy_demo_ride(ride: Dict[str, Any]) -> bool:
+    if ride.get("is_demo") is True:
+        return True
+    try:
+        price_usd = int(float(ride.get("price_usd") or 0))
+    except (TypeError, ValueError):
+        price_usd = 0
+    signature = (
+        str(ride.get("driver_name") or "").strip().lower(),
+        str(ride.get("vehicle") or "").strip().lower(),
+        str(ride.get("origin") or "").strip().lower(),
+        str(ride.get("destination") or "").strip().lower(),
+        price_usd,
+    )
+    return signature in LEGACY_DEMO_RIDE_SIGNATURES
+
+
 def is_public_ride(ride: Dict[str, Any]) -> bool:
-    return ride.get("is_demo") is not True
+    return not is_legacy_demo_ride(ride)
 
 
 def ride_departure_datetime(ride: Dict[str, Any]) -> Optional[datetime]:
@@ -454,7 +395,7 @@ async def cleanup_demo_rides() -> Dict[str, int]:
     preserved_count = 0
 
     for ride in rides:
-        if ride.get("is_demo") is True:
+        if is_legacy_demo_ride(ride):
             deleted = await database.delete_one("rides", ride["id"])
             if deleted:
                 deleted_count += 1
