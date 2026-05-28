@@ -229,7 +229,7 @@
     .contact-card {
       display: grid;
       gap: 12px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       margin-top: 16px;
     }
 
@@ -301,6 +301,7 @@
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
         <a href="/support">Support</a>
+        <a href="/safety">Safety</a>
       </div>
     </nav>
   </header>
@@ -349,6 +350,7 @@
     <li><strong>Authentication and verification information:</strong> email verification status, one-time code records, password reset records, login/session records, and account security timestamps.</li>
     <li><strong>Phone number:</strong> optional during signup/login, but required before booking a seat, posting a driver trip, or accepting passenger requests.</li>
     <li><strong>Ride and booking information:</strong> origin, destination, travel date, pickup and drop-off notes, seats, price, vehicle details, ride requests, booking status, and trip records.</li>
+    <li><strong>Location during active trips:</strong> LetsGoRide may use location only during active trips to help with trip coordination, live trip progress, ETA, and safety.</li>
     <li><strong>Driver verification information:</strong> identity document, driver license, vehicle registration or logbook, optional vehicle photo, verification notes, verification status, and review outcome.</li>
     <li><strong>Support and safety information:</strong> support messages, safety reports, complaints, dispute notes, and submitted evidence if provided by the user.</li>
     <li><strong>Technical information:</strong> basic device/app logs, error logs, IP address, browser/device type, timestamps, and security logs needed to operate and protect the service.</li>
@@ -362,7 +364,9 @@
     <li>We do not use advertising identifiers for targeted advertising.</li>
     <li>We do not access contacts.</li>
     <li>We do not record microphone audio.</li>
-    <li>We do not track live location in the background unless a future feature asks for permission and this policy is updated.</li>
+    <li>We do not track users 24/7.</li>
+    <li>We do not track users when no active trip is happening.</li>
+    <li>We do not use live location outside active trips.</li>
     <li>We do not show verification documents to passengers or normal users.</li>
     <li>We do not publicly display phone numbers in ride browsing.</li>
   </ul>
@@ -436,10 +440,6 @@
       <strong>Email</strong>
       <a href="mailto:support@letsgoride.site">support@letsgoride.site</a>
     </div>
-    <div class="contact-item">
-      <strong>Phone / WhatsApp</strong>
-      <a href="tel:+48735123967">+48735123967</a>
-    </div>
   </div>
 </section>
       </div>
@@ -453,6 +453,7 @@
         <a href="/privacy">Privacy Policy</a>
         <a href="/terms">Terms of Use</a>
         <a href="/support">Support</a>
+        <a href="/safety">Safety Policy</a>
       </div>
     </div>
   </footer>
