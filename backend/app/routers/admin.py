@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.auth import get_admin_user
 from app.database import database
@@ -49,10 +49,12 @@ def _public_document(document):
         "id": document.get("id"),
         "document_type": document.get("document_type"),
         "file_name": document.get("file_name"),
+        "file_url": document.get("file_url"),
+        "cloudinary_public_id": document.get("cloudinary_public_id"),
         "uploaded_at": document.get("uploaded_at"),
         "status": document.get("status", "pending"),
         "rejection_reason": document.get("rejection_reason"),
-        "content_type": mimetypes.guess_type(document.get("file_name") or "")[0],
+        "content_type": document.get("content_type") or mimetypes.guess_type(document.get("file_name") or "")[0],
     }
 
 
@@ -797,6 +799,9 @@ async def verification_document(driver_id: str, document_id: str, admin=Depends(
     if not document:
         logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
         api_error("Document not found.", 404)
+    if document.get("file_url"):
+        logger.info("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=302 file_found=true content_type=%s", driver_id, document_id, admin.get("id"), document.get("content_type") or "remote")
+        return RedirectResponse(str(document["file_url"]))
     storage_path = document.get("storage_path")
     if not storage_path:
         logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))

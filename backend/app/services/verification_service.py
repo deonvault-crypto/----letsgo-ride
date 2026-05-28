@@ -293,9 +293,11 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             "document_type": document.get("document_type"),
             "file_name": document.get("file_name"),
             "file_url": document.get("file_url"),
+            "cloudinary_public_id": document.get("cloudinary_public_id"),
             "uploaded_at": document.get("uploaded_at"),
             "status": document.get("status", "pending"),
             "rejection_reason": document.get("rejection_reason"),
+            "content_type": document.get("content_type"),
         }
         for document in manual_verification_documents(driver.get("documents", []))
     ]
@@ -393,17 +395,12 @@ def _next_status_after_upload(driver: Dict[str, Any], documents: List[Dict[str, 
     current_status = normalize_verification_status(driver.get("verification_status"), documents)
     if current_status in {"rejected", "needs_resubmission"}:
         return "needs_resubmission"
-    if _has_all_required_documents(documents):
-        return "pending_auto_check"
     return "pending_uploads"
 
 
 def _status_from_documents(documents: List[Dict[str, Any]]) -> str:
     if _has_all_required_documents(documents):
-        risk_score, risk_flags = _evaluate_document_risk(documents)
-        if risk_score == 0.0 and not risk_flags:
-            return "approved"
-        return "needs_review"
+        return "pending_auto_check"
     return "pending_uploads"
 
 
@@ -479,6 +476,8 @@ async def save_uploaded_document(
 
     if _cloudinary_configured():
         cloudinary_result = await _upload_to_cloudinary(upload, document_type)
+        if not cloudinary_result.get("secure_url") or not cloudinary_result.get("public_id"):
+            raise RuntimeError("Cloudinary upload did not return document metadata.")
         document["file_url"] = cloudinary_result.get("secure_url")
         document["cloudinary_public_id"] = cloudinary_result.get("public_id")
         document["resource_type"] = cloudinary_result.get("resource_type")

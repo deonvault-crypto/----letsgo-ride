@@ -1,6 +1,5 @@
-import axios from "axios";
-
-import { api, requestData, toFriendlyApiError } from "./api";
+import { getToken, requestData } from "./api";
+import { API_BASE_URL } from "../constants/config";
 import { ApiResponse } from "../types/api.types";
 import {
   VerificationDocument,
@@ -84,31 +83,87 @@ export async function uploadVerificationDocument(data: {
 }) {
   const formData = new FormData();
   formData.append("document_type", data.documentType);
+  const file = verificationUploadFile(data);
   formData.append("file", {
-    uri: data.uri,
-    name: data.name,
-    type: data.mimeType || "application/octet-stream",
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
   } as unknown as Blob);
 
   try {
-    const response = await api.post<ApiResponse<VerificationDocument>>(
-      "/verification/manual/upload",
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
-    );
-    if (!response.data.success) {
-      throw new Error(response.data.error || "Upload failed.");
+    const token = await getToken();
+    const response = await fetch(`${API_BASE_URL}/verification/manual/upload`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData as unknown as BodyInit,
+    });
+    const payload = await response.json() as ApiResponse<VerificationDocument>;
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.success === false ? payload.error : "Upload failed.");
     }
-    return normalizeVerificationDocument(response.data.data) || {
+    return normalizeVerificationDocument(payload.data) || {
       document_type: data.documentType,
-      file_name: data.name,
+      file_name: file.name,
       status: "pending",
     };
   } catch (err) {
-    if (axios.isAxiosError(err)) {
-      throw new Error(toFriendlyApiError(err));
-    }
-    throw err;
+    throw new Error(err instanceof Error ? err.message : "Upload failed.");
+  }
+}
+
+function verificationUploadFile(data: {
+  documentType: VerificationDocumentType;
+  uri: string;
+  name?: string | null;
+  mimeType?: string | null;
+}) {
+  const uri = String(data.uri || "").trim();
+  if (!uri) {
+    throw new Error("Camera did not return a saved photo. Please try again.");
+  }
+
+  const type = normalizeMimeType(data.mimeType, uri);
+  const name = normalizeFileName(data.name, uri, data.documentType, type);
+  return { uri, name, type };
+}
+
+function normalizeMimeType(mimeType: string | null | undefined, uri: string) {
+  const normalized = String(mimeType || "").trim().toLowerCase();
+  if (normalized.startsWith("image/")) return normalized;
+
+  const extension = extensionFromName(uri);
+  if (extension === "png") return "image/png";
+  if (extension === "heic") return "image/heic";
+  if (extension === "heif") return "image/heif";
+  return "image/jpeg";
+}
+
+function normalizeFileName(name: string | null | undefined, uri: string, documentType: VerificationDocumentType, mimeType: string) {
+  const uriName = safeDecode(uri.split("?")[0].split("#")[0].split("/").pop() || "");
+  const rawName = String(name || uriName || "").trim();
+  const extension = extensionFromName(rawName) || extensionForMimeType(mimeType);
+  const withoutExtension = rawName.replace(/\.[a-z0-9]+$/i, "") || `${documentType}-${Date.now()}`;
+  const safeBase = withoutExtension.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || documentType;
+  return `${safeBase}.${extension}`;
+}
+
+function extensionFromName(value: string) {
+  const match = value.match(/\.([a-z0-9]+)(?:$|[?#])/i);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function extensionForMimeType(mimeType: string) {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/heic") return "heic";
+  if (mimeType === "image/heif") return "heif";
+  return "jpg";
+}
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }
 
@@ -146,6 +201,7 @@ function normalizeVerificationDocument(document: unknown): VerificationDocument 
     document_type: documentType,
     file_name: String(raw.file_name || raw.filename || raw.name || `${documentType}.jpg`),
     file_url: typeof raw.file_url === "string" ? raw.file_url : undefined,
+    cloudinary_public_id: typeof raw.cloudinary_public_id === "string" ? raw.cloudinary_public_id : null,
     uploaded_at: typeof raw.uploaded_at === "string" ? raw.uploaded_at : undefined,
     status: raw.status === "accepted" || raw.status === "rejected" ? raw.status : "pending",
     rejection_reason: typeof raw.rejection_reason === "string" ? raw.rejection_reason : undefined,

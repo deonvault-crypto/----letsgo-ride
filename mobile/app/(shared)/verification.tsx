@@ -91,8 +91,8 @@ export default function DriverVerificationScreen() {
   useLiveRefresh(load, 15000);
 
   async function captureDocument(documentType: VerificationDocumentType) {
+    let capturedPhoto = false;
     try {
-      setUploading(documentType);
       setActionError("");
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -108,16 +108,27 @@ export default function DriverVerificationScreen() {
       });
       if (result.canceled || !result.assets[0]) return;
       const asset = result.assets[0];
-      const fallbackName = `${documentType}-${Date.now()}.jpg`;
-      await uploadVerificationDocument({
+      capturedPhoto = true;
+      setUploading(documentType);
+      const uploaded = await uploadVerificationDocument({
         documentType,
         uri: asset.uri,
-        name: asset.fileName || fallbackName,
-        mimeType: asset.mimeType || "image/jpeg",
+        name: capturedFileName(asset.uri, asset.fileName, documentType),
+        mimeType: asset.mimeType || undefined,
       });
-      await load();
+      setProfile((current) => mergeUploadedDocument(current, uploaded));
+      try {
+        const refreshed = await getMyVerification();
+        setProfile((current) => mergeUploadedDocument(refreshed, uploaded, current?.documents || []));
+      } catch {
+        setActionError("Photo uploaded, but verification status could not refresh. Pull down or retry in a moment.");
+      }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Unable to capture document.");
+      setActionError(
+        capturedPhoto
+          ? "Photo captured, but upload failed. Please try again."
+          : err instanceof Error ? err.message : "Unable to capture document.",
+      );
     } finally {
       setUploading(null);
     }
@@ -142,6 +153,9 @@ export default function DriverVerificationScreen() {
   const status = profile?.verification_status || "not_started";
   const uploadedDocuments = profile?.documents || [];
   const requiredDocuments = (profile?.required_documents || manualDocumentTypes).filter((item) => manualDocumentTypes.includes(item));
+  const requiredCaptureDocuments = requiredDocuments.filter((item) => item !== "vehicle_photo_optional");
+  const hasRequiredCaptures = requiredCaptureDocuments.every((documentType) => Boolean(findLatestDocument(uploadedDocuments, documentType)));
+  const isResubmission = status === "rejected" || status === "needs_resubmission" || Boolean(profile?.verification_submitted_at);
   const canRenderVerification = Boolean(profile && !loadError);
   const showManualForm = canRenderVerification && (
     status === "not_started" ||
@@ -170,7 +184,9 @@ export default function DriverVerificationScreen() {
         </View>
       ) : null}
 
-      {canRenderVerification && status !== "not_started" ? <StatusCopy status={status} /> : null}
+      {canRenderVerification && status !== "not_started" ? (
+        <StatusCopy status={status} readyToSubmit={showManualForm && hasRequiredCaptures} />
+      ) : null}
 
       {canRenderVerification && showSubmittedState ? (
         <SubmittedState status={status} documents={uploadedDocuments} />
@@ -187,6 +203,7 @@ export default function DriverVerificationScreen() {
                 documentType={documentType}
                 documents={uploadedDocuments}
                 uploading={uploading === documentType}
+                disabled={Boolean(uploading)}
                 onCapture={() => captureDocument(documentType)}
               />
             ))}
@@ -216,10 +233,13 @@ export default function DriverVerificationScreen() {
               </Text>
             </Pressable>
             {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+            {!hasRequiredCaptures ? (
+              <Text style={styles.body}>Capture every required check before submitting for review.</Text>
+            ) : null}
             <AppButton
-              title={status === "not_started" ? "Submit for review" : "Resubmit for review"}
+              title={isResubmission ? "Resubmit for review" : "Submit for review"}
               loading={saving}
-              disabled={!consent}
+              disabled={!consent || !hasRequiredCaptures || Boolean(uploading)}
               onPress={submit}
             />
           </View>
@@ -233,15 +253,20 @@ function DocumentRow({
   documentType,
   documents,
   uploading,
+  disabled,
   onCapture,
 }: {
   documentType: VerificationDocumentType;
   documents: VerificationDocument[];
   uploading: boolean;
+  disabled: boolean;
   onCapture: () => void;
 }) {
   const document = findLatestDocument(documents, documentType);
   const required = documentType !== "vehicle_photo_optional";
+  const captureStatus = uploading
+    ? "Uploading photo..."
+    : document ? `Captured - ${formatStatus(document.status || "pending")}` : "Not captured";
   return (
     <View style={styles.documentRow}>
       <View style={styles.documentCopy}>
@@ -251,13 +276,14 @@ function DocumentRow({
         </Text>
         <Text style={styles.body}>{documentDescriptions[documentType]}</Text>
         <Text numberOfLines={1} style={styles.body}>
-          {document ? `${document.file_name || "Captured document"} - ${formatStatus(document.status || "pending")}` : "Not captured"}
+          {captureStatus}
         </Text>
       </View>
       <AppButton
         title={captureLabels[documentType] || "Capture document"}
         variant="secondary"
         loading={uploading}
+        disabled={disabled}
         onPress={onCapture}
         icon={<MaterialCommunityIcons name="camera-outline" size={18} color={colors.whiteText} />}
         style={styles.smallButton}
@@ -318,9 +344,49 @@ function findLatestDocument(documents: VerificationDocument[], documentType: Ver
   return [...documents].reverse().find((item) => item.document_type === documentType);
 }
 
-function StatusCopy({ status }: { status: VerificationProfile["verification_status"] }) {
+function capturedFileName(uri: string, fileName: string | null | undefined, documentType: VerificationDocumentType) {
+  const uriName = uri.split("?")[0].split("#")[0].split("/").pop() || "";
+  const rawName = safeDecode(fileName || uriName);
+  if (rawName && /\.[a-z0-9]+$/i.test(rawName)) return rawName;
+  return `${documentType}-${Date.now()}.jpg`;
+}
+
+function mergeUploadedDocument(
+  profile: VerificationProfile | null,
+  uploaded: VerificationDocument,
+  existingDocuments: VerificationDocument[] = [],
+): VerificationProfile | null {
+  if (!profile) return profile;
+  const documents = dedupeDocuments([...existingDocuments, ...profile.documents, uploaded]);
+  return {
+    ...profile,
+    verification_status: profile.verification_status === "not_started" ? "pending_uploads" : profile.verification_status,
+    documents,
+  };
+}
+
+function dedupeDocuments(documents: VerificationDocument[]) {
+  const byKey = new Map<string, VerificationDocument>();
+  for (const document of documents) {
+    const key = document.id || `${document.document_type}:${document.file_name}:${document.uploaded_at || ""}`;
+    byKey.set(key, document);
+  }
+  return Array.from(byKey.values());
+}
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function StatusCopy({ status, readyToSubmit }: { status: VerificationProfile["verification_status"]; readyToSubmit: boolean }) {
   const copy = {
-    pending_uploads: "Capture the remaining documents so LetsGoRide can review your driver verification.",
+    pending_uploads: readyToSubmit
+      ? "All required captures are attached. Review the consent statement and submit them for LetsGoRide review."
+      : "Capture the remaining documents so LetsGoRide can review your driver verification.",
     pending_auto_check: "Your documents are being checked automatically.",
     needs_review: "We need more information. Please check the note and update your documents.",
     needs_resubmission: "Your verification requires a resubmission. Capture updated documents and submit again.",
