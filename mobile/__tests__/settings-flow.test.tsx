@@ -2,7 +2,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import SettingsScreen from "../app/(shared)/settings";
 import { deleteAccount } from "../services/authService";
-import { disableBiometricLogin } from "../services/biometricService";
+import { disableBiometricLogin, enableBiometricLogin, isBiometricEnabled } from "../services/biometricService";
 import { updateNotificationPreferences } from "../services/notificationService";
 import {
   enablePhoneNotifications,
@@ -99,6 +99,13 @@ describe("settings account controls", () => {
       expect(screen.getByText("Enable notifications in device settings")).toBeOnTheScreen();
     });
     expect(screen.getByRole("button", { name: "Edit profile" })).toBeOnTheScreen();
+    expect(screen.getByText("Account")).toBeOnTheScreen();
+    expect(screen.getByText("Notifications")).toBeOnTheScreen();
+    expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
+    expect(screen.getByText("Support & Safety")).toBeOnTheScreen();
+    expect(screen.getByText("Account Control")).toBeOnTheScreen();
+    expect(screen.queryByText("Phone and document privacy")).toBeNull();
+    expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
 
     const tripUpdatesSwitch = screen.getByLabelText("Trip updates");
     expect(tripUpdatesSwitch.props.value).toBe(false);
@@ -106,6 +113,27 @@ describe("settings account controls", () => {
 
     fireEvent(tripUpdatesSwitch, "valueChange", true);
     expect(updateNotificationPreferences).not.toHaveBeenCalled();
+  });
+
+  it("shows short contextual privacy prompts instead of permanent privacy cards", async () => {
+    (isBiometricEnabled as jest.Mock).mockResolvedValueOnce(false);
+    const screen = render(<SettingsScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
+    });
+
+    fireEvent(screen.getByLabelText("Biometric login"), "valueChange", true);
+    expect(await screen.findByText("Face ID will only unlock LetsGoRide on this device.")).toBeOnTheScreen();
+    expect(enableBiometricLogin).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByRole("button", { name: "Enable biometric login" }));
+    await waitFor(() => {
+      expect(enableBiometricLogin).toHaveBeenCalled();
+    });
+
+    fireEvent.press(screen.getByRole("button", { name: "Verified identity badge" }));
+    expect(screen.getByText("A verified badge means LetsGoRide has reviewed your identity documents. It helps build trust with passengers and drivers.")).toBeOnTheScreen();
   });
 
   it("shows the explanation before requesting phone notifications from settings", async () => {
@@ -143,6 +171,7 @@ describe("settings account controls", () => {
     fireEvent.press(screen.getAllByRole("button", { name: "Delete account" })[0]);
 
     expect(screen.getByText("Delete account?")).toBeOnTheScreen();
+    expect(screen.getByText("This permanently deletes your LetsGoRide account, trips, messages, verification records, and saved preferences.")).toBeOnTheScreen();
     expect(screen.getByText("Type DELETE to confirm.")).toBeOnTheScreen();
     fireEvent.press(screen.getAllByRole("button", { name: "Delete account" }).at(-1)!);
     expect(deleteAccount).not.toHaveBeenCalled();

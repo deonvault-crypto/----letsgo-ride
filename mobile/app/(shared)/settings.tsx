@@ -6,7 +6,7 @@ import { AppButton } from "../../components/ui/AppButton";
 import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
-import { legalUrls, supportEmail } from "../../constants/legal";
+import { legalUrls } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { deleteAccount, logout } from "../../services/authService";
@@ -98,6 +98,8 @@ export default function SettingsScreen() {
   const [phoneNotificationMessage, setPhoneNotificationMessage] = useState("");
   const [notificationExplanationOpen, setNotificationExplanationOpen] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
+  const [biometricExplanationOpen, setBiometricExplanationOpen] = useState(false);
+  const [verifiedBadgeModalOpen, setVerifiedBadgeModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [deleteSaving, setDeleteSaving] = useState(false);
@@ -216,6 +218,14 @@ export default function SettingsScreen() {
   }
 
   async function toggleBiometrics(nextValue: boolean) {
+    if (nextValue && !biometricEnabled) {
+      setBiometricExplanationOpen(true);
+      return;
+    }
+    await setBiometricLoginEnabled(nextValue);
+  }
+
+  async function setBiometricLoginEnabled(nextValue: boolean) {
     try {
       setBiometricSaving(true);
       if (nextValue) {
@@ -235,18 +245,9 @@ export default function SettingsScreen() {
     }
   }
 
-  function explainVerifiedBadge() {
-    Alert.alert(
-      "Verified identity badge",
-      "A blue verified badge means the person completed LetsGoRide identity verification. It helps passengers and drivers know the account is real and reviewed by LetsGoRide.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: isVerifiedStatus(verificationStatus) ? "View status" : "Start verification",
-          onPress: () => router.push("/(shared)/verification" as never),
-        },
-      ],
-    );
+  async function confirmBiometricExplanation() {
+    setBiometricExplanationOpen(false);
+    await setBiometricLoginEnabled(true);
   }
 
   return (
@@ -255,12 +256,7 @@ export default function SettingsScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete account?</Text>
-            <Text style={styles.body}>
-              This will permanently delete your LetsGoRide account and remove
-              your access to trips, messages, and profile data. Some trip,
-              safety, and admin records may be retained where required for
-              security, dispute handling, or legal reasons.
-            </Text>
+            <Text style={styles.body}>This permanently deletes your LetsGoRide account, trips, messages, verification records, and saved preferences.</Text>
             <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
             <TextInput
               value={deleteText}
@@ -293,6 +289,36 @@ export default function SettingsScreen() {
             <View style={styles.modalActions}>
               <AppButton title="Enable notifications" loading={pushSaving} onPress={confirmNotificationExplanation} />
               <AppButton title="Not now" variant="secondary" onPress={skipNotificationExplanation} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={biometricExplanationOpen} transparent animationType="fade" onRequestClose={() => setBiometricExplanationOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Biometric login</Text>
+            <Text style={styles.body}>Face ID will only unlock LetsGoRide on this device.</Text>
+            <View style={styles.modalActions}>
+              <AppButton title="Enable biometric login" loading={biometricSaving} onPress={confirmBiometricExplanation} />
+              <AppButton title="Cancel" variant="secondary" onPress={() => setBiometricExplanationOpen(false)} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={verifiedBadgeModalOpen} transparent animationType="fade" onRequestClose={() => setVerifiedBadgeModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Verified identity badge</Text>
+            <Text style={styles.body}>A verified badge means LetsGoRide has reviewed your identity documents. It helps build trust with passengers and drivers.</Text>
+            <View style={styles.modalActions}>
+              <AppButton
+                title={isVerifiedStatus(verificationStatus) ? "View status" : "Start verification"}
+                onPress={() => {
+                  setVerifiedBadgeModalOpen(false);
+                  router.push("/(shared)/verification" as never);
+                }}
+              />
+              <AppButton title="Close" variant="secondary" onPress={() => setVerifiedBadgeModalOpen(false)} />
             </View>
           </View>
         </View>
@@ -369,7 +395,7 @@ export default function SettingsScreen() {
         })}
       </Section>
 
-      <Section title="Security">
+      <Section title="Security & Privacy">
         <View style={styles.toggleRow}>
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Biometric login</Text>
@@ -380,6 +406,8 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <Switch
+            accessibilityLabel="Biometric login"
+            accessibilityState={{ disabled: !biometricSupported || biometricSaving, checked: biometricEnabled }}
             value={biometricEnabled}
             disabled={!biometricSupported || biometricSaving}
             onValueChange={toggleBiometrics}
@@ -387,35 +415,18 @@ export default function SettingsScreen() {
             thumbColor={biometricEnabled ? colors.primaryGreen : "#FFFDF8"}
           />
         </View>
-      </Section>
-
-      <Section title="Privacy and safety">
-        <View style={styles.explainerCard}>
-          <Text style={styles.explainerTitle}>Phone and document privacy</Text>
-          <Text style={styles.body}>
-            Your phone number is not shown publicly in ride browsing. It is
-            only shared when needed for confirmed trip coordination. Verification
-            documents are visible only to authorized admins.
-          </Text>
-        </View>
-        <View style={styles.explainerCard}>
-          <Text style={styles.explainerTitle}>How LetsGoRide uses account data</Text>
-          <Text style={styles.body}>
-            LetsGoRide uses email and password login, optional biometric login
-            on your device, in-app messages, support messages, safety reports,
-            and notifications for trip updates. Phone numbers are optional
-            until booking or posting a ride. Profile photos and driver
-            verification documents are used for trust and safety review. The
-            app does not offer online payments, GPS tracking, contacts access,
-            or advertising tracking.
-          </Text>
-        </View>
         <ListTile
           icon="check-decagram-outline"
           title="Verified identity badge"
-          subtitle="Build trust with other passengers and drivers"
-          onPress={explainVerifiedBadge}
+          subtitle="What the verified badge means"
+          onPress={() => setVerifiedBadgeModalOpen(true)}
         />
+        <ListTile icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
+        <ListTile icon="file-document-outline" title="Terms of Use" onPress={() => openExternalUrl(legalUrls.terms)} />
+        <ListTile icon="shield-outline" title="Safety Policy" onPress={() => openExternalUrl(legalUrls.safety)} />
+      </Section>
+
+      <Section title="Support & Safety">
         <ListTile
           icon="lifebuoy"
           title="Support"
@@ -430,19 +441,7 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Section title="Legal">
-        <ListTile icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
-        <ListTile icon="file-document-outline" title="Terms of Use" onPress={() => openExternalUrl(legalUrls.terms)} />
-        <ListTile icon="shield-outline" title="Safety Policy" onPress={() => openExternalUrl(legalUrls.safety)} />
-        <ListTile
-          icon="email-outline"
-          title="Support Contact"
-          subtitle={supportEmail}
-          onPress={() => openExternalUrl(legalUrls.support)}
-        />
-      </Section>
-
-      <Section title="Account control">
+      <Section title="Account Control">
         <ListTile
           icon="logout"
           title="Logout"
@@ -552,18 +551,6 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 12,
     lineHeight: 17,
-  },
-  explainerCard: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "#FFFBF3",
-  },
-  explainerTitle: {
-    color: colors.whiteText,
-    fontWeight: "900",
   },
   modalBackdrop: {
     flex: 1,
