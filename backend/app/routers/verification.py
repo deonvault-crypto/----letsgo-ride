@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from requests import RequestException
 
 from app.auth import get_current_user
+from app.config import get_settings
 from app.models.verification import DocumentType, VerificationSubmitBody
 from app.services.verification_service import (
+    VerificationUploadError,
+    cloudinary_configuration_status,
     get_driver_for_user,
     public_verification,
     save_uploaded_document,
@@ -13,12 +17,31 @@ from app.utils import api_error, api_success
 
 
 router = APIRouter(prefix="/verification", tags=["verification"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/me")
 async def my_verification(user=Depends(get_current_user)):
     driver = await get_driver_for_user(user)
     return api_success(public_verification(driver))
+
+
+@router.get("/cloudinary/status")
+async def verification_cloudinary_status(user=Depends(get_current_user)):
+    settings = get_settings()
+    if settings.app_env == "production" and user.get("role") != "admin":
+        api_error("Admin access is required.", 403)
+    status = cloudinary_configuration_status()
+    logger.info(
+        "verification_upload stage=cloudinary_status_checked user_id=%s role=%s configured=%s cloud_name_present=%s api_key_present=%s api_secret_present=%s",
+        user.get("id"),
+        user.get("role"),
+        status["configured"],
+        status["cloud_name_present"],
+        status["api_key_present"],
+        status["api_secret_present"],
+    )
+    return api_success(status)
 
 
 @router.post("/manual/submit")
@@ -35,11 +58,7 @@ async def upload_manual_document(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
-    try:
-        uploaded = await save_uploaded_document(user, document_type, file)
-    except (RequestException, RuntimeError):
-        api_error("Verification document upload failed. Please try again.", 502)
-    return api_success(uploaded)
+    return await _upload_document(document_type, file, user)
 
 
 @router.post("/upload")
@@ -48,8 +67,49 @@ async def upload_document(
     file: UploadFile = File(...),
     user=Depends(get_current_user),
 ):
+    return await _upload_document(document_type, file, user)
+
+
+async def _upload_document(document_type: DocumentType, file: UploadFile, user):
+    logger.info(
+        "verification_upload stage=auth_user_loaded user_id=%s role=%s",
+        user.get("id"),
+        user.get("role"),
+    )
+    logger.info(
+        "verification_upload stage=multipart_file_received user_id=%s document_type=%s filename=%s content_type=%s",
+        user.get("id"),
+        document_type,
+        file.filename or "missing",
+        file.content_type or "missing",
+    )
     try:
         uploaded = await save_uploaded_document(user, document_type, file)
-    except (RequestException, RuntimeError):
-        api_error("Verification document upload failed. Please try again.", 502)
+    except VerificationUploadError as error:
+        logger.exception(
+            "verification_upload stage=%s user_id=%s document_type=%s error=%s",
+            error.stage,
+            user.get("id"),
+            document_type,
+            error.log_message,
+        )
+        api_error(
+            error.message,
+            error.status_code,
+            stage=error.stage,
+            document_type=document_type,
+        )
+    except Exception as error:
+        logger.exception(
+            "verification_upload stage=unexpected user_id=%s document_type=%s error=%s",
+            user.get("id"),
+            document_type,
+            str(error),
+        )
+        api_error(
+            "Unexpected verification upload failure.",
+            502,
+            stage="unexpected",
+            document_type=document_type,
+        )
     return api_success(uploaded)

@@ -1,11 +1,11 @@
 import asyncio
-import hashlib
-import hmac
-import time
+import io
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-import requests
+import cloudinary
+import cloudinary.uploader
 from fastapi import UploadFile
 
 from app.config import get_settings
@@ -17,6 +17,7 @@ from app.utils import new_id, now_iso
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 REQUIRED_DOCUMENTS = [
     "selfie",
@@ -64,6 +65,21 @@ DOCUMENT_TYPE_ALIASES = {
     "vehicle_logbook": "vehicle_registration_or_logbook",
     "vehicle_photo": "vehicle_photo_optional",
 }
+
+
+class VerificationUploadError(RuntimeError):
+    def __init__(
+        self,
+        stage: str,
+        message: str,
+        status_code: int = 502,
+        log_message: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.message = message
+        self.log_message = log_message or message
+        self.status_code = status_code
 
 
 def default_verification_fields() -> Dict[str, Any]:
@@ -178,35 +194,111 @@ def _safe_file_name(file_name: str) -> str:
     return "".join(character for character in file_name if character.isalnum() or character in ("-", "_", ".")).strip(".") or "document"
 
 
+def _configure_cloudinary_sdk():
+    config = cloudinary.config(
+        cloud_name=settings.cloudinary_cloud_name or None,
+        api_key=settings.cloudinary_api_key or None,
+        api_secret=settings.cloudinary_api_secret or None,
+        secure=True,
+    )
+    logger.info(
+        "verification_upload cloudinary_init source=%s cloudinary_url_present=%s configured=%s cloud_name=%s api_key_present=%s api_secret_present=%s sdk_cloud_name=%s",
+        settings.cloudinary_config_source,
+        settings.cloudinary_url_present,
+        bool(config.cloud_name and config.api_key and config.api_secret),
+        settings.cloudinary_cloud_name or "missing",
+        bool(settings.cloudinary_api_key),
+        bool(settings.cloudinary_api_secret),
+        config.cloud_name or "missing",
+    )
+    return config
+
+
+cloudinary_config = _configure_cloudinary_sdk()
+
+
+def cloudinary_configuration_status() -> Dict[str, bool]:
+    config = cloudinary.config()
+    cloud_name_present = bool(config.cloud_name)
+    api_key_present = bool(config.api_key)
+    api_secret_present = bool(config.api_secret)
+    return {
+        "configured": bool(cloud_name_present and api_key_present and api_secret_present),
+        "cloud_name_present": cloud_name_present,
+        "api_key_present": api_key_present,
+        "api_secret_present": api_secret_present,
+    }
+
+
 def _cloudinary_configured() -> bool:
-    return bool(settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret)
+    return cloudinary_configuration_status()["configured"]
 
 
 def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[str], document_type: str) -> Dict[str, Any]:
-    if not _cloudinary_configured():
-        raise RuntimeError("Cloudinary is not configured.")
+    config_status = cloudinary_configuration_status()
+    logger.info(
+        "verification_upload stage=cloudinary_config_detected configured=%s cloud_name_present=%s api_key_present=%s api_secret_present=%s",
+        config_status["configured"],
+        config_status["cloud_name_present"],
+        config_status["api_key_present"],
+        config_status["api_secret_present"],
+    )
+    if not config_status["configured"]:
+        raise VerificationUploadError(
+            "cloudinary_init",
+            "Cloudinary is not configured for verification uploads.",
+        )
 
-    url = f"https://api.cloudinary.com/v1_1/{settings.cloudinary_cloud_name}/auto/upload"
-    timestamp = int(time.time())
     folder = f"letsgoride/verification/{document_type}"
-    signature_base = f"folder={folder}&timestamp={timestamp}"
-    signature = hmac.new(settings.cloudinary_api_secret.encode(), signature_base.encode(), hashlib.sha1).hexdigest()
-    payload = {
-        "api_key": settings.cloudinary_api_key,
-        "timestamp": timestamp,
-        "folder": folder,
-        "signature": signature,
-    }
-    files = {"file": (filename, file_bytes, content_type or "application/octet-stream")}
-    response = requests.post(url, data=payload, files=files, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    file_obj = io.BytesIO(file_bytes)
+    file_obj.name = filename
+    logger.info(
+        "verification_upload stage=cloudinary_upload_start folder=%s filename=%s content_type=%s bytes=%s",
+        folder,
+        filename,
+        content_type or "unknown",
+        len(file_bytes),
+    )
+    try:
+        result = cloudinary.uploader.upload(
+            file_obj,
+            resource_type="auto",
+            folder=folder,
+            use_filename=True,
+            unique_filename=True,
+        )
+    except Exception as exc:
+        raise VerificationUploadError(
+            "cloudinary_upload",
+            "Cloudinary upload failed.",
+            log_message=f"{type(exc).__name__}: {str(exc)}",
+        ) from exc
+    logger.info(
+        "verification_upload stage=cloudinary_upload_done public_id=%s resource_type=%s secure_url_present=%s",
+        result.get("public_id"),
+        result.get("resource_type"),
+        bool(result.get("secure_url")),
+    )
+    return result
 
 
-async def _upload_to_cloudinary(upload: UploadFile, document_type: str) -> Dict[str, Any]:
+async def _read_upload_bytes(upload: UploadFile, document_type: str) -> bytes:
+    logger.info(
+        "verification_upload stage=image_read_start document_type=%s filename=%s content_type=%s",
+        document_type,
+        upload.filename or "missing",
+        upload.content_type or "missing",
+    )
     file_bytes = await upload.read()
-    filename = upload.filename or _safe_file_name("document")
-    return await asyncio.to_thread(_cloudinary_upload, file_bytes, filename, upload.content_type, document_type)
+    logger.info(
+        "verification_upload stage=image_read_done document_type=%s filename=%s bytes=%s",
+        document_type,
+        upload.filename or "missing",
+        len(file_bytes),
+    )
+    if not file_bytes:
+        raise VerificationUploadError("image_read", "Uploaded verification image was empty.", 400)
+    return file_bytes
 
 
 def _evaluate_document_risk(documents: List[Dict[str, Any]]) -> Tuple[float, List[str]]:
@@ -459,73 +551,108 @@ async def save_uploaded_document(
     document_type: str,
     upload: UploadFile,
 ) -> Dict[str, Any]:
+    logger.info(
+        "verification_upload stage=save_start user_id=%s document_type=%s filename=%s content_type=%s",
+        user.get("id"),
+        document_type,
+        upload.filename or "missing",
+        upload.content_type or "missing",
+    )
     driver = await ensure_driver_for_user(user)
     document_id = new_id()
     timestamp = now_iso()
     safe_name = _safe_file_name(upload.filename or "document")
+    file_bytes = await _read_upload_bytes(upload, document_type)
 
     document: Dict[str, Any] = {
         "id": document_id,
         "document_type": document_type,
-        "file_name": upload.filename or safe_name,
+        "file_name": safe_name,
         "uploaded_at": timestamp,
         "status": "pending",
         "rejection_reason": None,
         "content_type": upload.content_type,
     }
 
-    if _cloudinary_configured():
-        cloudinary_result = await _upload_to_cloudinary(upload, document_type)
-        if not cloudinary_result.get("secure_url") or not cloudinary_result.get("public_id"):
-            raise RuntimeError("Cloudinary upload did not return document metadata.")
-        document["file_url"] = cloudinary_result.get("secure_url")
-        document["cloudinary_public_id"] = cloudinary_result.get("public_id")
-        document["resource_type"] = cloudinary_result.get("resource_type")
-    else:
-        target_dir = STORAGE_ROOT / user["id"]
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target_path = target_dir / f"{document_id}_{safe_name}"
-        content = await upload.read()
-        target_path.write_bytes(content)
-        document["storage_path"] = str(target_path)
-        document["file_url"] = None
+    cloudinary_result = await asyncio.to_thread(_cloudinary_upload, file_bytes, safe_name, upload.content_type, document_type)
+    if not cloudinary_result.get("secure_url") or not cloudinary_result.get("public_id"):
+        raise VerificationUploadError("cloudinary_upload", "Cloudinary upload did not return secure_url and public_id.")
+    document["file_url"] = cloudinary_result.get("secure_url")
+    document["cloudinary_public_id"] = cloudinary_result.get("public_id")
+    document["resource_type"] = cloudinary_result.get("resource_type")
 
     documents = [*manual_verification_documents(driver.get("documents", [])), document]
     verification_status = _next_status_after_upload(driver, documents)
     risk_score, risk_flags = _evaluate_document_risk(documents) if _has_all_required_documents(documents) else (None, [])
 
-    updated = await database.update_one(
-        "drivers",
-        driver["id"],
-        {
-            "documents": documents,
-            "verification_provider": "manual",
-            "verification_status": verification_status,
-            "verification_risk_score": risk_score,
-            "verification_risk_flags": risk_flags,
-            "identity_verification_state": "pending_verification",
-            "updated_at": timestamp,
-        },
+    logger.info(
+        "verification_upload stage=mongodb_save_start user_id=%s driver_id=%s document_id=%s document_type=%s verification_status=%s",
+        user.get("id"),
+        driver.get("id"),
+        document_id,
+        document_type,
+        verification_status,
     )
-    await database.update_one(
-        "users",
-        user["id"],
-        {
-            "verification_status": verification_status,
-            "verification_provider": "manual",
-            "identity_verification_state": "pending_verification",
-            "updated_at": timestamp,
-        },
+    try:
+        updated = await database.update_one(
+            "drivers",
+            driver["id"],
+            {
+                "documents": documents,
+                "verification_provider": "manual",
+                "verification_status": verification_status,
+                "verification_risk_score": risk_score,
+                "verification_risk_flags": risk_flags,
+                "identity_verification_state": "pending_verification",
+                "updated_at": timestamp,
+            },
+        )
+        if not updated:
+            raise RuntimeError("Driver record was not found after verification document update.")
+        await database.update_one(
+            "users",
+            user["id"],
+            {
+                "verification_status": verification_status,
+                "verification_provider": "manual",
+                "identity_verification_state": "pending_verification",
+                "updated_at": timestamp,
+            },
+        )
+    except Exception as exc:
+        raise VerificationUploadError(
+            "mongodb_save",
+            "MongoDB save failed.",
+            log_message=f"{type(exc).__name__}: {str(exc)}",
+        ) from exc
+    logger.info(
+        "verification_upload stage=mongodb_save_done user_id=%s driver_id=%s document_id=%s file_url_present=%s cloudinary_public_id=%s",
+        user.get("id"),
+        driver.get("id"),
+        document_id,
+        bool(document.get("file_url")),
+        document.get("cloudinary_public_id") or "missing",
     )
-    await write_audit_log(
-        actor_user_id=user["id"],
-        actor_role=user.get("role"),
-        action="driver_verification_document_uploaded",
-        target_type="driver",
-        target_id=driver["id"],
-        metadata={"document_id": document_id, "document_type": document_type},
-    )
-    return public_verification(updated or driver)["documents"][-1]
+    try:
+        await write_audit_log(
+            actor_user_id=user["id"],
+            actor_role=user.get("role"),
+            action="driver_verification_document_uploaded",
+            target_type="driver",
+            target_id=driver["id"],
+            metadata={"document_id": document_id, "document_type": document_type},
+        )
+    except Exception:
+        logger.exception(
+            "verification_upload stage=audit_log_failed user_id=%s driver_id=%s document_id=%s",
+            user.get("id"),
+            driver.get("id"),
+            document_id,
+        )
+    uploaded_documents = public_verification(updated)["documents"]
+    if not uploaded_documents:
+        raise VerificationUploadError("mongodb_save", "MongoDB save did not return the uploaded document.")
+    return uploaded_documents[-1]
 
 
 async def apply_admin_verification_status(

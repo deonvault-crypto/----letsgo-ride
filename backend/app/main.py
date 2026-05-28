@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +14,7 @@ from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 app = FastAPI(title="LetsGoRide API", version="0.1.0")
 ride_lifecycle_stop_event: asyncio.Event | None = None
 ride_lifecycle_task: asyncio.Task | None = None
@@ -37,7 +39,22 @@ async def http_exception_handler(_: Request, exc: HTTPException):
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(_: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    if request.url.path in {"/verification/manual/upload", "/verification/upload"}:
+        logger.error(
+            "verification_upload stage=form_parse_failed path=%s errors=%s",
+            request.url.path,
+            exc.errors(),
+        )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "stage": "form_parse",
+                "error": "Verification upload form validation failed.",
+                "details": exc.errors(),
+            },
+        )
     return JSONResponse(
         status_code=422,
         content={"success": False, "error": "Validation failed.", "details": exc.errors()},

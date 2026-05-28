@@ -30,7 +30,10 @@ class Settings:
             "RESEND_REPLY_TO_EMAIL",
             "RESEND_REPLY_TO",
         )
-        cloudinary_url_config = self._parse_cloudinary_url(self._get_env_first("CLOUDINARY_URL"))
+        cloudinary_url = self._get_env_first("CLOUDINARY_URL")
+        cloudinary_url_config = self._parse_cloudinary_url(cloudinary_url)
+        self.cloudinary_url_present = bool(cloudinary_url)
+        self.cloudinary_config_source = "CLOUDINARY_URL" if cloudinary_url_config else "split_env"
         self.cloudinary_cloud_name = self._get_env_first("CLOUDINARY_CLOUD_NAME") or cloudinary_url_config.get("cloud_name", "")
         self.cloudinary_api_key = self._get_env_first("CLOUDINARY_API_KEY") or cloudinary_url_config.get("api_key", "")
         self.cloudinary_api_secret = self._get_env_first("CLOUDINARY_API_SECRET") or cloudinary_url_config.get("api_secret", "")
@@ -63,6 +66,9 @@ class Settings:
     def _parse_cloudinary_url(value: str) -> dict[str, str]:
         if not value:
             return {}
+        value = value.strip().strip("'\"")
+        if value.startswith("CLOUDINARY_URL="):
+            value = value.split("=", 1)[1].strip().strip("'\"")
         parsed = urlparse(value)
         if parsed.scheme != "cloudinary":
             return {}

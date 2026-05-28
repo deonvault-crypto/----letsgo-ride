@@ -17,5 +17,5 @@ def api_success(data: Any = None) -> Dict[str, Any]:
     return {"success": True, "data": data}
 
 
-def api_error(message: str, status_code: int = 400) -> None:
-    raise HTTPException(status_code=status_code, detail={"success": False, "error": message})
+def api_error(message: str, status_code: int = 400, **extra: Any) -> None:
+    raise HTTPException(status_code=status_code, detail={"success": False, "error": message, **extra})
