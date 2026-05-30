@@ -8,6 +8,7 @@ import { registerPushToken, unregisterPushToken } from "./notificationService";
 const PUSH_TOKEN_STORAGE_KEY = "letsgoride.push.token";
 const NOTIFICATION_EXPLANATION_STORAGE_KEY = "letsgoride.notifications.explanation.seen";
 const PUSH_PERMISSION_REQUESTED_STORAGE_KEY = "letsgoride.notifications.permission.requested";
+const ANDROID_DEFAULT_CHANNEL_ID = "default";
 
 type PushRegistrationState = {
   enabled: boolean;
@@ -31,6 +32,28 @@ export function configureNotificationHandler() {
       shouldSetBadge: true,
     }),
   });
+}
+
+async function ensureAndroidDefaultNotificationChannel(): Promise<PushRegistrationState | null> {
+  if (Platform.OS !== "android") return null;
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_DEFAULT_CHANNEL_ID, {
+      name: "Default",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#118B44",
+      sound: "default",
+      enableVibrate: true,
+      showBadge: true,
+    });
+    return null;
+  } catch {
+    return {
+      enabled: false,
+      status: "off",
+      message: "Could not prepare Android notifications. Please try again.",
+    };
+  }
 }
 
 async function getStoredPushToken(): Promise<string | null> {
@@ -113,6 +136,9 @@ async function unregisterSavedPushToken() {
 }
 
 async function registerCurrentPushToken(): Promise<PushRegistrationState> {
+  const channelError = await ensureAndroidDefaultNotificationChannel();
+  if (channelError) return channelError;
+
   const currentPermissions = await Notifications.getPermissionsAsync();
   if (!currentPermissions.granted) {
     await unregisterSavedPushToken();
@@ -166,6 +192,9 @@ export async function phoneNotificationStatus(): Promise<PushRegistrationState> 
 }
 
 export async function enablePhoneNotifications(): Promise<PushRegistrationState> {
+  const channelError = await ensureAndroidDefaultNotificationChannel();
+  if (channelError) return channelError;
+
   const current = await Notifications.getPermissionsAsync();
   const alreadyRequested = await hasRequestedPhonePermission();
   if (!current.granted && alreadyRequested) {
