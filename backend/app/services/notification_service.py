@@ -40,7 +40,7 @@ PREFERENCE_FOR_TYPE = {
 
 
 def _safe_provider_body(raw_body: str) -> str:
-    body = raw_body.replace("\r", " ").replace("\n", " ").strip()
+    body = str(raw_body).replace("\r", " ").replace("\n", " ").strip()
     body = re.sub(r"ExpoPushToken\[[^\]]+\]", "ExpoPushToken[redacted]", body)
     return body[:500]
 
@@ -50,6 +50,22 @@ def _push_allowed(notification_type: str, preferences: Dict[str, Any]) -> bool:
     if preference_key == "safety_alerts":
         return bool(preferences.get(preference_key, True))
     return bool(preferences.get(preference_key, DEFAULT_PREFERENCES.get(preference_key, True)))
+
+
+def _extract_expo_token(token_doc: Dict[str, Any]) -> Optional[str]:
+    token_value = (
+        token_doc.get("expo_push_token")
+        or token_doc.get("push_token")
+        or token_doc.get("token")
+    )
+    if not token_value:
+        return None
+
+    token_value = str(token_value).strip()
+    if not token_value:
+        return None
+
+    return token_value
 
 
 def _send_expo_push_batch(payloads: list[Dict[str, Any]]) -> Dict[str, Any]:
@@ -64,6 +80,7 @@ def _send_expo_push_batch(payloads: list[Dict[str, Any]]) -> Dict[str, Any]:
             "User-Agent": "LetsGoRideBackend/1.0",
         },
     )
+
     try:
         with request.urlopen(req, timeout=10) as response:
             body = _safe_provider_body(response.read().decode("utf-8", errors="replace"))
@@ -78,32 +95,64 @@ def _send_expo_push_batch(payloads: list[Dict[str, Any]]) -> Dict[str, Any]:
 async def _send_push_for_notification(notification: Dict[str, Any]) -> Dict[str, Any]:
     user_id = notification.get("user_id")
     notification_type = notification.get("type", "trip_updates")
+
     if not user_id:
+        logger.info(
+            "notification_push_check notification_type=%s user_id=%s push_status=missing_user",
+            notification_type,
+            user_id,
+        )
         return {"delivered_push": False, "push_status": "missing_user"}
 
     preferences = await get_or_create_preferences(user_id)
-    if not _push_allowed(notification_type, preferences):
+    preference_allowed = _push_allowed(notification_type, preferences)
+
+    if not preference_allowed:
+        logger.info(
+            "notification_push_check notification_type=%s user_id=%s preference_allowed=false push_status=disabled_by_preference",
+            notification_type,
+            user_id,
+        )
         return {"delivered_push": False, "push_status": "disabled_by_preference"}
 
-    tokens = [
-        token
-        for token in await database.find_many("device_push_tokens", {"user_id": user_id, "active": True})
-        if token.get("expo_push_token")
-    ]
+    token_docs = await database.find_many("device_push_tokens", {"user_id": user_id, "active": True})
+
+    tokens = []
+    for token_doc in token_docs:
+        expo_token = _extract_expo_token(token_doc)
+        if expo_token:
+            tokens.append({**token_doc, "expo_push_token": expo_token})
+
+    logger.info(
+        "notification_push_check notification_type=%s user_id=%s preference_allowed=%s token_docs=%s token_count=%s",
+        notification_type,
+        user_id,
+        preference_allowed,
+        len(token_docs),
+        len(tokens),
+    )
+
     if not tokens:
+        logger.info(
+            "notification_push provider=expo notification_type=%s user_id=%s token_count=0 push_sent=false provider_status=no_active_tokens body=",
+            notification_type,
+            user_id,
+        )
         return {"delivered_push": False, "push_status": "no_active_tokens"}
 
     payloads = [
         {
             "to": token["expo_push_token"],
-            "title": notification.get("title"),
-            "body": notification.get("body"),
+            "title": notification.get("title") or "LetsGoRide",
+            "body": notification.get("body") or "You have a new update.",
             "data": notification.get("data", {}),
             "sound": "default",
-            "priority": "default",
+            "priority": "high",
+            "channelId": "default",
         }
         for token in tokens
     ]
+
     result = await asyncio.to_thread(_send_expo_push_batch, payloads)
     provider_body = result.get("body", "")
     delivered = bool(result.get("ok"))
@@ -114,9 +163,14 @@ async def _send_push_for_notification(notification: Dict[str, Any]) -> Dict[str,
             await database.update_one(
                 "device_push_tokens",
                 token["id"],
-                {"active": False, "updated_at": now_iso(), "last_provider_error": "invalid_token"},
+                {
+                    "active": False,
+                    "updated_at": now_iso(),
+                    "last_provider_error": "invalid_token",
+                },
             )
         push_status = "invalid_token"
+        delivered = False
 
     logger.info(
         "notification_push provider=expo notification_type=%s user_id=%s token_count=%s push_sent=%s provider_status=%s body=%s",
@@ -127,6 +181,7 @@ async def _send_push_for_notification(notification: Dict[str, Any]) -> Dict[str,
         push_status,
         provider_body,
     )
+
     return {"delivered_push": delivered, "push_status": push_status}
 
 
@@ -151,7 +206,16 @@ async def create_app_notification(
         "delivered_push": False,
         "push_status": "not_configured",
     }
+
+    logger.info(
+        "notification_create notification_type=%s user_id=%s title=%s",
+        notification_type,
+        user_id,
+        title,
+    )
+
     created = await database.insert_one("app_notifications", notification)
+
     try:
         push_result = await _send_push_for_notification(created)
         updated = await database.update_one(
@@ -164,6 +228,7 @@ async def create_app_notification(
             },
         )
         return updated or {**created, **push_result}
+
     except Exception as exc:
         logger.warning(
             "notification_push provider=expo notification_type=%s user_id=%s push_sent=false provider_status=error body=%s",
@@ -174,7 +239,11 @@ async def create_app_notification(
         await database.update_one(
             "app_notifications",
             created["id"],
-            {"delivered_push": False, "push_status": "push_error", "updated_at": now_iso()},
+            {
+                "delivered_push": False,
+                "push_status": "push_error",
+                "updated_at": now_iso(),
+            },
         )
         return created
 
@@ -194,7 +263,12 @@ async def notify_users(
         await create_app_notification(user_id, notification_type, title, body, data)
 
 
-async def notify_admins(notification_type: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> None:
+async def notify_admins(
+    notification_type: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+) -> None:
     admins = await database.find_many("users", {"role": "admin"})
     await notify_users([admin["id"] for admin in admins], notification_type, title, body, data)
 
@@ -203,6 +277,7 @@ async def get_or_create_preferences(user_id: str) -> Dict[str, Any]:
     existing = await database.find_one("notification_preferences", {"user_id": user_id})
     if existing:
         return existing
+
     timestamp = now_iso()
     created = {
         "id": new_id(),
