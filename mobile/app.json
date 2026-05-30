@@ -32,7 +32,7 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "co.zw.letsgoride"
+      "package": "com.letsgo.ride"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
