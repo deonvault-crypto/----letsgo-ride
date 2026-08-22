@@ -26,6 +26,10 @@ class Settings:
         self.google_maps_api_key = self._get_env_first("GOOGLE_MAPS_API_KEY")
         self.routing_region_code = os.getenv("ROUTING_REGION_CODE", "ZW").strip().upper() or "ZW"
         self.routing_timeout_seconds = self._parse_float(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"), 8.0)
+        # Explicitly opt-in to real provider calls during staging startup. Never enabled by default.
+        self.routing_staging_smoke_test_enabled = self._parse_bool(
+            os.getenv("ROUTING_STAGING_SMOKE_TEST_ENABLED", "false")
+        )
 
         # Delivery pricing is deliberately disabled until commercial rates are explicitly configured.
         self.courier_auto_pricing_enabled = self._parse_bool(
