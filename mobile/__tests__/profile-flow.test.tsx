@@ -53,7 +53,7 @@ describe("profile update flow", () => {
     (getMyVerification as jest.Mock).mockResolvedValue(notStartedProfile);
   });
 
-  it("shows saved profile data, saves edits, and keeps updated fields visible", async () => {
+  it("shows the premium account summary, saves edits, and keeps updated fields visible", async () => {
     jest.useFakeTimers();
     const updatedUser: User = {
       ...passengerUser,
@@ -66,12 +66,14 @@ describe("profile update flow", () => {
     (updateCurrentUser as jest.Mock).mockResolvedValueOnce(updatedUser);
 
     const summary = render(<ProfileScreen />);
-    expect(summary.getByText("Hi, Tendai")).toBeOnTheScreen();
-    expect(summary.getByText("+263771234567")).toBeOnTheScreen();
+    expect(summary.getByText("Tendai Moyo")).toBeOnTheScreen();
+    expect(summary.getByText("Harare")).toBeOnTheScreen();
+    expect(summary.getByText("Current mode · Passenger")).toBeOnTheScreen();
+    expect(summary.getByText("Identity verification")).toBeOnTheScreen();
     await waitFor(() => {
-      expect(summary.getByText("Start verification")).toBeOnTheScreen();
+      expect(summary.getByText("Required before posting driver trips")).toBeOnTheScreen();
     });
-    expect(summary.queryByRole("button", { name: "Edit profile" })).toBeNull();
+    expect(summary.queryByText("Your driver account is verified")).toBeNull();
     fireEvent.press(summary.getByRole("button", { name: "Settings" }));
     expect(mockPush).toHaveBeenCalledWith("/(shared)/settings");
     summary.unmount();
@@ -115,29 +117,27 @@ describe("profile update flow", () => {
     jest.useRealTimers();
   });
 
-  it("shows verification under review instead of start verification after submission", async () => {
+  it("shows driver verification under review after submission", async () => {
     (getMyVerification as jest.Mock).mockResolvedValueOnce(pendingProfile);
 
     const screen = render(<ProfileScreen />);
 
     await waitFor(() => {
-      expect(screen.getAllByText("Verification under review").length).toBeGreaterThan(0);
-      expect(screen.getByText("View verification status")).toBeOnTheScreen();
-      expect(screen.queryByText("Start verification")).toBeNull();
+      expect(screen.getByText("Driver verification")).toBeOnTheScreen();
+      expect(screen.getByText("Verification under review")).toBeOnTheScreen();
+      expect(screen.queryByText("Required before posting driver trips")).toBeNull();
     });
   });
 
-  it("uses compact approved verification wording once the driver is verified", async () => {
+  it("uses clear approved driver verification wording without confusing passenger identity", async () => {
     (getMyVerification as jest.Mock).mockResolvedValueOnce(verifiedProfile);
 
     const screen = render(<ProfileScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText("Verification status")).toBeOnTheScreen();
-      expect(screen.getByText("Your driver account is verified")).toBeOnTheScreen();
-      expect(screen.queryByText("Driver verified")).toBeNull();
-      expect(screen.queryByText("View verification")).toBeNull();
-      expect(screen.queryByText("Verify your identity before posting rides")).toBeNull();
+      expect(screen.getByText("Driver verification")).toBeOnTheScreen();
+      expect(screen.getByText("Driver verification approved")).toBeOnTheScreen();
+      expect(screen.queryByText("Your driver account is verified")).toBeNull();
     });
   });
 
