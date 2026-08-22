@@ -27,6 +27,26 @@ class Settings:
         self.routing_region_code = os.getenv("ROUTING_REGION_CODE", "ZW").strip().upper() or "ZW"
         self.routing_timeout_seconds = self._parse_float(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"), 8.0)
 
+        # Delivery pricing is deliberately disabled until commercial rates are explicitly configured.
+        self.courier_auto_pricing_enabled = self._parse_bool(
+            os.getenv("COURIER_AUTO_PRICING_ENABLED", "false")
+        )
+        self.courier_base_price_usd = self._parse_nonnegative_float(
+            os.getenv("COURIER_BASE_PRICE_USD", "0"), 0.0
+        )
+        self.courier_price_per_km_usd = self._parse_nonnegative_float(
+            os.getenv("COURIER_PRICE_PER_KM_USD", "0"), 0.0
+        )
+        self.courier_price_per_minute_usd = self._parse_nonnegative_float(
+            os.getenv("COURIER_PRICE_PER_MINUTE_USD", "0"), 0.0
+        )
+        self.courier_minimum_price_usd = self._parse_nonnegative_float(
+            os.getenv("COURIER_MINIMUM_PRICE_USD", "0"), 0.0
+        )
+        self.courier_payout_percent = self._parse_nonnegative_float(
+            os.getenv("COURIER_PAYOUT_PERCENT", "0"), 0.0
+        )
+
         self.resend_api_key = self._get_env_first("RESEND_API_KEY")
         self.resend_from_email = self._get_env_first(
             "RESEND_FROM_EMAIL",
@@ -77,6 +97,14 @@ class Settings:
             return default
 
     @staticmethod
+    def _parse_nonnegative_float(value: str, default: float) -> float:
+        try:
+            parsed = float(value)
+            return parsed if parsed >= 0 else default
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
     def _get_env_first(*names: str) -> str:
         for name in names:
             value = os.getenv(name)
@@ -103,6 +131,18 @@ class Settings:
     @property
     def routing_configured(self) -> bool:
         return self.routing_provider == "google" and bool(self.google_maps_api_key)
+
+    @property
+    def courier_pricing_configured(self) -> bool:
+        has_distance_or_time_rate = (
+            self.courier_price_per_km_usd > 0 or self.courier_price_per_minute_usd > 0
+        )
+        return bool(
+            self.courier_auto_pricing_enabled
+            and self.courier_minimum_price_usd > 0
+            and has_distance_or_time_rate
+            and 0 < self.courier_payout_percent <= 100
+        )
 
     @property
     def resend_api_key_present(self) -> bool:
