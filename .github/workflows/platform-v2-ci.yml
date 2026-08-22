@@ -42,7 +42,23 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests
-        run: timeout 5m npm test -- --runInBand --verbose --detectOpenHandles --testTimeout=15000
+        shell: bash
+        run: |
+          set -uo pipefail
+          while IFS= read -r test_file; do
+            echo "=== RUNNING ${test_file} ==="
+            if timeout 60s npx jest --runTestsByPath "$test_file" --runInBand --verbose --detectOpenHandles --testTimeout=15000; then
+              echo "=== PASSED ${test_file} ==="
+            else
+              status=$?
+              if [ "$status" -eq 124 ]; then
+                echo "::error file=${test_file}::Test file timed out after 60 seconds"
+              else
+                echo "::error file=${test_file}::Test file failed with exit code ${status}"
+              fi
+              exit "$status"
+            fi
+          done < <(find __tests__ -type f \( -name '*.test.ts' -o -name '*.test.tsx' \) | sort)
 
   backend:
     name: Backend import, syntax and service tests
