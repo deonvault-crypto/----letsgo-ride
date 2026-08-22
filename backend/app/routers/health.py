@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
@@ -17,6 +18,27 @@ async def health_check():
             "database_status": database.status,
         }
     )
+
+
+@router.get("/live")
+async def liveness_check():
+    """Process-level liveness probe. It must not depend on external services."""
+    return api_success({"service": "LetsGoRide API", "status": "alive"})
+
+
+@router.get("/ready")
+async def readiness_check():
+    """Readiness probe: traffic requiring persistence is safe only with MongoDB connected."""
+    ready = database.status == "connected"
+    payload = {
+        "success": ready,
+        "data": {
+            "service": "LetsGoRide API",
+            "status": "ready" if ready else "degraded",
+            "database_status": database.status,
+        },
+    }
+    return JSONResponse(status_code=200 if ready else 503, content=payload)
 
 
 @router.get("/email-config")
