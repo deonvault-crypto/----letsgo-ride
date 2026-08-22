@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import admin, auth, conversations, drivers, health, media, notifications, reports, requests, reviews, rides, support, verification, waitlist
+from app.routers import admin, auth, conversations, courier, drivers, health, media, notifications, reports, requests, reviews, rides, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 
@@ -91,6 +91,7 @@ app.include_router(reviews.router)
 app.include_router(conversations.router)
 app.include_router(notifications.router)
 app.include_router(drivers.router)
+app.include_router(courier.router)
 app.include_router(reports.router)
 app.include_router(support.router)
 app.include_router(verification.router)
