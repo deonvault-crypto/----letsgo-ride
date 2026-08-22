@@ -15,6 +15,26 @@ export type CourierGeoPoint = {
   longitude?: number | null;
 };
 
+export type CourierQuotePreviewPayload = {
+  pickup_address: string;
+  dropoff_address: string;
+  pickup_location?: CourierGeoPoint | null;
+  dropoff_location?: CourierGeoPoint | null;
+};
+
+export type CourierQuotePreview = {
+  currency: "USD" | string;
+  price_usd: number;
+  distance_km: number;
+  estimated_duration_minutes: number;
+  pricing_source: string;
+  route_provider: string;
+  pickup_address: string;
+  dropoff_address: string;
+  pickup_location: CourierGeoPoint;
+  dropoff_location: CourierGeoPoint;
+};
+
 export type CourierCreatePayload = {
   pickup_address: string;
   dropoff_address: string;
