@@ -50,6 +50,7 @@ export type CourierDelivery = CourierCreatePayload & {
   quote_status?: "PENDING" | "READY" | string;
   currency?: string;
   price_usd?: number | null;
+  courier_payout_usd?: number | null;
   distance_km?: number | null;
   estimated_duration_minutes?: number | null;
   source_type?: "COURIER_REQUEST" | "FOOD_ORDER" | string;
