@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
+from app.services.courier_service import append_delivery_event
+from app.services.fulfillment_link_service import sync_food_order_from_delivery
 from app.utils import new_id, now_iso
 
 
@@ -99,3 +101,75 @@ async def approve_courier_profile(profile_id: str, actor: Dict[str, Any]) -> Dic
 async def assigned_courier_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     deliveries = await database.find_many("courier_deliveries", {"courier_user_id": _user_id(user)})
     return sorted(deliveries, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+
+
+async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:
+    profile = await get_courier_profile(user)
+    if not profile or profile.get("status") != "APPROVED":
+        raise PermissionError("Approved courier verification is required to view delivery offers.")
+    if not profile.get("online"):
+        return []
+
+    offers = await database.find_many(
+        "courier_deliveries",
+        {"status": "MATCHING", "courier_user_id": None, "quote_status": "READY"},
+    )
+    user_id = _user_id(user)
+    eligible = [
+        delivery
+        for delivery in offers
+        if delivery.get("sender_user_id") != user_id
+        and isinstance(delivery.get("price_usd"), (int, float))
+        and float(delivery.get("price_usd") or 0) > 0
+    ]
+    return sorted(eligible, key=lambda item: str(item.get("created_at") or ""))
+
+
+async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    profile = await get_courier_profile(user)
+    if not profile or profile.get("status") != "APPROVED":
+        raise PermissionError("Approved courier verification is required to accept delivery work.")
+    if not profile.get("online"):
+        raise PermissionError("Go online before accepting a delivery offer.")
+
+    delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
+    if not delivery:
+        raise ValueError("Delivery offer not found.")
+    if delivery.get("sender_user_id") == _user_id(user):
+        raise ValueError("You cannot claim your own delivery request.")
+    if delivery.get("status") != "MATCHING" or delivery.get("quote_status") != "READY":
+        raise ValueError("This delivery is not currently available for matching.")
+    if delivery.get("courier_user_id"):
+        raise ValueError("Another courier already accepted this delivery.")
+    if not isinstance(delivery.get("price_usd"), (int, float)) or float(delivery.get("price_usd") or 0) <= 0:
+        raise ValueError("Delivery pricing must be ready before a courier can accept it.")
+
+    now = now_iso()
+    updated = await database.update_one_if(
+        "courier_deliveries",
+        {
+            "id": delivery_id,
+            "status": "MATCHING",
+            "quote_status": "READY",
+            "courier_user_id": None,
+        },
+        {
+            "courier_user_id": _user_id(user),
+            "courier_name": user.get("name") or profile.get("name") or "LetsGoRide Courier",
+            "status": "ASSIGNED",
+            "live_tracking_active": True,
+            "assigned_at": now,
+            "updated_at": now,
+        },
+    )
+    if not updated:
+        raise ValueError("Another courier accepted this delivery first.")
+
+    await append_delivery_event(
+        delivery_id,
+        "COURIER_CLAIMED_OFFER",
+        actor_user_id=_user_id(user),
+        data={"courier_user_id": _user_id(user), "assignment_method": "courier_claim"},
+    )
+    await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
+    return updated
