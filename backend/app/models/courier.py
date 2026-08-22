@@ -22,6 +22,13 @@ class GeoPoint(BaseModel):
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
+class CourierQuotePreviewBody(BaseModel):
+    pickup_address: str = Field(min_length=3, max_length=240)
+    dropoff_address: str = Field(min_length=3, max_length=240)
+    pickup_location: Optional[GeoPoint] = None
+    dropoff_location: Optional[GeoPoint] = None
+
+
 class CourierCreateBody(BaseModel):
     pickup_address: str = Field(min_length=3, max_length=240)
     dropoff_address: str = Field(min_length=3, max_length=240)
