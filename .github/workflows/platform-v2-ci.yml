@@ -1,17 +1,26 @@
 name: Platform V2 CI
 
 on:
-  push:
-    branches:
-      - platform-v2-m1-m6
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-v2-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   mobile:
     name: Mobile typecheck and tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: mobile
@@ -38,6 +47,7 @@ jobs:
   backend:
     name: Backend import, syntax and service tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
