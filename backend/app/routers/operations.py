@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
 from app.models.operations import AvailabilityCreateBody, CourierOnlineBody, CourierProfileCreateBody
+from app.services.courier_earnings_service import courier_earnings_summary
 from app.services.operations_service import (
     approve_courier_profile,
     assigned_courier_deliveries,
@@ -76,6 +77,11 @@ async def courier_profile_approve(profile_id: str, user=Depends(get_current_user
 @router.get("/courier/deliveries")
 async def courier_assigned_deliveries(user=Depends(get_current_user)):
     return api_success(await assigned_courier_deliveries(user))
+
+
+@router.get("/courier/earnings")
+async def courier_earnings(user=Depends(get_current_user)):
+    return api_success(await courier_earnings_summary(user))
 
 
 @router.get("/courier/offers")
