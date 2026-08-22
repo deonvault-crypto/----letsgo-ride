@@ -28,8 +28,10 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - name: Checkout
+      - name: Checkout Platform V2 staging branch
         uses: actions/checkout@v4
+        with:
+          ref: platform-v2-m1-m6
 
       - name: Setup Node
         uses: actions/setup-node@v4
