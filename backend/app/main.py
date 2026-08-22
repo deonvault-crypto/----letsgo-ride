@@ -78,6 +78,14 @@ async def on_startup():
         await seed_demo_rides()
     ride_lifecycle_stop_event = asyncio.Event()
     ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
+    logger.info(
+        "routing_smoke_gate app_env=%s enabled=%s configured=%s provider=%s region=%s",
+        settings.app_env,
+        settings.routing_staging_smoke_test_enabled,
+        settings.routing_configured,
+        settings.routing_provider,
+        settings.routing_region_code,
+    )
     if settings.routing_staging_smoke_test_enabled:
         staging_routing_smoke_task = asyncio.create_task(run_staging_routing_smoke_test())
 
