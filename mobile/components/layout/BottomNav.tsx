@@ -2,27 +2,85 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 
-import { colors } from "../../constants/colors";
-import { spacing } from "../../constants/spacing";
+import { v2Theme } from "../../constants/v2Theme";
 
 type NavRole = "passenger" | "driver";
 
-const passengerItems = [
-  { label: "Home", icon: "home-variant-outline", href: "/(passenger)/home" },
-  { label: "Search", icon: "magnify", href: "/(passenger)/search" },
-  { label: "Trips", icon: "ticket-confirmation-outline", href: "/(passenger)/my-trips" },
-  { label: "Profile", icon: "account-outline", href: "/(shared)/profile" },
+type NavItem = {
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  activeIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  href: string;
+  aliases?: string[];
+};
+
+const passengerItems: NavItem[] = [
+  {
+    label: "Home",
+    icon: "home-variant-outline",
+    activeIcon: "home-variant",
+    href: "/(passenger)/home",
+  },
+  {
+    label: "Services",
+    icon: "view-grid-outline",
+    activeIcon: "view-grid",
+    href: "/(shared)/services",
+  },
+  {
+    label: "Activity",
+    icon: "clock-outline",
+    activeIcon: "clock",
+    href: "/(shared)/activity",
+    aliases: ["/my-trips"],
+  },
+  {
+    label: "Account",
+    icon: "account-outline",
+    activeIcon: "account",
+    href: "/(shared)/account",
+    aliases: ["/profile"],
+  },
 ];
 
-const driverItems = [
-  { label: "Home", icon: "view-dashboard-outline", href: "/(driver)/home" },
-  { label: "Post", icon: "plus-circle-outline", href: "/(driver)/post-trip" },
-  { label: "Trips", icon: "steering", href: "/(driver)/trips" },
-  { label: "Profile", icon: "account-outline", href: "/(shared)/profile" },
+const driverItems: NavItem[] = [
+  {
+    label: "Home",
+    icon: "view-dashboard-outline",
+    activeIcon: "view-dashboard",
+    href: "/(driver)/home",
+  },
+  {
+    label: "Post",
+    icon: "plus-circle-outline",
+    activeIcon: "plus-circle",
+    href: "/(driver)/post-trip",
+  },
+  {
+    label: "Trips",
+    icon: "steering",
+    href: "/(driver)/trips",
+  },
+  {
+    label: "Account",
+    icon: "account-outline",
+    activeIcon: "account",
+    href: "/(shared)/account",
+    aliases: ["/profile"],
+  },
 ];
 
 function navPath(href: string) {
-  return href.replace("/(passenger)", "").replace("/(driver)", "").replace("/(shared)", "");
+  return href
+    .replace("/(passenger)", "")
+    .replace("/(driver)", "")
+    .replace("/(shared)", "");
+}
+
+function isItemActive(pathname: string, item: NavItem) {
+  const target = navPath(item.href);
+  if (pathname === target || pathname.endsWith(target)) return true;
+  return item.aliases?.some((alias) => pathname === alias || pathname.endsWith(alias)) ?? false;
 }
 
 export function BottomNav({ role }: { role: NavRole }) {
@@ -31,75 +89,89 @@ export function BottomNav({ role }: { role: NavRole }) {
   const items = role === "driver" ? driverItems : passengerItems;
 
   return (
-    <View style={styles.wrap}>
-      {items.map((item) => {
-        const activePath = navPath(item.href);
-        const active = pathname === activePath || pathname.endsWith(activePath);
-        return (
-          <Pressable
-            key={item.label}
-            onPress={() => {
-              if (!active) router.replace(item.href as never);
-            }}
-            style={[styles.item, active && styles.activeItem]}
-          >
-            <MaterialCommunityIcons
-              name={item.icon as never}
-              size={22}
-              color={active ? colors.primaryGreen : colors.mutedText}
-            />
-            <Text style={[styles.label, active && styles.activeLabel]}>{item.label}</Text>
-          </Pressable>
-        );
-      })}
+    <View pointerEvents="box-none" style={styles.positioner}>
+      <View style={styles.wrap}>
+        {items.map((item) => {
+          const active = isItemActive(pathname, item);
+          return (
+            <Pressable
+              key={item.label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={item.label}
+              hitSlop={4}
+              onPress={() => {
+                if (!active) router.replace(item.href as never);
+              }}
+              style={({ pressed }) => [
+                styles.item,
+                active && styles.activeItem,
+                pressed && styles.pressedItem,
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={(active && item.activeIcon ? item.activeIcon : item.icon) as never}
+                size={22}
+                color={active ? v2Theme.colors.brand : v2Theme.colors.inkSecondary}
+              />
+              <Text numberOfLines={1} style={[styles.label, active && styles.activeLabel]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  positioner: {
     position: "absolute",
-    left: spacing.screen,
-    right: spacing.screen,
-    bottom: 12,
-    height: 66,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(255,253,248,0.96)",
+    left: v2Theme.spacing.page,
+    right: v2Theme.spacing.page,
+    bottom: 10,
+  },
+  wrap: {
+    height: v2Theme.control.navHeight,
+    borderRadius: v2Theme.radius.xxl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: v2Theme.colors.lineStrong,
+    backgroundColor: "rgba(255,255,255,0.98)",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
-    shadowColor: colors.black,
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 7,
+    paddingVertical: 7,
+    shadowColor: v2Theme.colors.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
   },
   item: {
+    flex: 1,
+    minHeight: 56,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    minWidth: 58,
-    minHeight: 48,
-    borderRadius: 18,
-    paddingHorizontal: spacing.sm,
+    gap: 3,
+    paddingHorizontal: 4,
   },
   activeItem: {
-    backgroundColor: "rgba(17,139,68,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(17,139,68,0.34)",
-    shadowColor: colors.primaryGreen,
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
+    backgroundColor: v2Theme.colors.brandSoft,
+  },
+  pressedItem: {
+    opacity: 0.68,
   },
   label: {
-    color: colors.mutedText,
+    color: v2Theme.colors.inkSecondary,
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
+    letterSpacing: -0.1,
   },
   activeLabel: {
-    color: colors.primaryGreen,
+    color: v2Theme.colors.brandStrong,
+    fontWeight: "800",
   },
 });
