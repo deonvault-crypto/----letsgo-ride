@@ -85,6 +85,7 @@ async def create_delivery(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict
         "quote_status": "PENDING",
         "currency": "USD",
         "price_usd": None,
+        "courier_payout_usd": None,
         "distance_km": None,
         "estimated_duration_minutes": None,
         "live_tracking_active": False,
@@ -184,6 +185,7 @@ async def set_delivery_quote(
     updates: Dict[str, Any] = {
         "quote_status": "READY",
         "price_usd": round(float(quote["price_usd"]), 2),
+        "courier_payout_usd": round(float(quote["courier_payout_usd"]), 2),
         "distance_km": quote.get("distance_km"),
         "estimated_duration_minutes": quote.get("estimated_duration_minutes"),
         "updated_at": now_iso(),
@@ -200,6 +202,7 @@ async def set_delivery_quote(
         actor_user_id=_user_id(actor),
         data={
             "price_usd": updated.get("price_usd"),
+            "courier_payout_usd": updated.get("courier_payout_usd"),
             "distance_km": updated.get("distance_km"),
             "estimated_duration_minutes": updated.get("estimated_duration_minutes"),
         },
