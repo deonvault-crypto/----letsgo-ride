@@ -43,7 +43,7 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests
-        run: npm test -- --runInBand
+        run: timeout 5m npm test -- --runInBand --verbose --detectOpenHandles --testTimeout=15000
 
   backend:
     name: Backend import, syntax and service tests
