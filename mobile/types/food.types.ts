@@ -74,10 +74,13 @@ export type FoodOrder = {
   restaurant_id: string;
   restaurant_name?: string;
   customer_user_id: string;
+  customer_name?: string;
   status: FoodOrderStatus;
   delivery_address: string;
+  delivery_location?: { latitude?: number | null; longitude?: number | null } | null;
   recipient_name: string;
   recipient_phone: string;
+  customer_note?: string | null;
   items: Array<{
     menu_item_id: string;
     name?: string;
@@ -90,7 +93,18 @@ export type FoodOrder = {
   delivery_fee_usd?: number | null;
   total_usd?: number | null;
   pricing_status?: string;
+  currency?: string;
   courier_delivery_id?: string | null;
+  cancellation_reason?: string | null;
   created_at?: string;
   updated_at?: string;
+};
+
+export type FoodOrderEvent = {
+  id: string;
+  order_id: string;
+  type: string;
+  actor_user_id?: string | null;
+  data?: Record<string, unknown>;
+  created_at: string;
 };
