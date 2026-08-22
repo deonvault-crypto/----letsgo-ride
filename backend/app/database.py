@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 
 from app.config import get_settings
 
@@ -87,7 +88,7 @@ class Database:
 
         rows = []
         for item in self.memory[collection]:
-            if all(item.get(key) == value for key, value in filters.items()):
+            if self._matches(item, filters):
                 rows.append(deepcopy(item))
         return rows
 
@@ -99,7 +100,7 @@ class Database:
             return self._clean(item) if item else None
 
         for item in self.memory[collection]:
-            if all(item.get(key) == value for key, value in filters.items()):
+            if self._matches(item, filters):
                 return deepcopy(item)
         return None
 
@@ -120,6 +121,27 @@ class Database:
 
         for index, item in enumerate(self.memory[collection]):
             if item.get("id") == item_id:
+                self.memory[collection][index] = {**item, **deepcopy(updates)}
+                return deepcopy(self.memory[collection][index])
+        return None
+
+    async def update_one_if(
+        self,
+        collection: str,
+        filters: Dict[str, Any],
+        updates: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically update the first row that still matches all supplied filters."""
+        if self.db is not None:
+            item = await self.db[collection].find_one_and_update(
+                filters,
+                {"$set": updates},
+                return_document=ReturnDocument.AFTER,
+            )
+            return self._clean(item) if item else None
+
+        for index, item in enumerate(self.memory[collection]):
+            if self._matches(item, filters):
                 self.memory[collection][index] = {**item, **deepcopy(updates)}
                 return deepcopy(self.memory[collection][index])
         return None
@@ -145,6 +167,23 @@ class Database:
             return
 
         self.memory[collection] = [deepcopy(item) for item in items]
+
+    def _matches(self, item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+        for key, expected in filters.items():
+            actual = item.get(key)
+            if isinstance(expected, dict):
+                if "$in" in expected and actual not in expected["$in"]:
+                    return False
+                if "$ne" in expected and actual == expected["$ne"]:
+                    return False
+                if "$exists" in expected:
+                    exists = key in item
+                    if bool(expected["$exists"]) != exists:
+                        return False
+                continue
+            if actual != expected:
+                return False
+        return True
 
 
 database = Database()
