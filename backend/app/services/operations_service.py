@@ -121,6 +121,8 @@ async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:
         if delivery.get("sender_user_id") != user_id
         and isinstance(delivery.get("price_usd"), (int, float))
         and float(delivery.get("price_usd") or 0) > 0
+        and isinstance(delivery.get("courier_payout_usd"), (int, float))
+        and float(delivery.get("courier_payout_usd") or 0) > 0
     ]
     return sorted(eligible, key=lambda item: str(item.get("created_at") or ""))
 
@@ -143,6 +145,8 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         raise ValueError("Another courier already accepted this delivery.")
     if not isinstance(delivery.get("price_usd"), (int, float)) or float(delivery.get("price_usd") or 0) <= 0:
         raise ValueError("Delivery pricing must be ready before a courier can accept it.")
+    if not isinstance(delivery.get("courier_payout_usd"), (int, float)) or float(delivery.get("courier_payout_usd") or 0) <= 0:
+        raise ValueError("Courier payout must be set before this offer can be accepted.")
 
     now = now_iso()
     updated = await database.update_one_if(
@@ -169,7 +173,11 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         delivery_id,
         "COURIER_CLAIMED_OFFER",
         actor_user_id=_user_id(user),
-        data={"courier_user_id": _user_id(user), "assignment_method": "courier_claim"},
+        data={
+            "courier_user_id": _user_id(user),
+            "assignment_method": "courier_claim",
+            "courier_payout_usd": updated.get("courier_payout_usd"),
+        },
     )
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     return updated
