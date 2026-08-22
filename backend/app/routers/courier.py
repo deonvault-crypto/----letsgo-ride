@@ -6,6 +6,7 @@ from app.models.courier import (
     CourierCancelBody,
     CourierCreateBody,
     CourierLocationBody,
+    CourierQuoteBody,
     CourierStatusBody,
 )
 from app.services.courier_service import (
@@ -15,6 +16,7 @@ from app.services.courier_service import (
     get_delivery,
     list_delivery_events,
     list_user_deliveries,
+    set_delivery_quote,
     tracking_state,
     update_courier_location,
     update_delivery_status,
@@ -63,6 +65,20 @@ async def cancel_courier_delivery(
 ):
     try:
         return api_success(await cancel_delivery(delivery_id, user, payload.reason))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/deliveries/{delivery_id}/quote")
+async def quote_courier_delivery(
+    delivery_id: str,
+    payload: CourierQuoteBody,
+    user=Depends(get_current_user),
+):
+    try:
+        return api_success(await set_delivery_quote(delivery_id, payload.model_dump(), user))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
