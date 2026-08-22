@@ -54,7 +54,6 @@ describe("profile update flow", () => {
   });
 
   it("shows the premium account summary, saves edits, and keeps updated fields visible", async () => {
-    jest.useFakeTimers();
     const updatedUser: User = {
       ...passengerUser,
       name: "Tendai Chipo",
@@ -105,8 +104,10 @@ describe("profile update flow", () => {
       expect(screen.getByText("Profile saved. Returning to profile...")).toBeOnTheScreen();
       expect(screen.getByText("Phone number saved. Verification may be required before booking or posting rides.")).toBeOnTheScreen();
     });
-    jest.runOnlyPendingTimers();
-    expect(mockReplace).toHaveBeenCalledWith("/(shared)/profile");
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith("/(shared)/profile");
+    }, { timeout: 2000 });
 
     mockCurrentUser = updatedUser;
     screen.rerender(<EditProfileScreen />);
@@ -114,7 +115,6 @@ describe("profile update flow", () => {
     expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
     expect(screen.getByText("Mutare")).toBeOnTheScreen();
     expect(screen.queryByDisplayValue("")).not.toBeOnTheScreen();
-    jest.useRealTimers();
   });
 
   it("shows driver verification under review after submission", async () => {
