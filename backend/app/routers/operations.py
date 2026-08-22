@@ -1,0 +1,76 @@
+from fastapi import APIRouter, Depends
+
+from app.auth import get_current_user
+from app.models.operations import AvailabilityCreateBody, CourierOnlineBody, CourierProfileCreateBody
+from app.services.operations_service import (
+    approve_courier_profile,
+    assigned_courier_deliveries,
+    create_availability,
+    create_courier_profile,
+    delete_availability,
+    get_courier_profile,
+    list_availability,
+    set_courier_online,
+)
+from app.utils import api_error, api_success
+
+
+router = APIRouter(prefix="/operations", tags=["operations"])
+
+
+@router.get("/availability")
+async def my_availability(user=Depends(get_current_user)):
+    return api_success(await list_availability(user))
+
+
+@router.post("/availability")
+async def add_availability(payload: AvailabilityCreateBody, user=Depends(get_current_user)):
+    try:
+        return api_success(await create_availability(payload.model_dump(), user))
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.delete("/availability/{item_id}")
+async def remove_availability(item_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success({"deleted": await delete_availability(item_id, user)})
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 404)
+
+
+@router.get("/courier/profile")
+async def courier_profile(user=Depends(get_current_user)):
+    return api_success(await get_courier_profile(user))
+
+
+@router.post("/courier/profile")
+async def courier_profile_create(payload: CourierProfileCreateBody, user=Depends(get_current_user)):
+    return api_success(await create_courier_profile(payload.model_dump(), user))
+
+
+@router.post("/courier/online")
+async def courier_online(payload: CourierOnlineBody, user=Depends(get_current_user)):
+    try:
+        return api_success(await set_courier_online(user, payload.online))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/courier/profiles/{profile_id}/approve")
+async def courier_profile_approve(profile_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await approve_courier_profile(profile_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 404)
+
+
+@router.get("/courier/deliveries")
+async def courier_assigned_deliveries(user=Depends(get_current_user)):
+    return api_success(await assigned_courier_deliveries(user))
