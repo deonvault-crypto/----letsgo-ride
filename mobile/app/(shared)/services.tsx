@@ -58,6 +58,16 @@ export default function ServicesScreen() {
           onPress={() => router.push("/(shared)/courier" as never)}
         />
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>For businesses</Text>
+        <ServiceTile
+          title="Merchant workspace"
+          subtitle="Run restaurants, menus and incoming food orders"
+          icon="storefront-outline"
+          onPress={() => router.push("/(merchant)/home" as never)}
+        />
+      </View>
     </Screen>
   );
 }
