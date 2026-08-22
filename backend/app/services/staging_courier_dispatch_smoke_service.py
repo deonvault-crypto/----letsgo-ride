@@ -50,13 +50,25 @@ async def run_staging_courier_dispatch_smoke_test() -> Dict[str, Any]:
     settings = get_settings()
     app_env = str(settings.app_env or "development").strip().lower()
 
+    logger.warning(
+        "courier_dispatch_smoke gate app_env=%s enabled=%s routing_configured=%s pricing_configured=%s",
+        app_env,
+        settings.courier_dispatch_staging_smoke_test_enabled,
+        settings.routing_configured,
+        settings.courier_pricing_configured,
+    )
+
     if app_env != "staging":
+        logger.warning("courier_dispatch_smoke status=skipped reason=not_staging")
         return {"status": "skipped", "reason": "not_staging"}
     if not settings.courier_dispatch_staging_smoke_test_enabled:
+        logger.warning("courier_dispatch_smoke status=skipped reason=disabled")
         return {"status": "skipped", "reason": "disabled"}
     if not settings.routing_configured:
+        logger.warning("courier_dispatch_smoke status=failed reason=routing_not_configured")
         return {"status": "failed", "reason": "routing_not_configured"}
     if not settings.courier_pricing_configured:
+        logger.warning("courier_dispatch_smoke status=failed reason=pricing_not_configured")
         return {"status": "failed", "reason": "pricing_not_configured"}
 
     run_id = new_id()
@@ -82,7 +94,7 @@ async def run_staging_courier_dispatch_smoke_test() -> Dict[str, Any]:
     profile_id: str | None = None
     checkpoints: List[str] = []
 
-    logger.info("courier_dispatch_smoke status=started")
+    logger.warning("courier_dispatch_smoke status=started")
 
     try:
         profile = await create_courier_profile(
@@ -207,7 +219,7 @@ async def run_staging_courier_dispatch_smoke_test() -> Dict[str, Any]:
         _assert(required_events.issubset(set(event_types)), "expected lifecycle events are missing")
         checkpoints.append("event_audit_complete")
 
-        logger.info(
+        logger.warning(
             "courier_dispatch_smoke status=passed checkpoints=%s distance_km=%s eta_minutes=%s price_usd=%s payout_usd=%s events=%s",
             len(checkpoints),
             quoted.get("distance_km"),
@@ -238,4 +250,4 @@ async def run_staging_courier_dispatch_smoke_test() -> Dict[str, Any]:
         }
     finally:
         await _cleanup(delivery_id, profile_id)
-        logger.info("courier_dispatch_smoke cleanup=complete")
+        logger.warning("courier_dispatch_smoke cleanup=complete")
