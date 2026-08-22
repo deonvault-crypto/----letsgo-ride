@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 CourierStatus = Literal[
@@ -47,8 +47,15 @@ class CourierAssignBody(BaseModel):
 
 class CourierQuoteBody(BaseModel):
     price_usd: float = Field(gt=0, le=10000)
+    courier_payout_usd: float = Field(gt=0, le=10000)
     distance_km: Optional[float] = Field(default=None, ge=0, le=5000)
     estimated_duration_minutes: Optional[int] = Field(default=None, ge=0, le=10000)
+
+    @model_validator(mode="after")
+    def payout_cannot_exceed_customer_fee(self):
+        if self.courier_payout_usd > self.price_usd:
+            raise ValueError("Courier payout cannot exceed the customer delivery fee.")
+        return self
 
 
 class CourierStatusBody(BaseModel):
