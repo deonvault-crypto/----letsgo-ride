@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - platform-v2-m1-m6
   workflow_dispatch:
 
 permissions:
@@ -21,7 +20,7 @@ jobs:
   mobile:
     name: Mobile typecheck and tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: mobile
@@ -48,7 +47,7 @@ jobs:
   backend:
     name: Backend import, syntax and service tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
