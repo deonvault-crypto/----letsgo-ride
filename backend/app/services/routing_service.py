@@ -46,12 +46,34 @@ def _google_config() -> tuple[str, str, float]:
     return settings.google_maps_api_key, settings.routing_region_code, settings.routing_timeout_seconds
 
 
+def _provider_error_details(response: requests.Response) -> tuple[str, str]:
+    """Return safe structured Google error fields without logging credentials or request data."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return "unknown", "non_json_response"
+    if not isinstance(payload, dict):
+        return "unknown", "invalid_error_payload"
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return "unknown", "provider_error"
+    status = str(error.get("status") or "unknown")[:80]
+    message = " ".join(str(error.get("message") or "provider_error").split())[:300]
+    return status, message
+
+
 def _request_json(method: str, url: str, **kwargs: Any) -> Dict[str, Any]:
     response = requests.request(method, url, **kwargs)
     try:
         response.raise_for_status()
     except requests.RequestException as exc:
-        logger.warning("routing_provider_request_failed provider=google status=%s", response.status_code)
+        provider_status, provider_message = _provider_error_details(response)
+        logger.warning(
+            "routing_provider_request_failed provider=google http_status=%s provider_status=%s message=%r",
+            response.status_code,
+            provider_status,
+            provider_message,
+        )
         raise RoutingError("Routing provider request failed.") from exc
     try:
         payload = response.json()
