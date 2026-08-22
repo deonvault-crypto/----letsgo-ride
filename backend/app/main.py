@@ -11,6 +11,7 @@ from app.database import database
 from app.routers import admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, reports, requests, reviews, rides, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
+from app.utils import api_success
 
 
 settings = get_settings()
@@ -26,6 +27,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/", include_in_schema=False)
+async def root_probe():
+    return api_success({"service": "LetsGoRide API", "status": "ok"})
 
 
 @app.exception_handler(HTTPException)
