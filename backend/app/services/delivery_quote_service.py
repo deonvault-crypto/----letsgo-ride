@@ -24,40 +24,76 @@ def _normalize_point(value: Any) -> Dict[str, float] | None:
     return {"latitude": float(latitude), "longitude": float(longitude)}
 
 
-async def maybe_auto_quote_delivery(
-    delivery_id: str,
+async def calculate_delivery_quote(
+    pickup_address: str,
+    dropoff_address: str,
+    *,
+    pickup_location: Dict[str, float] | None = None,
+    dropoff_location: Dict[str, float] | None = None,
+) -> Dict[str, Any]:
+    """Resolve a real route and calculate server-owned delivery pricing.
+
+    This function is used both for customer previews and final server-side quoting.
+    The mobile client never supplies or calculates commercial pricing.
+    """
+    if not routing_status().get("configured"):
+        raise RoutingError("Routing is not configured.")
+
+    route = await resolve_route(
+        pickup_address,
+        dropoff_address,
+        origin=_normalize_point(pickup_location),
+        destination=_normalize_point(dropoff_location),
+        include_polyline=False,
+    )
+    pricing = calculate_delivery_pricing(
+        distance_km=float(route["distance_km"]),
+        estimated_duration_minutes=int(route["estimated_duration_minutes"]),
+    )
+    return {"route": route, "pricing": pricing}
+
+
+async def customer_quote_preview(
+    pickup_address: str,
+    dropoff_address: str,
+    *,
+    pickup_location: Dict[str, float] | None = None,
+    dropoff_location: Dict[str, float] | None = None,
+) -> Dict[str, Any]:
+    """Return only customer-safe quote fields; courier payout is intentionally omitted."""
+    calculated = await calculate_delivery_quote(
+        pickup_address,
+        dropoff_address,
+        pickup_location=pickup_location,
+        dropoff_location=dropoff_location,
+    )
+    route = calculated["route"]
+    pricing = calculated["pricing"]
+    return {
+        "currency": pricing["currency"],
+        "price_usd": pricing["price_usd"],
+        "distance_km": pricing["distance_km"],
+        "estimated_duration_minutes": pricing["estimated_duration_minutes"],
+        "pricing_source": pricing["pricing_source"],
+        "route_provider": route["provider"],
+        "pickup_address": route["origin_address"],
+        "dropoff_address": route["destination_address"],
+        "pickup_location": route["origin"],
+        "dropoff_location": route["destination"],
+    }
+
+
+async def apply_calculated_delivery_quote(
+    delivery: Dict[str, Any],
+    calculated: Dict[str, Any],
     *,
     actor_user_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Best-effort auto quote. Failure leaves the job pending for safe manual operations fallback."""
-    delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
-    if not delivery:
-        raise ValueError("Delivery not found.")
-    if delivery.get("status") in FINAL_STATUSES or delivery.get("quote_status") == "READY":
-        return delivery
-
-    if not routing_status().get("configured"):
-        return delivery
-
-    try:
-        route = await resolve_route(
-            str(delivery.get("pickup_address") or ""),
-            str(delivery.get("dropoff_address") or ""),
-            origin=_normalize_point(delivery.get("pickup_location")),
-            destination=_normalize_point(delivery.get("dropoff_location")),
-            include_polyline=False,
-        )
-        pricing = calculate_delivery_pricing(
-            distance_km=float(route["distance_km"]),
-            estimated_duration_minutes=int(route["estimated_duration_minutes"]),
-        )
-    except PricingNotConfiguredError:
-        return delivery
-    except RoutingError as exc:
-        logger.warning("delivery_auto_quote_routing_failed delivery_id=%s error=%s", delivery_id, type(exc).__name__)
-        return delivery
-
+    route = calculated["route"]
+    pricing = calculated["pricing"]
+    delivery_id = str(delivery["id"])
     now = now_iso()
+
     updates = {
         "quote_status": "READY",
         "price_usd": pricing["price_usd"],
@@ -66,6 +102,10 @@ async def maybe_auto_quote_delivery(
         "estimated_duration_minutes": pricing["estimated_duration_minutes"],
         "pricing_source": pricing["pricing_source"],
         "route_provider": route["provider"],
+        # Persist provider-resolved coordinates so customer and courier maps work even
+        # when the request started from address text only.
+        "pickup_location": route["origin"],
+        "dropoff_location": route["destination"],
         "updated_at": now,
     }
     if delivery.get("status") == "REQUESTED" and not delivery.get("courier_user_id"):
@@ -103,3 +143,39 @@ async def maybe_auto_quote_delivery(
     )
     await sync_food_order_pricing(updated, actor_user_id=actor_user_id)
     return updated
+
+
+async def maybe_auto_quote_delivery(
+    delivery_id: str,
+    *,
+    actor_user_id: str | None = None,
+) -> Dict[str, Any]:
+    """Best-effort auto quote. Failure leaves the job pending for safe manual operations fallback."""
+    delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
+    if not delivery:
+        raise ValueError("Delivery not found.")
+    if delivery.get("status") in FINAL_STATUSES or delivery.get("quote_status") == "READY":
+        return delivery
+
+    try:
+        calculated = await calculate_delivery_quote(
+            str(delivery.get("pickup_address") or ""),
+            str(delivery.get("dropoff_address") or ""),
+            pickup_location=_normalize_point(delivery.get("pickup_location")),
+            dropoff_location=_normalize_point(delivery.get("dropoff_location")),
+        )
+    except PricingNotConfiguredError:
+        return delivery
+    except RoutingError as exc:
+        logger.warning(
+            "delivery_auto_quote_routing_failed delivery_id=%s error=%s",
+            delivery_id,
+            type(exc).__name__,
+        )
+        return delivery
+
+    return await apply_calculated_delivery_quote(
+        delivery,
+        calculated,
+        actor_user_id=actor_user_id,
+    )
