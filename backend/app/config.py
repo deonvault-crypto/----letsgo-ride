@@ -50,6 +50,10 @@ class Settings:
         self.courier_payout_percent = self._parse_nonnegative_float(
             os.getenv("COURIER_PAYOUT_PERCENT", "0"), 0.0
         )
+        # End-to-end dispatch smoke test is staging-only and opt-in.
+        self.courier_dispatch_staging_smoke_test_enabled = self._parse_bool(
+            os.getenv("COURIER_DISPATCH_STAGING_SMOKE_TEST_ENABLED", "false")
+        )
 
         self.resend_api_key = self._get_env_first("RESEND_API_KEY")
         self.resend_from_email = self._get_env_first(
