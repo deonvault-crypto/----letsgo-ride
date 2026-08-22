@@ -7,6 +7,7 @@ from app.models.courier import (
     CourierCreateBody,
     CourierLocationBody,
     CourierQuoteBody,
+    CourierQuotePreviewBody,
     CourierStatusBody,
 )
 from app.services.courier_service import (
@@ -21,18 +22,80 @@ from app.services.courier_service import (
     update_courier_location,
     update_delivery_status,
 )
-from app.services.delivery_quote_service import maybe_auto_quote_delivery
+from app.services.delivery_quote_service import (
+    apply_calculated_delivery_quote,
+    calculate_delivery_quote,
+    customer_quote_preview,
+)
+from app.services.pricing_service import PricingNotConfiguredError
+from app.services.routing_service import (
+    RoutingError,
+    RoutingNoResultError,
+    RoutingNotConfiguredError,
+)
 from app.utils import api_error, api_success
 
 
 router = APIRouter(prefix="/courier", tags=["courier"])
 
 
+def _point(value):
+    return value.model_dump() if value else None
+
+
+def _pricing_unavailable_error() -> None:
+    api_error("Courier pricing is temporarily unavailable. Please try again later.", 503)
+
+
+@router.post("/quote-preview")
+async def preview_courier_quote(
+    payload: CourierQuotePreviewBody,
+    user=Depends(get_current_user),
+):
+    _ = user
+    try:
+        return api_success(
+            await customer_quote_preview(
+                payload.pickup_address,
+                payload.dropoff_address,
+                pickup_location=_point(payload.pickup_location),
+                dropoff_location=_point(payload.dropoff_location),
+            )
+        )
+    except PricingNotConfiguredError:
+        _pricing_unavailable_error()
+    except RoutingNotConfiguredError:
+        api_error("Courier routing is temporarily unavailable.", 503)
+    except RoutingNoResultError as exc:
+        api_error(str(exc), 404)
+    except RoutingError:
+        api_error("We could not calculate this delivery route right now.", 502)
+
+
 @router.post("/deliveries")
 async def create_courier_delivery(payload: CourierCreateBody, user=Depends(get_current_user)):
+    # Fail closed before writing a customer job. A direct courier request must have
+    # a real server-side route and price before it can enter the matching pool.
+    try:
+        calculated = await calculate_delivery_quote(
+            payload.pickup_address,
+            payload.dropoff_address,
+            pickup_location=_point(payload.pickup_location),
+            dropoff_location=_point(payload.dropoff_location),
+        )
+    except PricingNotConfiguredError:
+        _pricing_unavailable_error()
+    except RoutingNotConfiguredError:
+        api_error("Courier routing is temporarily unavailable.", 503)
+    except RoutingNoResultError as exc:
+        api_error(str(exc), 404)
+    except RoutingError:
+        api_error("We could not calculate this delivery route right now.", 502)
+
     created = await create_delivery(payload.model_dump(), user)
-    quoted = await maybe_auto_quote_delivery(
-        created["id"],
+    quoted = await apply_calculated_delivery_quote(
+        created,
+        calculated,
         actor_user_id=str(user.get("id") or ""),
     )
     return api_success(quoted)
