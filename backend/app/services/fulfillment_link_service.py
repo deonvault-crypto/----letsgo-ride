@@ -88,7 +88,7 @@ async def ensure_food_order_delivery(
         raise ValueError("Restaurant not found for this order.")
 
     delivery_fee = order.get("delivery_fee_usd")
-    priced = isinstance(delivery_fee, (int, float))
+    customer_fee = float(delivery_fee) if isinstance(delivery_fee, (int, float)) else None
     now = now_iso()
     delivery = {
         "id": new_id(),
@@ -97,10 +97,11 @@ async def ensure_food_order_delivery(
         "sender_phone": order.get("recipient_phone"),
         "courier_user_id": None,
         "courier_name": None,
-        "status": "MATCHING" if priced else "REQUESTED",
-        "quote_status": "READY" if priced else "PENDING",
+        "status": "REQUESTED",
+        "quote_status": "PENDING",
         "currency": order.get("currency") or "USD",
-        "price_usd": float(delivery_fee) if priced else None,
+        "price_usd": customer_fee,
+        "courier_payout_usd": None,
         "distance_km": None,
         "estimated_duration_minutes": None,
         "live_tracking_active": False,
@@ -145,13 +146,13 @@ async def ensure_food_order_delivery(
         saved["id"],
         "FOOD_FULFILLMENT_CREATED",
         actor_user_id=actor_user_id,
-        data={"food_order_id": order_id, "quote_status": saved["quote_status"]},
+        data={"food_order_id": order_id, "quote_status": "PENDING"},
     )
     await _append_food_event(
         order_id,
         "COURIER_FULFILLMENT_CREATED",
         actor_user_id=actor_user_id,
-        data={"delivery_id": saved["id"], "quote_status": saved["quote_status"]},
+        data={"delivery_id": saved["id"], "quote_status": "PENDING"},
     )
     return saved
 
