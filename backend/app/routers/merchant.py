@@ -21,6 +21,7 @@ from app.services.merchant_service import (
     update_restaurant,
     update_restaurant_order_status,
 )
+from app.services.merchant_workspace_service import get_restaurant_workspace
 from app.utils import api_error, api_success
 
 
@@ -35,6 +36,16 @@ async def merchant_create_restaurant(payload: RestaurantCreateBody, user=Depends
 @router.get("/restaurants/my")
 async def merchant_restaurants(user=Depends(get_current_user)):
     return api_success(await list_my_restaurants(user))
+
+
+@router.get("/restaurants/{restaurant_id}/workspace")
+async def merchant_restaurant_workspace(restaurant_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await get_restaurant_workspace(restaurant_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 404)
 
 
 @router.patch("/restaurants/{restaurant_id}")
