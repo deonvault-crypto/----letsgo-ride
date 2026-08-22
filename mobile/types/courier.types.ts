@@ -22,7 +22,7 @@ export type CourierCreatePayload = {
   dropoff_location?: CourierGeoPoint | null;
   recipient_name: string;
   recipient_phone: string;
-  package_type: "parcel" | "shopping" | "documents" | "other";
+  package_type: "parcel" | "shopping" | "documents" | "food" | "other";
   package_description?: string | null;
   weight_kg?: number | null;
   declared_value_usd?: number | null;
@@ -47,11 +47,14 @@ export type CourierDelivery = CourierCreatePayload & {
   courier_user_id?: string | null;
   courier_name?: string | null;
   status: CourierStatus;
-  quote_status?: string;
+  quote_status?: "PENDING" | "READY" | string;
   currency?: string;
   price_usd?: number | null;
   distance_km?: number | null;
   estimated_duration_minutes?: number | null;
+  source_type?: "COURIER_REQUEST" | "FOOD_ORDER" | string;
+  source_id?: string | null;
+  food_order_id?: string | null;
   live_tracking_active?: boolean;
   last_courier_location?: CourierLocation | null;
   assigned_at?: string | null;
