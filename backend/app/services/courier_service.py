@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List
 
 from app.database import database
+from app.services.fulfillment_link_service import (
+    sync_food_order_from_delivery,
+    sync_food_order_pricing,
+)
 from app.utils import new_id, now_iso
 
 
@@ -85,6 +89,8 @@ async def create_delivery(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict
         "estimated_duration_minutes": None,
         "live_tracking_active": False,
         "last_courier_location": None,
+        "source_type": "COURIER_REQUEST",
+        "source_id": None,
         "cancelled_at": None,
         "delivered_at": None,
         "created_at": now,
@@ -96,7 +102,7 @@ async def create_delivery(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict
         saved["id"],
         "DELIVERY_REQUESTED",
         actor_user_id=_user_id(user),
-        data={"status": saved["status"]},
+        data={"status": saved["status"], "quote_status": saved["quote_status"]},
     )
     return saved
 
@@ -134,6 +140,8 @@ async def cancel_delivery(
     reason: str | None,
 ) -> Dict[str, Any]:
     delivery = await get_delivery(delivery_id, user)
+    if delivery.get("source_type") == "FOOD_ORDER":
+        raise ValueError("Food delivery cancellation must be handled from the food order or support flow.")
     if not (_is_admin(user) or delivery.get("sender_user_id") == _user_id(user)):
         raise PermissionError("Only the sender or an administrator can cancel this delivery.")
     if delivery.get("status") in FINAL_STATUSES:
@@ -160,6 +168,46 @@ async def cancel_delivery(
     return updated
 
 
+async def set_delivery_quote(
+    delivery_id: str,
+    quote: Dict[str, Any],
+    actor: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not _is_admin(actor):
+        raise PermissionError("Only an administrator can set delivery pricing right now.")
+    delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
+    if not delivery:
+        raise ValueError("Delivery not found.")
+    if delivery.get("status") in FINAL_STATUSES:
+        raise ValueError("A finalised delivery cannot be priced.")
+
+    updates: Dict[str, Any] = {
+        "quote_status": "READY",
+        "price_usd": round(float(quote["price_usd"]), 2),
+        "distance_km": quote.get("distance_km"),
+        "estimated_duration_minutes": quote.get("estimated_duration_minutes"),
+        "updated_at": now_iso(),
+    }
+    if delivery.get("status") == "REQUESTED" and not delivery.get("courier_user_id"):
+        updates["status"] = "MATCHING"
+
+    updated = await database.update_one("courier_deliveries", delivery_id, updates)
+    if not updated:
+        raise ValueError("Delivery not found.")
+    await append_delivery_event(
+        delivery_id,
+        "DELIVERY_QUOTED",
+        actor_user_id=_user_id(actor),
+        data={
+            "price_usd": updated.get("price_usd"),
+            "distance_km": updated.get("distance_km"),
+            "estimated_duration_minutes": updated.get("estimated_duration_minutes"),
+        },
+    )
+    await sync_food_order_pricing(updated, actor_user_id=_user_id(actor))
+    return updated
+
+
 async def assign_delivery(
     delivery_id: str,
     courier_user_id: str,
@@ -169,31 +217,42 @@ async def assign_delivery(
     if not delivery:
         raise ValueError("Delivery not found.")
     if not _is_admin(actor):
-        raise PermissionError("Only an administrator can assign courier work right now.")
+        raise PermissionError("Only an administrator can assign courier work directly.")
     if delivery.get("status") in FINAL_STATUSES:
         raise ValueError("A finalised delivery cannot be assigned.")
+    if delivery.get("courier_user_id") and delivery.get("courier_user_id") != courier_user_id:
+        raise ValueError("This delivery is already assigned to another courier.")
 
     courier = await database.find_one("users", {"id": courier_user_id})
     if not courier:
         raise ValueError("Courier account not found.")
 
-    updates = {
-        "courier_user_id": courier_user_id,
-        "courier_name": courier.get("name") or "LetsGoRide Courier",
-        "status": "ASSIGNED",
-        "live_tracking_active": True,
-        "assigned_at": now_iso(),
-        "updated_at": now_iso(),
-    }
-    updated = await database.update_one("courier_deliveries", delivery_id, updates)
+    now = now_iso()
+    updated = await database.update_one_if(
+        "courier_deliveries",
+        {
+            "id": delivery_id,
+            "courier_user_id": delivery.get("courier_user_id"),
+            "status": delivery.get("status"),
+        },
+        {
+            "courier_user_id": courier_user_id,
+            "courier_name": courier.get("name") or "LetsGoRide Courier",
+            "status": "ASSIGNED",
+            "live_tracking_active": True,
+            "assigned_at": now,
+            "updated_at": now,
+        },
+    )
     if not updated:
-        raise ValueError("Delivery not found.")
+        raise ValueError("Delivery changed while it was being assigned. Refresh and try again.")
     await append_delivery_event(
         delivery_id,
         "COURIER_ASSIGNED",
         actor_user_id=_user_id(actor),
-        data={"courier_user_id": courier_user_id},
+        data={"courier_user_id": courier_user_id, "assignment_method": "admin"},
     )
+    await sync_food_order_from_delivery(updated, actor_user_id=_user_id(actor))
     return updated
 
 
@@ -223,15 +282,20 @@ async def update_delivery_status(
     if status in {"CANCELLED", "FAILED"}:
         updates["live_tracking_active"] = False
 
-    updated = await database.update_one("courier_deliveries", delivery_id, updates)
+    updated = await database.update_one_if(
+        "courier_deliveries",
+        {"id": delivery_id, "status": current},
+        updates,
+    )
     if not updated:
-        raise ValueError("Delivery not found.")
+        raise ValueError("Delivery changed while progress was being updated. Refresh and try again.")
     await append_delivery_event(
         delivery_id,
         f"STATUS_{status}",
         actor_user_id=_user_id(user),
         data={"from": current, "to": status, "note": note},
     )
+    await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     return updated
 
 
