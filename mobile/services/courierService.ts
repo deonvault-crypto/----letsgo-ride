@@ -4,9 +4,19 @@ import {
   CourierDelivery,
   CourierEvent,
   CourierLocation,
+  CourierQuotePreview,
+  CourierQuotePreviewPayload,
   CourierStatus,
   CourierTrackingState,
 } from "../types/courier.types";
+
+export function previewCourierQuote(payload: CourierQuotePreviewPayload) {
+  return requestData<CourierQuotePreview>({
+    method: "POST",
+    url: "/courier/quote-preview",
+    data: payload,
+  });
+}
 
 export function createCourierDelivery(payload: CourierCreatePayload) {
   return requestData<CourierDelivery>({
