@@ -9,6 +9,7 @@ from app.models.merchant import (
     RestaurantCreateBody,
     RestaurantUpdateBody,
 )
+from app.services.merchant_order_orchestration_service import transition_merchant_order
 from app.services.merchant_service import (
     activate_restaurant,
     create_menu_category,
@@ -19,7 +20,6 @@ from app.services.merchant_service import (
     submit_restaurant_for_review,
     update_menu_item,
     update_restaurant,
-    update_restaurant_order_status,
 )
 from app.services.merchant_workspace_service import get_restaurant_workspace
 from app.utils import api_error, api_success
@@ -141,7 +141,7 @@ async def merchant_set_order_status(
     user=Depends(get_current_user),
 ):
     try:
-        return api_success(await update_restaurant_order_status(order_id, payload.status, payload.note, user))
+        return api_success(await transition_merchant_order(order_id, payload.status, payload.note, user))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
