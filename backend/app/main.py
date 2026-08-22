@@ -11,6 +11,7 @@ from app.database import database
 from app.routers import admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, reports, requests, reviews, rides, routing, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
+from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
 from app.utils import api_success
 
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="LetsGoRide API", version="0.1.0")
 ride_lifecycle_stop_event: asyncio.Event | None = None
 ride_lifecycle_task: asyncio.Task | None = None
+staging_routing_smoke_task: asyncio.Task | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,22 +71,26 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.on_event("startup")
 async def on_startup():
-    global ride_lifecycle_stop_event, ride_lifecycle_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, staging_routing_smoke_task
     await database.connect()
     await ensure_admin_seed_user()
     if settings.enable_demo_seed:
         await seed_demo_rides()
     ride_lifecycle_stop_event = asyncio.Event()
     ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
+    if settings.routing_staging_smoke_test_enabled:
+        staging_routing_smoke_task = asyncio.create_task(run_staging_routing_smoke_test())
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    global ride_lifecycle_stop_event, ride_lifecycle_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, staging_routing_smoke_task
     if ride_lifecycle_stop_event:
         ride_lifecycle_stop_event.set()
     if ride_lifecycle_task:
         ride_lifecycle_task.cancel()
+    if staging_routing_smoke_task:
+        staging_routing_smoke_task.cancel()
     await database.close()
 
 
