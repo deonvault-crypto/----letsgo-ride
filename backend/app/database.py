@@ -33,6 +33,7 @@ COLLECTION_NAMES = [
     "courier_events",
     "courier_profiles",
     "courier_location_snapshots",
+    "work_availability",
     "restaurants",
     "restaurant_categories",
     "menu_categories",
