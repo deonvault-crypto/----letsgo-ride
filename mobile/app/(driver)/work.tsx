@@ -117,7 +117,6 @@ export default function DriverWorkScreen() {
       setRefreshingOffers(false);
     }
   }
-
   async function claim(offer: CourierDelivery) {
     if (claimingId) return;
     try {
@@ -182,7 +181,7 @@ export default function DriverWorkScreen() {
 
       {profile && !courierApproved ? (
         <View style={styles.reviewNotice}>
-          <MaterialCommunityIcons name="shield-clock-outline" size={23} color={v2Theme.colors.warning} />
+          <MaterialCommunityIcons name="shield-lock-outline" size={23} color={v2Theme.colors.warning} />
           <View style={styles.noticeCopy}><Text style={styles.reviewNoticeTitle}>Courier review required</Text><Text style={styles.noticeBody}>Availability can be planned now. Going online and claiming paid work stays locked until approval.</Text></View>
         </View>
       ) : null}
