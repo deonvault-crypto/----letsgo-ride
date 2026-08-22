@@ -33,7 +33,8 @@ async def run_staging_routing_smoke_test() -> Dict[str, Any]:
     results: List[Dict[str, Any]] = []
     failures = 0
 
-    logger.info("routing_smoke status=started probes=%s", len(STAGING_ROUTE_PROBES))
+    # Warning level is intentional for this opt-in staging probe so Render always surfaces the result.
+    logger.warning("routing_smoke status=started probes=%s", len(STAGING_ROUTE_PROBES))
 
     for origin_address, destination_address in STAGING_ROUTE_PROBES:
         try:
@@ -64,7 +65,7 @@ async def run_staging_routing_smoke_test() -> Dict[str, Any]:
                 entry["pricing"] = None
 
             results.append(entry)
-            logger.info(
+            logger.warning(
                 "routing_smoke status=passed origin=%r destination=%r distance_km=%s eta_minutes=%s pricing=%s",
                 origin_address,
                 destination_address,
@@ -89,7 +90,7 @@ async def run_staging_routing_smoke_test() -> Dict[str, Any]:
             )
 
     status = "passed" if failures == 0 else "failed"
-    logger.info(
+    logger.warning(
         "routing_smoke status=%s passed=%s failed=%s",
         status,
         len(STAGING_ROUTE_PROBES) - failures,
