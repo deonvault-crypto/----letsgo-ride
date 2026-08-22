@@ -38,3 +38,11 @@ export function setCourierOnline(online: boolean) {
 export function listAssignedCourierDeliveries() {
   return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/courier/deliveries" });
 }
+
+export function listCourierOffers() {
+  return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/courier/offers" });
+}
+
+export function claimCourierOffer(deliveryId: string) {
+  return requestData<CourierDelivery>({ method: "POST", url: `/operations/courier/offers/${deliveryId}/claim` });
+}
