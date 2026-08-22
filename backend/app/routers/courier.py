@@ -21,6 +21,7 @@ from app.services.courier_service import (
     update_courier_location,
     update_delivery_status,
 )
+from app.services.delivery_quote_service import maybe_auto_quote_delivery
 from app.utils import api_error, api_success
 
 
@@ -29,7 +30,12 @@ router = APIRouter(prefix="/courier", tags=["courier"])
 
 @router.post("/deliveries")
 async def create_courier_delivery(payload: CourierCreateBody, user=Depends(get_current_user)):
-    return api_success(await create_delivery(payload.model_dump(), user))
+    created = await create_delivery(payload.model_dump(), user)
+    quoted = await maybe_auto_quote_delivery(
+        created["id"],
+        actor_user_id=str(user.get("id") or ""),
+    )
+    return api_success(quoted)
 
 
 @router.get("/deliveries/my")
