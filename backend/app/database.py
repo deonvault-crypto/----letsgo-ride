@@ -29,6 +29,16 @@ COLLECTION_NAMES = [
     "notification_preferences",
     "trip_events",
     "verification_events",
+    "courier_deliveries",
+    "courier_events",
+    "courier_profiles",
+    "courier_location_snapshots",
+    "restaurants",
+    "restaurant_categories",
+    "menu_categories",
+    "menu_items",
+    "food_orders",
+    "food_order_events",
 ]
 
 
