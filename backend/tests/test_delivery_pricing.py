@@ -34,6 +34,9 @@ class DeliveryPricingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["pricing_source"], "AUTOMATIC_POLICY")
 
     async def test_auto_quote_moves_job_to_matching_and_syncs_food_total(self):
+        pickup_location = {"latitude": -17.8252, "longitude": 31.0335}
+        dropoff_location = {"latitude": -17.78, "longitude": 31.08}
+
         await database.insert_one(
             "food_orders",
             {
@@ -54,8 +57,8 @@ class DeliveryPricingTests(unittest.IsolatedAsyncioTestCase):
                 "courier_user_id": None,
                 "pickup_address": "1 Samora Machel Ave, Harare",
                 "dropoff_address": "20 Borrowdale Road, Harare",
-                "pickup_location": {"latitude": -17.8252, "longitude": 31.0335},
-                "dropoff_location": {"latitude": -17.78, "longitude": 31.08},
+                "pickup_location": pickup_location,
+                "dropoff_location": dropoff_location,
                 "food_order_id": "food-1",
                 "source_type": "FOOD_ORDER",
             },
@@ -63,6 +66,10 @@ class DeliveryPricingTests(unittest.IsolatedAsyncioTestCase):
 
         route_result = {
             "provider": "google",
+            "origin_address": "1 Samora Machel Ave, Harare",
+            "destination_address": "20 Borrowdale Road, Harare",
+            "origin": pickup_location,
+            "destination": dropoff_location,
             "distance_km": 7.2,
             "estimated_duration_minutes": 24,
         }
@@ -93,6 +100,8 @@ class DeliveryPricingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(quoted["price_usd"], 4.0)
         self.assertEqual(quoted["courier_payout_usd"], 2.8)
         self.assertEqual(quoted["route_provider"], "google")
+        self.assertEqual(quoted["pickup_location"], pickup_location)
+        self.assertEqual(quoted["dropoff_location"], dropoff_location)
 
         order = await database.find_one("food_orders", {"id": "food-1"})
         self.assertEqual(order["delivery_fee_usd"], 4.0)
