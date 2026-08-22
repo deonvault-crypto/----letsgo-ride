@@ -1,10 +1,10 @@
-import { Stack } from "expo-router";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 
+import { FoodBasketProvider } from "../contexts/FoodBasketContext";
 import { configureNotificationHandler } from "../services/pushNotificationService";
 
 export default function RootLayout() {
@@ -30,6 +30,14 @@ export default function RootLayout() {
         router.push(`/(passenger)/ride/${data.ride_id}` as never);
         return;
       }
+      if (typeof data.delivery_id === "string") {
+        router.push(`/(shared)/courier/${data.delivery_id}` as never);
+        return;
+      }
+      if (typeof data.food_order_id === "string") {
+        router.push(`/(shared)/food/order/${data.food_order_id}` as never);
+        return;
+      }
       if (typeof data.support_message_id === "string") {
         router.push("/(shared)/support" as never);
         return;
@@ -43,8 +51,10 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false, animation: "none", animationTypeForReplace: "pop" }} />
+      <FoodBasketProvider>
+        <StatusBar style="dark" />
+        <Stack screenOptions={{ headerShown: false, animation: "none", animationTypeForReplace: "pop" }} />
+      </FoodBasketProvider>
     </SafeAreaProvider>
   );
 }
