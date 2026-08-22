@@ -5,11 +5,13 @@ from app.models.operations import AvailabilityCreateBody, CourierOnlineBody, Cou
 from app.services.operations_service import (
     approve_courier_profile,
     assigned_courier_deliveries,
+    claim_courier_offer,
     create_availability,
     create_courier_profile,
     delete_availability,
     get_courier_profile,
     list_availability,
+    list_courier_offers,
     set_courier_online,
 )
 from app.utils import api_error, api_success
@@ -74,3 +76,21 @@ async def courier_profile_approve(profile_id: str, user=Depends(get_current_user
 @router.get("/courier/deliveries")
 async def courier_assigned_deliveries(user=Depends(get_current_user)):
     return api_success(await assigned_courier_deliveries(user))
+
+
+@router.get("/courier/offers")
+async def courier_delivery_offers(user=Depends(get_current_user)):
+    try:
+        return api_success(await list_courier_offers(user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+
+
+@router.post("/courier/offers/{delivery_id}/claim")
+async def courier_claim_delivery_offer(delivery_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await claim_courier_offer(delivery_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 409)
