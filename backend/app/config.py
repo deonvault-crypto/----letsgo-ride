@@ -20,6 +20,13 @@ class Settings:
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
         self.public_api_base_url = self._get_env_first("PUBLIC_API_BASE_URL", "API_PUBLIC_BASE_URL") or "https://letsgoride-backend.onrender.com"
+
+        # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
+        self.routing_provider = os.getenv("ROUTING_PROVIDER", "disabled").strip().lower()
+        self.google_maps_api_key = self._get_env_first("GOOGLE_MAPS_API_KEY")
+        self.routing_region_code = os.getenv("ROUTING_REGION_CODE", "ZW").strip().upper() or "ZW"
+        self.routing_timeout_seconds = self._parse_float(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"), 8.0)
+
         self.resend_api_key = self._get_env_first("RESEND_API_KEY")
         self.resend_from_email = self._get_env_first(
             "RESEND_FROM_EMAIL",
@@ -62,6 +69,14 @@ class Settings:
         return value.strip().lower() in ("1", "true", "yes", "on")
 
     @staticmethod
+    def _parse_float(value: str, default: float) -> float:
+        try:
+            parsed = float(value)
+            return parsed if parsed > 0 else default
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
     def _get_env_first(*names: str) -> str:
         for name in names:
             value = os.getenv(name)
@@ -84,6 +99,10 @@ class Settings:
             "api_key": unquote(parsed.username or ""),
             "api_secret": unquote(parsed.password or ""),
         }
+
+    @property
+    def routing_configured(self) -> bool:
+        return self.routing_provider == "google" and bool(self.google_maps_api_key)
 
     @property
     def resend_api_key_present(self) -> bool:
