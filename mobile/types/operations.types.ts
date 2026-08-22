@@ -23,3 +23,19 @@ export type CourierProfile = {
   created_at?: string;
   updated_at?: string;
 };
+
+export type CourierPayoutItem = {
+  delivery_id: string;
+  payout_usd: number;
+  delivered_at?: string | null;
+  source_type?: string;
+};
+
+export type CourierEarningsSummary = {
+  currency: "USD" | string;
+  completed_deliveries: number;
+  total_payout_usd: number;
+  today_payout_usd: number;
+  last_7_days_payout_usd: number;
+  latest_payouts: CourierPayoutItem[];
+};
