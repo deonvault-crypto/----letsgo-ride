@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from app.database import database
 from app.services.food_service import append_order_event
+from app.services.fulfillment_link_service import ensure_food_order_delivery
 from app.utils import new_id, now_iso
 
 
@@ -196,17 +197,23 @@ async def update_restaurant_order_status(
     if not _is_admin(user) and status not in MERCHANT_ORDER_TRANSITIONS.get(current, set()):
         raise ValueError(f"Merchant cannot move order from {current} to {status}.")
 
-    updated = await database.update_one(
+    updated = await database.update_one_if(
         "food_orders",
-        order_id,
+        {"id": order_id, "status": current},
         {"status": status, "updated_at": now_iso()},
     )
     if not updated:
-        raise ValueError("Order not found.")
+        raise ValueError("Order changed while it was being updated. Refresh and try again.")
     await append_order_event(
         order_id,
         f"ORDER_{status}",
         actor_user_id=_user_id(user),
         data={"from": current, "to": status, "note": note},
     )
+
+    if status == "READY_FOR_PICKUP":
+        await ensure_food_order_delivery(order_id, actor_user_id=_user_id(user))
+        refreshed = await database.find_one("food_orders", {"id": order_id})
+        if refreshed:
+            return refreshed
     return updated
