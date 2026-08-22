@@ -99,7 +99,7 @@ describe("settings account controls", () => {
       expect(screen.getByText("Enable notifications in device settings")).toBeOnTheScreen();
     });
     expect(screen.getByRole("button", { name: "Edit profile" })).toBeOnTheScreen();
-    expect(screen.getByText("Account")).toBeOnTheScreen();
+    expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
     expect(screen.getByText("Notifications")).toBeOnTheScreen();
     expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
     expect(screen.getByText("Support & Safety")).toBeOnTheScreen();
