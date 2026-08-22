@@ -3,6 +3,7 @@ import { FoodOrder, MenuCategory, MenuItem } from "../types/food.types";
 import {
   MenuCategoryCreatePayload,
   MenuItemCreatePayload,
+  MerchantDashboardData,
   MerchantOrderStatusPayload,
   MerchantRestaurant,
   RestaurantCreatePayload,
@@ -11,6 +12,10 @@ import {
 
 export function listMyRestaurants() {
   return requestData<MerchantRestaurant[]>({ method: "GET", url: "/merchant/restaurants/my" });
+}
+
+export function getRestaurantWorkspace(restaurantId: string) {
+  return requestData<MerchantDashboardData>({ method: "GET", url: `/merchant/restaurants/${restaurantId}/workspace` });
 }
 
 export function createRestaurant(payload: RestaurantCreatePayload) {
