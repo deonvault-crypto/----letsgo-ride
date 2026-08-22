@@ -29,7 +29,7 @@ class CourierCreateBody(BaseModel):
     dropoff_location: Optional[GeoPoint] = None
     recipient_name: str = Field(min_length=2, max_length=120)
     recipient_phone: str = Field(min_length=5, max_length=40)
-    package_type: Literal["parcel", "shopping", "documents", "other"]
+    package_type: Literal["parcel", "shopping", "documents", "food", "other"]
     package_description: Optional[str] = Field(default=None, max_length=500)
     weight_kg: Optional[float] = Field(default=None, gt=0, le=100)
     declared_value_usd: Optional[float] = Field(default=None, ge=0, le=10000)
@@ -43,6 +43,12 @@ class CourierCancelBody(BaseModel):
 
 class CourierAssignBody(BaseModel):
     courier_user_id: str = Field(min_length=1)
+
+
+class CourierQuoteBody(BaseModel):
+    price_usd: float = Field(gt=0, le=10000)
+    distance_km: Optional[float] = Field(default=None, ge=0, le=5000)
+    estimated_duration_minutes: Optional[int] = Field(default=None, ge=0, le=10000)
 
 
 class CourierStatusBody(BaseModel):
