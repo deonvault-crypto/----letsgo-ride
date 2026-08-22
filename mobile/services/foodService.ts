@@ -2,6 +2,7 @@ import { requestData } from "./api";
 import {
   FoodOrder,
   FoodOrderCreatePayload,
+  FoodOrderEvent,
   Restaurant,
   RestaurantMenu,
 } from "../types/food.types";
@@ -28,6 +29,10 @@ export function listMyFoodOrders() {
 
 export function getFoodOrder(orderId: string) {
   return requestData<FoodOrder>({ method: "GET", url: `/food/orders/${orderId}` });
+}
+
+export function getFoodOrderEvents(orderId: string) {
+  return requestData<FoodOrderEvent[]>({ method: "GET", url: `/food/orders/${orderId}/events` });
 }
 
 export function cancelFoodOrder(orderId: string, reason?: string) {
