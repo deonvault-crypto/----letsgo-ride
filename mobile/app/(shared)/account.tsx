@@ -1,21 +1,45 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { v2Theme } from "../../constants/v2Theme";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { getMyVerification } from "../../services/verificationService";
+import { VerificationProfile } from "../../types/verification.types";
 import { displayNameOrFallback } from "../../utils/displayName";
 import { formatStatus } from "../../utils/formatStatus";
+import {
+  isPendingVerificationStatus,
+  isVerifiedStatus,
+  needsVerificationReview,
+} from "../../utils/verificationStatus";
 
 export default function AccountScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
+  const [verification, setVerification] = useState<VerificationProfile | null>(null);
   const role = user?.role === "driver" ? "driver" : "passenger";
   const verified = isIdentityVerified(user);
   const name = displayNameOrFallback(user?.name);
+
+  const loadVerification = useCallback(async () => {
+    try {
+      setVerification(await getMyVerification());
+    } catch {
+      setVerification(null);
+    }
+  }, []);
+
+  useLiveRefresh(loadVerification, 30000);
+
+  const driverVerificationStatus =
+    verification?.verification_status || user?.verification_status || "not_started";
+  const driverVerification = driverVerificationCopy(driverVerificationStatus);
 
   return (
     <Screen navRole={role}>
@@ -52,7 +76,8 @@ export default function AccountScreen() {
         <AccountRow
           icon="steering"
           title="Driver verification"
-          subtitle={role === "driver" ? "Manage driver verification and documents" : "Required before posting driver trips"}
+          subtitle={driverVerification.subtitle}
+          tone={driverVerification.tone}
           onPress={() => router.push("/(shared)/verification" as never)}
         />
       </View>
@@ -82,6 +107,7 @@ export default function AccountScreen() {
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={role === "driver" ? "Switch to Passenger mode" : "Switch to Driver mode"}
           onPress={() => router.replace(role === "driver" ? "/(passenger)/home" as never : "/(driver)/home" as never)}
           style={({ pressed }) => [styles.switchButton, pressed && styles.pressed]}
         >
@@ -94,7 +120,12 @@ export default function AccountScreen() {
 
 function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
+    >
       <View style={styles.quickIcon}>
         <MaterialCommunityIcons name={icon} size={24} color={v2Theme.colors.ink} />
       </View>
@@ -114,16 +145,29 @@ function AccountRow({
   title: string;
   subtitle: string;
   onPress: () => void;
-  tone?: "neutral" | "success";
+  tone?: "neutral" | "success" | "warning";
 }) {
+  const iconColor =
+    tone === "success"
+      ? v2Theme.colors.brandStrong
+      : tone === "warning"
+        ? v2Theme.colors.warning
+        : v2Theme.colors.ink;
+
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <View style={[styles.rowIcon, tone === "success" && styles.rowIconSuccess]}>
-        <MaterialCommunityIcons
-          name={icon}
-          size={22}
-          color={tone === "success" ? v2Theme.colors.brandStrong : v2Theme.colors.ink}
-        />
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityHint={subtitle}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <View style={[
+        styles.rowIcon,
+        tone === "success" && styles.rowIconSuccess,
+        tone === "warning" && styles.rowIconWarning,
+      ]}>
+        <MaterialCommunityIcons name={icon} size={22} color={iconColor} />
       </View>
       <View style={styles.rowCopy}>
         <Text style={styles.rowTitle}>{title}</Text>
@@ -132,6 +176,22 @@ function AccountRow({
       <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
     </Pressable>
   );
+}
+
+function driverVerificationCopy(status: string): {
+  subtitle: string;
+  tone: "neutral" | "success" | "warning";
+} {
+  if (isVerifiedStatus(status)) {
+    return { subtitle: "Driver verification approved", tone: "success" };
+  }
+  if (isPendingVerificationStatus(status)) {
+    return { subtitle: "Verification under review", tone: "warning" };
+  }
+  if (needsVerificationReview(status)) {
+    return { subtitle: "Action needed · review your documents", tone: "warning" };
+  }
+  return { subtitle: "Required before posting driver trips", tone: "neutral" };
 }
 
 const styles = StyleSheet.create({
@@ -219,6 +279,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowIconSuccess: { backgroundColor: v2Theme.colors.brandSoft },
+  rowIconWarning: { backgroundColor: v2Theme.colors.warningSoft },
   rowCopy: { flex: 1, gap: 3 },
   rowTitle: {
     color: v2Theme.colors.ink,
