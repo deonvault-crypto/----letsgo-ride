@@ -14,6 +14,7 @@ import {
 } from "../../../services/courierService";
 import { watchForegroundLocation } from "../../../services/locationService";
 import { CourierDelivery, CourierEvent, CourierStatus } from "../../../types/courier.types";
+import { openNavigation } from "../../../utils/openNavigation";
 
 const NEXT_STATUS: Partial<Record<CourierStatus, CourierStatus>> = {
   ASSIGNED: "COURIER_TO_PICKUP",
@@ -24,6 +25,8 @@ const NEXT_STATUS: Partial<Record<CourierStatus, CourierStatus>> = {
 };
 
 const TRACKING_STATUSES = new Set<CourierStatus>(["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
+const PICKUP_NAV_STATUSES = new Set<CourierStatus>(["ASSIGNED", "COURIER_TO_PICKUP"]);
+const DROPOFF_NAV_STATUSES = new Set<CourierStatus>(["PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
 
 export default function CourierJobScreen() {
   const { deliveryId } = useLocalSearchParams<{ deliveryId: string }>();
@@ -32,6 +35,7 @@ export default function CourierJobScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const locationSubscription = useRef<{ remove: () => void } | null>(null);
 
@@ -54,7 +58,9 @@ export default function CourierJobScreen() {
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, 12000);
     return () => {
+      clearInterval(timer);
       locationSubscription.current?.remove();
       locationSubscription.current = null;
     };
@@ -95,6 +101,25 @@ export default function CourierJobScreen() {
     setSharing(false);
   }
 
+  async function navigate() {
+    if (!delivery || navigating) return;
+    const destination = PICKUP_NAV_STATUSES.has(delivery.status)
+      ? delivery.pickup_address
+      : DROPOFF_NAV_STATUSES.has(delivery.status)
+        ? delivery.dropoff_address
+        : null;
+    if (!destination) return;
+    try {
+      setNavigating(true);
+      setError(null);
+      await openNavigation(destination);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to open navigation.");
+    } finally {
+      setNavigating(false);
+    }
+  }
+
   async function advance() {
     if (!delivery || busy) return;
     const next = NEXT_STATUS[delivery.status];
@@ -105,6 +130,7 @@ export default function CourierJobScreen() {
       const updated = await updateCourierDeliveryStatus(delivery.id, next);
       setDelivery(updated);
       setEvents(await getCourierEvents(delivery.id));
+      if (next === "COURIER_TO_PICKUP" && !sharing) await startSharing();
       if (next === "DELIVERED") stopSharing();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update delivery progress.");
@@ -114,6 +140,13 @@ export default function CourierJobScreen() {
   }
 
   const next = delivery ? NEXT_STATUS[delivery.status] : undefined;
+  const navigationLabel = delivery
+    ? PICKUP_NAV_STATUSES.has(delivery.status)
+      ? "Navigate to pickup"
+      : DROPOFF_NAV_STATUSES.has(delivery.status)
+        ? "Navigate to drop-off"
+        : null
+    : null;
 
   return (
     <Screen showBack fallbackRoute="/(driver)/work" title="Delivery job" showNotifications={false}>
@@ -124,19 +157,32 @@ export default function CourierJobScreen() {
         <>
           <View style={styles.heroCard}>
             <View style={styles.heroTop}>
-              <View style={styles.heroIcon}><MaterialCommunityIcons name="package-variant-closed" size={26} color={v2Theme.colors.brandStrong} /></View>
-              <View style={styles.heroCopy}><Text style={styles.heroEyebrow}>DELIVERY {delivery.id.slice(0, 8).toUpperCase()}</Text><Text style={styles.heroTitle}>{delivery.status.replaceAll("_", " ")}</Text></View>
+              <View style={styles.heroIcon}><MaterialCommunityIcons name={delivery.source_type === "FOOD_ORDER" ? "food-fork-drink" : "package-variant-closed"} size={26} color={v2Theme.colors.brandStrong} /></View>
+              <View style={styles.heroCopy}><Text style={styles.heroEyebrow}>{delivery.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"} · {delivery.id.slice(0, 8).toUpperCase()}</Text><Text style={styles.heroTitle}>{delivery.status.replaceAll("_", " ")}</Text></View>
+              {delivery.courier_payout_usd != null ? <View style={styles.payoutBadge}><Text style={styles.payoutLabel}>YOUR PAY</Text><Text style={styles.payoutValue}>${delivery.courier_payout_usd.toFixed(2)}</Text></View> : null}
             </View>
             <Text style={styles.heroRoute}>{delivery.pickup_address} → {delivery.dropoff_address}</Text>
-            <View style={styles.heroMeta}><Text style={styles.heroMetaText}>{delivery.package_type.replaceAll("_", " ")}</Text>{delivery.price_usd != null ? <><View style={styles.metaDot} /><Text style={styles.heroMetaText}>${delivery.price_usd.toFixed(2)}</Text></> : null}</View>
+            <View style={styles.heroMeta}>
+              {delivery.distance_km != null ? <Meta value={`${delivery.distance_km.toFixed(1)} km`} /> : null}
+              {delivery.estimated_duration_minutes != null ? <Meta value={`${delivery.estimated_duration_minutes} min route`} /> : null}
+              <Meta value={delivery.package_type.replaceAll("_", " ")} />
+            </View>
           </View>
 
           <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} height={300} />
 
+          {navigationLabel ? (
+            <Pressable accessibilityRole="button" onPress={navigate} disabled={navigating} style={({ pressed }) => [styles.navigationButton, navigating && styles.disabled, pressed && !navigating && styles.pressed]}>
+              <View style={styles.navigationIcon}><MaterialCommunityIcons name="navigation-variant" size={24} color="#FFFFFF" /></View>
+              <View style={styles.navigationCopy}><Text style={styles.navigationTitle}>{navigating ? "Opening maps…" : navigationLabel}</Text><Text style={styles.navigationBody}>{PICKUP_NAV_STATUSES.has(delivery.status) ? delivery.pickup_address : delivery.dropoff_address}</Text></View>
+              <MaterialCommunityIcons name="arrow-top-right" size={21} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
+
           {TRACKING_STATUSES.has(delivery.status) ? (
             <View style={styles.trackingCard}>
               <View style={[styles.trackingIcon, sharing && styles.trackingIconActive]}><MaterialCommunityIcons name="crosshairs-gps" size={24} color={sharing ? "#FFFFFF" : v2Theme.colors.brandStrong} /></View>
-              <View style={styles.trackingCopy}><Text style={styles.trackingTitle}>{sharing ? "Live location sharing" : "Share live courier location"}</Text><Text style={styles.trackingBody}>{sharing ? "Customer tracking updates while this screen stays active." : "Foreground GPS only. Start it when actively working this job."}</Text></View>
+              <View style={styles.trackingCopy}><Text style={styles.trackingTitle}>{sharing ? "Live location sharing" : "Share live courier location"}</Text><Text style={styles.trackingBody}>{sharing ? "Customer map receives foreground GPS updates while this job stays active." : "Start when working the job. Location sharing stops when this screen closes or delivery completes."}</Text></View>
               <Pressable accessibilityRole="button" onPress={sharing ? stopSharing : startSharing} style={[styles.trackingButton, sharing && styles.trackingButtonActive]}><Text style={[styles.trackingButtonText, sharing && styles.trackingButtonTextActive]}>{sharing ? "Stop" : "Start"}</Text></Pressable>
             </View>
           ) : null}
@@ -159,10 +205,12 @@ export default function CourierJobScreen() {
               <View><Text style={styles.primaryText}>{busy ? "Updating…" : nextLabel(next)}</Text><Text style={styles.primarySub}>{nextHelp(next)}</Text></View>
               <MaterialCommunityIcons name="arrow-right" size={22} color="#FFFFFF" />
             </Pressable>
+          ) : delivery.status === "DELIVERED" ? (
+            <View style={styles.completedCard}><View style={styles.completedIcon}><MaterialCommunityIcons name="check" size={24} color="#FFFFFF" /></View><View style={styles.completedCopy}><Text style={styles.completedTitle}>Delivery complete</Text><Text style={styles.completedBody}>{delivery.courier_payout_usd != null ? `$${delivery.courier_payout_usd.toFixed(2)} is recorded in your completed courier earnings.` : "This job is recorded as delivered."}</Text></View></View>
           ) : null}
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Job activity</Text>
+            <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Job activity</Text><Text style={styles.activityCount}>{events.length} events</Text></View>
             <View style={styles.eventCard}>
               {events.slice().reverse().slice(0, 10).map((event, index) => (
                 <View key={event.id} style={[styles.eventRow, index > 0 && styles.eventBorder]}>
@@ -176,6 +224,10 @@ export default function CourierJobScreen() {
       ) : null}
     </Screen>
   );
+}
+
+function Meta({ value }: { value: string }) {
+  return <View style={styles.metaPill}><Text style={styles.heroMetaText}>{value}</Text></View>;
 }
 
 function DetailRow({ icon, title, body }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; title: string; body: string }) {
@@ -192,11 +244,11 @@ function nextLabel(status: CourierStatus) {
 }
 
 function nextHelp(status: CourierStatus) {
-  if (status === "COURIER_TO_PICKUP") return "You are on the way to collect the package";
-  if (status === "PICKED_UP") return "Only confirm once the package is physically collected";
+  if (status === "COURIER_TO_PICKUP") return "Begin the pickup leg and live-location workflow";
+  if (status === "PICKED_UP") return "Only confirm after the package is physically collected";
   if (status === "IN_TRANSIT") return "Begin the delivery leg to the recipient";
   if (status === "ARRIVING") return "Use when you are close to the drop-off";
-  if (status === "DELIVERED") return "Finish the job after successful handover";
+  if (status === "DELIVERED") return "Finish only after successful handover";
   return "Update delivery progress";
 }
 
@@ -207,48 +259,71 @@ function formatTime(value: string) {
 }
 
 const styles = StyleSheet.create({
-  loading: { color: v2Theme.colors.inkSecondary, fontSize: 12 },
+  loading: { color: v2Theme.colors.inkSecondary, fontSize: 11 },
   errorCard: { minHeight: 58, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
-  errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, fontWeight: "700" },
-  retry: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" },
-  heroCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 17, gap: 12 },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 11 },
-  heroIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 10, fontWeight: "700" },
+  retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" },
+
+  heroCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 16, gap: 12 },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  heroIcon: { width: 49, height: 49, borderRadius: 17, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
   heroCopy: { flex: 1, gap: 3 },
-  heroEyebrow: { color: "rgba(255,255,255,0.58)", fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
-  heroTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "900", textTransform: "capitalize" },
-  heroRoute: { color: "rgba(255,255,255,0.9)", fontSize: 13, lineHeight: 19, fontWeight: "800" },
-  heroMeta: { flexDirection: "row", alignItems: "center", gap: 7 },
-  heroMetaText: { color: "rgba(255,255,255,0.58)", fontSize: 9, fontWeight: "800", textTransform: "capitalize" },
-  metaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.4)" },
-  trackingCard: { minHeight: 82, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  heroEyebrow: { color: "rgba(255,255,255,0.48)", fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
+  heroTitle: { color: "#FFFFFF", fontSize: 17, fontWeight: "900", textTransform: "capitalize" },
+  payoutBadge: { alignItems: "flex-end", gap: 2 },
+  payoutLabel: { color: "rgba(255,255,255,0.46)", fontSize: 7, fontWeight: "900" },
+  payoutValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },
+  heroRoute: { color: "rgba(255,255,255,0.9)", fontSize: 12, lineHeight: 18, fontWeight: "800" },
+  heroMeta: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  metaPill: { minHeight: 27, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 8, justifyContent: "center" },
+  heroMetaText: { color: "rgba(255,255,255,0.58)", fontSize: 8, fontWeight: "800", textTransform: "capitalize" },
+
+  navigationButton: { minHeight: 72, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brand, padding: 12, flexDirection: "row", alignItems: "center", gap: 11 },
+  navigationIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
+  navigationCopy: { flex: 1, gap: 3 },
+  navigationTitle: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+  navigationBody: { color: "rgba(255,255,255,0.72)", fontSize: 9, lineHeight: 13 },
+
+  trackingCard: { minHeight: 84, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
   trackingIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   trackingIconActive: { backgroundColor: v2Theme.colors.brand },
   trackingCopy: { flex: 1, gap: 3 },
-  trackingTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  trackingBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
+  trackingTitle: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
+  trackingBody: { color: v2Theme.colors.inkSecondary, fontSize: 8, lineHeight: 13 },
   trackingButton: { minHeight: 38, borderRadius: 14, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
   trackingButtonActive: { backgroundColor: v2Theme.colors.ink },
-  trackingButtonText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
+  trackingButtonText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },
   trackingButtonTextActive: { color: "#FFFFFF" },
+
   section: { gap: 10 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
+  activityCount: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "800" },
   detailCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, overflow: "hidden" },
   detailRow: { minHeight: 68, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line },
   detailIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   detailCopy: { flex: 1, gap: 3 },
-  detailTitle: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" },
-  detailBody: { color: v2Theme.colors.ink, fontSize: 12, lineHeight: 17, fontWeight: "800" },
-  primaryButton: { minHeight: 66, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  primaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  primarySub: { color: "rgba(255,255,255,0.72)", fontSize: 9, marginTop: 2, maxWidth: 270 },
+  detailTitle: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" },
+  detailBody: { color: v2Theme.colors.ink, fontSize: 11, lineHeight: 16, fontWeight: "800" },
+
+  primaryButton: { minHeight: 66, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.ink, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  primaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  primarySub: { color: "rgba(255,255,255,0.62)", fontSize: 8, marginTop: 2, maxWidth: 270 },
+
+  completedCard: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  completedIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
+  completedCopy: { flex: 1, gap: 3 },
+  completedTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  completedBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
+
   eventCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13 },
   eventRow: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10 },
   eventBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: v2Theme.colors.line },
   eventDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: v2Theme.colors.brand },
   eventCopy: { flex: 1, gap: 3 },
   eventTitle: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
-  eventTime: { color: v2Theme.colors.inkSecondary, fontSize: 9 },
-  disabled: { opacity: 0.42 },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
+  eventTime: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "700" },
+
+  disabled: { opacity: 0.45 },
+  pressed: { opacity: 0.72 },
 });
