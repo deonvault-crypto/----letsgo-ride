@@ -36,7 +36,7 @@ jobs:
         run: npm test -- --runInBand
 
   backend:
-    name: Backend import and syntax checks
+    name: Backend import, syntax and service tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,9 +56,14 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile Python package
-        run: python -m compileall -q app
+        run: python -m compileall -q app tests
 
       - name: Import API application
         env:
           ENABLE_DEMO_SEED: "false"
         run: python -c "from app.main import app; assert app.title == 'LetsGoRide API'"
+
+      - name: Platform V2 service tests
+        env:
+          ENABLE_DEMO_SEED: "false"
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
