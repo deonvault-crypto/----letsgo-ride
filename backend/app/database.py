@@ -43,6 +43,8 @@ COLLECTION_NAMES = [
     "food_order_events",
 ]
 
+PERSISTENT_DATABASE_ENVS = {"staging", "production"}
+
 
 class Database:
     def __init__(self) -> None:
@@ -55,8 +57,15 @@ class Database:
 
     async def connect(self) -> None:
         settings = get_settings()
+        app_env = str(settings.app_env or "development").strip().lower()
+        requires_persistent_database = app_env in PERSISTENT_DATABASE_ENVS
+
         if not settings.mongodb_uri:
             self.status = "not_configured"
+            if requires_persistent_database:
+                raise RuntimeError(
+                    f"MongoDB is required when APP_ENV={app_env}; MONGODB_URI is not configured."
+                )
             return
 
         try:
@@ -64,10 +73,14 @@ class Database:
             self.db = self.client[settings.mongodb_db_name]
             await self.client.admin.command("ping")
             self.status = "connected"
-        except Exception:
+        except Exception as exc:
             self.client = None
             self.db = None
             self.status = "unavailable"
+            if requires_persistent_database:
+                raise RuntimeError(
+                    f"MongoDB is required when APP_ENV={app_env}, but the connection is unavailable."
+                ) from exc
 
     async def close(self) -> None:
         if self.client:
