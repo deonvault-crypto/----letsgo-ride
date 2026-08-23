@@ -57,7 +57,7 @@ export default function EmailLoginScreen() {
       return;
     }
     if (role === "courier") {
-      router.replace("/(driver)/work" as never);
+      router.replace("/(courier)/home" as never);
       return;
     }
     if (role === "merchant") {
