@@ -1,8 +1,30 @@
 import { requestData } from "./api";
-import { GeocodeResult, RouteResult, RoutingPoint, RoutingStatus } from "../types/routing.types";
+import {
+  GeocodeResult,
+  PlaceDetail,
+  PlaceSuggestion,
+  RouteResult,
+  RoutingPoint,
+  RoutingStatus,
+} from "../types/routing.types";
 
 export function getRoutingStatus() {
   return requestData<RoutingStatus>({ method: "GET", url: "/routing/status" });
+}
+
+export function autocompletePlaces(query: string) {
+  return requestData<PlaceSuggestion[]>({
+    method: "POST",
+    url: "/routing/places/autocomplete",
+    data: { query },
+  });
+}
+
+export function getPlaceDetail(placeId: string) {
+  return requestData<PlaceDetail>({
+    method: "GET",
+    url: `/routing/places/${encodeURIComponent(placeId)}`,
+  });
 }
 
 export function geocodeAddress(address: string) {
