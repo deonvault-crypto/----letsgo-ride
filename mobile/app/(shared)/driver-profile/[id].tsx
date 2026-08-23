@@ -42,7 +42,7 @@ export default function DriverPublicProfileScreen() {
 
   if (loading) {
     return (
-      <Screen title="Driver profile" showBack fallbackRoute="/(passenger)/home" navRole="passenger">
+      <Screen title="Driver profile" showBack fallbackRoute="/(customer)/home" navRole="customer">
         <LoadingState label="Loading driver profile..." />
       </Screen>
     );
@@ -50,7 +50,7 @@ export default function DriverPublicProfileScreen() {
 
   if (error || !profile) {
     return (
-      <Screen title="Driver profile" showBack fallbackRoute="/(passenger)/home" navRole="passenger">
+      <Screen title="Driver profile" showBack fallbackRoute="/(customer)/home" navRole="customer">
         <ErrorState message={error || "Driver profile not found."} onRetry={load} />
       </Screen>
     );
@@ -62,7 +62,7 @@ export default function DriverPublicProfileScreen() {
   const completedTrips = profile.completed_trips_count || 0;
 
   return (
-    <Screen title="Driver profile" showBack fallbackRoute="/(passenger)/home" navRole="passenger">
+    <Screen title="Driver profile" showBack fallbackRoute="/(customer)/home" navRole="customer">
       <View style={styles.hero}>
         <Avatar name={profile.name} imageUri={profile.profile_photo_url || undefined} size={94} />
         <View style={styles.heroCopy}>
@@ -119,7 +119,7 @@ export default function DriverPublicProfileScreen() {
       <View style={styles.actions}>
         <AppButton title="Report safety issue" variant="danger" onPress={() => router.push(`/(shared)/report?rideId=${rideId || ""}` as never)} />
         {rideId ? (
-          <AppButton title="Back to ride details" variant="secondary" onPress={() => router.replace(`/(passenger)/ride/${rideId}` as never)} />
+          <AppButton title="Back to ride details" variant="secondary" onPress={() => router.replace(`/(customer)/ride/${rideId}` as never)} />
         ) : (
           <AppButton title="Back" variant="secondary" onPress={() => router.back()} />
         )}
