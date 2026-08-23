@@ -53,7 +53,21 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <FoodBasketProvider>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, animation: "none", animationTypeForReplace: "pop" }} />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "fade",
+            animationDuration: 220,
+            animationTypeForReplace: "push",
+          }}
+        >
+          <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
+          <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
+          <Stack.Screen name="(passenger)" options={{ gestureEnabled: false, animation: "fade" }} />
+          <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
+          <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
+          <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
+        </Stack>
       </FoodBasketProvider>
     </SafeAreaProvider>
   );
