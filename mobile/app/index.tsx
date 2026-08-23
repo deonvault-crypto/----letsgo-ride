@@ -12,8 +12,10 @@ export default function IndexScreen() {
     async function decideRoute() {
       const session = await hasSession();
 
+      // Customer discovery is public. Authentication is requested only when a
+      // customer tries to book, order, send, message, pay or save something.
       if (!session) {
-        router.replace("/(passenger)/home" as never);
+        router.replace("/(customer)/home" as never);
         return;
       }
 
@@ -23,10 +25,10 @@ export default function IndexScreen() {
         else if (user.role === "driver") router.replace("/(driver)/home" as never);
         else if (user.role === "courier") router.replace("/(courier)/home" as never);
         else if (user.role === "merchant") router.replace("/(merchant)/home" as never);
-        else router.replace("/(passenger)/home" as never);
+        else router.replace("/(customer)/home" as never);
       } catch {
         await logout();
-        router.replace("/(passenger)/home" as never);
+        router.replace("/(customer)/home" as never);
       }
     }
     decideRoute();
