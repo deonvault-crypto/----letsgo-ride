@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -8,6 +9,9 @@ from app.database import database
 from app.models.user import normalize_email, validate_strong_password
 from app.services.email_service import send_password_reset_email, send_verification_email
 from app.utils import new_id, now_iso
+
+
+logger = logging.getLogger(__name__)
 
 
 class DuplicateVerifiedEmailError(Exception):
@@ -133,6 +137,12 @@ async def start_email_verification(user: Dict[str, Any], force: bool = False) ->
     updated = await database.update_one("users", user["id"], updates) or {**user, **updates}
     sent = await send_verification_email(updated["email"], code)
     if not sent:
+        settings = get_settings()
+        if settings.staging_email_mock_allowed:
+            logger.warning(
+                "Email delivery unavailable in non-production; explicit staging mock verification fallback is active."
+            )
+            return updated
         raise RuntimeError("Email verification could not be sent.")
     return updated
 
