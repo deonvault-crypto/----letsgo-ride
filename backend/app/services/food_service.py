@@ -10,18 +10,27 @@ from app.utils import new_id, now_iso
 FINAL_ORDER_STATUSES = {"DELIVERED", "CANCELLED", "REJECTED"}
 CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES = {"PLACED", "ACCEPTED"}
 PRE_PICKUP_DELIVERY_STATUSES = {"REQUESTED", "MATCHING", "ASSIGNED", "COURIER_TO_PICKUP"}
+PUBLIC_RESTAURANT_STATUSES = {"ACTIVE", "COMING_SOON"}
 
 
 async def list_restaurants() -> List[Dict[str, Any]]:
     restaurants = await database.find_many("restaurants")
-    public = [item for item in restaurants if item.get("status") == "ACTIVE"]
-    return sorted(public, key=lambda item: str(item.get("name") or "").lower())
+    public = [item for item in restaurants if item.get("status") in PUBLIC_RESTAURANT_STATUSES]
+    for item in public:
+        item["is_orderable"] = bool(item.get("status") == "ACTIVE" and item.get("is_accepting_orders", True))
+    return sorted(
+        public,
+        key=lambda item: (
+            0 if item.get("status") == "ACTIVE" else 1,
+            str(item.get("name") or "").lower(),
+        ),
+    )
 
 
 async def get_restaurant(restaurant_id: str) -> Dict[str, Any]:
     restaurant = await database.find_one("restaurants", {"id": restaurant_id})
     if not restaurant or restaurant.get("status") != "ACTIVE":
-        raise ValueError("Restaurant not found.")
+        raise ValueError("Restaurant not found or not yet available for ordering.")
     return restaurant
 
 
@@ -96,13 +105,9 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "customer_name": user.get("name") or payload.get("recipient_name"),
         "restaurant_id": restaurant["id"],
         "restaurant_name": restaurant.get("name"),
-        # status remains the simple customer-facing summary. Operational state is
-        # split below so restaurant preparation and courier movement can overlap.
         "status": "PLACED",
         "restaurant_status": "PLACED",
         "fulfillment_status": "NOT_STARTED",
-        # A real payment provider has not been wired yet. Keeping this explicit
-        # prevents staging/demo checkout from being mistaken for a real charge.
         "payment_status": "NOT_CONFIGURED",
         "items": item_snapshots,
         "subtotal_usd": round(subtotal, 2),
