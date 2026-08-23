@@ -79,8 +79,8 @@ export default function ReviewScreen() {
         reviewerRole === "driver" && params.tripId
           ? `/(driver)/trip/${params.tripId}` as never
           : params.tripId
-            ? `/(passenger)/ride/${params.tripId}` as never
-            : "/(passenger)/my-trips" as never,
+            ? `/(customer)/ride/${params.tripId}` as never
+            : "/(customer)/my-trips" as never,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to submit review.");
@@ -101,7 +101,7 @@ export default function ReviewScreen() {
   }
 
   return (
-    <Screen title="Review" showBack fallbackRoute={reviewerRole === "driver" ? "/(driver)/trips" : "/(passenger)/my-trips"} navRole={reviewerRole === "driver" ? "driver" : "passenger"}>
+    <Screen title="Review" showBack fallbackRoute={reviewerRole === "driver" ? "/(driver)/trips" : "/(customer)/my-trips"} navRole={reviewerRole === "driver" ? "driver" : "customer"}>
       <View style={styles.header}>
         <Text style={styles.title}>How was your trip?</Text>
         <Text style={styles.body}>Share a quick review for {revieweeName}. Private safety reports are not shown publicly.</Text>
