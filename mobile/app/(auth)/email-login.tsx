@@ -19,7 +19,7 @@ import { normalizeEmail } from "../../utils/passwordRules";
 
 export default function EmailLoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string }>();
   const [email, setEmail] = useState(params.email || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -41,10 +41,32 @@ export default function EmailLoginScreen() {
     loadBiometrics().catch(() => setBiometricReady(false));
   }, []);
 
+  function safeCustomerReturnTo() {
+    const value = typeof params.returnTo === "string" ? params.returnTo : "";
+    const allowed = ["/(shared)/courier", "/(shared)/food", "/(passenger)/"];
+    return allowed.some((prefix) => value === prefix || value.startsWith(prefix)) ? value : null;
+  }
+
   function routeForRole(role?: string | null) {
-    if (role === "admin") router.replace("/(admin)/dashboard" as never);
-    else if (role === "driver") router.replace("/(driver)/home" as never);
-    else router.replace("/(passenger)/home" as never);
+    if (role === "admin") {
+      router.replace("/(admin)/dashboard" as never);
+      return;
+    }
+    if (role === "driver") {
+      router.replace("/(driver)/home" as never);
+      return;
+    }
+    if (role === "courier") {
+      router.replace("/(driver)/work" as never);
+      return;
+    }
+    if (role === "merchant") {
+      router.replace("/(merchant)/home" as never);
+      return;
+    }
+
+    const returnTo = safeCustomerReturnTo();
+    router.replace((returnTo || "/(passenger)/home") as never);
   }
 
   async function continueAfterAuth(role?: string | null) {
@@ -121,7 +143,7 @@ export default function EmailLoginScreen() {
   const needsVerification = error.toLowerCase().includes("verify your email");
 
   return (
-    <Screen title="Login" showBack fallbackRoute="/(auth)/welcome" showNotifications={false}>
+    <Screen title="Login" showBack fallbackRoute="/(passenger)/home" showNotifications={false}>
       <Modal visible={notificationIntroOpen} transparent animationType="fade" onRequestClose={() => finishNotificationIntro(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -140,8 +162,8 @@ export default function EmailLoginScreen() {
         <BrandLogo size="regular" />
       </View>
       <View style={styles.card}>
-        <Text style={styles.title}>Login with email</Text>
-        <Text style={styles.body}>Access your passenger or driver account. You can add a phone number later.</Text>
+        <Text style={styles.title}>Welcome back</Text>
+        <Text style={styles.body}>Sign in to your LetsGoRide account. Customer, Driver, Courier and Merchant accounts stay separate.</Text>
         <AppInput
           label="Email"
           value={email}
@@ -177,15 +199,19 @@ export default function EmailLoginScreen() {
             <AppButton
               title="Go to email verification"
               variant="ghost"
-              onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail } } as never)}
+              onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail, returnTo: params.returnTo } } as never)}
             />
           </View>
         ) : null}
         <AppButton title="Login" loading={loading} onPress={submit} disabled={!normalizedEmail || password.length < 8} />
         {biometricReady ? <AppButton title={biometricText} variant="secondary" onPress={biometricLogin} loading={loading} /> : null}
-        <AppButton title="Create account" variant="secondary" onPress={() => router.push("/(auth)/email-register" as never)} />
+        <AppButton
+          title="Create customer account"
+          variant="secondary"
+          onPress={() => router.push({ pathname: "/(auth)/email-register", params: { returnTo: params.returnTo } } as never)}
+        />
       </View>
-      <Text style={styles.footer}>Proudly Zimbabwean · Built for safer shared rides</Text>
+      <Text style={styles.footer}>Proudly Zimbabwean · Built for safer shared rides and deliveries</Text>
     </Screen>
   );
 }
