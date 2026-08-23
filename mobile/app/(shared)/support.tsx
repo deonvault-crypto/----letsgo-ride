@@ -15,7 +15,7 @@ import { mySupportMessages, sendSupportMessage, SupportMessage } from "../../ser
 import { formatStatus } from "../../utils/formatStatus";
 
 export default function SupportScreen() {
-  const [subject, setSubject] = useState("Ride support");
+  const [subject, setSubject] = useState("LetsGoRide support");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [saving, setSaving] = useState(false);
@@ -46,11 +46,10 @@ export default function SupportScreen() {
   }
 
   return (
-    <Screen title="Support" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
+    <Screen title="Support" showBack fallbackRoute="/(shared)/account" navRole="customer">
       <Text style={styles.title}>Support</Text>
       <Text style={styles.body}>
-        Send a message to LetsGoRide support for route, account,
-        verification, or safety help. You can also reach us at {supportEmail}.
+        Send a message to LetsGoRide support for Ride, Food, Courier, account, payment, safety, or delivery help. You can also reach us at {supportEmail}.
       </Text>
       <AppInput label="Subject" value={subject} onChangeText={setSubject} />
       <AppInput label="Message" value={message} onChangeText={setMessage} placeholder="How can we help?" multiline />
