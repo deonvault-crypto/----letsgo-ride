@@ -186,14 +186,16 @@ describe("settings account controls", () => {
 
     fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE");
 
-    let enabledConfirmationButton: ReturnType<typeof screen.getAllByRole>[number] | undefined;
     await waitFor(() => {
-      enabledConfirmationButton = screen
+      const confirmationButton = screen
         .getAllByRole("button", { name: "Delete account" })
         .find((button) => button.props.disabled === false);
-      expect(enabledConfirmationButton).toBeDefined();
+      expect(confirmationButton).toBeDefined();
     });
 
+    const enabledConfirmationButton = screen
+      .getAllByRole("button", { name: "Delete account" })
+      .find((button) => button.props.disabled === false);
     fireEvent.press(enabledConfirmationButton!);
 
     await waitFor(() => {
