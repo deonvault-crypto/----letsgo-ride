@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from app.database import database
 from app.services.delivery_security_service import create_delivery_handoff
+from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
@@ -66,11 +67,11 @@ async def ensure_food_order_delivery(
     *,
     actor_user_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Create exactly one courier fulfillment record after the restaurant accepts the order.
+    """Create exactly one courier fulfillment record when checkout confirms the order.
 
-    Restaurant preparation and courier matching intentionally run in parallel. The
-    restaurant can continue PREPARING -> READY_FOR_PICKUP while dispatch independently
-    moves REQUESTED -> MATCHING -> COURIER_TO_PICKUP.
+    Restaurant preparation and courier matching run in parallel. The restaurant moves
+    PREPARING -> READY_FOR_PICKUP while dispatch independently progresses from matching
+    through pickup, delivery and secure handoff.
     """
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
@@ -223,10 +224,30 @@ async def sync_food_order_from_delivery(
         updates["delivered_at"] = delivery.get("delivered_at") or now_iso()
 
     updated = await database.update_one("food_orders", order_id, updates)
-    if updated:
-        await _append_food_event(
-            order_id,
-            f"FULFILLMENT_{target}",
-            actor_user_id=actor_user_id,
-            data={"delivery_id": delivery.get("id"), "source": "courier"},
-        )
+    if not updated:
+        return
+
+    await _append_food_event(
+        order_id,
+        f"FULFILLMENT_{target}",
+        actor_user_id=actor_user_id,
+        data={"delivery_id": delivery.get("id"), "source": "courier"},
+    )
+
+    if target in {"PICKED_UP", "DELIVERED"}:
+        restaurant = await database.find_one("restaurants", {"id": order.get("restaurant_id")})
+        merchant_user_id = str(restaurant.get("owner_user_id") or "") if restaurant else ""
+        if merchant_user_id:
+            title = "Order collected" if target == "PICKED_UP" else "Order delivered"
+            body = (
+                "The courier collected this order from the restaurant."
+                if target == "PICKED_UP"
+                else "The customer handoff was verified and the order is complete."
+            )
+            await create_app_notification(
+                merchant_user_id,
+                "food_update",
+                title,
+                body,
+                {"order_id": order_id, "delivery_id": delivery.get("id")},
+            )
