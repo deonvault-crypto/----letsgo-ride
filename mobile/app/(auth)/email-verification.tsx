@@ -18,7 +18,7 @@ import { normalizeEmail } from "../../utils/passwordRules";
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string }>();
   const [email, setEmail] = useState(params.email || "");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,10 +32,30 @@ export default function EmailVerificationScreen() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  function safeCustomerReturnTo() {
+    const value = typeof params.returnTo === "string" ? params.returnTo : "";
+    const allowed = ["/(shared)/courier", "/(shared)/food", "/(passenger)/"];
+    return allowed.some((prefix) => value === prefix || value.startsWith(prefix)) ? value : null;
+  }
+
   function routeForRole(role?: string | null) {
-    if (role === "admin") router.replace("/(admin)/dashboard" as never);
-    else if (role === "driver") router.replace("/(driver)/home" as never);
-    else router.replace("/(passenger)/home" as never);
+    if (role === "admin") {
+      router.replace("/(admin)/dashboard" as never);
+      return;
+    }
+    if (role === "driver") {
+      router.replace("/(driver)/home" as never);
+      return;
+    }
+    if (role === "courier") {
+      router.replace("/(driver)/work" as never);
+      return;
+    }
+    if (role === "merchant") {
+      router.replace("/(merchant)/home" as never);
+      return;
+    }
+    router.replace((safeCustomerReturnTo() || "/(passenger)/home") as never);
   }
 
   async function continueAfterVerification(role?: string | null) {
@@ -105,7 +125,7 @@ export default function EmailVerificationScreen() {
       </View>
       <View style={styles.copy}>
         <Text style={styles.title}>Verify your email</Text>
-        <Text style={styles.body}>We sent a 6-digit code to your email. Enter the code to activate your LetsGoRide account.</Text>
+        <Text style={styles.body}>We sent a 6-digit code to your email. Enter it to activate your LetsGoRide customer account.</Text>
       </View>
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" />
       <AppInput label="6-digit code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} leftIcon="numeric" />
@@ -118,12 +138,12 @@ export default function EmailVerificationScreen() {
           <View style={styles.modalCard}>
             <BrandLogo size="regular" />
             <Text style={styles.modalTitle}>Account verified</Text>
-            <Text style={styles.modalBody}>Welcome to LetsGoRide.</Text>
+            <Text style={styles.modalBody}>You’re ready. We’ll take you back to what you were doing.</Text>
             <AppButton
               title={verifiedWithSession ? "Continue" : "Continue to login"}
               onPress={() => {
                 if (verifiedWithSession) continueAfterVerification(verifiedRole);
-                else router.replace({ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email) } } as never);
+                else router.replace({ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email), returnTo: params.returnTo } } as never);
               }}
             />
           </View>
