@@ -6,8 +6,6 @@ from app.models.courier import GeoPoint
 
 
 FoodOrderStatus = Literal[
-    "PLACED",
-    "ACCEPTED",
     "PREPARING",
     "READY_FOR_PICKUP",
     "COURIER_ASSIGNED",
@@ -30,7 +28,7 @@ class FoodOrderItemBody(BaseModel):
 class FoodOrderCreateBody(BaseModel):
     restaurant_id: str = Field(min_length=1)
     delivery_address: str = Field(min_length=3, max_length=240)
-    delivery_location: Optional[GeoPoint] = None
+    delivery_location: GeoPoint
     recipient_name: str = Field(min_length=2, max_length=120)
     recipient_phone: str = Field(min_length=5, max_length=40)
     items: List[FoodOrderItemBody] = Field(min_length=1, max_length=50)
