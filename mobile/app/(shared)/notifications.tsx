@@ -38,7 +38,16 @@ export default function NotificationsScreen() {
     await markNotificationRead(notification.id);
     await load();
     const data = notification.data || {};
+    const target = typeof data.notification_target === "string" ? data.notification_target : "";
 
+    if (target === "merchant_order" && typeof data.restaurant_id === "string") {
+      router.push(`/(merchant)/restaurant/${data.restaurant_id}` as never);
+      return;
+    }
+    if (target === "courier_delivery" && typeof data.delivery_id === "string") {
+      router.push(`/(courier)/delivery/${data.delivery_id}` as never);
+      return;
+    }
     if (typeof data.conversation_id === "string") {
       router.push(`/(shared)/conversation/${data.conversation_id}` as never);
       return;
@@ -135,72 +144,17 @@ function iconForNotification(type: string): keyof typeof MaterialCommunityIcons.
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  title: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 30,
-  },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  notificationRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(17,139,68,0.1)",
-  },
-  notificationCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  notificationHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.primaryGreen,
-  },
-  unread: {
-    borderColor: colors.primaryGreen,
-    backgroundColor: colors.elevated,
-  },
-  pressed: {
-    transform: [{ scale: 0.99 }],
-  },
-  cardTitle: {
-    flex: 1,
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 16,
-  },
-  body: {
-    color: colors.mutedText,
-    lineHeight: 22,
-  },
-  time: {
-    color: colors.mutedText,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  title: { color: colors.whiteText, fontWeight: "900", fontSize: 30 },
+  card: { backgroundColor: colors.card, borderRadius: 22, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.xs },
+  notificationRow: { flexDirection: "row", gap: spacing.md },
+  iconWrap: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,139,68,0.1)" },
+  notificationCopy: { flex: 1, gap: 4 },
+  notificationHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primaryGreen },
+  unread: { borderColor: colors.primaryGreen, backgroundColor: colors.elevated },
+  pressed: { transform: [{ scale: 0.99 }] },
+  cardTitle: { flex: 1, color: colors.whiteText, fontWeight: "900", fontSize: 16 },
+  body: { color: colors.mutedText, lineHeight: 22 },
+  time: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
 });
