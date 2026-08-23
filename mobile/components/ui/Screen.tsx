@@ -19,7 +19,7 @@ import { Header } from "../layout/Header";
 type ScreenProps = {
   children: ReactNode;
   title?: string;
-  navRole?: "passenger" | "driver";
+  navRole?: "customer" | "driver" | "passenger";
   showHeader?: boolean;
   showBack?: boolean;
   fallbackRoute?: Href;
@@ -80,24 +80,9 @@ export function Screen({
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.appBackground,
-  },
-  keyboard: {
-    flex: 1,
-  },
-  frame: {
-    flex: 1,
-    paddingHorizontal: spacing.screen,
-  },
-  scrollContent: {
-    paddingTop: spacing.md,
-    gap: spacing.lg,
-  },
-  staticContent: {
-    flex: 1,
-    paddingTop: spacing.md,
-    gap: spacing.lg,
-  },
+  safe: { flex: 1, backgroundColor: colors.appBackground },
+  keyboard: { flex: 1 },
+  frame: { flex: 1, paddingHorizontal: spacing.screen },
+  scrollContent: { paddingTop: spacing.md, gap: spacing.lg },
+  staticContent: { flex: 1, paddingTop: spacing.md, gap: spacing.lg },
 });
