@@ -7,6 +7,7 @@ from app.services.fulfillment_link_service import (
     sync_food_order_from_delivery,
     sync_food_order_pricing,
 )
+from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
@@ -32,6 +33,16 @@ ALLOWED_TRANSITIONS = {
     "FAILED": set(),
 }
 
+CUSTOMER_STATUS_NOTIFICATIONS = {
+    "ASSIGNED": ("Courier assigned", "A courier accepted your delivery."),
+    "COURIER_TO_PICKUP": ("Courier heading to pickup", "Your courier is on the way to the pickup point."),
+    "PICKED_UP": ("Package collected", "Your courier confirmed pickup of the package."),
+    "IN_TRANSIT": ("Your package is on the way", "The delivery is now moving toward the recipient."),
+    "ARRIVING": ("Courier arriving soon", "The courier is close to the drop-off point."),
+    "DELIVERED": ("Delivery complete", "Your package was marked as delivered."),
+    "FAILED": ("Delivery needs attention", "Something interrupted this delivery. Open LetsGoRide for details."),
+}
+
 
 def _user_id(user: Dict[str, Any]) -> str:
     return str(user.get("id") or "")
@@ -52,6 +63,21 @@ def _can_view(delivery: Dict[str, Any], user: Dict[str, Any]) -> bool:
 
 def _can_operate_as_courier(delivery: Dict[str, Any], user: Dict[str, Any]) -> bool:
     return _is_admin(user) or delivery.get("courier_user_id") == _user_id(user)
+
+
+async def _notify_customer_status(delivery: Dict[str, Any], status: str) -> None:
+    sender_user_id = str(delivery.get("sender_user_id") or "")
+    notification = CUSTOMER_STATUS_NOTIFICATIONS.get(status)
+    if not sender_user_id or not notification:
+        return
+    title, body = notification
+    await create_app_notification(
+        sender_user_id,
+        "courier_update",
+        title,
+        body,
+        {"delivery_id": delivery.get("id"), "courier_status": status},
+    )
 
 
 async def append_delivery_event(
@@ -121,11 +147,10 @@ async def list_user_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     user_id = _user_id(user)
     if _is_admin(user):
         deliveries = await database.find_many("courier_deliveries")
+    elif user.get("role") == "courier":
+        deliveries = await database.find_many("courier_deliveries", {"courier_user_id": user_id})
     else:
-        sent = await database.find_many("courier_deliveries", {"sender_user_id": user_id})
-        assigned = await database.find_many("courier_deliveries", {"courier_user_id": user_id})
-        by_id = {item["id"]: item for item in [*sent, *assigned]}
-        deliveries = list(by_id.values())
+        deliveries = await database.find_many("courier_deliveries", {"sender_user_id": user_id})
     return sorted(deliveries, key=lambda item: str(item.get("created_at") or ""), reverse=True)
 
 
@@ -166,6 +191,15 @@ async def cancel_delivery(
         actor_user_id=_user_id(user),
         data={"reason": reason},
     )
+    courier_user_id = str(updated.get("courier_user_id") or "")
+    if courier_user_id:
+        await create_app_notification(
+            courier_user_id,
+            "courier_update",
+            "Delivery cancelled",
+            "The customer cancelled this job before pickup.",
+            {"delivery_id": delivery_id, "courier_status": "CANCELLED"},
+        )
     return updated
 
 
@@ -227,7 +261,7 @@ async def assign_delivery(
         raise ValueError("This delivery is already assigned to another courier.")
 
     courier = await database.find_one("users", {"id": courier_user_id})
-    if not courier:
+    if not courier or courier.get("role") != "courier":
         raise ValueError("Courier account not found.")
 
     now = now_iso()
@@ -254,6 +288,14 @@ async def assign_delivery(
         "COURIER_ASSIGNED",
         actor_user_id=_user_id(actor),
         data={"courier_user_id": courier_user_id, "assignment_method": "admin"},
+    )
+    await _notify_customer_status(updated, "ASSIGNED")
+    await create_app_notification(
+        courier_user_id,
+        "courier_update",
+        "Delivery assigned",
+        "A delivery has been assigned to your Courier account.",
+        {"delivery_id": delivery_id, "courier_status": "ASSIGNED"},
     )
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(actor))
     return updated
@@ -298,6 +340,7 @@ async def update_delivery_status(
         actor_user_id=_user_id(user),
         data={"from": current, "to": status, "note": note},
     )
+    await _notify_customer_status(updated, status)
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     return updated
 
