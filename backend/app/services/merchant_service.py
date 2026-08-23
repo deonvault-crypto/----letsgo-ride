@@ -10,7 +10,7 @@ from app.utils import new_id, now_iso
 
 
 MERCHANT_ORDER_TRANSITIONS = {
-    "PLACED": {"ACCEPTED", "REJECTED"},
+    "PLACED": {"ACCEPTED", "PREPARING", "REJECTED"},
     "ACCEPTED": {"PREPARING"},
     "PREPARING": {"READY_FOR_PICKUP"},
 }
@@ -203,10 +203,14 @@ async def update_restaurant_order_status(
         "restaurant_status": status,
         "updated_at": now,
     }
-    # Keep the simple customer summary aligned with restaurant preparation until
-    # the courier layer eventually marks the overall order DELIVERED.
     if status in {"ACCEPTED", "PREPARING", "READY_FOR_PICKUP", "REJECTED"}:
         updates["status"] = status
+    if current == "PLACED" and status in {"ACCEPTED", "PREPARING"}:
+        updates["accepted_at"] = now
+    if status == "PREPARING":
+        updates["preparing_at"] = now
+    if status == "READY_FOR_PICKUP":
+        updates["ready_for_pickup_at"] = now
     if status == "REJECTED":
         updates["fulfillment_status"] = "NOT_STARTED"
         updates["rejected_at"] = now
@@ -219,6 +223,14 @@ async def update_restaurant_order_status(
     if not updated:
         raise ValueError("Order changed while it was being updated. Refresh and try again.")
 
+    if current == "PLACED" and status == "PREPARING":
+        await append_order_event(
+            order_id,
+            "RESTAURANT_ACCEPTED",
+            actor_user_id=_user_id(user),
+            data={"from": current, "to": "ACCEPTED", "note": note},
+        )
+
     await append_order_event(
         order_id,
         f"RESTAURANT_{status}",
@@ -226,10 +238,10 @@ async def update_restaurant_order_status(
         data={"from": current, "to": status, "note": note},
     )
 
-    # Dispatch starts as soon as the restaurant accepts. Preparation and courier
-    # matching then progress independently, which avoids waiting until food is cold
-    # before LetsGoRide begins looking for a courier.
-    if status == "ACCEPTED":
+    # Accepting an order is the dispatch trigger. The merchant UI now combines
+    # acceptance and prep start into one action, while existing ACCEPTED orders
+    # remain supported for backward compatibility.
+    if current == "PLACED" and status in {"ACCEPTED", "PREPARING"}:
         delivery = await ensure_food_order_delivery(order_id, actor_user_id=_user_id(user))
         quoted = await maybe_auto_quote_delivery(delivery["id"], actor_user_id=_user_id(user))
         await append_order_event(
