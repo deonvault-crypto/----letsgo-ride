@@ -48,7 +48,7 @@ export default function EmailVerificationScreen() {
       return;
     }
     if (role === "courier") {
-      router.replace("/(driver)/work" as never);
+      router.replace("/(courier)/home" as never);
       return;
     }
     if (role === "merchant") {
@@ -125,7 +125,7 @@ export default function EmailVerificationScreen() {
       </View>
       <View style={styles.copy}>
         <Text style={styles.title}>Verify your email</Text>
-        <Text style={styles.body}>We sent a 6-digit code to your email. Enter it to activate your LetsGoRide customer account.</Text>
+        <Text style={styles.body}>We sent a 6-digit code to your email. Enter it to activate your LetsGoRide account.</Text>
       </View>
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" />
       <AppInput label="6-digit code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} leftIcon="numeric" />
@@ -138,7 +138,7 @@ export default function EmailVerificationScreen() {
           <View style={styles.modalCard}>
             <BrandLogo size="regular" />
             <Text style={styles.modalTitle}>Account verified</Text>
-            <Text style={styles.modalBody}>You’re ready. We’ll take you back to what you were doing.</Text>
+            <Text style={styles.modalBody}>You’re ready. We’ll take you to the correct LetsGoRide product.</Text>
             <AppButton
               title={verifiedWithSession ? "Continue" : "Continue to login"}
               onPress={() => {
