@@ -1,9 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
-import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import {
@@ -80,7 +79,7 @@ export default function CourierHomeScreen() {
         setDeliveries(nextDeliveries);
         setEarnings(nextEarnings);
       } catch {
-        // Keep last known state on transient network failures.
+        // Preserve the last known workspace during short network interruptions.
       }
     }, 12000);
     return () => clearInterval(timer);
@@ -121,18 +120,21 @@ export default function CourierHomeScreen() {
   return (
     <Screen showNotifications={false}>
       <View style={styles.hero}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroMark}><MaterialCommunityIcons name="bike-fast" size={27} color="#FFFFFF" /></View>
+          <View style={[styles.statusPill, online && styles.statusPillOnline]}>
+            <View style={[styles.statusDot, online && styles.statusDotOnline]} />
+            <Text style={[styles.statusText, online && styles.statusTextOnline]}>{online ? "ONLINE" : "OFFLINE"}</Text>
+          </View>
+        </View>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>LETSGORIDE COURIER</Text>
-          <Text style={styles.title}>Deliver. Earn. Stay focused.</Text>
-          <Text style={styles.body}>This workspace is only for courier work. No ride-posting or customer mode lives here.</Text>
-        </View>
-        <View style={[styles.statusPill, online && styles.statusPillOnline]}>
-          <View style={[styles.statusDot, online && styles.statusDotOnline]} />
-          <Text style={[styles.statusText, online && styles.statusTextOnline]}>{online ? "ONLINE" : "OFFLINE"}</Text>
+          <Text style={styles.title}>{online ? "Ready for your next delivery." : "Your delivery day starts here."}</Text>
+          <Text style={styles.body}>{online ? "Nearby paid jobs will appear below. Accept one and we’ll guide the journey from pickup to verified handoff." : "Go online when you’re ready to receive nearby delivery work."}</Text>
         </View>
       </View>
 
-      {loading ? <LoadingState label="Loading courier workspace..." /> : null}
+      {loading ? <WorkspaceLoading /> : null}
 
       {error ? (
         <Pressable accessibilityRole="button" onPress={load} style={styles.errorCard}>
@@ -144,141 +146,229 @@ export default function CourierHomeScreen() {
 
       {!loading && !profile ? (
         <View style={styles.setupCard}>
-          <View style={styles.setupIcon}><MaterialCommunityIcons name="motorbike" size={28} color={v2Theme.colors.brandStrong} /></View>
-          <Text style={styles.setupTitle}>Set up your courier profile</Text>
-          <Text style={styles.setupBody}>Choose your delivery vehicle and submit your courier profile for approval.</Text>
+          <View style={styles.setupIcon}><MaterialCommunityIcons name="motorbike" size={29} color={v2Theme.colors.brandStrong} /></View>
+          <Text style={styles.setupTitle}>Become a LetsGoRide Courier</Text>
+          <Text style={styles.setupBody}>Add your delivery vehicle and courier details. Once approved, you can go online and receive paid jobs.</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(courier)/onboarding" as never)} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Start courier setup</Text>
+            <Text style={styles.primaryButtonText}>Set up courier account</Text>
             <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
           </Pressable>
         </View>
       ) : null}
 
       {profile ? (
-        <View style={styles.controlCard}>
+        <View style={[styles.controlCard, online && styles.controlCardOnline]}>
+          <View style={[styles.controlIcon, online && styles.controlIconOnline]}>
+            <MaterialCommunityIcons name={online ? "radar" : "power"} size={25} color={online ? "#FFFFFF" : v2Theme.colors.brandStrong} />
+          </View>
           <View style={styles.controlCopy}>
-            <Text style={styles.controlLabel}>Courier verification</Text>
-            <Text style={styles.controlValue}>{profile.status.replaceAll("_", " ").toLowerCase()}</Text>
-            <Text style={styles.controlHint}>{approved ? "You can go online and receive nearby delivery offers." : "Approval is required before paid delivery work."}</Text>
+            <Text style={styles.controlValue}>{online ? "You’re receiving offers" : approved ? "You’re offline" : "Verification in progress"}</Text>
+            <Text style={styles.controlHint}>{approved ? online ? "Keep LetsGoRide open while you wait for nearby work." : "Go online whenever you’re ready to deliver." : `Courier status: ${profile.status.replaceAll("_", " ").toLowerCase()}.`}</Text>
           </View>
           <Pressable accessibilityRole="button" disabled={!approved || busy} onPress={toggleOnline} style={[styles.onlineButton, online && styles.onlineButtonActive, (!approved || busy) && styles.disabled]}>
-            <Text style={[styles.onlineButtonText, online && styles.onlineButtonTextActive]}>{busy ? "Updating…" : online ? "Go offline" : "Go online"}</Text>
+            {busy ? <ActivityIndicator size="small" color={online ? "#FFFFFF" : v2Theme.colors.ink} /> : <Text style={[styles.onlineButtonText, online && styles.onlineButtonTextActive]}>{online ? "Go offline" : "Go online"}</Text>}
           </Pressable>
         </View>
       ) : null}
 
-      <View style={styles.metrics}>
-        <Metric icon="briefcase-outline" label="Active jobs" value={String(activeDeliveries.length)} />
-        <Metric icon="check-decagram-outline" label="Completed" value={String(earnings.completed_deliveries)} />
-        <Metric icon="cash" label="Total earned" value={`$${earnings.total_payout_usd.toFixed(2)}`} />
+      <View style={styles.earningsCard}>
+        <View style={styles.earningsMain}>
+          <Text style={styles.earningsEyebrow}>TODAY</Text>
+          <Text style={styles.earningsValue}>${earnings.today_payout_usd.toFixed(2)}</Text>
+          <Text style={styles.earningsLabel}>courier earnings</Text>
+        </View>
+        <View style={styles.earningsDivider} />
+        <View style={styles.earningsSide}>
+          <MiniMetric label="7 DAYS" value={`$${earnings.last_7_days_payout_usd.toFixed(2)}`} />
+          <MiniMetric label="COMPLETED" value={String(earnings.completed_deliveries)} />
+        </View>
       </View>
+
+      {activeDeliveries.length > 0 ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}><View><Text style={styles.sectionEyebrow}>CURRENT</Text><Text style={styles.sectionTitle}>Active delivery</Text></View></View>
+          {activeDeliveries.map((delivery) => (
+            <Pressable key={delivery.id} accessibilityRole="button" onPress={() => router.push(`/(courier)/delivery/${delivery.id}` as never)} style={({ pressed }) => [styles.activeCard, pressed && styles.pressed]}>
+              <View style={styles.activeTop}>
+                <View style={styles.activeIcon}><MaterialCommunityIcons name={delivery.source_type === "FOOD_ORDER" ? "food-takeout-box-outline" : "package-variant-closed"} size={23} color={v2Theme.colors.brandStrong} /></View>
+                <View style={styles.activeCopy}><Text style={styles.activeStatus}>{humanCourierStatus(delivery.status)}</Text><Text style={styles.activeHint}>{activeDeliveryHint(delivery.status)}</Text></View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
+              </View>
+              <RouteLine pickup={delivery.pickup_address} dropoff={delivery.dropoff_address} />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <View><Text style={styles.sectionTitle}>Delivery offers</Text><Text style={styles.sectionSub}>{online ? "Live priced courier work" : "Go online to receive offers"}</Text></View>
+          <View><Text style={styles.sectionEyebrow}>NEARBY</Text><Text style={styles.sectionTitle}>Delivery offers</Text><Text style={styles.sectionSub}>{online ? "Priced jobs available to your courier account" : "Go online to start receiving work"}</Text></View>
+          {online ? <View style={styles.liveBadge}><View style={styles.liveBadgeDot} /><Text style={styles.liveBadgeText}>LIVE</Text></View> : null}
         </View>
+
         {!loading && online && offers.length === 0 ? (
-          <View style={styles.emptyCard}><MaterialCommunityIcons name="radar" size={28} color={v2Theme.colors.brandStrong} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>Listening for delivery work</Text><Text style={styles.emptyBody}>New priced requests appear here while you stay online.</Text></View></View>
+          <View style={styles.listeningCard}>
+            <View style={styles.radarWrap}><MaterialCommunityIcons name="radar" size={30} color={v2Theme.colors.brandStrong} /></View>
+            <View style={styles.emptyCopy}><Text style={styles.emptyTitle}>Looking for nearby work…</Text><Text style={styles.emptyBody}>You’re online. New delivery offers will appear here automatically.</Text></View>
+          </View>
         ) : null}
+
+        {!online && profile ? (
+          <View style={styles.emptyCard}><MaterialCommunityIcons name="power-sleep" size={27} color={v2Theme.colors.inkSecondary} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>Offers are paused</Text><Text style={styles.emptyBody}>Your courier account stays quiet until you go online.</Text></View></View>
+        ) : null}
+
         {offers.map((offer) => (
           <View key={offer.id} style={styles.jobCard}>
-            <View style={styles.jobIcon}><MaterialCommunityIcons name={offer.source_type === "FOOD_ORDER" ? "food-fork-drink" : "package-variant-closed"} size={23} color={v2Theme.colors.brandStrong} /></View>
-            <View style={styles.jobCopy}>
-              <Text style={styles.jobType}>{offer.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"}</Text>
-              <Text numberOfLines={2} style={styles.jobRoute}>{offer.pickup_address} → {offer.dropoff_address}</Text>
-              <Text style={styles.jobMeta}>{offer.distance_km != null ? `${offer.distance_km.toFixed(1)} km` : "Distance pending"} · {offer.estimated_duration_minutes != null ? `${offer.estimated_duration_minutes} min` : "ETA pending"}</Text>
+            <View style={styles.offerTop}>
+              <View style={styles.jobIcon}><MaterialCommunityIcons name={offer.source_type === "FOOD_ORDER" ? "food-fork-drink" : "package-variant-closed"} size={24} color={v2Theme.colors.brandStrong} /></View>
+              <View style={styles.jobCopy}>
+                <Text style={styles.jobType}>{offer.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"}</Text>
+                <Text style={styles.jobMeta}>{offer.distance_km != null ? `${offer.distance_km.toFixed(1)} km` : "Distance calculating"} · {offer.estimated_duration_minutes != null ? `${offer.estimated_duration_minutes} min` : "ETA calculating"}</Text>
+              </View>
+              <View style={styles.payBlock}><Text style={styles.payLabel}>YOU EARN</Text><Text style={styles.payValue}>${Number(offer.courier_payout_usd || 0).toFixed(2)}</Text></View>
             </View>
-            <View style={styles.jobAction}>
-              <Text style={styles.payLabel}>YOUR PAY</Text>
-              <Text style={styles.payValue}>${Number(offer.courier_payout_usd || 0).toFixed(2)}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Accept delivery" disabled={Boolean(claimingId)} onPress={() => claim(offer)} style={[styles.acceptButton, claimingId && styles.disabled]}>
-                <Text style={styles.acceptText}>{claimingId === offer.id ? "Accepting…" : "Accept"}</Text>
-              </Pressable>
-            </View>
+            <RouteLine pickup={offer.pickup_address} dropoff={offer.dropoff_address} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Accept delivery" disabled={Boolean(claimingId)} onPress={() => claim(offer)} style={({ pressed }) => [styles.acceptButton, Boolean(claimingId) && styles.disabled, pressed && styles.pressed]}>
+              <Text style={styles.acceptText}>{claimingId === offer.id ? "Accepting delivery…" : "Accept delivery"}</Text>
+              <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+            </Pressable>
           </View>
         ))}
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Active deliveries</Text><Text style={styles.sectionSub}>Jobs currently assigned to this courier account</Text></View></View>
-        {activeDeliveries.length === 0 ? (
-          <View style={styles.emptyCard}><MaterialCommunityIcons name="package-variant" size={26} color={v2Theme.colors.inkSecondary} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>No active delivery</Text><Text style={styles.emptyBody}>Accepted jobs will appear here.</Text></View></View>
-        ) : null}
-        {activeDeliveries.map((delivery) => (
-          <Pressable key={delivery.id} accessibilityRole="button" onPress={() => router.push(`/(courier)/delivery/${delivery.id}` as never)} style={({ pressed }) => [styles.activeCard, pressed && styles.pressed]}>
-            <View style={styles.activeIcon}><MaterialCommunityIcons name="navigation-variant-outline" size={22} color={v2Theme.colors.ink} /></View>
-            <View style={styles.activeCopy}><Text style={styles.activeStatus}>{delivery.status.replaceAll("_", " ")}</Text><Text numberOfLines={2} style={styles.activeRoute}>{delivery.pickup_address} → {delivery.dropoff_address}</Text></View>
-            <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
-          </Pressable>
-        ))}
-      </View>
+      {activeDeliveries.length === 0 && !loading ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Current job</Text>
+          <View style={styles.emptyCard}><MaterialCommunityIcons name="package-variant" size={27} color={v2Theme.colors.inkSecondary} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>No active delivery</Text><Text style={styles.emptyBody}>When you accept an offer, the route and live journey will take over this workspace.</Text></View></View>
+        </View>
+      ) : null}
     </Screen>
   );
 }
 
-function Metric({ icon, label, value }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: string }) {
-  return <View style={styles.metric}><View style={styles.metricIcon}><MaterialCommunityIcons name={icon} size={20} color={v2Theme.colors.brandStrong} /></View><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
+function WorkspaceLoading() {
+  return <View style={styles.loadingCard}><View style={styles.loadingIcon}><MaterialCommunityIcons name="bike-fast" size={25} color={v2Theme.colors.brandStrong} /></View><View style={styles.loadingCopy}><Text style={styles.loadingTitle}>Getting your workspace ready</Text><Text style={styles.loadingBody}>Checking jobs, offers and earnings…</Text></View><ActivityIndicator size="small" color={v2Theme.colors.brandStrong} /></View>;
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return <View style={styles.miniMetric}><Text style={styles.miniMetricLabel}>{label}</Text><Text style={styles.miniMetricValue}>{value}</Text></View>;
+}
+
+function RouteLine({ pickup, dropoff }: { pickup: string; dropoff: string }) {
+  return (
+    <View style={styles.routeBox}>
+      <View style={styles.routeRail}><View style={styles.pickupDot} /><View style={styles.routeRailLine} /><View style={styles.dropoffDot} /></View>
+      <View style={styles.routeCopy}>
+        <View><Text style={styles.routeLabel}>PICKUP</Text><Text numberOfLines={2} style={styles.routeText}>{pickup}</Text></View>
+        <View><Text style={styles.routeLabel}>DROP-OFF</Text><Text numberOfLines={2} style={styles.routeText}>{dropoff}</Text></View>
+      </View>
+    </View>
+  );
+}
+
+function humanCourierStatus(status: CourierDelivery["status"]) {
+  if (status === "ASSIGNED" || status === "COURIER_TO_PICKUP") return "Head to pickup";
+  if (status === "PICKED_UP" || status === "IN_TRANSIT") return "On the way to recipient";
+  if (status === "ARRIVING") return "Almost at the recipient";
+  if (status === "DELIVERED") return "Delivered";
+  return status.replaceAll("_", " ").toLowerCase();
+}
+
+function activeDeliveryHint(status: CourierDelivery["status"]) {
+  if (status === "ASSIGNED" || status === "COURIER_TO_PICKUP") return "Navigate there and confirm once collected.";
+  if (status === "PICKED_UP" || status === "IN_TRANSIT") return "GPS is updating the journey automatically.";
+  if (status === "ARRIVING") return "Handoff unlocks near the recipient pin.";
+  return "Open delivery details";
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 18, gap: 14 },
+  hero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 18, gap: 18 },
+  heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  heroMark: { width: 51, height: 51, borderRadius: 18, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
   heroCopy: { gap: 7 },
   eyebrow: { color: "#8FE6AE", fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
   title: { color: "#FFFFFF", fontSize: 29, lineHeight: 34, fontWeight: "900", letterSpacing: -0.8 },
   body: { color: "rgba(255,255,255,0.66)", fontSize: 12, lineHeight: 18 },
-  statusPill: { alignSelf: "flex-start", borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 11, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 6 },
+  statusPill: { borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 11, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 6 },
   statusPillOnline: { backgroundColor: "rgba(70,203,115,0.18)" },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.42)" },
   statusDotOnline: { backgroundColor: "#65DE8E" },
   statusText: { color: "rgba(255,255,255,0.62)", fontSize: 9, fontWeight: "900" },
   statusTextOnline: { color: "#A6F2BE" },
+  loadingCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  loadingIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  loadingCopy: { flex: 1, gap: 3 },
+  loadingTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  loadingBody: { color: v2Theme.colors.inkSecondary, fontSize: 9 },
   errorCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.dangerSoft, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, fontWeight: "700" },
   retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" },
   setupCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 18, gap: 10 },
-  setupIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  setupTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900" },
+  setupIcon: { width: 56, height: 56, borderRadius: 19, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  setupTitle: { color: v2Theme.colors.ink, fontSize: 21, fontWeight: "900" },
   setupBody: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
-  primaryButton: { minHeight: 52, borderRadius: 17, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  primaryButton: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   primaryButtonText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
-  controlCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
+  controlCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  controlCardOnline: { backgroundColor: v2Theme.colors.brandSofter, borderColor: v2Theme.colors.brandSoft },
+  controlIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  controlIconOnline: { backgroundColor: v2Theme.colors.brand },
   controlCopy: { flex: 1, gap: 3 },
-  controlLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.6 },
-  controlValue: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900", textTransform: "capitalize" },
+  controlValue: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
   controlHint: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
-  onlineButton: { minHeight: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
+  onlineButton: { minHeight: 42, minWidth: 82, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
   onlineButtonActive: { backgroundColor: v2Theme.colors.ink },
   onlineButtonText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
   onlineButtonTextActive: { color: "#FFFFFF" },
-  metrics: { flexDirection: "row", gap: 8 },
-  metric: { flex: 1, minHeight: 105, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 11, gap: 4 },
-  metricIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  metricValue: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
-  metricLabel: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" },
+  earningsCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 16, flexDirection: "row", alignItems: "stretch", gap: 15 },
+  earningsMain: { flex: 1.15, justifyContent: "center" },
+  earningsEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  earningsValue: { color: v2Theme.colors.ink, fontSize: 28, lineHeight: 33, fontWeight: "900", letterSpacing: -0.8 },
+  earningsLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9 },
+  earningsDivider: { width: StyleSheet.hairlineWidth, backgroundColor: v2Theme.colors.line },
+  earningsSide: { flex: 1, justifyContent: "space-around", gap: 10 },
+  miniMetric: { gap: 2 },
+  miniMetricLabel: { color: v2Theme.colors.inkTertiary, fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
+  miniMetricValue: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
+  sectionEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  sectionTitle: { color: v2Theme.colors.ink, fontSize: 21, fontWeight: "900", letterSpacing: -0.45 },
   sectionSub: { color: v2Theme.colors.inkSecondary, fontSize: 9, marginTop: 2 },
+  liveBadge: { borderRadius: 999, backgroundColor: v2Theme.colors.brandSoft, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 5 },
+  liveBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.brandStrong },
+  liveBadgeText: { color: v2Theme.colors.brandStrong, fontSize: 7, fontWeight: "900" },
   emptyCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
+  listeningCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
+  radarWrap: { width: 52, height: 52, borderRadius: 18, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   emptyCopy: { flex: 1, gap: 3 },
   emptyTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
   emptyBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
-  jobCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 13, flexDirection: "row", gap: 11, alignItems: "center" },
-  jobIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  jobCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 13 },
+  offerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  jobIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   jobCopy: { flex: 1, gap: 3 },
   jobType: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
-  jobRoute: { color: v2Theme.colors.ink, fontSize: 11, lineHeight: 16, fontWeight: "900" },
-  jobMeta: { color: v2Theme.colors.inkSecondary, fontSize: 8 },
-  jobAction: { alignItems: "flex-end", gap: 4 },
+  jobMeta: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "700" },
+  payBlock: { alignItems: "flex-end", gap: 1 },
   payLabel: { color: v2Theme.colors.inkTertiary, fontSize: 7, fontWeight: "900" },
-  payValue: { color: v2Theme.colors.ink, fontSize: 16, fontWeight: "900" },
-  acceptButton: { minHeight: 32, borderRadius: 12, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
-  acceptText: { color: "#FFFFFF", fontSize: 9, fontWeight: "900" },
-  activeCard: { minHeight: 76, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11 },
-  activeIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  payValue: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
+  routeBox: { flexDirection: "row", gap: 10, backgroundColor: v2Theme.colors.surfaceMuted, borderRadius: 18, padding: 12 },
+  routeRail: { width: 12, alignItems: "center", paddingVertical: 4 },
+  pickupDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: v2Theme.colors.brand },
+  routeRailLine: { flex: 1, width: 2, minHeight: 25, backgroundColor: v2Theme.colors.lineStrong },
+  dropoffDot: { width: 9, height: 9, borderRadius: 2, backgroundColor: v2Theme.colors.ink },
+  routeCopy: { flex: 1, gap: 10 },
+  routeLabel: { color: v2Theme.colors.inkTertiary, fontSize: 7, fontWeight: "900", letterSpacing: 0.7 },
+  routeText: { color: v2Theme.colors.ink, fontSize: 10, lineHeight: 14, fontWeight: "800", marginTop: 2 },
+  acceptButton: { minHeight: 52, borderRadius: 17, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  acceptText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  activeCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft, padding: 14, gap: 12 },
+  activeTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  activeIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   activeCopy: { flex: 1, gap: 3 },
-  activeStatus: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", textTransform: "capitalize" },
-  activeRoute: { color: v2Theme.colors.ink, fontSize: 11, lineHeight: 16, fontWeight: "800" },
+  activeStatus: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
+  activeHint: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 13 },
   disabled: { opacity: 0.42 },
   pressed: { opacity: 0.72 },
 });
