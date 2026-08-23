@@ -22,7 +22,11 @@ export default function AccountScreen() {
   const router = useRouter();
   const { user, loading, isGuest } = useCurrentUser();
   const [verification, setVerification] = useState<VerificationProfile | null>(null);
-  const navRole = user?.role === "driver" || user?.role === "courier" ? "driver" : "passenger";
+  const navRole: "customer" | "driver" | undefined = user?.role === "driver"
+    ? "driver"
+    : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
+      ? undefined
+      : "customer";
   const verified = isIdentityVerified(user);
   const name = displayNameOrFallback(user?.name);
 
@@ -42,7 +46,7 @@ export default function AccountScreen() {
 
   if (!loading && isGuest) {
     return (
-      <Screen navRole="passenger">
+      <Screen navRole="customer">
         <View style={styles.guestHero}>
           <View style={styles.guestIcon}>
             <MaterialCommunityIcons name="account-circle-outline" size={36} color={v2Theme.colors.brandStrong} />
