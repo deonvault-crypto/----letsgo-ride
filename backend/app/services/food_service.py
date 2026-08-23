@@ -158,7 +158,11 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
             "food_update",
             "New order",
             f"A new {restaurant.get('name') or 'restaurant'} order is now in preparation.",
-            {"order_id": saved["id"], "restaurant_id": restaurant["id"]},
+            {
+                "food_order_id": saved["id"],
+                "restaurant_id": restaurant["id"],
+                "notification_target": "merchant_order",
+            },
         )
 
     await create_app_notification(
@@ -166,7 +170,11 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "food_update",
         "Order confirmed",
         f"{restaurant.get('name') or 'The restaurant'} has your order. We are matching a courier while the kitchen prepares it.",
-        {"order_id": saved["id"], "restaurant_id": restaurant["id"]},
+        {
+            "food_order_id": saved["id"],
+            "restaurant_id": restaurant["id"],
+            "notification_target": "customer_food_order",
+        },
     )
 
     delivery = await ensure_food_order_delivery(saved["id"], actor_user_id=customer_id)
@@ -265,7 +273,11 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
                 "food_update",
                 "Food delivery cancelled",
                 "The customer cancelled this order before pickup.",
-                {"order_id": order_id, "delivery_id": delivery_id},
+                {
+                    "food_order_id": order_id,
+                    "delivery_id": delivery_id,
+                    "notification_target": "courier_delivery",
+                },
             )
 
     merchant_user_id = ""
@@ -278,7 +290,11 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
             "food_update",
             "Order cancelled",
             "The customer cancelled this order before courier pickup.",
-            {"order_id": order_id},
+            {
+                "food_order_id": order_id,
+                "restaurant_id": order.get("restaurant_id"),
+                "notification_target": "merchant_order",
+            },
         )
 
     await append_order_event(
