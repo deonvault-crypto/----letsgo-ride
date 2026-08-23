@@ -11,22 +11,12 @@ export type LocationMemory = {
   recent: LocationChoice[];
 };
 
-const emptyMemory: LocationMemory = {
-  home: null,
-  work: null,
-  recent: [],
-};
+const emptyMemory: LocationMemory = { home: null, work: null, recent: [] };
 
 function isChoice(value: unknown): value is LocationChoice {
   if (!value || typeof value !== "object") return false;
   const item = value as LocationChoice;
-  return Boolean(
-    item.address &&
-    item.label &&
-    item.location &&
-    Number.isFinite(item.location.latitude) &&
-    Number.isFinite(item.location.longitude),
-  );
+  return Boolean(item.address && item.label && item.location && Number.isFinite(item.location.latitude) && Number.isFinite(item.location.longitude));
 }
 
 export async function getLocationMemory(): Promise<LocationMemory> {
@@ -50,9 +40,7 @@ async function write(memory: LocationMemory) {
 }
 
 function samePlace(a: LocationChoice, b: LocationChoice) {
-  const sameCoordinates =
-    Math.abs(a.location.latitude - b.location.latitude) < 0.00005 &&
-    Math.abs(a.location.longitude - b.location.longitude) < 0.00005;
+  const sameCoordinates = Math.abs(a.location.latitude - b.location.latitude) < 0.00005 && Math.abs(a.location.longitude - b.location.longitude) < 0.00005;
   return sameCoordinates || a.address.trim().toLowerCase() === b.address.trim().toLowerCase();
 }
 
@@ -62,10 +50,7 @@ export async function rememberLocation(choice: LocationChoice): Promise<Location
   return write({ ...current, recent });
 }
 
-export async function saveNamedLocation(
-  kind: "home" | "work",
-  choice: LocationChoice,
-): Promise<LocationMemory> {
+export async function saveNamedLocation(kind: "home" | "work", choice: LocationChoice): Promise<LocationMemory> {
   const current = await getLocationMemory();
   const recent = [choice, ...current.recent.filter((item) => !samePlace(item, choice))].slice(0, MAX_RECENT);
   return write({ ...current, [kind]: choice, recent });
