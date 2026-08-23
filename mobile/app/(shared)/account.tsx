@@ -31,7 +31,7 @@ export default function AccountScreen() {
   const name = displayNameOrFallback(user?.name);
 
   const loadVerification = useCallback(async () => {
-    if (!user) {
+    if (!user || user.role !== "driver") {
       setVerification(null);
       return;
     }
@@ -83,8 +83,7 @@ export default function AccountScreen() {
     );
   }
 
-  const driverVerificationStatus =
-    verification?.verification_status || user?.verification_status || "not_started";
+  const driverVerificationStatus = verification?.verification_status || user?.verification_status || "not_started";
   const driverVerification = driverVerificationCopy(driverVerificationStatus);
   const accountLabel = accountTypeLabel(user?.role);
 
@@ -111,16 +110,9 @@ export default function AccountScreen() {
         <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Verification</Text>
-        <AccountRow
-          icon="account-check-outline"
-          title="Identity verification"
-          subtitle={verified ? "Identity verified" : "Review your identity status"}
-          tone={verified ? "success" : "neutral"}
-          onPress={() => router.push("/(shared)/verification" as never)}
-        />
-        {user?.role === "driver" ? (
+      {user?.role === "driver" ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Driver verification</Text>
           <AccountRow
             icon="steering"
             title="Driver verification"
@@ -128,8 +120,8 @@ export default function AccountScreen() {
             tone={driverVerification.tone}
             onPress={() => router.push("/(shared)/verification" as never)}
           />
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
@@ -190,12 +182,7 @@ function AccountRow({
   onPress: () => void;
   tone?: "neutral" | "success" | "warning";
 }) {
-  const iconColor =
-    tone === "success"
-      ? v2Theme.colors.brandStrong
-      : tone === "warning"
-        ? v2Theme.colors.warning
-        : v2Theme.colors.ink;
+  const iconColor = tone === "success" ? v2Theme.colors.brandStrong : tone === "warning" ? v2Theme.colors.warning : v2Theme.colors.ink;
 
   return (
     <Pressable
@@ -205,11 +192,7 @@ function AccountRow({
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <View style={[
-        styles.rowIcon,
-        tone === "success" && styles.rowIconSuccess,
-        tone === "warning" && styles.rowIconWarning,
-      ]}>
+      <View style={[styles.rowIcon, tone === "success" && styles.rowIconSuccess, tone === "warning" && styles.rowIconWarning]}>
         <MaterialCommunityIcons name={icon} size={22} color={iconColor} />
       </View>
       <View style={styles.rowCopy}>
@@ -221,213 +204,49 @@ function AccountRow({
   );
 }
 
-function driverVerificationCopy(status: string): {
-  subtitle: string;
-  tone: "neutral" | "success" | "warning";
-} {
-  if (isVerifiedStatus(status)) {
-    return { subtitle: "Driver verification approved", tone: "success" };
-  }
-  if (isPendingVerificationStatus(status)) {
-    return { subtitle: "Verification under review", tone: "warning" };
-  }
-  if (needsVerificationReview(status)) {
-    return { subtitle: "Action needed · review your documents", tone: "warning" };
-  }
+function driverVerificationCopy(status: string): { subtitle: string; tone: "neutral" | "success" | "warning" } {
+  if (isVerifiedStatus(status)) return { subtitle: "Driver verification approved", tone: "success" };
+  if (isPendingVerificationStatus(status)) return { subtitle: "Verification under review", tone: "warning" };
+  if (needsVerificationReview(status)) return { subtitle: "Action needed · review your documents", tone: "warning" };
   return { subtitle: "Required before posting driver trips", tone: "neutral" };
 }
 
 const styles = StyleSheet.create({
-  guestHero: {
-    borderRadius: v2Theme.radius.xxl,
-    backgroundColor: v2Theme.colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.lineStrong,
-    padding: 20,
-    gap: 12,
-    shadowColor: v2Theme.colors.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 4,
-  },
-  guestIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 22,
-    backgroundColor: v2Theme.colors.brandSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  guestEyebrow: {
-    color: v2Theme.colors.brandStrong,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-  guestTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: 28,
-    lineHeight: 33,
-    fontWeight: "900",
-    letterSpacing: -0.8,
-  },
-  guestBody: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  guestPrimary: {
-    minHeight: 54,
-    borderRadius: 18,
-    backgroundColor: v2Theme.colors.brand,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    marginTop: 4,
-  },
+  guestHero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 20, gap: 12, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.08, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 4 },
+  guestIcon: { width: 62, height: 62, borderRadius: 22, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  guestEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.1 },
+  guestTitle: { color: v2Theme.colors.ink, fontSize: 28, lineHeight: 33, fontWeight: "900", letterSpacing: -0.8 },
+  guestBody: { color: v2Theme.colors.inkSecondary, fontSize: 14, lineHeight: 21 },
+  guestPrimary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, marginTop: 4 },
   guestPrimaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  guestSecondary: {
-    minHeight: 50,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.lineStrong,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  guestSecondary: { minHeight: 50, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center" },
   guestSecondaryText: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  guestNote: {
-    borderRadius: v2Theme.radius.xl,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    padding: 15,
-    flexDirection: "row",
-    gap: 11,
-    alignItems: "flex-start",
-  },
+  guestNote: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 15, flexDirection: "row", gap: 11, alignItems: "flex-start" },
   guestNoteText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
-  profileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 15,
-    paddingVertical: 5,
-  },
+  profileHeader: { flexDirection: "row", alignItems: "center", gap: 15, paddingVertical: 5 },
   profileCopy: { flex: 1, gap: 5 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  name: {
-    flexShrink: 1,
-    color: v2Theme.colors.ink,
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-  },
-  meta: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 13,
-  },
-  modePill: {
-    alignSelf: "flex-start",
-    borderRadius: v2Theme.radius.pill,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  modeText: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 10,
-    fontWeight: "900",
-  },
-  quickGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  quickCard: {
-    width: "48%",
-    minHeight: 94,
-    borderRadius: v2Theme.radius.xl,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    padding: 13,
-    justifyContent: "space-between",
-  },
-  quickIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: v2Theme.colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quickLabel: {
-    color: v2Theme.colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-  },
+  name: { flexShrink: 1, color: v2Theme.colors.ink, fontSize: 26, fontWeight: "900", letterSpacing: -0.7 },
+  meta: { color: v2Theme.colors.inkSecondary, fontSize: 13 },
+  modePill: { alignSelf: "flex-start", borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 9, paddingVertical: 5 },
+  modeText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "900" },
+  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  quickCard: { width: "48%", minHeight: 94, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 13, justifyContent: "space-between" },
+  quickIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
+  quickLabel: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
   section: { gap: 9 },
-  sectionTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: -0.4,
-  },
-  row: {
-    minHeight: 74,
-    borderRadius: v2Theme.radius.xl,
-    backgroundColor: v2Theme.colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.line,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  rowIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
+  row: { minHeight: 74, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  rowIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   rowIconSuccess: { backgroundColor: v2Theme.colors.brandSoft },
   rowIconWarning: { backgroundColor: v2Theme.colors.warningSoft },
   rowCopy: { flex: 1, gap: 3 },
-  rowTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  rowSubtitle: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  separationCard: {
-    borderRadius: v2Theme.radius.xxl,
-    backgroundColor: v2Theme.colors.brandSofter,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  separationIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 17,
-    backgroundColor: v2Theme.colors.brandSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  rowTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
+  rowSubtitle: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
+  separationCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  separationIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   separationCopy: { flex: 1, gap: 4 },
-  separationTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  separationBody: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 11,
-    lineHeight: 16,
-  },
+  separationTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
+  separationBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
   pressed: { opacity: 0.7 },
 });
