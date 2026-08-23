@@ -10,7 +10,7 @@ import { getCurrentUser, hasSession, logout } from "../services/authService";
 const MIN_LAUNCH_MS = 460;
 
 function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 export default function IndexScreen() {
