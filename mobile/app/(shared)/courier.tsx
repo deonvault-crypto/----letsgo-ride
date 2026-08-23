@@ -1,22 +1,22 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { AuthRequiredModal } from "../../components/auth/AuthRequiredModal";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
+import { useLocationDraft } from "../../contexts/LocationDraftContext";
 import { createCourierDelivery, previewCourierQuote } from "../../services/courierService";
-import { getCurrentDeviceLocation } from "../../services/locationService";
-import {
-  CourierCreatePayload,
-  CourierQuotePreview,
-} from "../../types/courier.types";
+import { hasSession } from "../../services/authService";
+import { CourierCreatePayload, CourierQuotePreview } from "../../types/courier.types";
 
 const packageTypes = [
-  ["parcel", "package-variant-closed", "Parcel", "Everyday packages"],
-  ["shopping", "shopping-outline", "Shopping", "Store pickups"],
-  ["documents", "file-document-outline", "Documents", "Paperwork & envelopes"],
-  ["other", "dots-horizontal-circle-outline", "Other", "Tell us what it is"],
+  ["parcel", "package-variant-closed", "Parcel", "Boxes, gifts & everyday packages"],
+  ["shopping", "shopping-outline", "Shopping", "Store pickups & shopping bags"],
+  ["documents", "file-document-outline", "Documents", "Envelopes, forms & paperwork"],
+  ["other", "dots-horizontal-circle-outline", "Other", "Tell the courier what it is"],
 ] as const;
 
 const steps = ["Route", "Package", "Recipient", "Review"] as const;
@@ -24,10 +24,8 @@ type PackageType = CourierCreatePayload["package_type"];
 
 export default function CourierScreen() {
   const router = useRouter();
+  const { pickup, dropoff, clear } = useLocationDraft();
   const [step, setStep] = useState(0);
-  const [pickupAddress, setPickupAddress] = useState("");
-  const [dropoffAddress, setDropoffAddress] = useState("");
-  const [pickupLocation, setPickupLocation] = useState<CourierCreatePayload["pickup_location"]>(null);
   const [packageType, setPackageType] = useState<PackageType>("parcel");
   const [description, setDescription] = useState("");
   const [weight, setWeight] = useState("");
@@ -37,45 +35,39 @@ export default function CourierScreen() {
   const [pickupNote, setPickupNote] = useState("");
   const [dropoffNote, setDropoffNote] = useState("");
   const [quote, setQuote] = useState<CourierQuotePreview | null>(null);
-  const [locating, setLocating] = useState(false);
   const [quoting, setQuoting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const transition = useRef(new Animated.Value(1)).current;
 
-  function invalidateQuote() {
+  useEffect(() => {
+    transition.setValue(0);
+    Animated.spring(transition, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 190,
+      mass: 0.8,
+    }).start();
+  }, [step, transition]);
+
+  useEffect(() => {
     setQuote(null);
-  }
+  }, [pickup?.location.latitude, pickup?.location.longitude, dropoff?.location.latitude, dropoff?.location.longitude]);
 
-  function updatePickupAddress(value: string) {
-    setPickupAddress(value);
-    setPickupLocation(null);
-    invalidateQuote();
-  }
-
-  function updateDropoffAddress(value: string) {
-    setDropoffAddress(value);
-    invalidateQuote();
-  }
-
-  async function attachCurrentPickupLocation() {
-    try {
-      setLocating(true);
-      setError(null);
-      const location = await getCurrentDeviceLocation();
-      setPickupLocation({ latitude: location.latitude, longitude: location.longitude });
-      invalidateQuote();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to get your current location.");
-    } finally {
-      setLocating(false);
-    }
-  }
+  const animatedStepStyle = {
+    opacity: transition,
+    transform: [
+      {
+        translateY: transition.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
+      },
+    ],
+  };
 
   function validateCurrentStep() {
-    if (step === 0) {
-      if (pickupAddress.trim().length < 3 || dropoffAddress.trim().length < 3) {
-        return "Add a clear pickup and drop-off location before continuing.";
-      }
+    if (step === 0 && (!pickup || !dropoff)) {
+      return "Choose both pickup and drop-off on the map before continuing.";
     }
     if (step === 1) {
       const parsedWeight = weight.trim() ? Number(weight) : null;
@@ -87,10 +79,8 @@ export default function CourierScreen() {
         return "Declared value must be between $0 and $10,000.";
       }
     }
-    if (step === 2) {
-      if (recipientName.trim().length < 2 || recipientPhone.trim().length < 5) {
-        return "Add the recipient name and phone number before reviewing the delivery.";
-      }
+    if (step === 2 && (recipientName.trim().length < 2 || recipientPhone.trim().length < 5)) {
+      return "Add the recipient name and phone number before reviewing the delivery.";
     }
     return null;
   }
@@ -102,6 +92,14 @@ export default function CourierScreen() {
       return;
     }
     setError(null);
+
+    // Guests can browse LetsGoRide and even choose precise map locations. We ask
+    // for identity only when they are about to enter the real service workflow.
+    if (step === 0 && !(await hasSession())) {
+      setAuthPromptOpen(true);
+      return;
+    }
+
     if (step < 2) {
       setStep((current) => current + 1);
       return;
@@ -116,19 +114,21 @@ export default function CourierScreen() {
   }
 
   async function loadQuote() {
-    if (pickupAddress.trim().length < 3 || dropoffAddress.trim().length < 3) {
-      setError("Add a clear pickup and drop-off location first.");
+    if (!pickup || !dropoff) {
+      setError("Choose pickup and drop-off locations first.");
       return;
     }
     try {
       setQuoting(true);
       setError(null);
-      const nextQuote = await previewCourierQuote({
-        pickup_address: pickupAddress.trim(),
-        dropoff_address: dropoffAddress.trim(),
-        pickup_location: pickupLocation,
-      });
-      setQuote(nextQuote);
+      setQuote(
+        await previewCourierQuote({
+          pickup_address: pickup.address,
+          dropoff_address: dropoff.address,
+          pickup_location: pickup.location,
+          dropoff_location: dropoff.location,
+        }),
+      );
     } catch (err) {
       setQuote(null);
       setError(err instanceof Error ? err.message : "Unable to calculate this delivery price.");
@@ -138,13 +138,14 @@ export default function CourierScreen() {
   }
 
   function payload(): CourierCreatePayload {
+    if (!pickup || !dropoff) throw new Error("Delivery locations are missing.");
     const parsedWeight = weight.trim() ? Number(weight) : null;
     const parsedValue = declaredValue.trim() ? Number(declaredValue) : null;
     return {
-      pickup_address: pickupAddress.trim(),
-      dropoff_address: dropoffAddress.trim(),
-      pickup_location: quote?.pickup_location ?? pickupLocation,
-      dropoff_location: quote?.dropoff_location ?? null,
+      pickup_address: pickup.address,
+      dropoff_address: dropoff.address,
+      pickup_location: quote?.pickup_location ?? pickup.location,
+      dropoff_location: quote?.dropoff_location ?? dropoff.location,
       recipient_name: recipientName.trim(),
       recipient_phone: recipientPhone.trim(),
       package_type: packageType,
@@ -158,10 +159,15 @@ export default function CourierScreen() {
 
   async function confirmDelivery() {
     if (!quote || submitting) return;
+    if (!(await hasSession())) {
+      setAuthPromptOpen(true);
+      return;
+    }
     try {
       setSubmitting(true);
       setError(null);
       const delivery = await createCourierDelivery(payload());
+      clear();
       router.replace(`/(shared)/courier/${delivery.id}` as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to request this courier delivery.");
@@ -173,17 +179,15 @@ export default function CourierScreen() {
 
   return (
     <Screen showBack fallbackRoute="/(shared)/services" title="Courier" showNotifications={false}>
-      <View style={styles.hero}>
-        <View style={styles.heroIcon}>
-          <MaterialCommunityIcons name="package-variant-closed" size={28} color={v2Theme.colors.brandStrong} />
-        </View>
-        <View style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>LETSGORIDE COURIER</Text>
-          <Text style={styles.title}>Send something.</Text>
-          <Text style={styles.body}>Real route. Clear price. Live delivery progress.</Text>
-        </View>
-      </View>
+      <AuthRequiredModal
+        visible={authPromptOpen}
+        onClose={() => setAuthPromptOpen(false)}
+        returnTo="/(shared)/courier"
+        title="Ready to send it?"
+        body="Sign in or create a customer account to request a real courier. Your selected map locations stay ready when you return."
+      />
 
+      <CourierHero />
       <Progress step={step} />
 
       {error ? (
@@ -198,55 +202,56 @@ export default function CourierScreen() {
         </View>
       ) : null}
 
-      {step === 0 ? (
-        <RouteStep
-          pickupAddress={pickupAddress}
-          dropoffAddress={dropoffAddress}
-          pickupLocationAttached={Boolean(pickupLocation)}
-          locating={locating}
-          onPickupChange={updatePickupAddress}
-          onDropoffChange={updateDropoffAddress}
-          onUseCurrentLocation={attachCurrentPickupLocation}
-        />
-      ) : null}
+      <Animated.View style={[styles.stepStage, animatedStepStyle]}>
+        {step === 0 ? (
+          <RouteStep
+            pickupLabel={pickup?.label || null}
+            pickupAddress={pickup?.address || null}
+            dropoffLabel={dropoff?.label || null}
+            dropoffAddress={dropoff?.address || null}
+            onPickup={() => router.push({ pathname: "/(shared)/location-picker", params: { kind: "pickup" } } as never)}
+            onDropoff={() => router.push({ pathname: "/(shared)/location-picker", params: { kind: "dropoff" } } as never)}
+          />
+        ) : null}
 
-      {step === 1 ? (
-        <PackageStep
-          packageType={packageType}
-          description={description}
-          weight={weight}
-          declaredValue={declaredValue}
-          onPackageType={setPackageType}
-          onDescription={setDescription}
-          onWeight={setWeight}
-          onDeclaredValue={setDeclaredValue}
-        />
-      ) : null}
+        {step === 1 ? (
+          <PackageStep
+            packageType={packageType}
+            description={description}
+            weight={weight}
+            declaredValue={declaredValue}
+            onPackageType={setPackageType}
+            onDescription={setDescription}
+            onWeight={setWeight}
+            onDeclaredValue={setDeclaredValue}
+          />
+        ) : null}
 
-      {step === 2 ? (
-        <RecipientStep
-          recipientName={recipientName}
-          recipientPhone={recipientPhone}
-          pickupNote={pickupNote}
-          dropoffNote={dropoffNote}
-          onRecipientName={setRecipientName}
-          onRecipientPhone={setRecipientPhone}
-          onPickupNote={setPickupNote}
-          onDropoffNote={setDropoffNote}
-        />
-      ) : null}
+        {step === 2 ? (
+          <RecipientStep
+            recipientName={recipientName}
+            recipientPhone={recipientPhone}
+            pickupNote={pickupNote}
+            dropoffNote={dropoffNote}
+            onRecipientName={setRecipientName}
+            onRecipientPhone={setRecipientPhone}
+            onPickupNote={setPickupNote}
+            onDropoffNote={setDropoffNote}
+          />
+        ) : null}
 
-      {step === 3 ? (
-        <ReviewStep
-          pickupAddress={pickupAddress}
-          dropoffAddress={dropoffAddress}
-          packageType={packageType}
-          recipientName={recipientName}
-          quote={quote}
-          quoting={quoting}
-          onRefreshQuote={loadQuote}
-        />
-      ) : null}
+        {step === 3 ? (
+          <ReviewStep
+            pickupAddress={pickup?.address || ""}
+            dropoffAddress={dropoff?.address || ""}
+            packageType={packageType}
+            recipientName={recipientName}
+            quote={quote}
+            quoting={quoting}
+            onRefreshQuote={loadQuote}
+          />
+        ) : null}
+      </Animated.View>
 
       <View style={styles.footerActions}>
         {step > 0 ? (
@@ -258,7 +263,7 @@ export default function CourierScreen() {
 
         {step < 3 ? (
           <Pressable accessibilityRole="button" onPress={nextStep} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
-            <Text style={styles.primaryButtonText}>{step === 2 ? "Review & get price" : "Continue"}</Text>
+            <Text style={styles.primaryButtonText}>{step === 0 ? "Continue" : step === 2 ? "Review & get price" : "Continue"}</Text>
             <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
           </Pressable>
         ) : (
@@ -271,7 +276,7 @@ export default function CourierScreen() {
           >
             <View>
               <Text style={styles.primaryButtonText}>{submitting ? "Requesting courier…" : "Confirm & request courier"}</Text>
-              {quote ? <Text style={styles.primaryButtonSub}>${quote.price_usd.toFixed(2)} · server-confirmed at request</Text> : null}
+              {quote ? <Text style={styles.primaryButtonSub}>${quote.price_usd.toFixed(2)} · final server check on request</Text> : null}
             </View>
             <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
           </Pressable>
@@ -280,9 +285,37 @@ export default function CourierScreen() {
 
       <View style={styles.trustRow}>
         <MaterialCommunityIcons name="shield-check-outline" size={17} color={v2Theme.colors.inkSecondary} />
-        <Text style={styles.trustText}>Pricing and route calculations come from the LetsGoRide backend. The app does not invent delivery fees.</Text>
+        <Text style={styles.trustText}>Map coordinates drive the route. The typed place name is only a human-friendly label.</Text>
       </View>
     </Screen>
+  );
+}
+
+function CourierHero() {
+  return (
+    <LinearGradient
+      colors={["#123F2A", "#176E3D", "#2F9A58"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.hero}
+    >
+      <View style={styles.heroCopy}>
+        <Text style={styles.heroEyebrow}>LETSGORIDE COURIER</Text>
+        <Text style={styles.heroTitle}>Send it without guessing.</Text>
+        <Text style={styles.heroBody}>Search the place, pin the exact gate, see the real route, then track the courier live.</Text>
+      </View>
+      <View style={styles.heroArt}>
+        <View style={[styles.artTile, styles.artTileBack]}>
+          <MaterialCommunityIcons name="file-document-outline" size={24} color="#173E2A" />
+        </View>
+        <View style={[styles.artTile, styles.artTileMiddle]}>
+          <MaterialCommunityIcons name="shopping-outline" size={27} color="#173E2A" />
+        </View>
+        <View style={[styles.artTile, styles.artTileFront]}>
+          <MaterialCommunityIcons name="package-variant-closed" size={32} color="#FFFFFF" />
+        </View>
+      </View>
+    </LinearGradient>
   );
 }
 
@@ -291,7 +324,9 @@ function Progress({ step }: { step: number }) {
     <View style={styles.progressWrap}>
       {steps.map((label, index) => (
         <View key={label} style={styles.progressItem}>
-          <View style={[styles.progressBar, index <= step && styles.progressBarActive]} />
+          <View style={[styles.progressBar, index <= step && styles.progressBarActive]}>
+            {index === step ? <View style={styles.progressGlow} /> : null}
+          </View>
           <Text style={[styles.progressLabel, index === step && styles.progressLabelActive]}>{label}</Text>
         </View>
       ))}
@@ -300,62 +335,78 @@ function Progress({ step }: { step: number }) {
 }
 
 function RouteStep({
+  pickupLabel,
   pickupAddress,
+  dropoffLabel,
   dropoffAddress,
-  pickupLocationAttached,
-  locating,
-  onPickupChange,
-  onDropoffChange,
-  onUseCurrentLocation,
+  onPickup,
+  onDropoff,
 }: {
-  pickupAddress: string;
-  dropoffAddress: string;
-  pickupLocationAttached: boolean;
-  locating: boolean;
-  onPickupChange: (value: string) => void;
-  onDropoffChange: (value: string) => void;
-  onUseCurrentLocation: () => void;
+  pickupLabel: string | null;
+  pickupAddress: string | null;
+  dropoffLabel: string | null;
+  dropoffAddress: string | null;
+  onPickup: () => void;
+  onDropoff: () => void;
 }) {
   return (
     <View style={styles.section}>
       <View>
-        <Text style={styles.sectionEyebrow}>STEP 1</Text>
-        <Text style={styles.sectionTitle}>Where is it going?</Text>
-        <Text style={styles.sectionBody}>Use specific streets, buildings or landmarks so the route can be priced accurately.</Text>
+        <Text style={styles.sectionEyebrow}>STEP 1 · MAP FIRST</Text>
+        <Text style={styles.sectionTitle}>Where should we collect and deliver?</Text>
+        <Text style={styles.sectionBody}>No perfect spelling needed. Search a landmark or street, then drag the pin to the exact gate.</Text>
       </View>
 
       <View style={styles.routeCard}>
-        <Field
-          label="Pickup"
-          icon="circle-slice-8"
-          placeholder="Street, building or landmark"
-          value={pickupAddress}
-          onChangeText={onPickupChange}
-          autoCapitalize="words"
-          brand
-        />
+        <LocationRow label="Pickup" icon="circle-slice-8" choiceLabel={pickupLabel} address={pickupAddress} brand onPress={onPickup} />
         <View style={styles.routeLine} />
-        <Field
-          label="Drop-off"
-          icon="map-marker-outline"
-          placeholder="Delivery address or landmark"
-          value={dropoffAddress}
-          onChangeText={onDropoffChange}
-          autoCapitalize="words"
-        />
+        <LocationRow label="Drop-off" icon="map-marker-outline" choiceLabel={dropoffLabel} address={dropoffAddress} onPress={onDropoff} />
       </View>
 
-      <Pressable accessibilityRole="button" disabled={locating} onPress={onUseCurrentLocation} style={({ pressed }) => [styles.locationButton, pressed && styles.pressed]}>
-        <View style={[styles.locationIcon, pickupLocationAttached && styles.locationIconActive]}>
-          <MaterialCommunityIcons name={pickupLocationAttached ? "check" : "crosshairs-gps"} size={19} color={pickupLocationAttached ? "#FFFFFF" : v2Theme.colors.brandStrong} />
+      <View style={styles.mapPromise}>
+        <View style={styles.mapPromiseIcon}>
+          <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color={v2Theme.colors.brandStrong} />
         </View>
-        <View style={styles.locationCopy}>
-          <Text style={styles.locationTitle}>{locating ? "Getting your location…" : pickupLocationAttached ? "Pickup GPS attached" : "Use my current pickup location"}</Text>
-          <Text style={styles.locationBody}>{pickupLocationAttached ? "The address stays visible while GPS improves route accuracy." : "Optional · foreground location permission only."}</Text>
+        <View style={styles.mapPromiseCopy}>
+          <Text style={styles.mapPromiseTitle}>Coordinates are the truth.</Text>
+          <Text style={styles.mapPromiseBody}>Even when a house has no perfect street address, the courier gets the exact map point you selected.</Text>
         </View>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
-      </Pressable>
+      </View>
     </View>
+  );
+}
+
+function LocationRow({
+  label,
+  icon,
+  choiceLabel,
+  address,
+  brand,
+  onPress,
+}: {
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  choiceLabel: string | null;
+  address: string | null;
+  brand?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.locationRow, pressed && styles.pressed]}>
+      <View style={[styles.locationRowIcon, brand && styles.locationRowIconBrand]}>
+        <MaterialCommunityIcons name={icon} size={21} color={brand ? v2Theme.colors.brandStrong : v2Theme.colors.inkSecondary} />
+      </View>
+      <View style={styles.locationRowCopy}>
+        <Text style={styles.locationRowLabel}>{label.toUpperCase()}</Text>
+        <Text numberOfLines={1} style={[styles.locationRowTitle, !choiceLabel && styles.locationRowPlaceholder]}>
+          {choiceLabel || `Choose ${label.toLowerCase()}`}
+        </Text>
+        {address && address !== choiceLabel ? <Text numberOfLines={1} style={styles.locationRowBody}>{address}</Text> : null}
+      </View>
+      <View style={styles.locationEdit}>
+        <MaterialCommunityIcons name={choiceLabel ? "pencil-outline" : "chevron-right"} size={19} color={v2Theme.colors.inkSecondary} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -383,11 +434,11 @@ function PackageStep({
       <View>
         <Text style={styles.sectionEyebrow}>STEP 2</Text>
         <Text style={styles.sectionTitle}>What are we carrying?</Text>
-        <Text style={styles.sectionBody}>Give the courier enough context to arrive with the right transport and handling expectations.</Text>
+        <Text style={styles.sectionBody}>Choose the closest match so the courier knows what kind of pickup to expect.</Text>
       </View>
 
       <View style={styles.packageGrid}>
-        {packageTypes.map(([value, icon, label, supporting]) => {
+        {packageTypes.map(([value, icon, label, supporting], index) => {
           const selected = packageType === value;
           return (
             <Pressable
@@ -397,12 +448,17 @@ function PackageStep({
               onPress={() => onPackageType(value)}
               style={({ pressed }) => [styles.packageCard, selected && styles.packageCardSelected, pressed && styles.pressed]}
             >
-              <View style={[styles.packageIcon, selected && styles.packageIconSelected]}>
-                <MaterialCommunityIcons name={icon} size={23} color={selected ? v2Theme.colors.brandStrong : v2Theme.colors.ink} />
+              <LinearGradient
+                colors={index % 2 === 0 ? ["#F0F8F2", "#E4F1E8"] : ["#FFF5DE", "#F6E9C9"]}
+                style={styles.packageArt}
+              >
+                <MaterialCommunityIcons name={icon} size={32} color={selected ? v2Theme.colors.brandStrong : v2Theme.colors.ink} />
+              </LinearGradient>
+              <View style={styles.packageCopy}>
+                <Text style={styles.packageTitle}>{label}</Text>
+                <Text style={styles.packageBody}>{supporting}</Text>
               </View>
-              <Text style={styles.packageTitle}>{label}</Text>
-              <Text style={styles.packageBody}>{supporting}</Text>
-              {selected ? <MaterialCommunityIcons name="check-circle" size={18} color={v2Theme.colors.brand} /> : null}
+              {selected ? <MaterialCommunityIcons name="check-circle" size={20} color={v2Theme.colors.brand} /> : null}
             </Pressable>
           );
         })}
@@ -412,13 +468,9 @@ function PackageStep({
         <SimpleField label="Package description" placeholder="e.g. Small sealed box with clothing" value={description} onChangeText={onDescription} multiline />
         <View style={styles.formDivider} />
         <View style={styles.twoColumn}>
-          <View style={styles.column}>
-            <SimpleField label="Weight (kg)" placeholder="Optional" value={weight} onChangeText={onWeight} keyboardType="decimal-pad" />
-          </View>
+          <View style={styles.column}><SimpleField label="Weight (kg)" placeholder="Optional" value={weight} onChangeText={onWeight} keyboardType="decimal-pad" /></View>
           <View style={styles.columnDivider} />
-          <View style={styles.column}>
-            <SimpleField label="Declared value (USD)" placeholder="Optional" value={declaredValue} onChangeText={onDeclaredValue} keyboardType="decimal-pad" />
-          </View>
+          <View style={styles.column}><SimpleField label="Declared value (USD)" placeholder="Optional" value={declaredValue} onChangeText={onDeclaredValue} keyboardType="decimal-pad" /></View>
         </View>
       </View>
     </View>
@@ -449,19 +501,17 @@ function RecipientStep({
       <View>
         <Text style={styles.sectionEyebrow}>STEP 3</Text>
         <Text style={styles.sectionTitle}>Who receives it?</Text>
-        <Text style={styles.sectionBody}>These details are used for the delivery handoff and should belong to the intended recipient.</Text>
+        <Text style={styles.sectionBody}>The courier uses these details only for the pickup and delivery handoff.</Text>
       </View>
-
       <View style={styles.formCard}>
         <SimpleField label="Recipient name" placeholder="Full name" value={recipientName} onChangeText={onRecipientName} autoCapitalize="words" />
         <View style={styles.formDivider} />
         <SimpleField label="Recipient phone" placeholder="e.g. +263 77 123 4567" value={recipientPhone} onChangeText={onRecipientPhone} keyboardType="phone-pad" />
       </View>
-
       <View style={styles.formCard}>
-        <SimpleField label="Pickup note" placeholder="Optional gate, desk or collection note" value={pickupNote} onChangeText={onPickupNote} multiline />
+        <SimpleField label="Pickup note" placeholder="Gate, desk, landmark or collection instruction" value={pickupNote} onChangeText={onPickupNote} multiline />
         <View style={styles.formDivider} />
-        <SimpleField label="Drop-off note" placeholder="Optional handoff instruction" value={dropoffNote} onChangeText={onDropoffNote} multiline />
+        <SimpleField label="Drop-off note" placeholder="Handoff instruction or exact entrance" value={dropoffNote} onChangeText={onDropoffNote} multiline />
       </View>
     </View>
   );
@@ -488,10 +538,9 @@ function ReviewStep({
     <View style={styles.section}>
       <View>
         <Text style={styles.sectionEyebrow}>STEP 4</Text>
-        <Text style={styles.sectionTitle}>Review your delivery.</Text>
-        <Text style={styles.sectionBody}>The quote below comes from the live server route and pricing policy. It is recalculated when you confirm.</Text>
+        <Text style={styles.sectionTitle}>Everything look right?</Text>
+        <Text style={styles.sectionBody}>The price comes from the live route. We verify the route again when you confirm.</Text>
       </View>
-
       <View style={styles.reviewRouteCard}>
         <ReviewLocation icon="circle-slice-8" label="PICKUP" value={quote?.pickup_address || pickupAddress} brand />
         <View style={styles.reviewRouteConnector} />
@@ -500,35 +549,43 @@ function ReviewStep({
 
       {quoting ? (
         <View style={styles.quoteLoadingCard}>
-          <View style={styles.quoteLoadingIcon}><MaterialCommunityIcons name="routes" size={24} color={v2Theme.colors.brandStrong} /></View>
-          <View style={styles.quoteLoadingCopy}><Text style={styles.quoteLoadingTitle}>Calculating the real route…</Text><Text style={styles.quoteLoadingBody}>Checking road distance, estimated time and server pricing.</Text></View>
+          <View style={styles.radarWrap}>
+            <View style={styles.radarOuter}><View style={styles.radarInner}><MaterialCommunityIcons name="routes" size={22} color={v2Theme.colors.brandStrong} /></View></View>
+          </View>
+          <View style={styles.quoteLoadingCopy}>
+            <Text style={styles.quoteLoadingTitle}>Building your real route…</Text>
+            <Text style={styles.quoteLoadingBody}>Road distance, drive time and delivery pricing are being checked now.</Text>
+          </View>
         </View>
       ) : quote ? (
         <View style={styles.quoteCard}>
           <View style={styles.quoteTop}>
             <View>
-              <Text style={styles.quoteEyebrow}>DELIVERY PRICE</Text>
+              <Text style={styles.quoteEyebrow}>YOUR DELIVERY</Text>
               <Text style={styles.quotePrice}>${quote.price_usd.toFixed(2)}</Text>
               <Text style={styles.quoteCurrency}>{quote.currency}</Text>
             </View>
-            <View style={styles.quoteVerified}><MaterialCommunityIcons name="check-decagram" size={19} color={v2Theme.colors.brandStrong} /><Text style={styles.quoteVerifiedText}>Server priced</Text></View>
+            <View style={styles.quoteVerified}>
+              <MaterialCommunityIcons name="check-decagram" size={19} color="#A9F2C2" />
+              <Text style={styles.quoteVerifiedText}>Live price</Text>
+            </View>
           </View>
           <View style={styles.quoteFacts}>
             <QuoteFact icon="map-marker-distance" label="Distance" value={`${quote.distance_km.toFixed(1)} km`} />
             <View style={styles.quoteFactDivider} />
-            <QuoteFact icon="clock-outline" label="Estimated drive" value={`${quote.estimated_duration_minutes} min`} />
+            <QuoteFact icon="clock-outline" label="Drive" value={`${quote.estimated_duration_minutes} min`} />
             <View style={styles.quoteFactDivider} />
             <QuoteFact icon="package-variant" label="Package" value={packageType.replaceAll("_", " ")} />
           </View>
           <Pressable accessibilityRole="button" onPress={onRefreshQuote} style={({ pressed }) => [styles.refreshQuote, pressed && styles.pressed]}>
-            <MaterialCommunityIcons name="refresh" size={16} color={v2Theme.colors.inkSecondary} />
-            <Text style={styles.refreshQuoteText}>Refresh quote</Text>
+            <MaterialCommunityIcons name="refresh" size={16} color="rgba(255,255,255,0.68)" />
+            <Text style={styles.refreshQuoteText}>Refresh route & price</Text>
           </Pressable>
         </View>
       ) : (
         <Pressable accessibilityRole="button" onPress={onRefreshQuote} style={({ pressed }) => [styles.quoteUnavailableCard, pressed && styles.pressed]}>
           <MaterialCommunityIcons name="calculator-variant-outline" size={25} color={v2Theme.colors.brandStrong} />
-          <View style={styles.quoteLoadingCopy}><Text style={styles.quoteLoadingTitle}>Get a live delivery price</Text><Text style={styles.quoteLoadingBody}>We will only let you request a courier after a real server quote is available.</Text></View>
+          <View style={styles.quoteLoadingCopy}><Text style={styles.quoteLoadingTitle}>Get a live delivery price</Text><Text style={styles.quoteLoadingBody}>LetsGoRide will not invent a fee if the real route cannot be calculated.</Text></View>
           <MaterialCommunityIcons name="arrow-right" size={20} color={v2Theme.colors.brandStrong} />
         </Pressable>
       )}
@@ -536,17 +593,8 @@ function ReviewStep({
       <View style={styles.reviewMetaCard}>
         <ReviewMeta icon="account-outline" label="Recipient" value={recipientName} />
         <ReviewMeta icon="package-variant-closed" label="Service" value="Courier delivery" />
-        <ReviewMeta icon="shield-check-outline" label="Tracking" value="Live after courier assignment" />
+        <ReviewMeta icon="map-marker-path" label="Tracking" value="Live after courier assignment" />
       </View>
-    </View>
-  );
-}
-
-function Field({ label, icon, brand, ...props }: { label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; brand?: boolean } & React.ComponentProps<typeof TextInput>) {
-  return (
-    <View style={styles.fieldRow}>
-      <View style={[styles.fieldIcon, brand && styles.fieldIconBrand]}><MaterialCommunityIcons name={icon} size={20} color={brand ? v2Theme.colors.brandStrong : v2Theme.colors.inkSecondary} /></View>
-      <View style={styles.fieldCopy}><Text style={styles.fieldLabel}>{label}</Text><TextInput placeholderTextColor={v2Theme.colors.inkTertiary} style={styles.fieldInput} {...props} /></View>
     </View>
   );
 }
@@ -565,7 +613,7 @@ function ReviewLocation({ icon, label, value, brand }: { icon: keyof typeof Mate
 }
 
 function QuoteFact({ icon, label, value }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: string }) {
-  return <View style={styles.quoteFact}><MaterialCommunityIcons name={icon} size={18} color={v2Theme.colors.inkSecondary} /><Text style={styles.quoteFactLabel}>{label}</Text><Text style={styles.quoteFactValue}>{value}</Text></View>;
+  return <View style={styles.quoteFact}><MaterialCommunityIcons name={icon} size={18} color="rgba(255,255,255,0.66)" /><Text style={styles.quoteFactLabel}>{label}</Text><Text style={styles.quoteFactValue}>{value}</Text></View>;
 }
 
 function ReviewMeta({ icon, label, value }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: string }) {
@@ -573,54 +621,66 @@ function ReviewMeta({ icon, label, value }: { icon: keyof typeof MaterialCommuni
 }
 
 const styles = StyleSheet.create({
-  hero: { flexDirection: "row", gap: 14, alignItems: "flex-start" },
-  heroIcon: { width: 56, height: 56, borderRadius: 19, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  heroCopy: { flex: 1, gap: 4 },
-  eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
-  title: { color: v2Theme.colors.ink, fontSize: 31, lineHeight: 35, fontWeight: "900", letterSpacing: -1.1 },
-  body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19 },
-
+  hero: {
+    minHeight: 178,
+    borderRadius: 30,
+    padding: 18,
+    flexDirection: "row",
+    overflow: "hidden",
+    shadowColor: "#113D28",
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 7,
+  },
+  heroCopy: { flex: 1, gap: 7, justifyContent: "center", paddingRight: 4 },
+  heroEyebrow: { color: "#BFE9CD", fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
+  heroTitle: { color: "#FFFFFF", fontSize: 28, lineHeight: 31, fontWeight: "900", letterSpacing: -1 },
+  heroBody: { color: "rgba(255,255,255,0.76)", fontSize: 11, lineHeight: 16, maxWidth: 225 },
+  heroArt: { width: 105, position: "relative", justifyContent: "center" },
+  artTile: { position: "absolute", width: 62, height: 62, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  artTileBack: { backgroundColor: "#FFE9B1", right: 30, top: 17, transform: [{ rotate: "-12deg" }] },
+  artTileMiddle: { backgroundColor: "#E6F7EB", right: 0, top: 46, transform: [{ rotate: "10deg" }] },
+  artTileFront: { backgroundColor: "#102E21", right: 22, bottom: 16, transform: [{ rotate: "-3deg" }] },
   progressWrap: { flexDirection: "row", gap: 7 },
   progressItem: { flex: 1, gap: 6 },
-  progressBar: { height: 4, borderRadius: 3, backgroundColor: v2Theme.colors.lineStrong },
+  progressBar: { height: 5, borderRadius: 4, backgroundColor: v2Theme.colors.lineStrong, overflow: "hidden" },
   progressBarActive: { backgroundColor: v2Theme.colors.brand },
+  progressGlow: { flex: 1, backgroundColor: "rgba(255,255,255,0.28)" },
   progressLabel: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "800" },
-  progressLabelActive: { color: v2Theme.colors.ink },
-
+  progressLabelActive: { color: v2Theme.colors.ink, fontWeight: "900" },
   errorCard: { borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 13, flexDirection: "row", alignItems: "center", gap: 9 },
   errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, lineHeight: 16, fontWeight: "700" },
   errorAction: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" },
-
+  stepStage: { gap: 14 },
   section: { gap: 14 },
   sectionEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1.1, marginBottom: 4 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 25, lineHeight: 30, fontWeight: "900", letterSpacing: -0.7 },
   sectionBody: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18, marginTop: 4 },
-
-  routeCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, overflow: "hidden", borderWidth: 1, borderColor: v2Theme.colors.line },
-  fieldRow: { minHeight: 82, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", gap: 12 },
-  fieldIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
-  fieldIconBrand: { backgroundColor: v2Theme.colors.brandSoft },
-  fieldCopy: { flex: 1, gap: 4 },
-  fieldLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.6 },
-  fieldInput: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "800", paddingVertical: 4 },
-  routeLine: { height: StyleSheet.hairlineWidth, backgroundColor: v2Theme.colors.line, marginLeft: 69 },
-
-  locationButton: { minHeight: 72, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 12, flexDirection: "row", alignItems: "center", gap: 11 },
-  locationIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  locationIconActive: { backgroundColor: v2Theme.colors.brand },
-  locationCopy: { flex: 1, gap: 3 },
-  locationTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  locationBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
-
-  packageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  packageCard: { width: "48%", minHeight: 146, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 13, gap: 7, borderWidth: 1, borderColor: "transparent" },
-  packageCardSelected: { backgroundColor: v2Theme.colors.brandSofter, borderColor: v2Theme.colors.brandSoft },
-  packageIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
-  packageIconSelected: { backgroundColor: v2Theme.colors.brandSoft },
-  packageTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  packageBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 13, flex: 1 },
-
-  formCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, overflow: "hidden", borderWidth: 1, borderColor: v2Theme.colors.line },
+  routeCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong },
+  locationRow: { minHeight: 88, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  locationRowIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  locationRowIconBrand: { backgroundColor: v2Theme.colors.brandSoft },
+  locationRowCopy: { flex: 1, gap: 3 },
+  locationRowLabel: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  locationRowTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
+  locationRowPlaceholder: { color: v2Theme.colors.inkSecondary },
+  locationRowBody: { color: v2Theme.colors.inkSecondary, fontSize: 10 },
+  locationEdit: { width: 36, height: 36, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  routeLine: { height: StyleSheet.hairlineWidth, backgroundColor: v2Theme.colors.line, marginLeft: 70 },
+  mapPromise: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
+  mapPromiseIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  mapPromiseCopy: { flex: 1, gap: 3 },
+  mapPromiseTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  mapPromiseBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
+  packageGrid: { gap: 10 },
+  packageCard: { minHeight: 104, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 10, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong },
+  packageCardSelected: { borderColor: v2Theme.colors.brand, backgroundColor: v2Theme.colors.brandSofter },
+  packageArt: { width: 78, height: 78, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  packageCopy: { flex: 1, gap: 4 },
+  packageTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
+  packageBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
+  formCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong },
   formDivider: { height: StyleSheet.hairlineWidth, backgroundColor: v2Theme.colors.line, marginHorizontal: 14 },
   simpleField: { paddingHorizontal: 15, paddingVertical: 13, gap: 5, minHeight: 72 },
   simpleLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.55 },
@@ -629,8 +689,7 @@ const styles = StyleSheet.create({
   twoColumn: { flexDirection: "row" },
   column: { flex: 1 },
   columnDivider: { width: StyleSheet.hairlineWidth, backgroundColor: v2Theme.colors.line, marginVertical: 12 },
-
-  reviewRouteCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 14, gap: 0, borderWidth: 1, borderColor: v2Theme.colors.line },
+  reviewRouteCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong },
   reviewLocation: { flexDirection: "row", alignItems: "center", gap: 11, minHeight: 61 },
   reviewLocationIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   reviewLocationIconBrand: { backgroundColor: v2Theme.colors.brandSoft },
@@ -638,15 +697,15 @@ const styles = StyleSheet.create({
   reviewLocationLabel: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
   reviewLocationValue: { color: v2Theme.colors.ink, fontSize: 12, lineHeight: 17, fontWeight: "800" },
   reviewRouteConnector: { width: 1, height: 14, backgroundColor: v2Theme.colors.lineStrong, marginLeft: 20 },
-
-  quoteLoadingCard: { minHeight: 92, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  quoteLoadingCard: { minHeight: 98, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 },
+  radarWrap: { width: 58, height: 58, alignItems: "center", justifyContent: "center" },
+  radarOuter: { width: 58, height: 58, borderRadius: 29, backgroundColor: "rgba(18,139,68,0.09)", alignItems: "center", justifyContent: "center" },
+  radarInner: { width: 42, height: 42, borderRadius: 21, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   quoteUnavailableCard: { minHeight: 92, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 },
-  quoteLoadingIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   quoteLoadingCopy: { flex: 1, gap: 4 },
   quoteLoadingTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
   quoteLoadingBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
-
-  quoteCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 17, gap: 15 },
+  quoteCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: "#102E21", padding: 17, gap: 15 },
   quoteTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   quoteEyebrow: { color: "rgba(255,255,255,0.54)", fontSize: 8, fontWeight: "900", letterSpacing: 1 },
   quotePrice: { color: "#FFFFFF", fontSize: 38, lineHeight: 43, fontWeight: "900", letterSpacing: -1.4, marginTop: 2 },
@@ -659,24 +718,21 @@ const styles = StyleSheet.create({
   quoteFactLabel: { color: "rgba(255,255,255,0.48)", fontSize: 7, fontWeight: "800" },
   quoteFactValue: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", textTransform: "capitalize", textAlign: "center" },
   refreshQuote: { flexDirection: "row", alignSelf: "flex-start", alignItems: "center", gap: 5 },
-  refreshQuoteText: { color: "rgba(255,255,255,0.62)", fontSize: 9, fontWeight: "800" },
-
-  reviewMetaCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13, borderWidth: 1, borderColor: v2Theme.colors.line },
+  refreshQuoteText: { color: "rgba(255,255,255,0.68)", fontSize: 9, fontWeight: "800" },
+  reviewMetaCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong },
   reviewMetaRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line },
   reviewMetaIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   reviewMetaCopy: { flex: 1, gap: 2 },
   reviewMetaLabel: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" },
   reviewMetaValue: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
-
   footerActions: { flexDirection: "row", gap: 10, alignItems: "stretch" },
-  secondaryButton: { minHeight: 58, minWidth: 92, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: 1, borderColor: v2Theme.colors.line, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  secondaryButton: { minHeight: 58, minWidth: 92, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   secondaryButtonText: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
   primaryButton: { flex: 1, minHeight: 58, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   primaryButtonText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   primaryButtonSub: { color: "rgba(255,255,255,0.7)", fontSize: 8, marginTop: 2 },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72 },
-
   trustRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingHorizontal: 3 },
   trustText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
 });
