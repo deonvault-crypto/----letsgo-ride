@@ -1,14 +1,17 @@
 export type Restaurant = {
   id: string;
-  owner_user_id?: string;
+  owner_user_id?: string | null;
   name: string;
   description?: string | null;
   phone?: string;
   address: string;
   cuisine_tags?: string[];
   opening_hours?: Record<string, string>;
-  status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | string;
+  status?: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | "COMING_SOON" | string;
   is_accepting_orders?: boolean;
+  is_orderable?: boolean;
+  partner_status?: "DEMO" | "NOT_CONTRACTED" | "CONTRACTED" | string;
+  demo_only?: boolean;
   rating?: number | null;
   review_count?: number;
   hero_image_url?: string | null;
@@ -47,8 +50,10 @@ export type FoodOrderStatus =
   | "PREPARING"
   | "READY_FOR_PICKUP"
   | "COURIER_ASSIGNED"
+  | "COURIER_TO_PICKUP"
   | "PICKED_UP"
   | "OUT_FOR_DELIVERY"
+  | "ARRIVING"
   | "DELIVERED"
   | "CANCELLED"
   | "REJECTED";
@@ -76,6 +81,9 @@ export type FoodOrder = {
   customer_user_id: string;
   customer_name?: string;
   status: FoodOrderStatus;
+  restaurant_status?: string;
+  fulfillment_status?: string;
+  payment_status?: string;
   delivery_address: string;
   delivery_location?: { latitude?: number | null; longitude?: number | null } | null;
   recipient_name: string;
