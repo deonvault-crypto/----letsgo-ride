@@ -13,7 +13,7 @@ import { createFoodOrder } from "../../../services/foodService";
 export default function FoodCheckoutScreen() {
   const router = useRouter();
   const basket = useFoodBasket();
-  const { user } = useCurrentUser();
+  const { user, isGuest } = useCurrentUser();
   const { foodDropoff, clearFoodDropoff } = useLocationDraft();
 
   const [recipientName, setRecipientName] = useState("");
@@ -27,7 +27,7 @@ export default function FoodCheckoutScreen() {
     if (user?.phone && !recipientPhone) setRecipientPhone(user.phone);
   }, [user?.name, user?.phone, recipientName, recipientPhone]);
 
-  const canSubmit = useMemo(
+  const detailsReady = useMemo(
     () => Boolean(
       basket.restaurant && basket.lines.length > 0 && foodDropoff && recipientName.trim().length >= 2 && recipientPhone.trim().length >= 5 && !submitting,
     ),
@@ -35,7 +35,11 @@ export default function FoodCheckoutScreen() {
   );
 
   async function placeOrder() {
-    if (!canSubmit || !basket.restaurant || !foodDropoff) return;
+    if (isGuest) {
+      router.push({ pathname: "/(auth)/email-login", params: { returnTo: "/(shared)/food/checkout" } } as never);
+      return;
+    }
+    if (!detailsReady || !basket.restaurant || !foodDropoff) return;
     try {
       setSubmitting(true);
       setError(null);
@@ -66,13 +70,13 @@ export default function FoodCheckoutScreen() {
           <View style={styles.emptyIcon}><MaterialCommunityIcons name="basket-outline" size={30} color={v2Theme.colors.brandStrong} /></View>
           <Text style={styles.emptyTitle}>Your basket is empty</Text>
           <Text style={styles.emptyBody}>Choose a restaurant and add something you want before checking out.</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/food" as never)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Browse restaurants</Text>
-          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/food" as never)} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Browse restaurants</Text></Pressable>
         </View>
       </Screen>
     );
   }
+
+  const primaryEnabled = isGuest || detailsReady;
 
   return (
     <Screen showBack fallbackRoute={`/(shared)/food/${basket.restaurant.id}` as never} title="Checkout" showNotifications={false}>
@@ -81,29 +85,37 @@ export default function FoodCheckoutScreen() {
         <View style={styles.heroCopy}><Text style={styles.eyebrow}>READY TO ORDER</Text><Text style={styles.title}>Confirm and go.</Text><Text style={styles.body}>If the restaurant is open and the items are available, your order enters the kitchen immediately while we start finding a courier.</Text></View>
       </View>
 
+      {isGuest ? (
+        <View style={styles.authCard}>
+          <View style={styles.authIcon}><MaterialCommunityIcons name="account-lock-outline" size={24} color={v2Theme.colors.brandStrong} /></View>
+          <View style={styles.authCopy}><Text style={styles.authTitle}>You’re almost there</Text><Text style={styles.authBody}>Sign in or create a customer account when you’re ready to place this order. Your basket stays here.</Text></View>
+        </View>
+      ) : null}
+
       <View style={styles.restaurantCard}>
         <View style={styles.restaurantIcon}><MaterialCommunityIcons name="storefront-outline" size={24} color={v2Theme.colors.brandStrong} /></View>
         <View style={styles.restaurantCopy}><Text style={styles.restaurantLabel}>Ordering from</Text><Text numberOfLines={1} style={styles.restaurantName}>{basket.restaurant.name}</Text><Text numberOfLines={1} style={styles.restaurantAddress}>{basket.restaurant.address}</Text></View>
         <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>OPEN</Text></View>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Delivery location</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Choose delivery location" onPress={() => router.push("/(shared)/location-picker?kind=food" as never)} style={({ pressed }) => [styles.locationCard, pressed && styles.pressed]}>
-          <View style={styles.locationIcon}><MaterialCommunityIcons name={foodDropoff ? "map-marker" : "map-marker-outline"} size={24} color={v2Theme.colors.brandStrong} /></View>
-          <View style={styles.locationCopy}><Text style={styles.locationLabel}>{foodDropoff ? "Deliver to" : "Choose where to deliver"}</Text><Text numberOfLines={1} style={styles.locationTitle}>{foodDropoff?.label || "Search, use GPS or move the pin"}</Text><Text numberOfLines={2} style={styles.locationBody}>{foodDropoff?.address || "Use an exact map pin so the courier does not have to guess your location."}</Text></View>
-          <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
-        </Pressable>
-      </View>
+      {!isGuest ? (
+        <>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Delivery location</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose delivery location" onPress={() => router.push("/(shared)/location-picker?kind=food" as never)} style={({ pressed }) => [styles.locationCard, pressed && styles.pressed]}>
+              <View style={styles.locationIcon}><MaterialCommunityIcons name={foodDropoff ? "map-marker" : "map-marker-outline"} size={24} color={v2Theme.colors.brandStrong} /></View>
+              <View style={styles.locationCopy}><Text style={styles.locationLabel}>{foodDropoff ? "Deliver to" : "Choose where to deliver"}</Text><Text numberOfLines={1} style={styles.locationTitle}>{foodDropoff?.label || "Search, use GPS or move the pin"}</Text><Text numberOfLines={2} style={styles.locationBody}>{foodDropoff?.address || "Use an exact map pin so the courier does not have to guess your location."}</Text></View>
+              <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
+            </Pressable>
+          </View>
 
-      <View style={styles.section}><Text style={styles.sectionTitle}>Recipient</Text><Field icon="account-outline" label="Name" value={recipientName} onChangeText={setRecipientName} placeholder="Recipient name" autoCapitalize="words" /><Field icon="phone-outline" label="Phone" value={recipientPhone} onChangeText={setRecipientPhone} placeholder="Recipient phone number" keyboardType="phone-pad" /></View>
+          <View style={styles.section}><Text style={styles.sectionTitle}>Recipient</Text><Field icon="account-outline" label="Name" value={recipientName} onChangeText={setRecipientName} placeholder="Recipient name" autoCapitalize="words" /><Field icon="phone-outline" label="Phone" value={recipientPhone} onChangeText={setRecipientPhone} placeholder="Recipient phone number" keyboardType="phone-pad" /></View>
 
-      <View style={styles.section}><Text style={styles.sectionTitle}>Payment</Text><View style={styles.paymentCard}><View style={styles.paymentIcon}><MaterialCommunityIcons name="cash" size={24} color={v2Theme.colors.brandStrong} /></View><View style={styles.paymentCopy}><Text style={styles.paymentTitle}>Pay on delivery</Text><Text style={styles.paymentBody}>Cash payment at handoff. Card and wallet payments will appear here once their payment rails are connected.</Text></View><MaterialCommunityIcons name="check-circle" size={23} color={v2Theme.colors.success} /></View></View>
+          <View style={styles.section}><Text style={styles.sectionTitle}>Payment</Text><View style={styles.paymentCard}><View style={styles.paymentIcon}><MaterialCommunityIcons name="cash" size={24} color={v2Theme.colors.brandStrong} /></View><View style={styles.paymentCopy}><Text style={styles.paymentTitle}>Pay on delivery</Text><Text style={styles.paymentBody}>Cash payment at handoff. Card and wallet payments will appear here once their payment rails are connected.</Text></View><MaterialCommunityIcons name="check-circle" size={23} color={v2Theme.colors.success} /></View></View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Order note</Text>
-        <View style={styles.noteField}><MaterialCommunityIcons name="note-text-outline" size={21} color={v2Theme.colors.inkSecondary} /><TextInput accessibilityLabel="Order note" multiline maxLength={400} value={customerNote} onChangeText={setCustomerNote} placeholder="Gate number, landmark, allergies or delivery instructions" placeholderTextColor={v2Theme.colors.inkTertiary} style={styles.noteInput} /></View>
-      </View>
+          <View style={styles.section}><Text style={styles.sectionTitle}>Order note</Text><View style={styles.noteField}><MaterialCommunityIcons name="note-text-outline" size={21} color={v2Theme.colors.inkSecondary} /><TextInput accessibilityLabel="Order note" multiline maxLength={400} value={customerNote} onChangeText={setCustomerNote} placeholder="Gate number, landmark, allergies or delivery instructions" placeholderTextColor={v2Theme.colors.inkTertiary} style={styles.noteInput} /></View></View>
+        </>
+      ) : null}
 
       <View style={styles.summaryCard}>
         <View style={styles.summaryHeader}><Text style={styles.summaryTitle}>Order summary</Text><Text style={styles.summaryCount}>{basket.itemCount} items</Text></View>
@@ -116,8 +128,8 @@ export default function FoodCheckoutScreen() {
 
       {error ? <View style={styles.errorCard}><MaterialCommunityIcons name="alert-circle-outline" size={21} color={v2Theme.colors.danger} /><Text style={styles.errorText}>{error}</Text></View> : null}
 
-      <Pressable accessibilityRole="button" accessibilityLabel="Place food order" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={placeOrder} style={({ pressed }) => [styles.primaryButton, !canSubmit && styles.primaryButtonDisabled, pressed && canSubmit && styles.pressed]}>
-        <View><Text style={styles.primaryButtonText}>{submitting ? "Starting your order…" : "Place order"}</Text><Text style={styles.primaryButtonSub}>{foodDropoff ? "Kitchen + courier dispatch start automatically" : "Choose a delivery location first"}</Text></View>
+      <Pressable accessibilityRole="button" accessibilityLabel={isGuest ? "Sign in to place food order" : "Place food order"} accessibilityState={{ disabled: !primaryEnabled }} disabled={!primaryEnabled} onPress={placeOrder} style={({ pressed }) => [styles.primaryButton, !primaryEnabled && styles.primaryButtonDisabled, pressed && primaryEnabled && styles.pressed]}>
+        <View><Text style={styles.primaryButtonText}>{isGuest ? "Sign in to place order" : submitting ? "Starting your order…" : "Place order"}</Text><Text style={styles.primaryButtonSub}>{isGuest ? "Continue without losing your basket" : foodDropoff ? "Kitchen + courier dispatch start automatically" : "Choose a delivery location first"}</Text></View>
         <MaterialCommunityIcons name="arrow-right" size={22} color="#FFFFFF" />
       </Pressable>
     </Screen>
@@ -130,6 +142,7 @@ function Field({ icon, label, value, onChangeText, placeholder, keyboardType = "
 
 const styles = StyleSheet.create({
   hero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 17, flexDirection: "row", gap: 13, alignItems: "flex-start" }, heroIcon: { width: 49, height: 49, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" }, heroCopy: { flex: 1, gap: 5 }, eyebrow: { color: "#8FE6AE", fontSize: 9, fontWeight: "900", letterSpacing: 1.15 }, title: { color: "#FFFFFF", fontSize: 27, lineHeight: 31, fontWeight: "900", letterSpacing: -0.8 }, body: { color: "rgba(255,255,255,0.68)", fontSize: 11, lineHeight: 17 },
+  authCard: { minHeight: 90, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }, authIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, authCopy: { flex: 1, gap: 4 }, authTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" }, authBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   restaurantCard: { minHeight: 82, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }, restaurantIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, restaurantCopy: { flex: 1, gap: 3 }, restaurantLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" }, restaurantName: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, restaurantAddress: { color: v2Theme.colors.inkSecondary, fontSize: 10 }, livePill: { borderRadius: 999, backgroundColor: v2Theme.colors.brandSofter, paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 5 }, liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.success }, liveText: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900" },
   section: { gap: 10 }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 }, locationCard: { minHeight: 92, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, locationIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, locationCopy: { flex: 1, gap: 3 }, locationLabel: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900" }, locationTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, locationBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   field: { minHeight: 72, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11 }, fieldIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, fieldCopy: { flex: 1, gap: 2 }, fieldLabel: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" }, input: { minHeight: 32, color: v2Theme.colors.ink, fontSize: 14, fontWeight: "800", paddingVertical: 0 },
