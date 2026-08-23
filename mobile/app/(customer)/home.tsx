@@ -20,7 +20,7 @@ export default function CustomerHomeScreen() {
 
   function chooseService(service: CustomerService) {
     if (service === "ride") return;
-    if (service === "food") return router.push("/(shared)/food" as never);
+    if (service === "food") return router.push("/(customer)/food" as never);
     router.push("/(shared)/courier" as never);
   }
 
@@ -49,7 +49,7 @@ export default function CustomerHomeScreen() {
         <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>For you</Text><Pressable onPress={() => router.push("/(shared)/services" as never)} hitSlop={8}><Text style={styles.textAction}>See all</Text></Pressable></View>
         <View style={styles.quickRow}>
           <QuickAction icon="car-outline" label="Ride" onPress={() => router.push("/(customer)/search" as never)} />
-          <QuickAction icon="food-fork-drink" label="Food" onPress={() => router.push("/(shared)/food" as never)} />
+          <QuickAction icon="food-fork-drink" label="Food" onPress={() => router.push("/(customer)/food" as never)} />
           <QuickAction icon="package-variant-closed" label="Courier" onPress={() => router.push("/(shared)/courier" as never)} />
         </View>
       </View>
