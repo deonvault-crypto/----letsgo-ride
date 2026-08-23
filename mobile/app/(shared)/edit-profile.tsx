@@ -20,7 +20,11 @@ import { isValidPhone } from "../../utils/validation";
 export default function EditProfileScreen() {
   const router = useRouter();
   const { user, reload } = useCurrentUser();
-  const role = user?.role === "driver" ? "driver" : "passenger";
+  const navRole: "customer" | "driver" | undefined = user?.role === "driver"
+    ? "driver"
+    : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
+      ? undefined
+      : "customer";
   const displayName = displayNameOrFallback(user?.name);
   const verified = isIdentityVerified(user);
   const [name, setName] = useState("");
@@ -77,11 +81,11 @@ export default function EditProfileScreen() {
       fillFormFromUser(updated);
       await reload();
       setSavedAndLeaving(true);
-      setMessage("Profile saved. Returning to profile...");
+      setMessage("Profile saved. Returning to account...");
       if (phoneChanged) {
-        setPhoneMessage("Phone number saved. Verification may be required before booking or posting rides.");
+        setPhoneMessage("Phone number saved. Verification may be required for some account actions.");
       }
-      setTimeout(() => router.replace("/(shared)/profile" as never), 900);
+      setTimeout(() => router.replace("/(shared)/account" as never), 900);
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : "Unable to update profile.");
@@ -121,7 +125,7 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <Screen title="Edit profile" showBack fallbackRoute="/(shared)/profile" navRole={role}>
+    <Screen title="Edit profile" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
       <View style={styles.card}>
         <View style={styles.photoRow}>
           <Avatar name={displayName} imageUri={profilePhotoUrl} size={76} />
@@ -148,10 +152,10 @@ export default function EditProfileScreen() {
         <Text style={styles.helperText}>Use country code, for example +263700000000.</Text>
       </View>
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Travel profile</Text>
+        <Text style={styles.sectionTitle}>Profile details</Text>
         <LocationPicker label="City" value={profileCity} onChangeText={setProfileCity} disabled={savedAndLeaving} />
         <AppInput label="About" value={bio} onChangeText={setBio} multiline editable={!savedAndLeaving} />
-        <AppInput label="Travel preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline editable={!savedAndLeaving} />
+        <AppInput label="Preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline editable={!savedAndLeaving} />
         {message ? <Text style={[styles.message, isError && styles.error]}>{message}</Text> : null}
         {phoneMessage ? <Text style={styles.phoneNotice}>{phoneMessage}</Text> : null}
         <AppButton title="Save profile" loading={saving} disabled={savedAndLeaving} onPress={saveProfile} />
