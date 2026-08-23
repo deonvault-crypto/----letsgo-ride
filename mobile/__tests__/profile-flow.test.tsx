@@ -86,7 +86,7 @@ describe("profile update flow", () => {
     fireEvent.changeText(screen.getByPlaceholderText("Search or type a location"), "Mutare");
     fireEvent.press(screen.getByText("Mutare"));
     fireEvent.changeText(screen.getByLabelText("About"), "Travels between Harare and Mutare");
-    fireEvent.changeText(screen.getByLabelText("Travel preferences"), "Quiet morning trips");
+    fireEvent.changeText(screen.getByLabelText("Preferences"), "Quiet morning trips");
     fireEvent.press(screen.getByRole("button", { name: "Save profile" }));
 
     await waitFor(() => {
@@ -99,12 +99,12 @@ describe("profile update flow", () => {
       }));
       expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
       expect(screen.getByText("Mutare")).toBeOnTheScreen();
-      expect(screen.getByText("Profile saved. Returning to profile...")).toBeOnTheScreen();
-      expect(screen.getByText("Phone number saved. Verification may be required before booking or posting rides.")).toBeOnTheScreen();
+      expect(screen.getByText("Profile saved. Returning to account...")).toBeOnTheScreen();
+      expect(screen.getByText("Phone number saved. Verification may be required for some account actions.")).toBeOnTheScreen();
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith("/(shared)/profile");
+      expect(mockReplace).toHaveBeenCalledWith("/(shared)/account");
     }, { timeout: 2000 });
 
     mockCurrentUser = updatedUser;
