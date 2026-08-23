@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
-from app.models.food import FoodOrderCancelBody, FoodOrderCreateBody
+from app.models.food import FoodCheckoutQuoteBody, FoodOrderCancelBody, FoodOrderCreateBody
+from app.services.food_checkout_service import preview_food_checkout
 from app.services.food_service import (
     cancel_food_order,
     create_food_order,
@@ -37,6 +38,14 @@ async def restaurant_menu(restaurant_id: str):
         return api_success(await get_restaurant_menu(restaurant_id))
     except ValueError as exc:
         api_error(str(exc), 404)
+
+
+@router.post("/checkout/quote")
+async def food_checkout_quote(payload: FoodCheckoutQuoteBody):
+    try:
+        return api_success(await preview_food_checkout(payload.model_dump()))
+    except ValueError as exc:
+        api_error(str(exc), 400)
 
 
 @router.post("/orders")
