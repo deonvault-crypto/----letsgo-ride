@@ -2,6 +2,7 @@ import { requestData } from "./api";
 import {
   CourierCreatePayload,
   CourierDelivery,
+  CourierDeliveryPin,
   CourierEvent,
   CourierLocation,
   CourierQuotePreview,
@@ -47,6 +48,13 @@ export function getCourierEvents(deliveryId: string) {
   });
 }
 
+export function getCourierDeliveryPin(deliveryId: string) {
+  return requestData<CourierDeliveryPin>({
+    method: "GET",
+    url: `/courier/deliveries/${deliveryId}/handoff-pin`,
+  });
+}
+
 export function cancelCourierDelivery(deliveryId: string, reason?: string) {
   return requestData<CourierDelivery>({
     method: "POST",
@@ -64,6 +72,22 @@ export function updateCourierDeliveryStatus(
     method: "POST",
     url: `/courier/deliveries/${deliveryId}/status`,
     data: { status, note: note || null },
+  });
+}
+
+export function reportCourierDelay(deliveryId: string, note?: string) {
+  return requestData<CourierDelivery>({
+    method: "POST",
+    url: `/courier/deliveries/${deliveryId}/delay`,
+    data: { note: note || null },
+  });
+}
+
+export function completeCourierDeliveryWithPin(deliveryId: string, pin: string) {
+  return requestData<CourierDelivery>({
+    method: "POST",
+    url: `/courier/deliveries/${deliveryId}/handoff`,
+    data: { pin },
   });
 }
 
