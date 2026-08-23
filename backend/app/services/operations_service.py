@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from app.database import database
 from app.services.courier_service import append_delivery_event
 from app.services.fulfillment_link_service import sync_food_order_from_delivery
+from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
@@ -128,6 +129,9 @@ async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    if user.get("role") != "courier":
+        raise PermissionError("A Courier account is required to accept delivery work.")
+
     profile = await get_courier_profile(user)
     if not profile or profile.get("status") != "APPROVED":
         raise PermissionError("Approved courier verification is required to accept delivery work.")
@@ -179,5 +183,16 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
             "courier_payout_usd": updated.get("courier_payout_usd"),
         },
     )
+
+    sender_user_id = str(updated.get("sender_user_id") or "")
+    if sender_user_id:
+        await create_app_notification(
+            sender_user_id,
+            "courier_update",
+            "Courier assigned",
+            f"{updated.get('courier_name') or 'Your courier'} accepted your delivery.",
+            {"delivery_id": delivery_id, "courier_status": "ASSIGNED"},
+        )
+
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     return updated
