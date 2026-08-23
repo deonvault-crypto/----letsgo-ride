@@ -296,12 +296,12 @@ export default function LocationPickerScreen() {
         {selected ? (
           <View style={styles.saveRow}>
             <Pressable accessibilityRole="button" onPress={() => saveAs("home")} disabled={Boolean(saving)} style={({ pressed }) => [styles.saveChip, pressed && styles.pressed]}>
-              <MaterialCommunityIcons name={memory.home && memory.home.address === selected.address ? "home-check-outline" : "home-plus-outline"} size={17} color={v2Theme.colors.ink} />
-              <Text style={styles.saveChipText}>{saving === "home" ? "Saving…" : "Save as Home"}</Text>
+              <MaterialCommunityIcons name="home-outline" size={17} color={v2Theme.colors.ink} />
+              <Text style={styles.saveChipText}>{saving === "home" ? "Saving…" : memory.home && memory.home.address === selected.address ? "Home saved" : "Save as Home"}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => saveAs("work")} disabled={Boolean(saving)} style={({ pressed }) => [styles.saveChip, pressed && styles.pressed]}>
-              <MaterialCommunityIcons name={memory.work && memory.work.address === selected.address ? "briefcase-check-outline" : "briefcase-plus-outline"} size={17} color={v2Theme.colors.ink} />
-              <Text style={styles.saveChipText}>{saving === "work" ? "Saving…" : "Save as Work"}</Text>
+              <MaterialCommunityIcons name="briefcase-outline" size={17} color={v2Theme.colors.ink} />
+              <Text style={styles.saveChipText}>{saving === "work" ? "Saving…" : memory.work && memory.work.address === selected.address ? "Work saved" : "Save as Work"}</Text>
             </Pressable>
           </View>
         ) : null}
