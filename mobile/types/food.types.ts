@@ -45,8 +45,6 @@ export type RestaurantMenu = {
 };
 
 export type FoodOrderStatus =
-  | "PLACED"
-  | "ACCEPTED"
   | "PREPARING"
   | "READY_FOR_PICKUP"
   | "COURIER_ASSIGNED"
@@ -55,6 +53,8 @@ export type FoodOrderStatus =
   | "DELIVERED"
   | "CANCELLED"
   | "REJECTED";
+
+export type FoodPaymentMethod = "CASH_ON_DELIVERY";
 
 export type FoodOrderItemPayload = {
   menu_item_id: string;
@@ -65,11 +65,12 @@ export type FoodOrderItemPayload = {
 export type FoodOrderCreatePayload = {
   restaurant_id: string;
   delivery_address: string;
-  delivery_location?: { latitude?: number | null; longitude?: number | null } | null;
+  delivery_location: { latitude: number; longitude: number };
   recipient_name: string;
   recipient_phone: string;
   items: FoodOrderItemPayload[];
   customer_note?: string | null;
+  payment_method: FoodPaymentMethod;
 };
 
 export type FoodOrder = {
@@ -81,6 +82,7 @@ export type FoodOrder = {
   status: FoodOrderStatus;
   restaurant_status?: string;
   fulfillment_status?: string;
+  payment_method?: FoodPaymentMethod | string;
   payment_status?: string;
   delivery_address: string;
   delivery_location?: { latitude?: number | null; longitude?: number | null } | null;

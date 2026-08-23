@@ -26,12 +26,21 @@ const HARARE_REGION: Region = {
 
 const emptyMemory: LocationMemory = { home: null, work: null, recent: [] };
 
+type PickerKind = "pickup" | "dropoff" | "food";
+
 export default function LocationPickerScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ kind?: string }>();
-  const kind = params.kind === "dropoff" ? "dropoff" : "pickup";
-  const { pickup, dropoff, setPickup, setDropoff } = useLocationDraft();
-  const existing = kind === "pickup" ? pickup : dropoff;
+  const kind: PickerKind = params.kind === "food" ? "food" : params.kind === "dropoff" ? "dropoff" : "pickup";
+  const {
+    pickup,
+    dropoff,
+    foodDropoff,
+    setPickup,
+    setDropoff,
+    setFoodDropoff,
+  } = useLocationDraft();
+  const existing = kind === "pickup" ? pickup : kind === "dropoff" ? dropoff : foodDropoff;
   const mapRef = useRef<MapView | null>(null);
   const [query, setQuery] = useState(existing?.address || "");
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -173,7 +182,8 @@ export default function LocationPickerScreen() {
       return;
     }
     if (kind === "pickup") setPickup(selected);
-    else setDropoff(selected);
+    else if (kind === "dropoff") setDropoff(selected);
+    else setFoodDropoff(selected);
     rememberLocation(selected).catch(() => undefined);
     router.back();
   }
@@ -182,12 +192,15 @@ export default function LocationPickerScreen() {
     ? { ...selected.location, latitudeDelta: 0.018, longitudeDelta: 0.018 }
     : HARARE_REGION;
   const showShortcuts = suggestions.length === 0 && query.trim().length < 2;
+  const screenTitle = kind === "pickup" ? "Choose pickup" : kind === "dropoff" ? "Choose drop-off" : "Choose delivery location";
+  const eyebrow = kind === "pickup" ? "PICKUP" : kind === "dropoff" ? "DROP-OFF" : "DELIVERY";
+  const fallbackRoute = kind === "food" ? "/(shared)/food/checkout" : "/(shared)/courier";
 
   return (
     <Screen
-      title={kind === "pickup" ? "Choose pickup" : "Choose drop-off"}
+      title={screenTitle}
       showBack
-      fallbackRoute="/(shared)/courier"
+      fallbackRoute={fallbackRoute as never}
       showNotifications={false}
       scroll={false}
     >
@@ -280,13 +293,13 @@ export default function LocationPickerScreen() {
         </MapView>
         <View pointerEvents="none" style={styles.mapHint}>
           <MaterialCommunityIcons name="gesture-tap-hold" size={18} color={v2Theme.colors.inkSecondary} />
-          <Text style={styles.mapHintText}>Drag the pin to the exact gate or pickup point</Text>
+          <Text style={styles.mapHintText}>Drag the pin to the exact gate or handoff point</Text>
         </View>
       </View>
 
       <View style={styles.confirmArea}>
         <View style={styles.selectedCopy}>
-          <Text style={styles.selectedEyebrow}>{kind === "pickup" ? "PICKUP" : "DROP-OFF"}</Text>
+          <Text style={styles.selectedEyebrow}>{eyebrow}</Text>
           <Text numberOfLines={1} style={styles.selectedTitle}>{selected?.label || "Choose a location"}</Text>
           <Text numberOfLines={2} style={styles.selectedBody}>
             {selected?.address || "Search above or use your current GPS position."}
@@ -297,11 +310,11 @@ export default function LocationPickerScreen() {
           <View style={styles.saveRow}>
             <Pressable accessibilityRole="button" onPress={() => saveAs("home")} disabled={Boolean(saving)} style={({ pressed }) => [styles.saveChip, pressed && styles.pressed]}>
               <MaterialCommunityIcons name="home-outline" size={17} color={v2Theme.colors.ink} />
-              <Text style={styles.saveChipText}>{saving === "home" ? "Saving…" : memory.home && memory.home.address === selected.address ? "Home saved" : "Save as Home"}</Text>
+              <Text style={styles.saveChipText}>{saving === "home" ? "Saving…" : memory.home?.address === selected.address ? "Home saved" : "Save as Home"}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => saveAs("work")} disabled={Boolean(saving)} style={({ pressed }) => [styles.saveChip, pressed && styles.pressed]}>
               <MaterialCommunityIcons name="briefcase-outline" size={17} color={v2Theme.colors.ink} />
-              <Text style={styles.saveChipText}>{saving === "work" ? "Saving…" : memory.work && memory.work.address === selected.address ? "Work saved" : "Save as Work"}</Text>
+              <Text style={styles.saveChipText}>{saving === "work" ? "Saving…" : memory.work?.address === selected.address ? "Work saved" : "Save as Work"}</Text>
             </Pressable>
           </View>
         ) : null}

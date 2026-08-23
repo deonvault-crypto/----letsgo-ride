@@ -3,15 +3,12 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
-from app.services.delivery_quote_service import maybe_auto_quote_delivery
 from app.services.food_service import append_order_event
-from app.services.fulfillment_link_service import ensure_food_order_delivery
+from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
 MERCHANT_ORDER_TRANSITIONS = {
-    "PLACED": {"ACCEPTED", "REJECTED"},
-    "ACCEPTED": {"PREPARING"},
     "PREPARING": {"READY_FOR_PICKUP"},
 }
 
@@ -190,7 +187,7 @@ async def update_restaurant_order_status(
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
         raise ValueError("Order not found.")
-    await require_restaurant_access(order["restaurant_id"], user)
+    restaurant = await require_restaurant_access(order["restaurant_id"], user)
 
     current = str(order.get("restaurant_status") or order.get("status") or "")
     if status == current:
@@ -203,13 +200,11 @@ async def update_restaurant_order_status(
         "restaurant_status": status,
         "updated_at": now,
     }
-    # Keep the simple customer summary aligned with restaurant preparation until
-    # the courier layer eventually marks the overall order DELIVERED.
-    if status in {"ACCEPTED", "PREPARING", "READY_FOR_PICKUP", "REJECTED"}:
+    if status == "READY_FOR_PICKUP":
+        updates["status"] = "READY_FOR_PICKUP"
+        updates["ready_for_pickup_at"] = now
+    elif _is_admin(user):
         updates["status"] = status
-    if status == "REJECTED":
-        updates["fulfillment_status"] = "NOT_STARTED"
-        updates["rejected_at"] = now
 
     updated = await database.update_one_if(
         "food_orders",
@@ -226,22 +221,29 @@ async def update_restaurant_order_status(
         data={"from": current, "to": status, "note": note},
     )
 
-    # Dispatch starts as soon as the restaurant accepts. Preparation and courier
-    # matching then progress independently, which avoids waiting until food is cold
-    # before LetsGoRide begins looking for a courier.
-    if status == "ACCEPTED":
-        delivery = await ensure_food_order_delivery(order_id, actor_user_id=_user_id(user))
-        quoted = await maybe_auto_quote_delivery(delivery["id"], actor_user_id=_user_id(user))
-        await append_order_event(
-            order_id,
-            "COURIER_MATCHING_STARTED",
-            actor_user_id=_user_id(user),
-            data={
-                "delivery_id": quoted.get("id"),
-                "delivery_status": quoted.get("status"),
-                "quote_status": quoted.get("quote_status"),
-            },
-        )
+    if status == "READY_FOR_PICKUP":
+        customer_user_id = str(order.get("customer_user_id") or "")
+        if customer_user_id:
+            await create_app_notification(
+                customer_user_id,
+                "food_update",
+                "Your order is ready",
+                f"{restaurant.get('name') or 'The restaurant'} has finished preparing your order.",
+                {"order_id": order_id, "restaurant_id": restaurant["id"]},
+            )
+
+        delivery_id = str(order.get("courier_delivery_id") or "")
+        if delivery_id:
+            delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
+            courier_user_id = str(delivery.get("courier_user_id") or "") if delivery else ""
+            if courier_user_id:
+                await create_app_notification(
+                    courier_user_id,
+                    "food_update",
+                    "Order ready for pickup",
+                    f"{restaurant.get('name') or 'The restaurant'} has the order ready for collection.",
+                    {"order_id": order_id, "delivery_id": delivery_id},
+                )
 
     refreshed = await database.find_one("food_orders", {"id": order_id})
     return refreshed or updated

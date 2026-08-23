@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
+from app.services.delivery_quote_service import maybe_auto_quote_delivery
+from app.services.fulfillment_link_service import ensure_food_order_delivery
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
 FINAL_ORDER_STATUSES = {"DELIVERED", "CANCELLED", "REJECTED"}
-CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES = {"PLACED", "ACCEPTED"}
+CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES = {"PREPARING"}
 PRE_PICKUP_DELIVERY_STATUSES = {"REQUESTED", "MATCHING", "ASSIGNED", "COURIER_TO_PICKUP"}
 PUBLIC_RESTAURANT_STATUSES = {"ACTIVE", "COMING_SOON"}
 
@@ -68,11 +70,19 @@ async def append_order_event(
 async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     restaurant = await get_restaurant(payload["restaurant_id"])
     if not restaurant.get("is_accepting_orders", True):
-        raise ValueError("This restaurant is not accepting orders right now.")
+        raise ValueError("This restaurant is closed for orders right now.")
 
     requested_items = payload.get("items") or []
     if not requested_items:
         raise ValueError("Add at least one menu item.")
+
+    delivery_location = payload.get("delivery_location")
+    if not isinstance(delivery_location, dict):
+        raise ValueError("Choose a precise delivery location on the map before checkout.")
+
+    payment_method = str(payload.get("payment_method") or "CASH_ON_DELIVERY")
+    if payment_method != "CASH_ON_DELIVERY":
+        raise ValueError("That payment method is not available yet.")
 
     item_snapshots: List[Dict[str, Any]] = []
     subtotal = 0.0
@@ -105,10 +115,11 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "customer_name": user.get("name") or payload.get("recipient_name"),
         "restaurant_id": restaurant["id"],
         "restaurant_name": restaurant.get("name"),
-        "status": "PLACED",
-        "restaurant_status": "PLACED",
+        "status": "PREPARING",
+        "restaurant_status": "PREPARING",
         "fulfillment_status": "NOT_STARTED",
-        "payment_status": "NOT_CONFIGURED",
+        "payment_method": payment_method,
+        "payment_status": "PAY_ON_DELIVERY",
         "items": item_snapshots,
         "subtotal_usd": round(subtotal, 2),
         "delivery_fee_usd": None,
@@ -121,13 +132,58 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         **{key: value for key, value in payload.items() if key != "items"},
     }
     saved = await database.insert_one("food_orders", order)
+    customer_id = str(user.get("id") or "")
+
     await append_order_event(
         saved["id"],
-        "ORDER_PLACED",
-        actor_user_id=str(user.get("id") or ""),
-        data={"restaurant_id": restaurant["id"], "subtotal_usd": saved["subtotal_usd"]},
+        "ORDER_CONFIRMED",
+        actor_user_id=customer_id,
+        data={
+            "restaurant_id": restaurant["id"],
+            "subtotal_usd": saved["subtotal_usd"],
+            "payment_method": payment_method,
+            "restaurant_status": "PREPARING",
+        },
     )
-    return saved
+    await append_order_event(
+        saved["id"],
+        "RESTAURANT_PREPARING",
+        data={"automatic": True},
+    )
+
+    merchant_user_id = str(restaurant.get("owner_user_id") or "")
+    if merchant_user_id:
+        await create_app_notification(
+            merchant_user_id,
+            "food_update",
+            "New order",
+            f"A new {restaurant.get('name') or 'restaurant'} order is now in preparation.",
+            {"order_id": saved["id"], "restaurant_id": restaurant["id"]},
+        )
+
+    await create_app_notification(
+        customer_id,
+        "food_update",
+        "Order confirmed",
+        f"{restaurant.get('name') or 'The restaurant'} has your order. We are matching a courier while the kitchen prepares it.",
+        {"order_id": saved["id"], "restaurant_id": restaurant["id"]},
+    )
+
+    delivery = await ensure_food_order_delivery(saved["id"], actor_user_id=customer_id)
+    quoted = await maybe_auto_quote_delivery(delivery["id"], actor_user_id=customer_id)
+    await append_order_event(
+        saved["id"],
+        "COURIER_MATCHING_STARTED",
+        actor_user_id=customer_id,
+        data={
+            "delivery_id": quoted.get("id"),
+            "delivery_status": quoted.get("status"),
+            "quote_status": quoted.get("quote_status"),
+        },
+    )
+
+    refreshed = await database.find_one("food_orders", {"id": saved["id"]})
+    return refreshed or saved
 
 
 async def list_customer_orders(user: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -211,6 +267,19 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
                 "The customer cancelled this order before pickup.",
                 {"order_id": order_id, "delivery_id": delivery_id},
             )
+
+    merchant_user_id = ""
+    restaurant = await database.find_one("restaurants", {"id": order.get("restaurant_id")})
+    if restaurant:
+        merchant_user_id = str(restaurant.get("owner_user_id") or "")
+    if merchant_user_id:
+        await create_app_notification(
+            merchant_user_id,
+            "food_update",
+            "Order cancelled",
+            "The customer cancelled this order before courier pickup.",
+            {"order_id": order_id},
+        )
 
     await append_order_event(
         order_id,
