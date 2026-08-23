@@ -164,7 +164,7 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         {
             "courier_user_id": _user_id(user),
             "courier_name": user.get("name") or profile.get("name") or "LetsGoRide Courier",
-            "status": "ASSIGNED",
+            "status": "COURIER_TO_PICKUP",
             "live_tracking_active": True,
             "assigned_at": now,
             "updated_at": now,
@@ -183,15 +183,21 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
             "courier_payout_usd": updated.get("courier_payout_usd"),
         },
     )
+    await append_delivery_event(
+        delivery_id,
+        "STATUS_COURIER_TO_PICKUP",
+        actor_user_id=_user_id(user),
+        data={"source": "automatic_after_acceptance"},
+    )
 
     sender_user_id = str(updated.get("sender_user_id") or "")
     if sender_user_id:
         await create_app_notification(
             sender_user_id,
             "courier_update",
-            "Courier assigned",
-            f"{updated.get('courier_name') or 'Your courier'} accepted your delivery.",
-            {"delivery_id": delivery_id, "courier_status": "ASSIGNED"},
+            "Courier is heading to pickup",
+            f"{updated.get('courier_name') or 'Your courier'} accepted the delivery and is on the way to pickup.",
+            {"delivery_id": delivery_id, "courier_status": "COURIER_TO_PICKUP"},
         )
 
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
