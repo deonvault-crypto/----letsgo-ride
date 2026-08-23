@@ -11,15 +11,23 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../../services/notificationService";
 import { AppNotification } from "../../types/notification.types";
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { user } = useCurrentUser();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const navRole: "customer" | "driver" | undefined = user?.role === "driver"
+    ? "driver"
+    : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
+      ? undefined
+      : "customer";
 
   const load = useCallback(async () => {
     try {
@@ -48,20 +56,28 @@ export default function NotificationsScreen() {
       router.push(`/(courier)/delivery/${data.delivery_id}` as never);
       return;
     }
+    if (target === "customer_food_order" && typeof data.food_order_id === "string") {
+      router.push(`/(shared)/food/order/${data.food_order_id}` as never);
+      return;
+    }
+    if (target === "customer_delivery" && typeof data.delivery_id === "string") {
+      router.push(`/(shared)/courier/${data.delivery_id}` as never);
+      return;
+    }
     if (typeof data.conversation_id === "string") {
       router.push(`/(shared)/conversation/${data.conversation_id}` as never);
       return;
     }
-    if (notification.type === "driver_verification" || typeof data.verification_status === "string") {
+    if ((notification.type === "driver_verification" || typeof data.verification_status === "string") && user?.role === "driver") {
       router.push("/(shared)/verification" as never);
-      return;
-    }
-    if (typeof data.delivery_id === "string") {
-      router.push(`/(shared)/courier/${data.delivery_id}` as never);
       return;
     }
     if (typeof data.food_order_id === "string") {
       router.push(`/(shared)/food/order/${data.food_order_id}` as never);
+      return;
+    }
+    if (typeof data.delivery_id === "string") {
+      router.push(user?.role === "courier" ? `/(courier)/delivery/${data.delivery_id}` as never : `/(shared)/courier/${data.delivery_id}` as never);
       return;
     }
     if (typeof data.support_message_id === "string") {
@@ -73,7 +89,7 @@ export default function NotificationsScreen() {
       return;
     }
     if (typeof data.ride_id === "string") {
-      router.push(`/(customer)/ride/${data.ride_id}` as never);
+      router.push(user?.role === "driver" ? `/(driver)/trip/${data.ride_id}` as never : `/(customer)/ride/${data.ride_id}` as never);
     }
   }
 
@@ -85,7 +101,7 @@ export default function NotificationsScreen() {
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
-    <Screen title="Notifications" showBack fallbackRoute="/(shared)/account" navRole="customer">
+    <Screen title="Notifications" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Notifications</Text>
         {unreadCount ? <StatusBadge label={`${unreadCount} unread`} tone="warning" /> : null}
@@ -94,11 +110,7 @@ export default function NotificationsScreen() {
       {loading ? <LoadingState label="Loading notifications..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && notifications.length === 0 ? (
-        <EmptyState
-          title="No notifications yet"
-          body="Ride, Food, Courier, support, and safety updates will appear here."
-          icon="bell-outline"
-        />
+        <EmptyState title="No notifications yet" body="Ride, Food, Courier, support, and safety updates will appear here." icon="bell-outline" />
       ) : null}
       {!loading && !error && notifications.map((notification) => (
         <Pressable
