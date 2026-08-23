@@ -56,16 +56,29 @@ export type FoodOrderStatus =
 
 export type FoodPaymentMethod = "CASH_ON_DELIVERY";
 
+export type FoodCheckoutQuotePayload = {
+  restaurant_id: string;
+  delivery_address: string;
+  delivery_location: { latitude: number; longitude: number };
+};
+
+export type FoodCheckoutQuote = {
+  restaurant_id: string;
+  currency: string;
+  delivery_fee_usd: number;
+  distance_km: number;
+  estimated_duration_minutes: number;
+  pickup_address: string;
+  dropoff_address: string;
+};
+
 export type FoodOrderItemPayload = {
   menu_item_id: string;
   quantity: number;
   note?: string | null;
 };
 
-export type FoodOrderCreatePayload = {
-  restaurant_id: string;
-  delivery_address: string;
-  delivery_location: { latitude: number; longitude: number };
+export type FoodOrderCreatePayload = FoodCheckoutQuotePayload & {
   recipient_name: string;
   recipient_phone: string;
   items: FoodOrderItemPayload[];
