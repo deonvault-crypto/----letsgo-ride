@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
@@ -13,7 +13,7 @@ import {
   updateMerchantOrderStatus,
   updateRestaurant,
 } from "../../../services/merchantService";
-import { FoodOrder, FoodOrderStatus } from "../../../types/food.types";
+import { FoodOrder } from "../../../types/food.types";
 import { MerchantDashboardData } from "../../../types/merchant.types";
 
 export default function MerchantRestaurantScreen() {
@@ -81,7 +81,7 @@ export default function MerchantRestaurantScreen() {
   }
 
   async function addCategory() {
-    if (!workspace || categoryName.trim().length < 1 || busy) return;
+    if (!workspace || !categoryName.trim() || busy) return;
     try {
       setBusy(true);
       setError(null);
@@ -98,7 +98,7 @@ export default function MerchantRestaurantScreen() {
   }
 
   async function addItem() {
-    if (!workspace || !selectedCategory || itemName.trim().length < 1 || busy) return;
+    if (!workspace || !selectedCategory || !itemName.trim() || busy) return;
     const price = Number(itemPrice);
     const prep = itemPrep.trim() ? Number(itemPrep) : null;
     if (!Number.isFinite(price) || price < 0 || (prep != null && (!Number.isFinite(prep) || prep < 0))) {
@@ -128,15 +128,15 @@ export default function MerchantRestaurantScreen() {
     }
   }
 
-  async function advanceOrder(order: FoodOrder, status: FoodOrderStatus) {
-    if (!workspace || busy) return;
+  async function markReady(order: FoodOrder) {
+    if (!workspace || busy || order.restaurant_status !== "PREPARING") return;
     try {
       setBusy(true);
       setError(null);
-      const updated = await updateMerchantOrderStatus(order.id, { status });
+      const updated = await updateMerchantOrderStatus(order.id, { status: "READY_FOR_PICKUP" });
       setWorkspace({ ...workspace, orders: workspace.orders.map((item) => item.id === updated.id ? updated : item) });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update order.");
+      setError(err instanceof Error ? err.message : "Unable to mark this order ready.");
     } finally {
       setBusy(false);
     }
@@ -167,8 +167,8 @@ export default function MerchantRestaurantScreen() {
 
           <View style={styles.controlCard}>
             <View style={styles.controlCopy}>
-              <Text style={styles.controlTitle}>Accepting orders</Text>
-              <Text style={styles.controlBody}>{workspace.restaurant.status === "ACTIVE" ? "Pause or resume customer ordering." : "This becomes available after activation."}</Text>
+              <Text style={styles.controlTitle}>Store availability</Text>
+              <Text style={styles.controlBody}>{workspace.restaurant.status === "ACTIVE" ? "When open, available menu items can be ordered immediately. There is no accept-order step." : "Ordering becomes available after activation."}</Text>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -178,31 +178,28 @@ export default function MerchantRestaurantScreen() {
               style={[styles.toggleButton, workspace.restaurant.is_accepting_orders && styles.toggleButtonOn, workspace.restaurant.status !== "ACTIVE" && styles.disabled]}
             >
               <View style={[styles.toggleDot, workspace.restaurant.is_accepting_orders && styles.toggleDotOn]} />
-              <Text style={[styles.toggleText, workspace.restaurant.is_accepting_orders && styles.toggleTextOn]}>{workspace.restaurant.is_accepting_orders ? "Live" : "Paused"}</Text>
+              <Text style={[styles.toggleText, workspace.restaurant.is_accepting_orders && styles.toggleTextOn]}>{workspace.restaurant.is_accepting_orders ? "Open" : "Closed"}</Text>
             </Pressable>
           </View>
 
           {workspace.restaurant.status === "DRAFT" ? (
             <Pressable accessibilityRole="button" onPress={submitReview} disabled={busy} style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}>
               <View style={styles.reviewIcon}><MaterialCommunityIcons name="shield-check-outline" size={23} color={v2Theme.colors.brandStrong} /></View>
-              <View style={styles.reviewCopy}>
-                <Text style={styles.reviewTitle}>Submit for merchant review</Text>
-                <Text style={styles.reviewBody}>Requires at least one category and one menu item.</Text>
-              </View>
+              <View style={styles.reviewCopy}><Text style={styles.reviewTitle}>Submit for merchant review</Text><Text style={styles.reviewBody}>Requires at least one category and one menu item.</Text></View>
               <MaterialCommunityIcons name="arrow-right" size={21} color={v2Theme.colors.ink} />
             </Pressable>
           ) : null}
 
           <View style={styles.section}>
-            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Incoming orders</Text><Text style={styles.sectionSub}>Kitchen workflow</Text></View><Text style={styles.count}>{activeOrders.length}</Text></View>
-            {activeOrders.length === 0 ? <EmptyRow icon="receipt-text-outline" title="No active orders" body="New customer orders will appear here as soon as they are placed." /> : null}
+            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Kitchen orders</Text><Text style={styles.sectionSub}>Orders arrive here already confirmed</Text></View><Text style={styles.count}>{activeOrders.length}</Text></View>
+            {activeOrders.length === 0 ? <EmptyRow icon="receipt-text-outline" title="No active orders" body="New orders appear automatically while the restaurant is open." /> : null}
             <View style={styles.orderList}>
-              {activeOrders.map((order) => <MerchantOrderCard key={order.id} order={order} busy={busy} onAdvance={advanceOrder} />)}
+              {activeOrders.map((order) => <MerchantOrderCard key={order.id} order={order} busy={busy} onReady={markReady} />)}
             </View>
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Menu</Text><Text style={styles.sectionSub}>Build categories before dishes</Text></View><Text style={styles.count}>{workspace.items.length}</Text></View>
+            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Menu</Text><Text style={styles.sectionSub}>Only available items can be ordered</Text></View><Text style={styles.count}>{workspace.items.length}</Text></View>
 
             <View style={styles.builderCard}>
               <Text style={styles.builderTitle}>Add category</Text>
@@ -254,121 +251,59 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <View style={styles.metric}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 
-function MerchantOrderCard({ order, busy, onAdvance }: { order: FoodOrder; busy: boolean; onAdvance: (order: FoodOrder, status: FoodOrderStatus) => void }) {
-  const next = nextMerchantStatus(order.status);
+function MerchantOrderCard({ order, busy, onReady }: { order: FoodOrder; busy: boolean; onReady: (order: FoodOrder) => void }) {
   const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const isPreparing = order.restaurant_status === "PREPARING" || order.status === "PREPARING";
+  const isReady = order.restaurant_status === "READY_FOR_PICKUP" || order.status === "READY_FOR_PICKUP";
   return (
     <View style={styles.orderCard}>
       <View style={styles.orderTop}>
         <View><Text style={styles.orderId}>ORDER {order.id.slice(0, 7).toUpperCase()}</Text><Text style={styles.orderName}>{order.recipient_name}</Text></View>
-        <Text style={styles.orderStatus}>{order.status.replaceAll("_", " ")}</Text>
+        <View style={[styles.orderStatusPill, isReady && styles.orderStatusReady]}><Text style={[styles.orderStatus, isReady && styles.orderStatusReadyText]}>{isReady ? "READY" : "PREPARING"}</Text></View>
       </View>
       <Text style={styles.orderMeta}>{totalItems} items · ${order.subtotal_usd.toFixed(2)} · {order.delivery_address}</Text>
-      <View style={styles.orderItems}>{order.items.slice(0, 4).map((item) => <Text key={item.menu_item_id} numberOfLines={1} style={styles.orderItem}>{item.quantity}× {item.name || "Menu item"}</Text>)}</View>
-      <View style={styles.orderActions}>
-        {order.status === "PLACED" ? <Pressable disabled={busy} onPress={() => onAdvance(order, "REJECTED")} style={styles.rejectButton}><Text style={styles.rejectText}>Reject</Text></Pressable> : null}
-        {next ? <Pressable disabled={busy} onPress={() => onAdvance(order, next)} style={styles.advanceButton}><Text style={styles.advanceText}>{nextLabel(next)}</Text><MaterialCommunityIcons name="arrow-right" size={18} color="#FFFFFF" /></Pressable> : null}
+      <View style={styles.orderItems}>{order.items.slice(0, 5).map((item) => <Text key={item.menu_item_id} numberOfLines={1} style={styles.orderItem}>{item.quantity}× {item.name || "Menu item"}</Text>)}</View>
+      <View style={styles.dispatchStrip}>
+        <MaterialCommunityIcons name="motorbike" size={18} color={v2Theme.colors.brandStrong} />
+        <Text style={styles.dispatchText}>{fulfillmentLabel(order.fulfillment_status)}</Text>
       </View>
+      {isPreparing ? (
+        <Pressable disabled={busy} onPress={() => onReady(order)} style={[styles.readyButton, busy && styles.disabled]}>
+          <Text style={styles.readyText}>Order is ready for pickup</Text><MaterialCommunityIcons name="check" size={19} color="#FFFFFF" />
+        </Pressable>
+      ) : null}
     </View>
   );
+}
+
+function fulfillmentLabel(status?: string) {
+  if (!status || status === "NOT_STARTED" || status === "REQUESTED" || status === "MATCHING") return "Finding a courier in parallel";
+  if (["ASSIGNED", "COURIER_ASSIGNED", "COURIER_TO_PICKUP"].includes(status)) return "Courier is heading to the restaurant";
+  if (status === "PICKED_UP") return "Courier collected the order";
+  if (["OUT_FOR_DELIVERY", "IN_TRANSIT", "ARRIVING"].includes(status)) return "Courier is delivering to the customer";
+  if (status === "DELIVERED") return "Delivered";
+  return status.replaceAll("_", " ").toLowerCase();
 }
 
 function EmptyRow({ icon, title, body }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; title: string; body: string }) {
   return <View style={styles.emptyRow}><View style={styles.emptyIcon}><MaterialCommunityIcons name={icon} size={23} color={v2Theme.colors.inkSecondary} /></View><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>{title}</Text><Text style={styles.emptyBody}>{body}</Text></View></View>;
 }
 
-function nextMerchantStatus(status: FoodOrderStatus): FoodOrderStatus | null {
-  if (status === "PLACED") return "ACCEPTED";
-  if (status === "ACCEPTED") return "PREPARING";
-  if (status === "PREPARING") return "READY_FOR_PICKUP";
-  return null;
-}
-
-function nextLabel(status: FoodOrderStatus) {
-  if (status === "ACCEPTED") return "Accept order";
-  if (status === "PREPARING") return "Start preparing";
-  if (status === "READY_FOR_PICKUP") return "Mark ready";
-  return status.replaceAll("_", " ");
-}
-
 const styles = StyleSheet.create({
   loading: { color: v2Theme.colors.inkSecondary, fontSize: 12 },
-  errorCard: { minHeight: 58, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
-  errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, fontWeight: "700" },
-  retry: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" },
-  heroCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 17, gap: 15 },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  heroIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
-  heroCopy: { flex: 1, gap: 4 },
-  heroEyebrow: { color: "rgba(255,255,255,0.6)", fontSize: 8, fontWeight: "900", letterSpacing: 0.9 },
-  heroTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "900" },
-  heroAddress: { color: "rgba(255,255,255,0.66)", fontSize: 10 },
-  metricsRow: { flexDirection: "row", gap: 8 },
-  metric: { flex: 1, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.08)", padding: 11, gap: 3 },
-  metricValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },
-  metricLabel: { color: "rgba(255,255,255,0.56)", fontSize: 8, fontWeight: "800" },
-  controlCard: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 },
-  controlCopy: { flex: 1, gap: 4 },
-  controlTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  controlBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
-  toggleButton: { minHeight: 38, borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6 },
-  toggleButtonOn: { backgroundColor: v2Theme.colors.brand },
-  toggleDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.inkTertiary },
-  toggleDotOn: { backgroundColor: "#FFFFFF" },
-  toggleText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
-  toggleTextOn: { color: "#FFFFFF" },
-  reviewButton: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
-  reviewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  reviewCopy: { flex: 1, gap: 3 },
-  reviewTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
-  reviewBody: { color: v2Theme.colors.inkSecondary, fontSize: 10 },
-  section: { gap: 11 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
-  sectionSub: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 },
-  count: { minWidth: 32, textAlign: "center", color: v2Theme.colors.ink, backgroundColor: v2Theme.colors.surfaceMuted, borderRadius: v2Theme.radius.pill, overflow: "hidden", paddingVertical: 6, paddingHorizontal: 8, fontSize: 10, fontWeight: "900" },
-  orderList: { gap: 9 },
-  orderCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 },
-  orderTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
-  orderId: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 },
-  orderName: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900", marginTop: 3 },
-  orderStatus: { color: v2Theme.colors.warning, backgroundColor: v2Theme.colors.warningSoft, borderRadius: v2Theme.radius.pill, overflow: "hidden", paddingHorizontal: 8, paddingVertical: 5, fontSize: 8, fontWeight: "900" },
-  orderMeta: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
-  orderItems: { gap: 4 },
-  orderItem: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "800" },
-  orderActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
-  rejectButton: { minHeight: 40, borderRadius: 14, backgroundColor: v2Theme.colors.dangerSoft, paddingHorizontal: 13, alignItems: "center", justifyContent: "center" },
-  rejectText: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" },
-  advanceButton: { minHeight: 40, borderRadius: 14, backgroundColor: v2Theme.colors.ink, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 7 },
-  advanceText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
-  emptyRow: { minHeight: 80, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
-  emptyIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
-  emptyCopy: { flex: 1, gap: 3 },
-  emptyTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  emptyBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
-  builderCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 },
-  builderTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  inlineForm: { flexDirection: "row", gap: 8 },
-  inlineInput: { flex: 1, minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 12, color: v2Theme.colors.ink, fontSize: 12, fontWeight: "800" },
-  squareButton: { width: 46, height: 46, borderRadius: 14, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
-  categoryWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  categoryPill: { minHeight: 36, borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 11, alignItems: "center", justifyContent: "center" },
-  categoryPillActive: { backgroundColor: v2Theme.colors.ink },
-  categoryText: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900" },
-  categoryTextActive: { color: "#FFFFFF" },
-  fullInput: { minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 12, color: v2Theme.colors.ink, fontSize: 12, fontWeight: "800" },
-  twoColumn: { flexDirection: "row", gap: 8 },
-  halfInput: { flex: 1 },
-  descriptionInput: { minHeight: 76, paddingTop: 12, textAlignVertical: "top" },
-  addItemButton: { minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  addItemText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
-  menuList: { gap: 8 },
-  menuItemRow: { minHeight: 68, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  menuItemIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
-  menuItemCopy: { flex: 1, gap: 3 },
-  menuItemName: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  menuItemMeta: { color: v2Theme.colors.inkSecondary, fontSize: 9 },
-  prep: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900" },
-  disabled: { opacity: 0.4 },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
+  errorCard: { minHeight: 58, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 }, errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, fontWeight: "700" }, retry: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" },
+  heroCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 17, gap: 15 }, heroTop: { flexDirection: "row", alignItems: "center", gap: 12 }, heroIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }, heroCopy: { flex: 1, gap: 4 }, heroEyebrow: { color: "rgba(255,255,255,0.6)", fontSize: 8, fontWeight: "900", letterSpacing: 0.9 }, heroTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "900" }, heroAddress: { color: "rgba(255,255,255,0.66)", fontSize: 10 },
+  metricsRow: { flexDirection: "row", gap: 8 }, metric: { flex: 1, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.08)", padding: 11, gap: 3 }, metricValue: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" }, metricLabel: { color: "rgba(255,255,255,0.56)", fontSize: 8, fontWeight: "800" },
+  controlCard: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }, controlCopy: { flex: 1, gap: 4 }, controlTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" }, controlBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
+  toggleButton: { minHeight: 38, borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 6 }, toggleButtonOn: { backgroundColor: v2Theme.colors.brand }, toggleDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.inkTertiary }, toggleDotOn: { backgroundColor: "#FFFFFF" }, toggleText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" }, toggleTextOn: { color: "#FFFFFF" },
+  reviewButton: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, reviewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, reviewCopy: { flex: 1, gap: 3 }, reviewTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, reviewBody: { color: v2Theme.colors.inkSecondary, fontSize: 10 },
+  section: { gap: 11 }, sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 }, sectionSub: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 }, count: { minWidth: 32, textAlign: "center", color: v2Theme.colors.ink, backgroundColor: v2Theme.colors.surfaceMuted, borderRadius: v2Theme.radius.pill, overflow: "hidden", paddingVertical: 6, paddingHorizontal: 8, fontSize: 10, fontWeight: "900" },
+  orderList: { gap: 9 }, orderCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 }, orderTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }, orderId: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 }, orderName: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900", marginTop: 3 }, orderStatusPill: { backgroundColor: v2Theme.colors.warningSoft, borderRadius: v2Theme.radius.pill, paddingHorizontal: 8, paddingVertical: 5 }, orderStatusReady: { backgroundColor: v2Theme.colors.brandSofter }, orderStatus: { color: v2Theme.colors.warning, fontSize: 8, fontWeight: "900" }, orderStatusReadyText: { color: v2Theme.colors.brandStrong }, orderMeta: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, orderItems: { gap: 4 }, orderItem: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "800" },
+  dispatchStrip: { minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.brandSofter, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11 }, dispatchText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" }, readyButton: { minHeight: 44, borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, readyText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
+  emptyRow: { minHeight: 80, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, emptyIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, emptyCopy: { flex: 1, gap: 3 }, emptyTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" }, emptyBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
+  builderCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 }, builderTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" }, inlineForm: { flexDirection: "row", gap: 8 }, inlineInput: { flex: 1, minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 12, color: v2Theme.colors.ink, fontSize: 12, fontWeight: "800" }, squareButton: { width: 46, height: 46, borderRadius: 14, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
+  categoryWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7 }, categoryPill: { minHeight: 36, borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 11, alignItems: "center", justifyContent: "center" }, categoryPillActive: { backgroundColor: v2Theme.colors.ink }, categoryText: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900" }, categoryTextActive: { color: "#FFFFFF" },
+  fullInput: { minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 12, color: v2Theme.colors.ink, fontSize: 12, fontWeight: "800" }, twoColumn: { flexDirection: "row", gap: 8 }, halfInput: { flex: 1 }, descriptionInput: { minHeight: 76, paddingTop: 12, textAlignVertical: "top" }, addItemButton: { minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, addItemText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
+  menuList: { gap: 8 }, menuItemRow: { minHeight: 68, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 10 }, menuItemIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, menuItemCopy: { flex: 1, gap: 3 }, menuItemName: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" }, menuItemMeta: { color: v2Theme.colors.inkSecondary, fontSize: 9 }, prep: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900" },
+  disabled: { opacity: 0.4 }, pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
 });
