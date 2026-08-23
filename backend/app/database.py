@@ -34,6 +34,7 @@ COLLECTION_NAMES = [
     "courier_events",
     "courier_profiles",
     "courier_location_snapshots",
+    "delivery_handoffs",
     "work_availability",
     "restaurants",
     "restaurant_categories",
@@ -164,37 +165,29 @@ class Database:
             result = await self.db[collection].delete_one({"id": item_id})
             return result.deleted_count > 0
 
-        original_count = len(self.memory[collection])
-        self.memory[collection] = [
-            item for item in self.memory[collection] if item.get("id") != item_id
-        ]
-        return len(self.memory[collection]) < original_count
+        before = len(self.memory[collection])
+        self.memory[collection] = [item for item in self.memory[collection] if item.get("id") != item_id]
+        return len(self.memory[collection]) < before
 
-    async def replace_collection(
-        self, collection: str, items: Iterable[Dict[str, Any]]
-    ) -> None:
+    async def replace_collection(self, collection: str, items: Iterable[Dict[str, Any]]) -> None:
+        clean_items = [deepcopy(item) for item in items]
         if self.db is not None:
             await self.db[collection].delete_many({})
-            if items:
-                await self.db[collection].insert_many(list(items))
+            if clean_items:
+                await self.db[collection].insert_many(clean_items)
             return
+        self.memory[collection] = clean_items
 
-        self.memory[collection] = [deepcopy(item) for item in items]
+    async def count(self, collection: str, filters: Optional[Dict[str, Any]] = None) -> int:
+        filters = filters or {}
+        if self.db is not None:
+            return await self.db[collection].count_documents(filters)
+        return sum(1 for item in self.memory[collection] if self._matches(item, filters))
 
-    def _matches(self, item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+    @staticmethod
+    def _matches(item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         for key, expected in filters.items():
-            actual = item.get(key)
-            if isinstance(expected, dict):
-                if "$in" in expected and actual not in expected["$in"]:
-                    return False
-                if "$ne" in expected and actual == expected["$ne"]:
-                    return False
-                if "$exists" in expected:
-                    exists = key in item
-                    if bool(expected["$exists"]) != exists:
-                        return False
-                continue
-            if actual != expected:
+            if item.get(key) != expected:
                 return False
         return True
 
