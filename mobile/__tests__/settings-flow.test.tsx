@@ -108,11 +108,11 @@ describe("settings account controls", () => {
     expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
     expect(screen.queryByRole("button", { name: "Change phone number" })).toBeNull();
 
-    const tripUpdatesSwitch = screen.getByLabelText("Trip updates");
-    expect(tripUpdatesSwitch.props.value).toBe(false);
-    expect(tripUpdatesSwitch.props.disabled).toBe(true);
+    const serviceUpdatesSwitch = screen.getByLabelText("Service updates");
+    expect(serviceUpdatesSwitch.props.value).toBe(false);
+    expect(serviceUpdatesSwitch.props.disabled).toBe(true);
 
-    fireEvent(tripUpdatesSwitch, "valueChange", true);
+    fireEvent(serviceUpdatesSwitch, "valueChange", true);
     expect(updateNotificationPreferences).not.toHaveBeenCalled();
   });
 
@@ -124,17 +124,20 @@ describe("settings account controls", () => {
       expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
     });
 
+    expect(screen.getByRole("button", { name: "Privacy Policy" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Terms of Use" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Safety Policy" })).toBeOnTheScreen();
+    expect(screen.queryByText("Phone and document privacy")).toBeNull();
+    expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
+
     fireEvent(screen.getByLabelText("Biometric login"), "valueChange", true);
-    expect(await screen.findByText("Face ID will only unlock LetsGoRide on this device.")).toBeOnTheScreen();
+    expect(await screen.findByText("Face ID or your device biometric only unlocks this LetsGoRide account on this device.")).toBeOnTheScreen();
     expect(enableBiometricLogin).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByRole("button", { name: "Enable biometric login" }));
     await waitFor(() => {
       expect(enableBiometricLogin).toHaveBeenCalled();
     });
-
-    fireEvent.press(screen.getByRole("button", { name: "Verified identity badge" }));
-    expect(screen.getByText("A verified badge means LetsGoRide has reviewed your identity documents. It helps build trust with passengers and drivers.")).toBeOnTheScreen();
   });
 
   it("shows the explanation before requesting phone notifications from settings", async () => {
@@ -157,9 +160,9 @@ describe("settings account controls", () => {
       expect(screen.getByText("Phone notifications: On")).toBeOnTheScreen();
     });
 
-    const tripUpdatesSwitch = screen.getByLabelText("Trip updates");
-    expect(tripUpdatesSwitch.props.value).toBe(true);
-    expect(tripUpdatesSwitch.props.disabled).toBe(false);
+    const serviceUpdatesSwitch = screen.getByLabelText("Service updates");
+    expect(serviceUpdatesSwitch.props.value).toBe(true);
+    expect(serviceUpdatesSwitch.props.disabled).toBe(false);
   });
 
   it("requires explicit confirmation before deleting an account", async () => {
@@ -172,20 +175,18 @@ describe("settings account controls", () => {
     fireEvent.press(screen.getAllByRole("button", { name: "Delete account" })[0]);
 
     expect(screen.getByText("Delete account?")).toBeOnTheScreen();
-    expect(screen.getByText("This permanently deletes your LetsGoRide account, trips, messages, verification records, and saved preferences.")).toBeOnTheScreen();
+    expect(screen.getByText("This permanently deletes your LetsGoRide account, activity, messages, verification records, and saved preferences.")).toBeOnTheScreen();
     expect(screen.getByText("Type DELETE to confirm.")).toBeOnTheScreen();
     fireEvent.press(screen.getAllByRole("button", { name: "Delete account" }).at(-1)!);
     expect(deleteAccount).not.toHaveBeenCalled();
 
     fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE");
-    for (const button of screen.getAllByRole("button", { name: "Delete account" })) {
-      fireEvent.press(button);
-    }
+    fireEvent.press(screen.getAllByRole("button", { name: "Delete account" }).at(-1)!);
 
     await waitFor(() => {
       expect(deleteAccount).toHaveBeenCalled();
       expect(disableBiometricLogin).toHaveBeenCalled();
-      expect(mockReplace).toHaveBeenCalledWith("/(auth)/welcome");
+      expect(mockReplace).toHaveBeenCalledWith("/(customer)/home");
     });
   });
 });
