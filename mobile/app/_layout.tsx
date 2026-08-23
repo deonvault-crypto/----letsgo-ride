@@ -28,7 +28,7 @@ export default function RootLayout() {
         return;
       }
       if (typeof data.ride_id === "string") {
-        router.push(`/(passenger)/ride/${data.ride_id}` as never);
+        router.push(`/(customer)/ride/${data.ride_id}` as never);
         return;
       }
       if (typeof data.delivery_id === "string") {
@@ -65,8 +65,9 @@ export default function RootLayout() {
           >
             <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
             <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(passenger)" options={{ gestureEnabled: false, animation: "fade" }} />
+            <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
             <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
+            <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
             <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
             <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
           </Stack>
