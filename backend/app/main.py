@@ -65,6 +65,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "details": exc.errors(),
             },
         )
+    if request.url.path.startswith("/courier/deliveries/") and request.url.path.endswith("/location"):
+        logger.warning(
+            "courier_location_validation_failed path=%s errors=%s",
+            request.url.path,
+            exc.errors(),
+        )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "error": "The device location could not be read. Keep moving and try again.",
+            },
+        )
     return JSONResponse(
         status_code=422,
         content={"success": False, "error": "Validation failed.", "details": exc.errors()},

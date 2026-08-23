@@ -3,14 +3,13 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
-from app.services.delivery_quote_service import maybe_auto_quote_delivery
-from app.services.fulfillment_link_service import ensure_food_order_delivery
 from app.services.notification_service import create_app_notification
+from app.services.courier_state_service import clear_courier_active_reference
 from app.utils import new_id, now_iso
 
 
 FINAL_ORDER_STATUSES = {"DELIVERED", "CANCELLED", "REJECTED"}
-CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES = {"PREPARING"}
+CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES = {"PENDING_RESTAURANT", "PREPARING"}
 PRE_PICKUP_DELIVERY_STATUSES = {"REQUESTED", "MATCHING", "ASSIGNED", "COURIER_TO_PICKUP"}
 PUBLIC_RESTAURANT_STATUSES = {"ACTIVE", "COMING_SOON"}
 
@@ -115,8 +114,8 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "customer_name": user.get("name") or payload.get("recipient_name"),
         "restaurant_id": restaurant["id"],
         "restaurant_name": restaurant.get("name"),
-        "status": "PREPARING",
-        "restaurant_status": "PREPARING",
+        "status": "PENDING_RESTAURANT",
+        "restaurant_status": "PENDING_RESTAURANT",
         "fulfillment_status": "NOT_STARTED",
         "payment_method": payment_method,
         "payment_status": "PAY_ON_DELIVERY",
@@ -136,19 +135,14 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
 
     await append_order_event(
         saved["id"],
-        "ORDER_CONFIRMED",
+        "ORDER_PLACED",
         actor_user_id=customer_id,
         data={
             "restaurant_id": restaurant["id"],
             "subtotal_usd": saved["subtotal_usd"],
             "payment_method": payment_method,
-            "restaurant_status": "PREPARING",
+            "restaurant_status": "PENDING_RESTAURANT",
         },
-    )
-    await append_order_event(
-        saved["id"],
-        "RESTAURANT_PREPARING",
-        data={"automatic": True},
     )
 
     merchant_user_id = str(restaurant.get("owner_user_id") or "")
@@ -156,8 +150,8 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         await create_app_notification(
             merchant_user_id,
             "food_update",
-            "New order",
-            f"A new {restaurant.get('name') or 'restaurant'} order is now in preparation.",
+            "New order needs a response",
+            f"Review and accept the new {restaurant.get('name') or 'restaurant'} order.",
             {
                 "food_order_id": saved["id"],
                 "restaurant_id": restaurant["id"],
@@ -168,8 +162,8 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
     await create_app_notification(
         customer_id,
         "food_update",
-        "Order confirmed",
-        f"{restaurant.get('name') or 'The restaurant'} has your order. We are matching a courier while the kitchen prepares it.",
+        "Order sent",
+        f"{restaurant.get('name') or 'The restaurant'} is reviewing your order. We will update you when it is accepted.",
         {
             "food_order_id": saved["id"],
             "restaurant_id": restaurant["id"],
@@ -177,21 +171,7 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         },
     )
 
-    delivery = await ensure_food_order_delivery(saved["id"], actor_user_id=customer_id)
-    quoted = await maybe_auto_quote_delivery(delivery["id"], actor_user_id=customer_id)
-    await append_order_event(
-        saved["id"],
-        "COURIER_MATCHING_STARTED",
-        actor_user_id=customer_id,
-        data={
-            "delivery_id": quoted.get("id"),
-            "delivery_status": quoted.get("status"),
-            "quote_status": quoted.get("quote_status"),
-        },
-    )
-
-    refreshed = await database.find_one("food_orders", {"id": saved["id"]})
-    return refreshed or saved
+    return saved
 
 
 async def list_customer_orders(user: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -252,9 +232,12 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
                 "cancellation_reason": reason,
                 "cancelled_at": now,
                 "live_tracking_active": False,
+                "tracking_stopped_at": now,
                 "updated_at": now,
             },
         )
+        terminal_delivery = {**linked_delivery, "status": "CANCELLED", "id": delivery_id}
+        await clear_courier_active_reference(terminal_delivery)
         await database.insert_one(
             "courier_events",
             {

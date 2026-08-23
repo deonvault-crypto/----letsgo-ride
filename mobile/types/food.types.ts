@@ -23,6 +23,7 @@ export type MenuCategory = {
   restaurant_id: string;
   name: string;
   description?: string | null;
+  image_url?: string | null;
   sort_order?: number;
 };
 
@@ -45,6 +46,7 @@ export type RestaurantMenu = {
 };
 
 export type FoodOrderStatus =
+  | "PENDING_RESTAURANT"
   | "PREPARING"
   | "READY_FOR_PICKUP"
   | "COURIER_ASSIGNED"

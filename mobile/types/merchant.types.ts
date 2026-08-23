@@ -2,7 +2,7 @@ import { FoodOrder, FoodOrderStatus, MenuCategory, MenuItem, Restaurant } from "
 
 export type MerchantRestaurant = Restaurant & {
   owner_user_id: string;
-  status: "DRAFT" | "PENDING_REVIEW" | "ACTIVE" | string;
+  status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "PENDING_REVIEW" | string;
   is_accepting_orders: boolean;
   location?: { latitude?: number | null; longitude?: number | null } | null;
   created_at?: string;
@@ -17,6 +17,12 @@ export type RestaurantCreatePayload = {
   location?: { latitude?: number | null; longitude?: number | null } | null;
   cuisine_tags?: string[];
   opening_hours?: Record<string, string>;
+  hero_image_url?: string | null;
+  logo_url?: string | null;
+  contact_person_name?: string | null;
+  contact_email?: string | null;
+  business_registration_number?: string | null;
+  pickup_instructions?: string | null;
 };
 
 export type RestaurantUpdatePayload = Partial<RestaurantCreatePayload> & {
@@ -29,6 +35,7 @@ export type MenuCategoryCreatePayload = {
   name: string;
   description?: string | null;
   sort_order?: number;
+  image_url?: string | null;
 };
 
 export type MenuItemCreatePayload = {

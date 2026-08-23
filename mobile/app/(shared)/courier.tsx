@@ -285,7 +285,7 @@ export default function CourierScreen() {
 
       <View style={styles.trustRow}>
         <MaterialCommunityIcons name="shield-check-outline" size={17} color={v2Theme.colors.inkSecondary} />
-        <Text style={styles.trustText}>Map coordinates drive the route. The typed place name is only a human-friendly label.</Text>
+        <Text style={styles.trustText}>Your exact map pins guide the route, while place names help everyone recognise each stop.</Text>
       </View>
     </Screen>
   );
@@ -368,7 +368,7 @@ function RouteStep({
           <MaterialCommunityIcons name="map-marker-radius-outline" size={22} color={v2Theme.colors.brandStrong} />
         </View>
         <View style={styles.mapPromiseCopy}>
-          <Text style={styles.mapPromiseTitle}>Coordinates are the truth.</Text>
+          <Text style={styles.mapPromiseTitle}>Your exact pin guides the courier.</Text>
           <Text style={styles.mapPromiseBody}>Even when a house has no perfect street address, the courier gets the exact map point you selected.</Text>
         </View>
       </View>

@@ -2,6 +2,18 @@
 
 This note captures the current launch checkpoint for the LetsGoRide mobile app and backend. It is safe to share internally, but it does not include secrets, API keys, passwords, OTPs, or private environment values.
 
+## Platform V2 final-pass checkpoint — 2026-08-23
+
+- Courier active work is server-owned: terminal jobs cannot hydrate the live workspace, offers pause during active work, and a database constraint prevents multiple active deliveries per courier.
+- Courier progression is intentionally minimal: accept, confirm physical pickup, automatic in-transit/arrival updates, then recipient PIN handoff. Terminal records cannot restart tracking.
+- Customer Activity has intentional guest, loading, error, empty, in-progress and history states. Live screens poll only while focused and in the foreground.
+- Food shows active internal ordering separately from truthful, non-orderable `COMING_SOON` brand listings. Restaurant/menu images have loading and owned fallback media.
+- Merchant onboarding uses `DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED → ACTIVE`, with admin-only review/activation and cash-on-delivery settlement labelled as not requiring a platform payout.
+- Public signup creates Passenger accounts only. Existing reviewed worker identities remain usable; role provisioning is admin-only and audited.
+- The staging backend and `letsgoride_staging` database are isolated from production. Do not write QA records to production.
+- Real new-account QA remains blocked until staging Resend variables are configured. Mock phone OTP is disabled outside development unless staging is explicitly opted in.
+- An installed iOS Preview build may be created only after the final Platform V2 CI run is green.
+
 ## Stable Checkpoints
 
 - Phase 1: `5c258d4` - Stabilize LetsGo Ride core flows and auth experience

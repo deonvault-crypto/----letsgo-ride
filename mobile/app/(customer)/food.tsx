@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 
+import { FoodImage } from "../../components/food/FoodImage";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { listRestaurants } from "../../services/foodService";
@@ -216,9 +217,9 @@ function RestaurantCard({ restaurant, onPress }: { restaurant: Restaurant; onPre
       style={({ pressed }) => [styles.restaurantCard, !orderable && styles.restaurantCardUnavailable, pressed && orderable && styles.pressed]}
     >
       <View style={[styles.restaurantVisual, orderable ? styles.restaurantVisualLive : styles.restaurantVisualUnavailable]}>
-        <View style={styles.restaurantGlyph}>
-          <MaterialCommunityIcons name={icon} size={31} color={orderable ? "#FFFFFF" : v2Theme.colors.brandStrong} />
-        </View>
+        <FoodImage uri={restaurant.hero_image_url} photographicFallback={orderable} label={restaurant.name} style={styles.restaurantPhoto} />
+        {orderable ? <View style={styles.photoScrim} /> : null}
+        {orderable ? <View style={styles.restaurantGlyph}><MaterialCommunityIcons name={icon} size={31} color="#FFFFFF" /></View> : <View />}
         <View style={[styles.availabilityBadge, !orderable && styles.availabilityBadgeUnavailable]}>
           <View style={[styles.availabilityDot, !orderable && styles.availabilityDotUnavailable]} />
           <Text style={styles.availabilityText}>{orderable ? "ACCEPTING ORDERS" : "ORDERING UNAVAILABLE"}</Text>
@@ -389,6 +390,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
   },
+  restaurantPhoto: { ...StyleSheet.absoluteFillObject },
+  photoScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(9,25,17,0.23)" },
   restaurantVisualLive: { backgroundColor: v2Theme.colors.brand },
   restaurantVisualUnavailable: { backgroundColor: v2Theme.colors.brandSofter },
   restaurantGlyph: {

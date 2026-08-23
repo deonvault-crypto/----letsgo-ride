@@ -160,6 +160,11 @@ class UserUpdate(BaseModel):
         return normalize_email(value)
 
 
+class AdminRoleUpdateBody(BaseModel):
+    role: Literal["driver", "courier", "merchant", "admin"]
+    reason: str = Field(min_length=3, max_length=300)
+
+
 class VerifyEmailBody(BaseModel):
     email: str = Field(min_length=5)
     code: str = Field(min_length=6, max_length=6)

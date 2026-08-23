@@ -73,6 +73,7 @@ class Database:
             self.client = AsyncIOMotorClient(settings.mongodb_uri)
             self.db = self.client[settings.mongodb_db_name]
             await self.client.admin.command("ping")
+            await self.ensure_indexes()
             self.status = "connected"
         except Exception as exc:
             self.client = None
@@ -82,6 +83,40 @@ class Database:
                 raise RuntimeError(
                     f"MongoDB is required when APP_ENV={app_env}, but the connection is unavailable."
                 ) from exc
+
+    async def ensure_indexes(self) -> None:
+        """Create the small set of operational indexes required by live product queries."""
+        if self.db is None:
+            return
+        await self.db["courier_deliveries"].create_index(
+            [("courier_user_id", 1), ("status", 1), ("updated_at", -1)],
+            name="courier_active_by_user",
+        )
+        await self.db["courier_deliveries"].create_index(
+            [("courier_user_id", 1)],
+            name="one_active_delivery_per_courier",
+            unique=True,
+            partialFilterExpression={
+                "courier_user_id": {"$type": "string"},
+                "status": {"$in": ["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVING"]},
+            },
+        )
+        await self.db["courier_deliveries"].create_index(
+            [("status", 1), ("courier_user_id", 1), ("quote_status", 1), ("created_at", 1)],
+            name="courier_offer_matching",
+        )
+        await self.db["food_orders"].create_index(
+            [("customer_user_id", 1), ("created_at", -1)],
+            name="food_orders_by_customer",
+        )
+        await self.db["food_orders"].create_index(
+            [("restaurant_id", 1), ("created_at", -1)],
+            name="food_orders_by_restaurant",
+        )
+        await self.db["restaurants"].create_index(
+            [("status", 1), ("is_accepting_orders", 1), ("name", 1)],
+            name="public_restaurant_availability",
+        )
 
     async def close(self) -> None:
         if self.client:
@@ -187,7 +222,17 @@ class Database:
     @staticmethod
     def _matches(item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         for key, expected in filters.items():
-            if item.get(key) != expected:
+            actual = item.get(key)
+            if isinstance(expected, dict):
+                for operator, value in expected.items():
+                    if operator == "$in" and actual not in value:
+                        return False
+                    if operator == "$nin" and actual in value:
+                        return False
+                    if operator == "$ne" and actual == value:
+                        return False
+                continue
+            if actual != expected:
                 return False
         return True
 

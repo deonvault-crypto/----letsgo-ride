@@ -23,10 +23,12 @@ export default function MerchantRestaurantScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [categoryName, setCategoryName] = useState("");
+  const [categoryImage, setCategoryImage] = useState("");
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemPrep, setItemPrep] = useState("");
+  const [itemImage, setItemImage] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -85,11 +87,12 @@ export default function MerchantRestaurantScreen() {
     try {
       setBusy(true);
       setError(null);
-      const category = await createMenuCategory(workspace.restaurant.id, { name: categoryName.trim(), sort_order: workspace.categories.length });
+      const category = await createMenuCategory(workspace.restaurant.id, { name: categoryName.trim(), image_url: categoryImage.trim() || null, sort_order: workspace.categories.length });
       const categories = [...workspace.categories, category];
       setWorkspace({ ...workspace, categories });
       setSelectedCategory(category.id);
       setCategoryName("");
+      setCategoryImage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to add category.");
     } finally {
@@ -114,6 +117,7 @@ export default function MerchantRestaurantScreen() {
         description: itemDescription.trim() || null,
         price_usd: price,
         preparation_minutes: prep == null ? null : Math.floor(prep),
+        image_url: itemImage.trim() || null,
         is_available: true,
       });
       setWorkspace({ ...workspace, items: [...workspace.items, item] });
@@ -121,6 +125,7 @@ export default function MerchantRestaurantScreen() {
       setItemPrice("");
       setItemDescription("");
       setItemPrep("");
+      setItemImage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to add menu item.");
     } finally {
@@ -137,6 +142,23 @@ export default function MerchantRestaurantScreen() {
       setWorkspace({ ...workspace, orders: workspace.orders.map((item) => item.id === updated.id ? updated : item) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to mark this order ready.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function respondToOrder(order: FoodOrder, status: "PREPARING" | "REJECTED") {
+    if (!workspace || busy || order.restaurant_status !== "PENDING_RESTAURANT") return;
+    try {
+      setBusy(true);
+      setError(null);
+      const updated = await updateMerchantOrderStatus(order.id, {
+        status,
+        note: status === "REJECTED" ? "Restaurant could not accept this order." : null,
+      });
+      setWorkspace({ ...workspace, orders: workspace.orders.map((item) => item.id === updated.id ? updated : item) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to respond to this order.");
     } finally {
       setBusy(false);
     }
@@ -168,7 +190,7 @@ export default function MerchantRestaurantScreen() {
           <View style={styles.controlCard}>
             <View style={styles.controlCopy}>
               <Text style={styles.controlTitle}>Store availability</Text>
-              <Text style={styles.controlBody}>{workspace.restaurant.status === "ACTIVE" ? "When open, available menu items can be ordered immediately. There is no accept-order step." : "Ordering becomes available after activation."}</Text>
+              <Text style={styles.controlBody}>{workspace.restaurant.status === "ACTIVE" ? "When open, new orders arrive here for your team to accept or decline." : "Ordering becomes available after activation."}</Text>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -182,19 +204,19 @@ export default function MerchantRestaurantScreen() {
             </Pressable>
           </View>
 
-          {workspace.restaurant.status === "DRAFT" ? (
+          {["DRAFT", "REJECTED"].includes(workspace.restaurant.status) ? (
             <Pressable accessibilityRole="button" onPress={submitReview} disabled={busy} style={({ pressed }) => [styles.reviewButton, pressed && styles.pressed]}>
               <View style={styles.reviewIcon}><MaterialCommunityIcons name="shield-check-outline" size={23} color={v2Theme.colors.brandStrong} /></View>
-              <View style={styles.reviewCopy}><Text style={styles.reviewTitle}>Submit for merchant review</Text><Text style={styles.reviewBody}>Requires at least one category and one menu item.</Text></View>
+              <View style={styles.reviewCopy}><Text style={styles.reviewTitle}>{workspace.restaurant.status === "REJECTED" ? "Resubmit for merchant review" : "Submit for merchant review"}</Text><Text style={styles.reviewBody}>Business details, exact location, opening hours, a category and an item are required.</Text></View>
               <MaterialCommunityIcons name="arrow-right" size={21} color={v2Theme.colors.ink} />
             </Pressable>
           ) : null}
 
           <View style={styles.section}>
-            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Kitchen orders</Text><Text style={styles.sectionSub}>Orders arrive here already confirmed</Text></View><Text style={styles.count}>{activeOrders.length}</Text></View>
-            {activeOrders.length === 0 ? <EmptyRow icon="receipt-text-outline" title="No active orders" body="New orders appear automatically while the restaurant is open." /> : null}
+            <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Kitchen orders</Text><Text style={styles.sectionSub}>Respond promptly, then keep preparation status current</Text></View><Text style={styles.count}>{activeOrders.length}</Text></View>
+            {activeOrders.length === 0 ? <EmptyRow icon="receipt-text-outline" title="No active orders" body="New orders appear here for acceptance while the restaurant is open." /> : null}
             <View style={styles.orderList}>
-              {activeOrders.map((order) => <MerchantOrderCard key={order.id} order={order} busy={busy} onReady={markReady} />)}
+              {activeOrders.map((order) => <MerchantOrderCard key={order.id} order={order} busy={busy} onRespond={respondToOrder} onReady={markReady} />)}
             </View>
           </View>
 
@@ -207,6 +229,7 @@ export default function MerchantRestaurantScreen() {
                 <TextInput accessibilityLabel="Category name" value={categoryName} onChangeText={setCategoryName} placeholder="e.g. Burgers" placeholderTextColor={v2Theme.colors.inkTertiary} style={styles.inlineInput} />
                 <Pressable accessibilityRole="button" accessibilityLabel="Add menu category" onPress={addCategory} disabled={!categoryName.trim() || busy} style={[styles.squareButton, (!categoryName.trim() || busy) && styles.disabled]}><MaterialCommunityIcons name="plus" size={21} color="#FFFFFF" /></Pressable>
               </View>
+              <TextInput accessibilityLabel="Category image URL" value={categoryImage} onChangeText={setCategoryImage} placeholder="Category image URL (optional)" placeholderTextColor={v2Theme.colors.inkTertiary} style={styles.fullInput} />
               {workspace.categories.length ? (
                 <View style={styles.categoryWrap}>
                   {workspace.categories.map((category) => (
@@ -226,6 +249,7 @@ export default function MerchantRestaurantScreen() {
                 <TextInput accessibilityLabel="Preparation minutes" value={itemPrep} onChangeText={setItemPrep} keyboardType="number-pad" placeholder="Prep min" placeholderTextColor={v2Theme.colors.inkTertiary} style={[styles.fullInput, styles.halfInput]} />
               </View>
               <TextInput accessibilityLabel="Menu item description" value={itemDescription} onChangeText={setItemDescription} multiline placeholder="Short description" placeholderTextColor={v2Theme.colors.inkTertiary} style={[styles.fullInput, styles.descriptionInput]} />
+              <TextInput accessibilityLabel="Menu item image URL" value={itemImage} onChangeText={setItemImage} placeholder="Dish image URL (optional)" placeholderTextColor={v2Theme.colors.inkTertiary} style={styles.fullInput} />
               <Pressable accessibilityRole="button" onPress={addItem} disabled={!selectedCategory || !itemName.trim() || !itemPrice.trim() || busy} style={[styles.addItemButton, (!selectedCategory || !itemName.trim() || !itemPrice.trim() || busy) && styles.disabled]}>
                 <Text style={styles.addItemText}>Add to menu</Text><MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
               </Pressable>
@@ -251,15 +275,16 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <View style={styles.metric}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>;
 }
 
-function MerchantOrderCard({ order, busy, onReady }: { order: FoodOrder; busy: boolean; onReady: (order: FoodOrder) => void }) {
+function MerchantOrderCard({ order, busy, onRespond, onReady }: { order: FoodOrder; busy: boolean; onRespond: (order: FoodOrder, status: "PREPARING" | "REJECTED") => void; onReady: (order: FoodOrder) => void }) {
   const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const isPending = order.restaurant_status === "PENDING_RESTAURANT" || order.status === "PENDING_RESTAURANT";
   const isPreparing = order.restaurant_status === "PREPARING" || order.status === "PREPARING";
   const isReady = order.restaurant_status === "READY_FOR_PICKUP" || order.status === "READY_FOR_PICKUP";
   return (
     <View style={styles.orderCard}>
       <View style={styles.orderTop}>
         <View><Text style={styles.orderId}>ORDER {order.id.slice(0, 7).toUpperCase()}</Text><Text style={styles.orderName}>{order.recipient_name}</Text></View>
-        <View style={[styles.orderStatusPill, isReady && styles.orderStatusReady]}><Text style={[styles.orderStatus, isReady && styles.orderStatusReadyText]}>{isReady ? "READY" : "PREPARING"}</Text></View>
+        <View style={[styles.orderStatusPill, isReady && styles.orderStatusReady]}><Text style={[styles.orderStatus, isReady && styles.orderStatusReadyText]}>{isReady ? "READY" : isPending ? "NEW" : "PREPARING"}</Text></View>
       </View>
       <Text style={styles.orderMeta}>{totalItems} items · ${order.subtotal_usd.toFixed(2)} · {order.delivery_address}</Text>
       <View style={styles.orderItems}>{order.items.slice(0, 5).map((item) => <Text key={item.menu_item_id} numberOfLines={1} style={styles.orderItem}>{item.quantity}× {item.name || "Menu item"}</Text>)}</View>
@@ -267,6 +292,16 @@ function MerchantOrderCard({ order, busy, onReady }: { order: FoodOrder; busy: b
         <MaterialCommunityIcons name="motorbike" size={18} color={v2Theme.colors.brandStrong} />
         <Text style={styles.dispatchText}>{fulfillmentLabel(order.fulfillment_status)}</Text>
       </View>
+      {isPending ? (
+        <View style={styles.responseRow}>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => onRespond(order, "REJECTED")} style={[styles.rejectButton, busy && styles.disabled]}>
+            <Text style={styles.rejectText}>Decline</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => onRespond(order, "PREPARING")} style={[styles.acceptButton, busy && styles.disabled]}>
+            <Text style={styles.readyText}>Accept order</Text><MaterialCommunityIcons name="check" size={19} color="#FFFFFF" />
+          </Pressable>
+        </View>
+      ) : null}
       {isPreparing ? (
         <Pressable disabled={busy} onPress={() => onReady(order)} style={[styles.readyButton, busy && styles.disabled]}>
           <Text style={styles.readyText}>Order is ready for pickup</Text><MaterialCommunityIcons name="check" size={19} color="#FFFFFF" />
@@ -277,7 +312,8 @@ function MerchantOrderCard({ order, busy, onReady }: { order: FoodOrder; busy: b
 }
 
 function fulfillmentLabel(status?: string) {
-  if (!status || status === "NOT_STARTED" || status === "REQUESTED" || status === "MATCHING") return "Finding a courier in parallel";
+  if (!status || status === "NOT_STARTED") return "Courier matching starts after acceptance";
+  if (status === "REQUESTED" || status === "MATCHING") return "Finding a courier in parallel";
   if (["ASSIGNED", "COURIER_ASSIGNED", "COURIER_TO_PICKUP"].includes(status)) return "Courier is heading to the restaurant";
   if (status === "PICKED_UP") return "Courier collected the order";
   if (["OUT_FOR_DELIVERY", "IN_TRANSIT", "ARRIVING"].includes(status)) return "Courier is delivering to the customer";
@@ -299,7 +335,7 @@ const styles = StyleSheet.create({
   reviewButton: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, reviewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, reviewCopy: { flex: 1, gap: 3 }, reviewTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, reviewBody: { color: v2Theme.colors.inkSecondary, fontSize: 10 },
   section: { gap: 11 }, sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 }, sectionSub: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 }, count: { minWidth: 32, textAlign: "center", color: v2Theme.colors.ink, backgroundColor: v2Theme.colors.surfaceMuted, borderRadius: v2Theme.radius.pill, overflow: "hidden", paddingVertical: 6, paddingHorizontal: 8, fontSize: 10, fontWeight: "900" },
   orderList: { gap: 9 }, orderCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 }, orderTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }, orderId: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 }, orderName: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900", marginTop: 3 }, orderStatusPill: { backgroundColor: v2Theme.colors.warningSoft, borderRadius: v2Theme.radius.pill, paddingHorizontal: 8, paddingVertical: 5 }, orderStatusReady: { backgroundColor: v2Theme.colors.brandSofter }, orderStatus: { color: v2Theme.colors.warning, fontSize: 8, fontWeight: "900" }, orderStatusReadyText: { color: v2Theme.colors.brandStrong }, orderMeta: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, orderItems: { gap: 4 }, orderItem: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "800" },
-  dispatchStrip: { minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.brandSofter, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11 }, dispatchText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" }, readyButton: { minHeight: 44, borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, readyText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
+  dispatchStrip: { minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.brandSofter, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11 }, dispatchText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" }, responseRow: { flexDirection: "row", gap: 8 }, rejectButton: { minHeight: 44, borderRadius: 14, backgroundColor: v2Theme.colors.dangerSoft, paddingHorizontal: 16, alignItems: "center", justifyContent: "center" }, rejectText: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" }, acceptButton: { flex: 1, minHeight: 44, borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, readyButton: { minHeight: 44, borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, readyText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
   emptyRow: { minHeight: 80, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 }, emptyIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, emptyCopy: { flex: 1, gap: 3 }, emptyTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" }, emptyBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   builderCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 }, builderTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" }, inlineForm: { flexDirection: "row", gap: 8 }, inlineInput: { flex: 1, minHeight: 46, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 12, color: v2Theme.colors.ink, fontSize: 12, fontWeight: "800" }, squareButton: { width: 46, height: 46, borderRadius: 14, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
   categoryWrap: { flexDirection: "row", flexWrap: "wrap", gap: 7 }, categoryPill: { minHeight: 36, borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 11, alignItems: "center", justifyContent: "center" }, categoryPillActive: { backgroundColor: v2Theme.colors.ink }, categoryText: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900" }, categoryTextActive: { color: "#FFFFFF" },

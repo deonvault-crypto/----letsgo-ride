@@ -4,9 +4,11 @@ from app.auth import get_current_user
 from app.models.operations import AvailabilityCreateBody, CourierOnlineBody, CourierProfileCreateBody
 from app.services.courier_earnings_service import courier_earnings_summary
 from app.services.operations_service import (
+    active_courier_delivery,
     approve_courier_profile,
     assigned_courier_deliveries,
     claim_courier_offer,
+    courier_delivery_history,
     create_availability,
     create_courier_profile,
     delete_availability,
@@ -95,6 +97,18 @@ async def courier_profile_approve(profile_id: str, user=Depends(get_current_user
 async def courier_assigned_deliveries(user=Depends(get_current_user)):
     _require_courier_account(user)
     return api_success(await assigned_courier_deliveries(user))
+
+
+@router.get("/courier/deliveries/active")
+async def courier_active_delivery(user=Depends(get_current_user)):
+    _require_courier_account(user)
+    return api_success(await active_courier_delivery(user))
+
+
+@router.get("/courier/deliveries/history")
+async def courier_delivery_history_list(user=Depends(get_current_user)):
+    _require_courier_account(user)
+    return api_success(await courier_delivery_history(user))
 
 
 @router.get("/courier/earnings")

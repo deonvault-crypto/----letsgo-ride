@@ -114,7 +114,7 @@ export default function MerchantHomeScreen() {
 
 function StatusPill({ status }: { status: string }) {
   const active = status === "ACTIVE";
-  const pending = status === "PENDING_REVIEW";
+  const pending = ["PENDING_REVIEW", "SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(status);
   return (
     <View style={[styles.statusPill, active && styles.statusPillActive, pending && styles.statusPillPending]}>
       <Text style={[styles.statusText, active && styles.statusTextActive, pending && styles.statusTextPending]}>{status.replaceAll("_", " ")}</Text>

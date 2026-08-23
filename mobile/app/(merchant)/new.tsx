@@ -17,6 +17,13 @@ export default function NewRestaurantScreen() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [cuisines, setCuisines] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [businessRegistration, setBusinessRegistration] = useState("");
+  const [dailyHours, setDailyHours] = useState("");
+  const [pickupInstructions, setPickupInstructions] = useState("");
+  const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -27,8 +34,8 @@ export default function NewRestaurantScreen() {
   }, [user?.phone]);
 
   const canSave = useMemo(
-    () => name.trim().length >= 2 && phone.trim().length >= 5 && address.trim().length >= 3 && !saving,
-    [name, phone, address, saving],
+    () => name.trim().length >= 2 && phone.trim().length >= 5 && address.trim().length >= 3 && contactName.trim().length >= 2 && dailyHours.trim().length >= 3 && Boolean(location) && !saving,
+    [name, phone, address, contactName, dailyHours, location, saving],
   );
 
   async function attachLocation() {
@@ -56,7 +63,13 @@ export default function NewRestaurantScreen() {
         address: address.trim(),
         location,
         cuisine_tags: cuisines.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 12),
-        opening_hours: {},
+        opening_hours: { daily: dailyHours.trim() },
+        contact_person_name: contactName.trim(),
+        contact_email: contactEmail.trim() || null,
+        business_registration_number: businessRegistration.trim() || null,
+        pickup_instructions: pickupInstructions.trim() || null,
+        hero_image_url: heroImageUrl.trim() || null,
+        logo_url: logoUrl.trim() || null,
       });
       router.replace(`/(merchant)/restaurant/${restaurant.id}` as never);
     } catch (err) {
@@ -78,7 +91,14 @@ export default function NewRestaurantScreen() {
         <Field label="Restaurant name" value={name} onChangeText={setName} placeholder="e.g. Mbare Grill" />
         <Field label="Phone" value={phone} onChangeText={setPhone} placeholder="Business phone" keyboardType="phone-pad" />
         <Field label="Address" value={address} onChangeText={setAddress} placeholder="Street, suburb, city" />
+        <Field label="Contact person" value={contactName} onChangeText={setContactName} placeholder="Full name" />
+        <Field label="Contact email" value={contactEmail} onChangeText={setContactEmail} placeholder="Business email (optional)" keyboardType="email-address" />
+        <Field label="Business registration" value={businessRegistration} onChangeText={setBusinessRegistration} placeholder="Registration number (optional)" />
+        <Field label="Daily opening hours" value={dailyHours} onChangeText={setDailyHours} placeholder="e.g. 08:00–21:00" />
         <Field label="Cuisine tags" value={cuisines} onChangeText={setCuisines} placeholder="Grill, Zimbabwean, Chicken" />
+        <Field label="Hero image URL" value={heroImageUrl} onChangeText={setHeroImageUrl} placeholder="HTTPS image URL (optional)" keyboardType="url" />
+        <Field label="Logo URL" value={logoUrl} onChangeText={setLogoUrl} placeholder="HTTPS image URL (optional)" keyboardType="url" />
+        <Field label="Courier pickup instructions" value={pickupInstructions} onChangeText={setPickupInstructions} placeholder="Counter, entrance or collection point" />
         <View style={styles.textAreaWrap}>
           <Text style={styles.label}>Description</Text>
           <TextInput
@@ -98,7 +118,7 @@ export default function NewRestaurantScreen() {
         <View style={styles.locationIcon}><MaterialCommunityIcons name="crosshairs-gps" size={23} color={v2Theme.colors.brandStrong} /></View>
         <View style={styles.locationCopy}>
           <Text style={styles.locationTitle}>{locating ? "Getting location…" : "Attach restaurant GPS pin"}</Text>
-          <Text style={styles.locationBody}>{location ? "Precise location attached" : "Optional now, useful for delivery routing later"}</Text>
+          <Text style={styles.locationBody}>{location ? "Precise pickup location attached" : "Required so couriers can route to the right entrance"}</Text>
         </View>
         {location ? <MaterialCommunityIcons name="check-circle" size={22} color={v2Theme.colors.success} /> : <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />}
       </Pressable>
@@ -113,7 +133,7 @@ export default function NewRestaurantScreen() {
   );
 }
 
-function Field({ label, value, onChangeText, placeholder, keyboardType = "default" }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; keyboardType?: "default" | "phone-pad" }) {
+function Field({ label, value, onChangeText, placeholder, keyboardType = "default" }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string; keyboardType?: "default" | "phone-pad" | "email-address" | "url" }) {
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.label}>{label}</Text>

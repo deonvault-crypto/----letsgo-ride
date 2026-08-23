@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 CourierStatus = Literal[
@@ -83,4 +83,14 @@ class CourierLocationBody(BaseModel):
     longitude: float = Field(ge=-180, le=180)
     accuracy: Optional[float] = Field(default=None, ge=0)
     heading: Optional[float] = Field(default=None, ge=0, le=360)
-    speed: Optional[float] = None
+    speed: Optional[float] = Field(default=None, ge=0)
+    recorded_at: Optional[str] = Field(default=None, max_length=80)
+
+    @field_validator("accuracy", "heading", "speed", mode="before")
+    @classmethod
+    def normalize_unavailable_sensor_values(cls, value):
+        # Core Location uses negative sentinel values when a sensor reading is
+        # unavailable. They are absence, not malformed courier input.
+        if isinstance(value, (int, float)) and value < 0:
+            return None
+        return value

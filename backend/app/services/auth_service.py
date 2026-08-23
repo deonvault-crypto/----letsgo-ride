@@ -154,7 +154,9 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
 
     if existing:
         updates = {
-            "role": role or existing.get("role", "passenger"),
+            # Authentication refreshes a session; it never changes product
+            # privileges supplied by an existing account record.
+            "role": existing.get("role", "passenger"),
             "token": token,
             "updated_at": timestamp,
         }
@@ -168,7 +170,7 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
         "phone": phone,
         "name": name or "LetsGoRide user",
         "city": "Harare",
-        "role": role,
+        "role": "passenger",
         "email_verified": False,
         "rating": 0,
         "token": token,
@@ -204,7 +206,9 @@ async def create_email_user(
         "email": normalized_email,
         "name": name,
         "city": city or "Harare",
-        "role": role,
+        # This service backs public registration only. Work product access is
+        # provisioned by an audited administrator action after identity creation.
+        "role": "passenger",
         "email_verified": False,
         "email_verified_at": None,
         "rating": 0,

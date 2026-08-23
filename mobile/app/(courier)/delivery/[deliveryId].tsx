@@ -1,11 +1,12 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DeliveryMap } from "../../../components/maps/DeliveryMap";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
+import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
 import {
   completeCourierDeliveryWithPin,
   getCourierDelivery,
@@ -17,6 +18,8 @@ import {
 import { watchForegroundLocation } from "../../../services/locationService";
 import { CourierDelivery, CourierEvent, CourierGeoPoint, CourierStatus } from "../../../types/courier.types";
 import { openNavigation } from "../../../utils/openNavigation";
+import { decodePolyline } from "../../../utils/decodePolyline";
+import { displayDeliveryReference } from "../../../utils/displayText";
 
 const ACTIVE = new Set<CourierStatus>(["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
 const BEFORE_PICKUP = new Set<CourierStatus>(["ASSIGNED", "COURIER_TO_PICKUP"]);
@@ -37,6 +40,9 @@ export default function CourierDeliveryScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const locationWatcher = useRef<{ remove: () => void } | null>(null);
+  const locationStarting = useRef(false);
+  const locationWriteInFlight = useRef(false);
+  const gpsGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!deliveryId) return;
@@ -55,28 +61,35 @@ export default function CourierDeliveryScreen() {
     }
   }, [deliveryId]);
 
-  useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, 10000);
+  useFocusEffect(useCallback(() => {
+    void refresh();
     return () => {
-      clearInterval(timer);
       locationWatcher.current?.remove();
       locationWatcher.current = null;
+      locationStarting.current = false;
+      locationWriteInFlight.current = false;
     };
-  }, [refresh]);
+  }, [delivery?.status, refresh]));
+
+  useLiveRefresh(refresh, 10000, Boolean(delivery?.status && ACTIVE.has(delivery.status)));
 
   const stopGps = useCallback(() => {
+    gpsGeneration.current += 1;
     locationWatcher.current?.remove();
     locationWatcher.current = null;
     setGpsLive(false);
   }, []);
 
   const startGps = useCallback(async (job: CourierDelivery) => {
-    if (locationWatcher.current || !ACTIVE.has(job.status)) return;
+    if (locationWatcher.current || locationStarting.current || !ACTIVE.has(job.status)) return;
+    locationStarting.current = true;
+    const generation = gpsGeneration.current;
     try {
       const watcher = await watchForegroundLocation(
         (location) => {
+          if (locationWriteInFlight.current) return;
           setDelivery((current) => current ? { ...current, last_courier_location: location } : current);
+          locationWriteInFlight.current = true;
           updateCourierLocation(job.id, {
             latitude: location.latitude,
             longitude: location.longitude,
@@ -84,19 +97,35 @@ export default function CourierDeliveryScreen() {
             heading: location.heading,
             speed: location.speed,
             recorded_at: new Date(location.timestamp).toISOString(),
-          }).then(setDelivery).catch((err) => {
-            setError(err instanceof Error ? err.message : "Live location could not update.");
+          }).then((updated) => {
+            setDelivery(updated);
+            if (!ACTIVE.has(updated.status)) stopGps();
+          }).catch((err) => {
+            // Automatic sensor writes belong in engineering diagnostics. The
+            // delivery screen keeps the last server state and stops the noisy
+            // watcher instead of showing raw validation copy to the courier.
+            console.warn("courier_location_update_failed", err);
+            stopGps();
+          }).finally(() => {
+            locationWriteInFlight.current = false;
           });
         },
-        (err) => setError(err.message),
+        (err) => setNotice(err.message),
       );
+      const stillForeground = !["background", "inactive"].includes(String(AppState.currentState || "active"));
+      if (generation !== gpsGeneration.current || !stillForeground) {
+        watcher.remove();
+        return;
+      }
       locationWatcher.current = watcher;
       setGpsLive(true);
     } catch (err) {
       setGpsLive(false);
       setError(err instanceof Error ? err.message : "Live location could not start.");
+    } finally {
+      locationStarting.current = false;
     }
-  }, []);
+  }, [stopGps]);
 
   useEffect(() => {
     if (!delivery) return;
@@ -104,15 +133,27 @@ export default function CourierDeliveryScreen() {
       stopGps();
       return;
     }
-    if (!locationWatcher.current) startGps(delivery);
+    const foreground = !["background", "inactive"].includes(String(AppState.currentState || "active"));
+    if (foreground && !locationWatcher.current) startGps(delivery);
+  }, [delivery?.id, delivery?.status, startGps, stopGps]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && delivery && ACTIVE.has(delivery.status)) {
+        void startGps(delivery);
+      } else {
+        stopGps();
+      }
+    });
+    return () => subscription.remove();
   }, [delivery?.id, delivery?.status, startGps, stopGps]);
 
   async function navigate() {
     if (!delivery || openingMaps) return;
     const destination = BEFORE_PICKUP.has(delivery.status)
-      ? delivery.pickup_address
+      ? { ...delivery.pickup_location, label: delivery.pickup_address }
       : AFTER_PICKUP.has(delivery.status)
-        ? delivery.dropoff_address
+        ? { ...delivery.dropoff_location, label: delivery.dropoff_address }
         : null;
     if (!destination) return;
     try {
@@ -125,6 +166,8 @@ export default function CourierDeliveryScreen() {
       setOpeningMaps(false);
     }
   }
+
+  const route = useMemo(() => decodePolyline(delivery?.route_polyline), [delivery?.route_polyline]);
 
   async function confirmPickup() {
     if (!delivery || busy || !BEFORE_PICKUP.has(delivery.status)) return;
@@ -215,7 +258,7 @@ export default function CourierDeliveryScreen() {
             <View style={styles.heroTop}>
               <View style={styles.heroIcon}><MaterialCommunityIcons name={delivery.source_type === "FOOD_ORDER" ? "food-takeout-box-outline" : "package-variant-closed"} size={28} color={v2Theme.colors.brandStrong} /></View>
               <View style={styles.flex}>
-                <Text style={styles.heroEyebrow}>{delivery.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"} · {delivery.id.slice(0, 8).toUpperCase()}</Text>
+                <Text style={styles.heroEyebrow}>{delivery.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"} · {displayDeliveryReference(delivery.id)}</Text>
                 <Text style={styles.heroTitle}>{statusTitle(delivery.status)}</Text>
               </View>
               {delivery.courier_payout_usd != null ? <View style={styles.pay}><Text style={styles.payLabel}>YOUR PAY</Text><Text style={styles.payValue}>${delivery.courier_payout_usd.toFixed(2)}</Text></View> : null}
@@ -224,7 +267,12 @@ export default function CourierDeliveryScreen() {
             <Journey status={delivery.status} />
           </View>
 
-          <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} height={320} />
+          <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} route={route} height={320} />
+
+          <View style={styles.routeMetrics}>
+            <RouteMetric icon="map-marker-distance" label="PLANNED ROUTE" value={delivery.distance_km != null ? `${delivery.distance_km.toFixed(1)} km` : "Route unavailable"} />
+            <RouteMetric icon="clock-outline" label="ROUTE ETA" value={delivery.estimated_duration_minutes != null ? `${delivery.estimated_duration_minutes} min` : "ETA unavailable"} />
+          </View>
 
           {ACTIVE.has(delivery.status) ? (
             <View style={styles.gpsCard}>
@@ -265,7 +313,7 @@ export default function CourierDeliveryScreen() {
           {delivery.status === "DELIVERED" ? (
             <View style={styles.deliveredCard}>
               <View style={styles.deliveredIcon}><MaterialCommunityIcons name="check" size={25} color="#FFFFFF" /></View>
-              <View style={styles.flex}><Text style={styles.deliveredTitle}>Delivered & verified</Text><Text style={styles.muted}>Recipient PIN accepted. Tracking is off and your completed payout is recorded.</Text></View>
+              <View style={styles.flex}><Text style={styles.deliveredTitle}>Delivered & verified</Text><Text style={styles.muted}>Recipient PIN accepted. Tracking is off and this earning is recorded in your history.</Text></View>
             </View>
           ) : null}
 
@@ -438,6 +486,18 @@ function Detail({ icon, label, value }: { icon: keyof typeof MaterialCommunityIc
   return <View style={styles.detailRow}><View style={styles.detailIcon}><MaterialCommunityIcons name={icon} size={20} color={v2Theme.colors.inkSecondary} /></View><View style={styles.flex}><Text style={styles.detailLabel}>{label}</Text><Text style={styles.detailValue}>{value}</Text></View></View>;
 }
 
+function RouteMetric({ icon, label, value }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; value: string }) {
+  return (
+    <View style={styles.routeMetric}>
+      <MaterialCommunityIcons name={icon} size={19} color={v2Theme.colors.brandStrong} />
+      <View style={styles.flex}>
+        <Text style={styles.routeMetricLabel}>{label}</Text>
+        <Text style={styles.routeMetricValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   muted: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
@@ -481,6 +541,10 @@ const styles = StyleSheet.create({
   navigateIcon: { width: 47, height: 47, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   navigateTitle: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   navigateBody: { color: "rgba(255,255,255,0.72)", fontSize: 9, lineHeight: 13 },
+  routeMetrics: { flexDirection: "row", gap: 8 },
+  routeMetric: { flex: 1, minHeight: 62, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 9 },
+  routeMetricLabel: { color: v2Theme.colors.inkTertiary, fontSize: 7, fontWeight: "900", letterSpacing: 0.45 },
+  routeMetricValue: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900", marginTop: 2 },
   section: { gap: 9 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   primaryButton: { minHeight: 68, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.ink, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },

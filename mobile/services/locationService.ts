@@ -10,12 +10,13 @@ export type DeviceLocation = {
 };
 
 function normalizeLocation(location: Location.LocationObject): DeviceLocation {
+  const available = (value: number | null) => typeof value === "number" && value >= 0 ? value : null;
   return {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
-    accuracy: location.coords.accuracy,
-    heading: location.coords.heading,
-    speed: location.coords.speed,
+    accuracy: available(location.coords.accuracy),
+    heading: available(location.coords.heading),
+    speed: available(location.coords.speed),
     timestamp: location.timestamp,
   };
 }

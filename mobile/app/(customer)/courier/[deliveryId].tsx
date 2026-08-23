@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { DeliveryMap } from "../../../components/maps/DeliveryMap";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
+import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
 import {
   cancelCourierDelivery,
   getCourierDelivery,
@@ -14,6 +15,8 @@ import {
   getCourierEvents,
 } from "../../../services/courierService";
 import type { CourierDelivery, CourierDeliveryPin, CourierEvent, CourierStatus } from "../../../types/courier.types";
+import { decodePolyline } from "../../../utils/decodePolyline";
+import { displayDeliveryReference } from "../../../utils/displayText";
 
 const CAN_CANCEL = new Set<CourierStatus>(["REQUESTED", "MATCHING", "ASSIGNED", "COURIER_TO_PICKUP"]);
 const PIN_VISIBLE = new Set<CourierStatus>(["PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
@@ -52,7 +55,7 @@ export default function CustomerCourierDeliveryScreen() {
     }
   }, [deliveryId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useLiveRefresh(load, 7000, !delivery || !FINAL.has(delivery.status));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -77,11 +80,7 @@ export default function CustomerCourierDeliveryScreen() {
     }).start();
   }, [delivery?.status, statusEntrance]);
 
-  useEffect(() => {
-    if (!delivery || FINAL.has(delivery.status)) return;
-    const timer = setInterval(load, 7000);
-    return () => clearInterval(timer);
-  }, [delivery?.status, load]);
+  const route = useMemo(() => decodePolyline(delivery?.route_polyline), [delivery?.route_polyline]);
 
   async function cancelDelivery() {
     if (!delivery || busy || !CAN_CANCEL.has(delivery.status)) return;
@@ -138,7 +137,7 @@ export default function CustomerCourierDeliveryScreen() {
                   <Animated.View style={[styles.statusDot, delivery.live_tracking_active && styles.statusDotLive, delivery.live_tracking_active && { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }) }]} />
                   <Text style={styles.statusText}>{delivery.live_tracking_active ? "LIVE TRACKING" : customerStatusChip(delivery.status)}</Text>
                 </View>
-                <Text style={styles.orderId}>#{delivery.id.slice(0, 8).toUpperCase()}</Text>
+                <Text style={styles.orderId}>{displayDeliveryReference(delivery.id)}</Text>
               </View>
             </LinearGradient>
           </Animated.View>
@@ -147,7 +146,7 @@ export default function CustomerCourierDeliveryScreen() {
           {isCourierHeading(delivery.status) ? <CourierFoundCard delivery={delivery} pulse={pulse} /> : null}
 
           <View style={styles.mapFrame}>
-            <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} height={315} />
+            <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} route={route} height={315} />
             {delivery.live_tracking_active ? (
               <View style={styles.mapLivePill}>
                 <MaterialCommunityIcons name="crosshairs-gps" size={15} color={v2Theme.colors.brandStrong} />

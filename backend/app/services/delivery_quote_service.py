@@ -44,7 +44,7 @@ async def calculate_delivery_quote(
         dropoff_address,
         origin=_normalize_point(pickup_location),
         destination=_normalize_point(dropoff_location),
-        include_polyline=False,
+        include_polyline=True,
     )
     pricing = calculate_delivery_pricing(
         distance_km=float(route["distance_km"]),
@@ -106,6 +106,7 @@ async def apply_calculated_delivery_quote(
         # when the request started from address text only.
         "pickup_location": route["origin"],
         "dropoff_location": route["destination"],
+        "route_polyline": route.get("encoded_polyline"),
         "updated_at": now,
     }
     if delivery.get("status") == "REQUESTED" and not delivery.get("courier_user_id"):

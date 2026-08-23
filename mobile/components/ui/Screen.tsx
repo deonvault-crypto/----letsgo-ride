@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -25,6 +26,8 @@ type ScreenProps = {
   fallbackRoute?: Href;
   showNotifications?: boolean;
   scroll?: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 };
 
 export function Screen({
@@ -36,12 +39,15 @@ export function Screen({
   fallbackRoute,
   showNotifications = true,
   scroll = true,
+  refreshing = false,
+  onRefresh,
 }: ScreenProps) {
   const contentPadding = navRole ? spacing.bottomNavHeight + 72 : spacing.xxl;
   const body = scroll ? (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: contentPadding }]}
+      refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primaryGreen} /> : undefined}
     >
       {children}
     </ScrollView>

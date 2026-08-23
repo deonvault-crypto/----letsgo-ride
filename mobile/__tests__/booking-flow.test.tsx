@@ -3,6 +3,8 @@ import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import RequestSeatScreen from "../app/(customer)/request/[id]";
 import CustomerTripsScreen from "../app/(customer)/my-trips";
 import { updateCurrentUser } from "../services/authService";
+import { listConversations } from "../services/conversationService";
+import { listPendingReviews } from "../services/reviewService";
 import { getRide, requestSeat } from "../services/ridesService";
 import { User } from "../types/user.types";
 import { passengerUser, ride, rideRequest } from "./fixtures";
@@ -86,7 +88,11 @@ describe("customer ride booking flow", () => {
     await waitFor(() => { expect(updateCurrentUser).toHaveBeenCalledWith({ phone: "+263778888888" }); });
     mockPathname = "/my-trips";
     const tripsScreen = render(<CustomerTripsScreen />);
-    expect(tripsScreen.getByText("Harare to Bulawayo")).toBeOnTheScreen();
-    expect(tripsScreen.getByText("Small bag only")).toBeOnTheScreen();
+    await waitFor(() => {
+      expect(listConversations).toHaveBeenCalled();
+      expect(listPendingReviews).toHaveBeenCalled();
+      expect(tripsScreen.getByText("Harare to Bulawayo")).toBeOnTheScreen();
+      expect(tripsScreen.getByText("Small bag only")).toBeOnTheScreen();
+    });
   });
 });

@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen } from "../../../../components/ui/Screen";
 import { v2Theme } from "../../../../constants/v2Theme";
+import { useLiveRefresh } from "../../../../hooks/useLiveRefresh";
 import { cancelFoodOrder, getFoodOrder, getFoodOrderEvents } from "../../../../services/foodService";
 import { FoodOrder, FoodOrderEvent } from "../../../../types/food.types";
 
@@ -34,19 +35,11 @@ export default function FoodOrderScreen() {
     }
   }, [orderId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!order || FINAL_STATUSES.has(order.status)) return;
-    const timer = setInterval(load, 10000);
-    return () => clearInterval(timer);
-  }, [order?.status, order?.fulfillment_status, order?.restaurant_status, load]);
+  useLiveRefresh(load, 10000, !order || !FINAL_STATUSES.has(order.status));
 
   const canCancel = useMemo(() => {
     if (!order) return false;
-    return order.restaurant_status === "PREPARING" && PRE_PICKUP_FULFILLMENT.has(order.fulfillment_status || "NOT_STARTED");
+    return ["PENDING_RESTAURANT", "PREPARING"].includes(order.restaurant_status || "") && PRE_PICKUP_FULFILLMENT.has(order.fulfillment_status || "NOT_STARTED");
   }, [order]);
 
   async function cancel() {
@@ -102,7 +95,7 @@ export default function FoodOrderScreen() {
           ) : (
             <View style={styles.parallelCard}>
               <View style={styles.parallelHeader}>
-                <View><Text style={styles.parallelTitle}>Live order</Text><Text style={styles.parallelSub}>Kitchen and courier move at the same time.</Text></View>
+                <View><Text style={styles.parallelTitle}>Live order</Text><Text style={styles.parallelSub}>{order.restaurant_status === "PENDING_RESTAURANT" ? "Waiting for the restaurant to respond." : "Kitchen and courier move at the same time."}</Text></View>
                 <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View>
               </View>
 
@@ -201,6 +194,7 @@ function customerHeadline(order: FoodOrder) {
   if (order.status === "DELIVERED") return "DELIVERED";
   if (order.status === "CANCELLED" || order.status === "REJECTED") return "CLOSED";
   if (["PICKED_UP", "OUT_FOR_DELIVERY"].includes(order.fulfillment_status || "")) return "ON THE WAY";
+  if (order.restaurant_status === "PENDING_RESTAURANT") return "AWAITING ACCEPTANCE";
   return "IN PROGRESS";
 }
 
@@ -210,22 +204,26 @@ function customerMessage(order: FoodOrder) {
   if (order.fulfillment_status === "ARRIVING") return "Your courier is almost there. Have your handoff code ready.";
   if (["PICKED_UP", "OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(order.fulfillment_status || "")) return "Your food has been collected and is on the way.";
   if (order.restaurant_status === "READY_FOR_PICKUP") return "The kitchen is done. Your courier can collect the order now.";
+  if (order.restaurant_status === "PENDING_RESTAURANT") return "Your order has been sent to the restaurant for acceptance.";
   return "The kitchen is preparing your food while LetsGoRide matches a courier in parallel.";
 }
 
 function kitchenTitle(order: FoodOrder) {
   if (order.status === "DELIVERED") return "Completed";
   if (order.restaurant_status === "READY_FOR_PICKUP") return "Ready for pickup";
+  if (order.restaurant_status === "PENDING_RESTAURANT") return "Awaiting restaurant";
   return "Preparing your food";
 }
 
 function kitchenBody(order: FoodOrder) {
   if (order.restaurant_status === "READY_FOR_PICKUP") return "Packed and waiting for courier collection.";
-  return "The order entered the kitchen automatically after checkout.";
+  if (order.restaurant_status === "PENDING_RESTAURANT") return "The restaurant needs to accept the order before preparation starts.";
+  return "The restaurant accepted your order and started preparing it.";
 }
 
 function courierTitle(status?: string) {
-  if (!status || status === "NOT_STARTED" || status === "REQUESTED" || status === "MATCHING") return "Finding your courier";
+  if (!status || status === "NOT_STARTED") return "Starts after acceptance";
+  if (status === "REQUESTED" || status === "MATCHING") return "Finding your courier";
   if (["ASSIGNED", "COURIER_ASSIGNED", "COURIER_TO_PICKUP"].includes(status)) return "Courier heading to pickup";
   if (status === "PICKED_UP") return "Food collected";
   if (["OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(status)) return "On the way";
@@ -235,7 +233,8 @@ function courierTitle(status?: string) {
 }
 
 function courierBody(status?: string) {
-  if (!status || status === "NOT_STARTED" || status === "REQUESTED" || status === "MATCHING") return "Matching runs while the kitchen prepares.";
+  if (!status || status === "NOT_STARTED") return "Courier matching will begin as soon as the restaurant accepts.";
+  if (status === "REQUESTED" || status === "MATCHING") return "Matching runs while the kitchen prepares.";
   if (["ASSIGNED", "COURIER_ASSIGNED", "COURIER_TO_PICKUP"].includes(status)) return "The courier is travelling to the restaurant.";
   if (status === "PICKED_UP") return "The courier confirmed collection.";
   if (["OUT_FOR_DELIVERY", "IN_TRANSIT", "ARRIVING"].includes(status)) return "Follow the courier live on the map.";
@@ -257,6 +256,7 @@ function StateCard({ icon, title, body }: { icon: keyof typeof MaterialCommunity
 
 function eventLabel(type: string) {
   const labels: Record<string, string> = {
+    ORDER_PLACED: "Order sent to restaurant",
     ORDER_CONFIRMED: "Order confirmed",
     RESTAURANT_PREPARING: "Kitchen started preparing",
     COURIER_FULFILLMENT_CREATED: "Courier search opened",

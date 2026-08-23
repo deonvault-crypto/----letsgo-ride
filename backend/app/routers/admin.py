@@ -11,6 +11,7 @@ from app.database import database
 from app.models.verification import VerificationStatusUpdateBody
 from app.models.request import RideRequestUpdateBody
 from app.models.ride import RideUpdateBody
+from app.models.user import AdminRoleUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
@@ -356,6 +357,38 @@ async def update_user_status(
         metadata={"status": status, "reason": reason},
     )
     return api_success(public_user(user))
+
+
+@router.patch("/users/{user_id}/role")
+async def provision_user_product_role(
+    user_id: str,
+    payload: AdminRoleUpdateBody,
+    admin=Depends(get_admin_user),
+):
+    if user_id == admin.get("id"):
+        api_error("Use a different administrator to change your own access.", 400)
+    existing = await database.find_one("users", {"id": user_id})
+    if not existing:
+        api_error("User not found.", 404)
+    previous_role = existing.get("role") or "passenger"
+    updated = await database.update_one(
+        "users",
+        user_id,
+        {"role": payload.role, "updated_at": now_iso()},
+    )
+    await write_audit_log(
+        actor_user_id=admin["id"],
+        actor_role=admin.get("role"),
+        action="admin_product_role_provisioned",
+        target_type="user",
+        target_id=user_id,
+        metadata={
+            "from_role": previous_role,
+            "to_role": payload.role,
+            "reason": payload.reason,
+        },
+    )
+    return api_success(public_user(updated or existing))
 
 
 @router.get("/rides")

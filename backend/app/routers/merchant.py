@@ -7,6 +7,7 @@ from app.models.merchant import (
     MenuItemUpdateBody,
     MerchantOrderStatusBody,
     RestaurantCreateBody,
+    RestaurantReviewBody,
     RestaurantUpdateBody,
 )
 from app.services.merchant_order_orchestration_service import transition_merchant_order
@@ -17,6 +18,7 @@ from app.services.merchant_service import (
     create_restaurant,
     list_my_restaurants,
     list_restaurant_orders,
+    review_restaurant,
     submit_restaurant_for_review,
     update_menu_item,
     update_restaurant,
@@ -87,6 +89,20 @@ async def merchant_activate_restaurant(restaurant_id: str, user=Depends(get_curr
     _require_merchant_account(user)
     try:
         return api_success(await activate_restaurant(restaurant_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/restaurants/{restaurant_id}/review")
+async def merchant_review_restaurant(
+    restaurant_id: str,
+    payload: RestaurantReviewBody,
+    user=Depends(get_current_user),
+):
+    try:
+        return api_success(await review_restaurant(restaurant_id, payload.status, payload.note, user))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:

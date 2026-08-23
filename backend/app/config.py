@@ -15,6 +15,9 @@ class Settings:
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
         self.mock_otp = os.getenv("MOCK_OTP", "123456")
+        self.allow_staging_mock_otp = self._parse_bool(
+            os.getenv("ALLOW_STAGING_MOCK_OTP", "false")
+        )
         self.allow_staging_email_mock = self._parse_bool(
             os.getenv("ALLOW_STAGING_EMAIL_MOCK", "false")
         )
@@ -174,6 +177,12 @@ class Settings:
     @property
     def staging_email_mock_allowed(self) -> bool:
         return self.app_env != "production" and self.allow_staging_email_mock
+
+    @property
+    def mock_otp_allowed(self) -> bool:
+        return self.app_env in {"development", "test"} or (
+            self.app_env == "staging" and self.allow_staging_mock_otp
+        )
 
 
 @lru_cache

@@ -1,7 +1,16 @@
 import { Linking, Platform } from "react-native";
 
-export async function openNavigation(destination: string) {
-  const clean = destination.trim();
+type NavigationDestination = string | { latitude?: number | null; longitude?: number | null; label?: string };
+
+export async function openNavigation(destination: NavigationDestination) {
+  const hasCoordinates = typeof destination !== "string"
+    && typeof destination.latitude === "number"
+    && typeof destination.longitude === "number";
+  const clean = typeof destination === "string"
+    ? destination.trim()
+    : hasCoordinates
+      ? `${destination.latitude},${destination.longitude}`
+      : (destination.label || "").trim();
   if (!clean) throw new Error("Destination is unavailable for navigation.");
 
   const encoded = encodeURIComponent(clean);

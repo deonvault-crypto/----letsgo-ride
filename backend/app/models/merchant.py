@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,12 @@ class RestaurantCreateBody(BaseModel):
     location: Optional[GeoPoint] = None
     cuisine_tags: List[str] = Field(default_factory=list, max_length=12)
     opening_hours: Dict[str, str] = Field(default_factory=dict)
+    hero_image_url: Optional[str] = Field(default=None, max_length=500)
+    logo_url: Optional[str] = Field(default=None, max_length=500)
+    contact_person_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    contact_email: Optional[str] = Field(default=None, max_length=180)
+    business_registration_number: Optional[str] = Field(default=None, max_length=120)
+    pickup_instructions: Optional[str] = Field(default=None, max_length=300)
 
 
 class RestaurantUpdateBody(BaseModel):
@@ -27,12 +33,22 @@ class RestaurantUpdateBody(BaseModel):
     is_accepting_orders: Optional[bool] = None
     hero_image_url: Optional[str] = Field(default=None, max_length=500)
     logo_url: Optional[str] = Field(default=None, max_length=500)
+    contact_person_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    contact_email: Optional[str] = Field(default=None, max_length=180)
+    business_registration_number: Optional[str] = Field(default=None, max_length=120)
+    pickup_instructions: Optional[str] = Field(default=None, max_length=300)
 
 
 class MenuCategoryCreateBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     description: Optional[str] = Field(default=None, max_length=240)
     sort_order: int = Field(default=0, ge=0, le=10000)
+    image_url: Optional[str] = Field(default=None, max_length=500)
+
+
+class RestaurantReviewBody(BaseModel):
+    status: Literal["UNDER_REVIEW", "APPROVED", "REJECTED", "SUSPENDED"]
+    note: Optional[str] = Field(default=None, max_length=500)
 
 
 class MenuItemCreateBody(BaseModel):

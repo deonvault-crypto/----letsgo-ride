@@ -8,7 +8,12 @@ from app.services.courier_service import (
     update_courier_location,
     update_delivery_status,
 )
-from app.services.operations_service import claim_courier_offer
+from app.services.operations_service import (
+    active_courier_delivery,
+    assigned_courier_deliveries,
+    claim_courier_offer,
+    courier_delivery_history,
+)
 
 
 class CourierAutomaticHandoffTests(unittest.IsolatedAsyncioTestCase):
@@ -70,6 +75,7 @@ class CourierAutomaticHandoffTests(unittest.IsolatedAsyncioTestCase):
     async def test_accept_pickup_arrival_and_pin_handoff_are_safe_and_minimal(self):
         claimed = await claim_courier_offer(self.delivery["id"], self.courier)
         self.assertEqual(claimed["status"], "COURIER_TO_PICKUP")
+        self.assertEqual((await active_courier_delivery(self.courier))["id"], self.delivery["id"])
 
         moving = await update_delivery_status(
             self.delivery["id"],
@@ -115,6 +121,27 @@ class CourierAutomaticHandoffTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed["status"], "DELIVERED")
         self.assertEqual(completed["delivery_verification_method"], "RECIPIENT_PIN")
         self.assertFalse(completed["live_tracking_active"])
+
+        profile = await database.find_one("courier_profiles", {"user_id": self.courier["id"]})
+        self.assertIsNone(profile.get("active_delivery_id"))
+        self.assertEqual(await assigned_courier_deliveries(self.courier), [])
+        self.assertIsNone(await active_courier_delivery(self.courier))
+        self.assertEqual([item["id"] for item in await courier_delivery_history(self.courier)], [self.delivery["id"]])
+
+        snapshots_before_late_callback = await database.find_many(
+            "courier_location_snapshots", {"delivery_id": self.delivery["id"]}
+        )
+        terminal_truth = await update_courier_location(
+            self.delivery["id"],
+            {"latitude": -17.7590, "longitude": 31.0910, "heading": None},
+            self.courier,
+        )
+        self.assertEqual(terminal_truth["status"], "DELIVERED")
+        self.assertFalse(terminal_truth["live_tracking_active"])
+        self.assertEqual(
+            len(await database.find_many("courier_location_snapshots", {"delivery_id": self.delivery["id"]})),
+            len(snapshots_before_late_callback),
+        )
 
         final_handoff = await get_delivery_pin(self.delivery["id"], self.customer)
         self.assertTrue(final_handoff["verified"])

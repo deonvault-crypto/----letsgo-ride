@@ -1,6 +1,7 @@
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import MapView, { Marker, Region } from "react-native-maps";
+import MapView, { Marker, Polyline, Region } from "react-native-maps";
+import { useEffect, useRef } from "react";
 
 import { v2Theme } from "../../constants/v2Theme";
 
@@ -13,6 +14,7 @@ type DeliveryMapProps = {
   pickup?: Point | null;
   dropoff?: Point | null;
   courier?: Point | null;
+  route?: Array<{ latitude: number; longitude: number }>;
   height?: number;
 };
 
@@ -27,7 +29,20 @@ function validPoint(point?: Point | null): point is { latitude: number; longitud
   return typeof point?.latitude === "number" && typeof point?.longitude === "number";
 }
 
-export function DeliveryMap({ pickup, dropoff, courier, height = 340 }: DeliveryMapProps) {
+export function DeliveryMap({ pickup, dropoff, courier, route = [], height = 340 }: DeliveryMapProps) {
+  const initialRegion = regionForPoints([pickup, dropoff, courier]);
+  const mapRef = useRef<MapView | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const points = [...route, pickup, dropoff, courier].filter(validPoint);
+    if (points.length < 2) return;
+    mapRef.current?.fitToCoordinates(points, {
+      animated: true,
+      edgePadding: { top: 54, right: 44, bottom: 54, left: 44 },
+    });
+  }, [courier?.latitude, courier?.longitude, dropoff?.latitude, dropoff?.longitude, pickup?.latitude, pickup?.longitude, route]);
+
   if (Platform.OS === "web") {
     return (
       <View style={[styles.webFallback, { height }]}>
@@ -38,17 +53,19 @@ export function DeliveryMap({ pickup, dropoff, courier, height = 340 }: Delivery
     );
   }
 
-  const initialRegion = regionForPoints([pickup, dropoff, courier]);
-
   return (
     <View style={[styles.frame, { height }]}>
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         rotateEnabled={false}
         pitchEnabled={false}
         toolbarEnabled={false}
       >
+        {route.length > 1 ? (
+          <Polyline coordinates={route} strokeColor={v2Theme.colors.brandStrong} strokeWidth={5} lineCap="round" lineJoin="round" />
+        ) : null}
         {validPoint(pickup) ? (
           <Marker coordinate={pickup} anchor={{ x: 0.5, y: 0.5 }}>
             <MapMarker icon="circle-slice-8" label="Pickup" tone="brand" />
@@ -61,10 +78,38 @@ export function DeliveryMap({ pickup, dropoff, courier, height = 340 }: Delivery
         ) : null}
         {validPoint(courier) ? (
           <Marker coordinate={courier} anchor={{ x: 0.5, y: 0.5 }}>
-            <MapMarker icon="motorbike" label="Courier" tone="courier" />
+            <CourierMarker />
           </Marker>
         ) : null}
       </MapView>
+    </View>
+  );
+}
+
+function CourierMarker() {
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(pulse, { toValue: 1, duration: 1600, useNativeDriver: true }),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+  return (
+    <View style={styles.markerWrap}>
+      <Animated.View
+        style={[
+          styles.livePulse,
+          {
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.34, 0] }),
+            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1.65] }) }],
+          },
+        ]}
+      />
+      <View style={[styles.marker, styles.markerAccent]}>
+        <MaterialCommunityIcons name="motorbike" size={18} color="#FFFFFF" />
+      </View>
+      <View style={styles.markerLabelWrap}><Text style={styles.markerLabel}>Courier</Text></View>
     </View>
   );
 }
@@ -143,6 +188,14 @@ const styles = StyleSheet.create({
   markerAccent: {
     backgroundColor: v2Theme.colors.brand,
     borderColor: "#FFFFFF",
+  },
+  livePulse: {
+    position: "absolute",
+    top: -3,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: v2Theme.colors.brand,
   },
   markerLabelWrap: {
     marginTop: 4,

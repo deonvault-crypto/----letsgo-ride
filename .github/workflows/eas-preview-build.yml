@@ -30,6 +30,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # This workflow may be dispatched from main, but Preview must always
+          # build the audited Platform V2 branch until it is merged.
+          ref: platform-v2-m1-m6
 
       - name: Setup Node
         uses: actions/setup-node@v4

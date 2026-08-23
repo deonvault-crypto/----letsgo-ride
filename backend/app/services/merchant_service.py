@@ -9,6 +9,7 @@ from app.utils import new_id, now_iso
 
 
 MERCHANT_ORDER_TRANSITIONS = {
+    "PENDING_RESTAURANT": {"PREPARING", "REJECTED"},
     "PREPARING": {"READY_FOR_PICKUP"},
 }
 
@@ -41,6 +42,10 @@ async def create_restaurant(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "review_count": 0,
         "hero_image_url": None,
         "logo_url": None,
+        # The current checkout contract is cash on delivery, so there is no
+        # platform-held balance to disburse. Do not imply a configured payout.
+        "payout_status": "NOT_REQUIRED_CASH_ON_DELIVERY",
+        "staff_user_ids": [],
         "created_at": now,
         "updated_at": now,
         **payload,
@@ -62,7 +67,10 @@ async def update_restaurant(
     user: Dict[str, Any],
 ) -> Dict[str, Any]:
     await require_restaurant_access(restaurant_id, user)
+    current = await database.find_one("restaurants", {"id": restaurant_id})
     clean = {key: value for key, value in updates.items() if value is not None}
+    if clean.get("is_accepting_orders") is True and current and current.get("status") != "ACTIVE":
+        raise ValueError("Restaurant approval and activation are required before accepting orders.")
     clean["updated_at"] = now_iso()
     updated = await database.update_one("restaurants", restaurant_id, clean)
     if not updated:
@@ -72,17 +80,26 @@ async def update_restaurant(
 
 async def submit_restaurant_for_review(restaurant_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     restaurant = await require_restaurant_access(restaurant_id, user)
+    if restaurant.get("status") not in {"DRAFT", "REJECTED"}:
+        raise ValueError("Only a draft or rejected restaurant can be submitted for review.")
     categories = await database.find_many("menu_categories", {"restaurant_id": restaurant_id})
     items = await database.find_many("menu_items", {"restaurant_id": restaurant_id})
     if not str(restaurant.get("address") or "").strip():
         raise ValueError("Add a restaurant address before submitting for review.")
+    location = restaurant.get("location")
+    if not isinstance(location, dict) or not isinstance(location.get("latitude"), (int, float)) or not isinstance(location.get("longitude"), (int, float)):
+        raise ValueError("Pin the restaurant pickup location before submitting for review.")
+    if not restaurant.get("opening_hours"):
+        raise ValueError("Add operating hours before submitting for review.")
+    if not str(restaurant.get("contact_person_name") or "").strip():
+        raise ValueError("Add a contact person before submitting for review.")
     if not categories or not items:
         raise ValueError("Add at least one menu category and item before submitting for review.")
     updated = await database.update_one(
         "restaurants",
         restaurant_id,
         {
-            "status": "PENDING_REVIEW",
+            "status": "SUBMITTED",
             "is_accepting_orders": False,
             "submitted_at": now_iso(),
             "updated_at": now_iso(),
@@ -99,8 +116,8 @@ async def activate_restaurant(restaurant_id: str, user: Dict[str, Any]) -> Dict[
     restaurant = await database.find_one("restaurants", {"id": restaurant_id})
     if not restaurant:
         raise ValueError("Restaurant not found.")
-    if restaurant.get("status") not in {"PENDING_REVIEW", "ACTIVE"}:
-        raise ValueError("Restaurant must be submitted for review before activation.")
+    if restaurant.get("status") not in {"APPROVED", "ACTIVE"}:
+        raise ValueError("Restaurant must be approved before activation.")
     updated = await database.update_one(
         "restaurants",
         restaurant_id,
@@ -111,6 +128,44 @@ async def activate_restaurant(restaurant_id: str, user: Dict[str, Any]) -> Dict[
             "updated_at": now_iso(),
         },
     )
+    if not updated:
+        raise ValueError("Restaurant not found.")
+    return updated
+
+
+async def review_restaurant(
+    restaurant_id: str,
+    status: str,
+    note: str | None,
+    user: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not _is_admin(user):
+        raise PermissionError("Only an administrator can review restaurants.")
+    restaurant = await database.find_one("restaurants", {"id": restaurant_id})
+    if not restaurant:
+        raise ValueError("Restaurant not found.")
+    current = str(restaurant.get("status") or "DRAFT")
+    allowed = {
+        "SUBMITTED": {"UNDER_REVIEW", "APPROVED", "REJECTED"},
+        "UNDER_REVIEW": {"APPROVED", "REJECTED"},
+        "APPROVED": {"SUSPENDED"},
+        "ACTIVE": {"SUSPENDED"},
+        "SUSPENDED": {"UNDER_REVIEW", "APPROVED"},
+    }
+    if status not in allowed.get(current, set()) and status != current:
+        raise ValueError(f"Restaurant cannot move from {current} to {status}.")
+    now = now_iso()
+    updates: Dict[str, Any] = {
+        "status": status,
+        "review_note": note,
+        "updated_at": now,
+    }
+    if status in {"REJECTED", "SUSPENDED", "UNDER_REVIEW"}:
+        updates["is_accepting_orders"] = False
+    if status == "APPROVED":
+        updates["approved_at"] = now
+        updates["is_accepting_orders"] = False
+    updated = await database.update_one("restaurants", restaurant_id, updates)
     if not updated:
         raise ValueError("Restaurant not found.")
     return updated
@@ -200,9 +255,17 @@ async def update_restaurant_order_status(
         "restaurant_status": status,
         "updated_at": now,
     }
-    if status == "READY_FOR_PICKUP":
+    if status == "PREPARING":
+        updates["status"] = "PREPARING"
+        updates["accepted_at"] = now
+    elif status == "READY_FOR_PICKUP":
         updates["status"] = "READY_FOR_PICKUP"
         updates["ready_for_pickup_at"] = now
+    elif status == "REJECTED":
+        updates["status"] = "REJECTED"
+        updates["fulfillment_status"] = "CANCELLED"
+        updates["rejected_at"] = now
+        updates["cancellation_reason"] = note or "The restaurant could not accept this order."
     elif _is_admin(user):
         updates["status"] = status
 
@@ -221,8 +284,38 @@ async def update_restaurant_order_status(
         data={"from": current, "to": status, "note": note},
     )
 
-    if status == "READY_FOR_PICKUP":
-        customer_user_id = str(order.get("customer_user_id") or "")
+    customer_user_id = str(order.get("customer_user_id") or "")
+    if status == "PREPARING" and customer_user_id:
+        await append_order_event(
+            order_id,
+            "ORDER_CONFIRMED",
+            actor_user_id=_user_id(user),
+            data={"restaurant_id": restaurant["id"]},
+        )
+        await create_app_notification(
+            customer_user_id,
+            "food_update",
+            "Order accepted",
+            f"{restaurant.get('name') or 'The restaurant'} is preparing your food. We are now finding a courier.",
+            {
+                "food_order_id": order_id,
+                "restaurant_id": restaurant["id"],
+                "notification_target": "customer_food_order",
+            },
+        )
+    elif status == "REJECTED" and customer_user_id:
+        await create_app_notification(
+            customer_user_id,
+            "food_update",
+            "Order not accepted",
+            note or f"{restaurant.get('name') or 'The restaurant'} could not accept this order.",
+            {
+                "food_order_id": order_id,
+                "restaurant_id": restaurant["id"],
+                "notification_target": "customer_food_order",
+            },
+        )
+    elif status == "READY_FOR_PICKUP":
         if customer_user_id:
             await create_app_notification(
                 customer_user_id,

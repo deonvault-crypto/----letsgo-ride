@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { AppButton } from "../../components/ui/AppButton";
@@ -14,6 +14,8 @@ import { spacing } from "../../constants/spacing";
 
 export default function SearchRideScreen() {
   const router = useRouter();
+  const { intent } = useLocalSearchParams<{ intent?: string }>();
+  const intercity = intent === "intercity";
   const [origin, setOrigin] = useState("Harare");
   const [destination, setDestination] = useState("Bulawayo");
   const [date, setDate] = useState("");
@@ -31,7 +33,7 @@ export default function SearchRideScreen() {
 
   return (
     <Screen navRole="customer">
-      <View style={styles.header}><Text style={styles.title}>Search rides</Text><Text style={styles.body}>Pick a route, date, and seat count before checking available trips.</Text></View>
+      <View style={styles.header}><Text style={styles.title}>{intercity ? "Find an intercity ride" : "Search rides"}</Text><Text style={styles.body}>{intercity ? "Choose two cities, your travel date and the seats you need." : "Pick a route, date, and seat count before checking available trips."}</Text></View>
       <View style={styles.formCard}>
         <LocationPicker label="Origin" value={origin} onChangeText={setOrigin} placeholder="Harare" />
         <Pressable accessibilityRole="button" accessibilityLabel="Swap route" onPress={swapRoute} style={({ pressed }) => [styles.swapButton, pressed && styles.pressed]}><MaterialCommunityIcons name="swap-vertical" size={20} color={colors.primaryGreen} /></Pressable>
@@ -40,7 +42,7 @@ export default function SearchRideScreen() {
         <Pressable accessibilityRole="button" accessibilityLabel="Seats" onPress={() => setSeatPickerOpen(true)} style={({ pressed }) => [styles.seatField, pressed && styles.pressed]}><View><Text style={styles.fieldLabel}>Seats</Text><Text style={styles.fieldValue}>{seats} {seats === 1 ? "seat" : "seats"}</Text></View><Text style={styles.changeText}>Change</Text></Pressable>
       </View>
       <View style={styles.section}><Text style={styles.sectionTitle}>Popular routes</Text><PopularRouteChips onSelect={(routeOrigin, routeDestination) => { setOrigin(routeOrigin); setDestination(routeDestination); }} /></View>
-      <AppButton title="Search rides" onPress={submit} />
+      <AppButton title={intercity ? "Find intercity rides" : "Search rides"} onPress={submit} />
       <SeatCounterPicker visible={seatPickerOpen} title="Seats needed" value={seats} min={1} max={6} helperText="Choose how many seats you want to reserve." onConfirm={(nextSeats) => { setSeats(nextSeats); setSeatPickerOpen(false); }} onClose={() => setSeatPickerOpen(false)} />
     </Screen>
   );

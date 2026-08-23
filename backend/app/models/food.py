@@ -6,6 +6,7 @@ from app.models.courier import GeoPoint
 
 
 FoodOrderStatus = Literal[
+    "PENDING_RESTAURANT",
     "PREPARING",
     "READY_FOR_PICKUP",
     "COURIER_ASSIGNED",

@@ -16,7 +16,7 @@ export type CourierProfile = {
   name?: string;
   transport_mode: "bicycle" | "motorbike" | "car" | "van";
   vehicle_description?: string | null;
-  status: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | string;
+  status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED" | string;
   online: boolean;
   completed_deliveries?: number;
   rating?: number | null;

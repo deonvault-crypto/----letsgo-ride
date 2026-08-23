@@ -20,6 +20,7 @@ from app.services.auth_service import (
     create_email_user,
     create_or_update_user,
     find_user_by_email,
+    find_user_by_phone,
     find_user_by_token,
     public_user,
     resend_email_verification,
@@ -38,8 +39,18 @@ from app.utils import now_iso
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _require_public_customer_signup(role: str) -> None:
+    if role != "passenger":
+        api_error(
+            "Driver, Courier and Merchant accounts use their own reviewed onboarding. Public signup creates a customer account.",
+            403,
+        )
+
+
 @router.post("/request-otp")
 async def request_otp(payload: RequestOtpBody):
+    if not get_settings().mock_otp_allowed:
+        api_error("Phone verification is not available. Use secure email sign-in.", 503)
     return api_success(
         {
             "phone": payload.phone,
@@ -50,20 +61,23 @@ async def request_otp(payload: RequestOtpBody):
 
 @router.post("/verify-otp")
 async def verify_otp(payload: VerifyOtpBody):
-    if payload.role == "admin":
-        api_error("Admin accounts must be created by an existing administrator.", 403)
-    if payload.otp != get_settings().mock_otp:
+    settings = get_settings()
+    if not settings.mock_otp_allowed:
+        api_error("Phone verification is not available. Use secure email sign-in.", 503)
+    existing = await find_user_by_phone(payload.phone)
+    if not existing:
+        _require_public_customer_signup(payload.role)
+    if payload.otp != settings.mock_otp:
         api_error("Invalid OTP code.", 401)
 
-    user = await create_or_update_user(payload.phone, payload.role)
+    user = await create_or_update_user(payload.phone, "passenger")
     return api_success({"token": user["token"], "user": public_user(user)})
 
 
 @router.post("/register")
 async def register(payload: RegisterBody):
-    if payload.role == "admin":
-        api_error("Admin accounts must be created by an existing administrator.", 403)
-    user = await create_or_update_user(payload.phone, payload.role, payload.name)
+    _require_public_customer_signup(payload.role)
+    user = await create_or_update_user(payload.phone, "passenger", payload.name)
     if payload.city:
         user["city"] = payload.city
     return api_success({"token": user["token"], "user": public_user(user)})
@@ -71,8 +85,7 @@ async def register(payload: RegisterBody):
 
 @router.post("/email-register")
 async def email_register(payload: EmailRegisterBody):
-    if payload.role == "admin":
-        api_error("Admin accounts must be created by an existing administrator.", 403)
+    _require_public_customer_signup(payload.role)
     if payload.password != payload.confirm_password:
         api_error("Passwords do not match.", 400)
     try:
@@ -81,7 +94,7 @@ async def email_register(payload: EmailRegisterBody):
             payload.email,
             payload.password,
             payload.city,
-            payload.role,
+            "passenger",
         )
     except DuplicateVerifiedEmailError as error:
         api_error(str(error), 409)

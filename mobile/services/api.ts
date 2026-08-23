@@ -95,6 +95,9 @@ export function toFriendlyApiError(error: AxiosError<ApiResponse<unknown>>) {
     if (normalizedMessage.includes("email verification could not be sent")) {
       return "Verification code could not be sent. Please try again.";
     }
+    if (normalizedMessage.includes("validation failed") || normalizedMessage.includes("validation error")) {
+      return "Some details could not be read. Please check them and try again.";
+    }
     return serverMessage;
   }
 

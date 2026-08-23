@@ -39,6 +39,14 @@ export function listAssignedCourierDeliveries() {
   return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/courier/deliveries" });
 }
 
+export function getActiveCourierDelivery() {
+  return requestData<CourierDelivery | null>({ method: "GET", url: "/operations/courier/deliveries/active" });
+}
+
+export function listCourierDeliveryHistory() {
+  return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/courier/deliveries/history" });
+}
+
 export function getCourierEarnings() {
   return requestData<CourierEarningsSummary>({ method: "GET", url: "/operations/courier/earnings" });
 }

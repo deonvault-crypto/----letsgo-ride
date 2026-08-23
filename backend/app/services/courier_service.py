@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from pymongo.errors import DuplicateKeyError
+
 from app.database import database
 from app.services.delivery_security_service import (
     DELIVERY_ARRIVING_RADIUS_METERS,
@@ -16,18 +18,18 @@ from app.services.fulfillment_link_service import (
     sync_food_order_from_delivery,
     sync_food_order_pricing,
 )
+from app.services.courier_state_service import (
+    ACTIVE_COURIER_STATUSES,
+    TERMINAL_COURIER_STATUSES,
+    clear_courier_active_reference,
+    set_courier_active_reference,
+)
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
-FINAL_STATUSES = {"DELIVERED", "CANCELLED", "FAILED"}
-ACTIVE_TRACKING_STATUSES = {
-    "ASSIGNED",
-    "COURIER_TO_PICKUP",
-    "PICKED_UP",
-    "IN_TRANSIT",
-    "ARRIVING",
-}
+FINAL_STATUSES = TERMINAL_COURIER_STATUSES
+ACTIVE_TRACKING_STATUSES = ACTIVE_COURIER_STATUSES
 
 ALLOWED_TRANSITIONS = {
     "REQUESTED": {"MATCHING", "ASSIGNED", "COURIER_TO_PICKUP", "CANCELLED"},
@@ -201,12 +203,14 @@ async def cancel_delivery(
     if delivery.get("status") in {"PICKED_UP", "IN_TRANSIT", "ARRIVING"}:
         raise ValueError("Contact support to stop a delivery after pickup.")
 
+    stopped_at = now_iso()
     updates = {
         "status": "CANCELLED",
         "cancellation_reason": reason,
-        "cancelled_at": now_iso(),
+        "cancelled_at": stopped_at,
         "live_tracking_active": False,
-        "updated_at": now_iso(),
+        "tracking_stopped_at": stopped_at,
+        "updated_at": stopped_at,
     }
     updated = await database.update_one("courier_deliveries", delivery_id, updates)
     if not updated:
@@ -226,6 +230,7 @@ async def cancel_delivery(
             "The customer cancelled this job before pickup.",
             {"delivery_id": delivery_id, "courier_status": "CANCELLED"},
         )
+    await clear_courier_active_reference(updated)
     return updated
 
 
@@ -291,22 +296,25 @@ async def assign_delivery(
         raise ValueError("Courier account not found.")
 
     now = now_iso()
-    updated = await database.update_one_if(
-        "courier_deliveries",
-        {
-            "id": delivery_id,
-            "courier_user_id": delivery.get("courier_user_id"),
-            "status": delivery.get("status"),
-        },
-        {
-            "courier_user_id": courier_user_id,
-            "courier_name": courier.get("name") or "LetsGoRide Courier",
-            "status": "COURIER_TO_PICKUP",
-            "live_tracking_active": True,
-            "assigned_at": now,
-            "updated_at": now,
-        },
-    )
+    try:
+        updated = await database.update_one_if(
+            "courier_deliveries",
+            {
+                "id": delivery_id,
+                "courier_user_id": delivery.get("courier_user_id"),
+                "status": delivery.get("status"),
+            },
+            {
+                "courier_user_id": courier_user_id,
+                "courier_name": courier.get("name") or "LetsGoRide Courier",
+                "status": "COURIER_TO_PICKUP",
+                "live_tracking_active": True,
+                "assigned_at": now,
+                "updated_at": now,
+            },
+        )
+    except DuplicateKeyError as error:
+        raise ValueError("This courier already has an active delivery.") from error
     if not updated:
         raise ValueError("Delivery changed while it was being assigned. Refresh and try again.")
     await append_delivery_event(
@@ -329,6 +337,7 @@ async def assign_delivery(
         "Head to the pickup point. Live location starts automatically in the Courier app.",
         {"delivery_id": delivery_id, "courier_status": "COURIER_TO_PICKUP"},
     )
+    await set_courier_active_reference(updated)
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(actor))
     return updated
 
@@ -396,6 +405,7 @@ async def update_delivery_status(
         updates["picked_up_at"] = now
     if status in {"CANCELLED", "FAILED"}:
         updates["live_tracking_active"] = False
+        updates["tracking_stopped_at"] = now
 
     updated = await database.update_one_if(
         "courier_deliveries",
@@ -412,6 +422,8 @@ async def update_delivery_status(
     )
     await _notify_customer_status(updated, status)
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
+    if status in FINAL_STATUSES:
+        await clear_courier_active_reference(updated)
     return updated
 
 
@@ -474,6 +486,7 @@ async def complete_delivery_with_pin(
             "status": "DELIVERED",
             "delivered_at": now,
             "live_tracking_active": False,
+            "tracking_stopped_at": now,
             "delivery_verification_method": "RECIPIENT_PIN",
             "handoff_distance_meters": round(handoff_distance, 1),
             "updated_at": now,
@@ -489,6 +502,7 @@ async def complete_delivery_with_pin(
     )
     await _notify_customer_status(updated, "DELIVERED")
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
+    await clear_courier_active_reference(updated)
     return updated
 
 
@@ -501,7 +515,10 @@ async def update_courier_location(
     if not _can_operate_as_courier(delivery, user):
         raise PermissionError("Only the assigned courier can share delivery location.")
     if delivery.get("status") not in ACTIVE_TRACKING_STATUSES:
-        raise ValueError("Live location is not active for this delivery.")
+        # Automatic sensor callbacks can arrive just after handoff. Returning
+        # server truth tells the client to stop without turning a safe race into
+        # a frightening courier-facing error.
+        return delivery
 
     snapshot = {
         "id": new_id(),
@@ -510,10 +527,9 @@ async def update_courier_location(
         **location,
         "recorded_at": now_iso(),
     }
-    await database.insert_one("courier_location_snapshots", snapshot)
-    updated = await database.update_one(
+    updated = await database.update_one_if(
         "courier_deliveries",
-        delivery_id,
+        {"id": delivery_id, "status": delivery.get("status")},
         {
             "last_courier_location": snapshot,
             "live_tracking_active": True,
@@ -521,7 +537,11 @@ async def update_courier_location(
         },
     )
     if not updated:
-        raise ValueError("Delivery not found.")
+        current = await database.find_one("courier_deliveries", {"id": delivery_id})
+        if current and current.get("status") in FINAL_STATUSES:
+            return current
+        raise ValueError("Delivery changed while location was updating. Refresh and try again.")
+    await database.insert_one("courier_location_snapshots", snapshot)
 
     if updated.get("status") == "IN_TRANSIT" and is_inside_radius(
         snapshot,
@@ -559,5 +579,6 @@ async def tracking_state(delivery_id: str, user: Dict[str, Any]) -> Dict[str, An
         "last_courier_location": delivery.get("last_courier_location"),
         "estimated_duration_minutes": delivery.get("estimated_duration_minutes"),
         "distance_km": delivery.get("distance_km"),
+        "route_polyline": delivery.get("route_polyline"),
         "handoff_radius_meters": DELIVERY_HANDOFF_RADIUS_METERS,
     }

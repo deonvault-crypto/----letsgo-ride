@@ -66,6 +66,7 @@ These names are derived from `backend/app/config.py`. Values are secrets/configu
 - `PUBLIC_API_BASE_URL`
 - `CORS_ORIGINS`
 - `ENABLE_DEMO_SEED`
+- `ALLOW_STAGING_MOCK_OTP` (staging-only, defaults off; never enable in production)
 
 ### Admin/bootstrap
 
@@ -94,6 +95,18 @@ These names are derived from `backend/app/config.py`. Values are secrets/configu
 - `VERIFICATION_DUPLICATE_DETECTION_ENABLED`
 - `VERIFICATION_RISK_SCORING_ENABLED`
 
+### Routing and courier pricing
+
+- `ROUTING_PROVIDER`
+- `GOOGLE_MAPS_API_KEY`
+- `ROUTING_REGION_CODE`
+- `COURIER_AUTO_PRICING_ENABLED`
+- `COURIER_BASE_PRICE_USD`
+- `COURIER_PRICE_PER_KM_USD`
+- `COURIER_PRICE_PER_MINUTE_USD`
+- `COURIER_MINIMUM_PRICE_USD`
+- `COURIER_PAYOUT_PERCENT`
+
 ## Mobile environment
 
 The mobile app now supports:
@@ -104,53 +117,46 @@ If the variable is absent, the app intentionally falls back to the production Re
 
 Staging/TestFlight/internal builds must explicitly set `EXPO_PUBLIC_API_BASE_URL` to the staging backend.
 
-## Current infrastructure audit — 2026-08-22
+## Current infrastructure audit — 2026-08-23
 
 ### GitHub
 
-- Platform V2 work is isolated in draft PR #1.
-- `main` remains the production branch.
-- CI covers mobile typecheck/tests and backend compile/import/service tests.
-- CI uses concurrency cancellation to avoid large stale queues.
+- Platform V2 remains isolated on `platform-v2-m1-m6`; `main` remains production.
+- Platform V2 CI covers mobile typecheck/tests and backend compile/import/service tests with concurrency cancellation.
+- The Preview workflow explicitly checks out `platform-v2-m1-m6`, even when dispatched from `main`.
+- The audited baseline run for commit `79eacf7` was green. The final commit must pass a fresh run before EAS is dispatched.
 
 ### Render
 
-- Production LetsGoRide backend exists and auto-deploys from `main`.
-- Production backend is healthy enough to serve active mobile requests.
-- Recent observed successful routes include `/auth/me`, `/rides`, `/notifications`, `/requests/my`, `/conversations`, `/reviews/pending`, and `/verification/me`.
-- Some unauthenticated requests correctly return `401`.
-- No dedicated LetsGoRide staging backend was found during this audit.
-- Pull-request previews are not enabled for the current production service.
+- Dedicated staging service: `letsgoride-v2-staging` at `https://letsgoride-v2-staging.onrender.com`.
+- Staging deploys `platform-v2-m1-m6` and uses `letsgoride_staging`; production was not written during this pass.
+- `/health` and `/health/ready` were both HTTP 200 with MongoDB connected at the audited baseline.
+- The observed courier GPS failure was a repeated HTTP 422 caused by iOS negative sensor sentinel values. The backend and client now normalize those values and log safe diagnostics.
+- The final deploy must be rechecked for readiness, routing status and runtime errors after the final commit.
 
 ### Vercel
 
-No LetsGoRide project is currently deployed on Vercel. Existing Vercel projects belong to other products. LetsGoRide does not need to move to Vercel merely because access exists; use the platform that fits each workload.
+No LetsGoRide project is deployed on Vercel. The available team projects belong to other products, so Platform V2 has no Vercel dependency.
 
 ### Resend
 
-- `letsgoride.site` is verified.
-- Sending is enabled.
-- Recent LetsGoRide verification emails are being delivered.
-- No Resend webhooks are currently configured.
+- `letsgoride.site` is verified and the Resend account can send.
+- Staging currently reports email configuration as absent. New email signup is therefore a release blocker until `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are configured on the staging service.
+- No secret values are recorded in this repository.
 
 ### MongoDB Atlas
 
-Atlas MCP access is currently blocked at the organization level. An Organization Owner must enable AI client/MCP access before the Atlas connector can inspect projects, clusters, databases, indexes, or alerts directly.
-
-Until that is enabled, do not guess Atlas topology or make database changes based only on application code.
+Atlas access was verified. The staging database is `letsgoride_staging`; the active, cancelled and delivered courier records were inspected without altering their history. Operational indexes are now created idempotently during backend startup, including a unique partial constraint that prevents one courier from owning two active deliveries.
 
 ## Staging creation checklist
 
-1. Enable MongoDB Atlas MCP access for the organization.
-2. Inspect the existing Atlas project/cluster and identify the production database name.
-3. Create a dedicated staging database (preferred initially over a paid second cluster unless isolation requirements justify one).
-4. Create a dedicated Render staging web service from `platform-v2-m1-m6`.
-5. Configure only staging secrets and the staging MongoDB database.
-6. Set `PUBLIC_API_BASE_URL` to the staging Render URL.
-7. Keep `ENABLE_DEMO_SEED=false` unless a dedicated deterministic staging seed is intentionally implemented.
-8. Build a staging mobile binary with `EXPO_PUBLIC_API_BASE_URL=<staging backend>`.
-9. Run smoke tests for auth, rides, courier, food, merchant, notifications, and verification.
-10. Only after green CI + staging QA should Platform V2 be considered for merge to `main`.
+1. Configure staging Resend variables and verify `/health/email-config` without exposing values.
+2. Confirm routing and courier pricing health against real Harare locations.
+3. Keep `ENABLE_DEMO_SEED=false` and `MONGODB_DB_NAME=letsgoride_staging`.
+4. Push only the audited Platform V2 commit and wait for CI plus Render readiness.
+5. Build one iOS Preview binary with the staging API URL after CI is green.
+6. Run installed-device QA for auth, rides, courier, food, merchant, notifications and verification.
+7. Only then consider merging Platform V2 to `main`.
 
 ## Production safety rules
 
@@ -162,12 +168,10 @@ Until that is enabled, do not guess Atlas topology or make database changes base
 - Keep migration/backfill operations explicit, reversible where possible, and documented.
 - Production deploys must be traceable to a GitHub commit.
 
-## Next infrastructure work
+## Release gates
 
-1. Get CI fully green.
-2. Enable Atlas MCP access and audit the database/indexes.
-3. Provision staging without touching production data.
-4. Add health/readiness endpoints and deployment smoke tests if missing.
-5. Add routing/geocoding provider abstraction and server-side quote calculation.
-6. Add structured observability for Food/Courier state transitions.
-7. Add Resend delivery-event webhook handling when needed for transactional email observability.
+- CI, Expo Doctor, backend tests and mobile tests must be green.
+- Render staging liveness/readiness must be green on the final commit.
+- Staging email must be configured before real new-account QA.
+- Routing and pricing must fail closed; no invented route, ETA, price or courier payout is permitted.
+- One EAS iOS Preview build is allowed only after the final CI run is green.

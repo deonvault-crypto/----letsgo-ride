@@ -67,11 +67,11 @@ async def ensure_food_order_delivery(
     *,
     actor_user_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Create exactly one courier fulfillment record when checkout confirms the order.
+    """Create exactly one courier fulfillment record after restaurant acceptance.
 
-    Restaurant preparation and courier matching run in parallel. The restaurant moves
-    PREPARING -> READY_FOR_PICKUP while dispatch independently progresses from matching
-    through pickup, delivery and secure handoff.
+    Once accepted, restaurant preparation and courier matching run in parallel. The
+    restaurant moves PREPARING -> READY_FOR_PICKUP while dispatch independently
+    progresses from matching through pickup, delivery and secure handoff.
     """
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:

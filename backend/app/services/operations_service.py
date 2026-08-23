@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from pymongo.errors import DuplicateKeyError
+
 from app.database import database
 from app.services.courier_service import append_delivery_event
+from app.services.courier_state_service import (
+    ACTIVE_COURIER_STATUSES,
+    TERMINAL_COURIER_STATUSES,
+    set_courier_active_reference,
+)
 from app.services.fulfillment_link_service import sync_food_order_from_delivery
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
@@ -56,7 +63,7 @@ async def create_courier_profile(payload: Dict[str, Any], user: Dict[str, Any]) 
         "id": new_id(),
         "user_id": _user_id(user),
         "name": user.get("name"),
-        "status": "PENDING_REVIEW",
+        "status": "SUBMITTED",
         "online": False,
         "completed_deliveries": 0,
         "rating": None,
@@ -89,6 +96,8 @@ async def approve_courier_profile(profile_id: str, actor: Dict[str, Any]) -> Dic
     profile = await database.find_one("courier_profiles", {"id": profile_id})
     if not profile:
         raise ValueError("Courier profile not found.")
+    if profile.get("status") not in {"SUBMITTED", "UNDER_REVIEW", "APPROVED"}:
+        raise ValueError("Courier application is not ready for approval.")
     updated = await database.update_one(
         "courier_profiles",
         profile_id,
@@ -100,7 +109,40 @@ async def approve_courier_profile(profile_id: str, actor: Dict[str, Any]) -> Dic
 
 
 async def assigned_courier_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    deliveries = await database.find_many("courier_deliveries", {"courier_user_id": _user_id(user)})
+    """Return active work only. History must never hydrate the live workspace."""
+    deliveries = await database.find_many(
+        "courier_deliveries",
+        {
+            "courier_user_id": _user_id(user),
+            "status": {"$in": sorted(ACTIVE_COURIER_STATUSES)},
+        },
+    )
+    return sorted(deliveries, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+
+
+async def active_courier_delivery(user: Dict[str, Any]) -> Dict[str, Any] | None:
+    deliveries = await assigned_courier_deliveries(user)
+    active = deliveries[0] if deliveries else None
+    profile = await get_courier_profile(user)
+    if active:
+        await set_courier_active_reference(active)
+    elif profile and profile.get("active_delivery_id"):
+        await database.update_one(
+            "courier_profiles",
+            profile["id"],
+            {"active_delivery_id": None, "updated_at": now_iso()},
+        )
+    return active
+
+
+async def courier_delivery_history(user: Dict[str, Any]) -> List[Dict[str, Any]]:
+    deliveries = await database.find_many(
+        "courier_deliveries",
+        {
+            "courier_user_id": _user_id(user),
+            "status": {"$in": sorted(TERMINAL_COURIER_STATUSES)},
+        },
+    )
     return sorted(deliveries, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
 
 
@@ -109,6 +151,8 @@ async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not profile or profile.get("status") != "APPROVED":
         raise PermissionError("Approved courier verification is required to view delivery offers.")
     if not profile.get("online"):
+        return []
+    if await active_courier_delivery(user):
         return []
 
     offers = await database.find_many(
@@ -137,6 +181,8 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         raise PermissionError("Approved courier verification is required to accept delivery work.")
     if not profile.get("online"):
         raise PermissionError("Go online before accepting a delivery offer.")
+    if await active_courier_delivery(user):
+        raise ValueError("Finish your current delivery before accepting another offer.")
 
     delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
     if not delivery:
@@ -153,23 +199,26 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         raise ValueError("Courier payout must be set before this offer can be accepted.")
 
     now = now_iso()
-    updated = await database.update_one_if(
-        "courier_deliveries",
-        {
-            "id": delivery_id,
-            "status": "MATCHING",
-            "quote_status": "READY",
-            "courier_user_id": None,
-        },
-        {
-            "courier_user_id": _user_id(user),
-            "courier_name": user.get("name") or profile.get("name") or "LetsGoRide Courier",
-            "status": "COURIER_TO_PICKUP",
-            "live_tracking_active": True,
-            "assigned_at": now,
-            "updated_at": now,
-        },
-    )
+    try:
+        updated = await database.update_one_if(
+            "courier_deliveries",
+            {
+                "id": delivery_id,
+                "status": "MATCHING",
+                "quote_status": "READY",
+                "courier_user_id": None,
+            },
+            {
+                "courier_user_id": _user_id(user),
+                "courier_name": user.get("name") or profile.get("name") or "LetsGoRide Courier",
+                "status": "COURIER_TO_PICKUP",
+                "live_tracking_active": True,
+                "assigned_at": now,
+                "updated_at": now,
+            },
+        )
+    except DuplicateKeyError as error:
+        raise ValueError("Finish your current delivery before accepting another offer.") from error
     if not updated:
         raise ValueError("Another courier accepted this delivery first.")
 
@@ -183,6 +232,7 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
             "courier_payout_usd": updated.get("courier_payout_usd"),
         },
     )
+    await set_courier_active_reference(updated)
     await append_delivery_event(
         delivery_id,
         "STATUS_COURIER_TO_PICKUP",

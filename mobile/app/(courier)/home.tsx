@@ -1,15 +1,16 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import {
   claimCourierOffer,
+  getActiveCourierDelivery,
   getCourierEarnings,
   getCourierProfile,
-  listAssignedCourierDeliveries,
   listCourierOffers,
   setCourierOnline,
 } from "../../services/operationsService";
@@ -28,7 +29,7 @@ const emptyEarnings: CourierEarningsSummary = {
 export default function CourierHomeScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<CourierProfile | null>(null);
-  const [deliveries, setDeliveries] = useState<CourierDelivery[]>([]);
+  const [activeDelivery, setActiveDelivery] = useState<CourierDelivery | null>(null);
   const [offers, setOffers] = useState<CourierDelivery[]>([]);
   const [earnings, setEarnings] = useState<CourierEarningsSummary>(emptyEarnings);
   const [loading, setLoading] = useState(true);
@@ -40,15 +41,17 @@ export default function CourierHomeScreen() {
     try {
       setError(null);
       const nextProfile = await getCourierProfile();
-      const [nextDeliveries, nextEarnings] = await Promise.all([
-        listAssignedCourierDeliveries(),
+      const [nextDelivery, nextEarnings] = await Promise.all([
+        getActiveCourierDelivery(),
         getCourierEarnings(),
       ]);
-      const nextOffers = nextProfile?.status === "APPROVED" && nextProfile.online
+      const nextOffers = nextProfile?.status === "APPROVED" && nextProfile.online && !nextDelivery
         ? await listCourierOffers()
         : [];
       setProfile(nextProfile);
-      setDeliveries(nextDeliveries);
+      // Server truth wins on every login/focus hydration. A null response clears
+      // any stale in-memory job immediately.
+      setActiveDelivery(nextDelivery);
       setEarnings(nextEarnings);
       setOffers(nextOffers);
     } catch (err) {
@@ -64,26 +67,21 @@ export default function CourierHomeScreen() {
 
   const approved = profile?.status === "APPROVED";
   const online = Boolean(approved && profile?.online);
-  const activeDeliveries = deliveries.filter((item) => !["DELIVERED", "CANCELLED", "FAILED"].includes(item.status));
-
-  useEffect(() => {
-    if (!online) return;
-    const timer = setInterval(async () => {
-      try {
-        const [nextOffers, nextDeliveries, nextEarnings] = await Promise.all([
-          listCourierOffers(),
-          listAssignedCourierDeliveries(),
-          getCourierEarnings(),
-        ]);
-        setOffers(nextOffers);
-        setDeliveries(nextDeliveries);
-        setEarnings(nextEarnings);
-      } catch {
-        // Preserve the last known workspace during short network interruptions.
-      }
-    }, 12000);
-    return () => clearInterval(timer);
+  const refreshLive = useCallback(async () => {
+    try {
+      const nextDelivery = await getActiveCourierDelivery();
+      const [nextOffers, nextEarnings] = await Promise.all([
+        online && !nextDelivery ? listCourierOffers() : Promise.resolve([]),
+        getCourierEarnings(),
+      ]);
+      setOffers(nextOffers);
+      setActiveDelivery(nextDelivery);
+      setEarnings(nextEarnings);
+    } catch {
+      // Preserve the last known workspace during short network interruptions.
+    }
   }, [online]);
+  useLiveRefresh(refreshLive, 12000, online || Boolean(activeDelivery));
 
   async function toggleOnline() {
     if (!profile || busy) return;
@@ -92,7 +90,7 @@ export default function CourierHomeScreen() {
       setError(null);
       const updated = await setCourierOnline(!profile.online);
       setProfile(updated);
-      setOffers(updated.online ? await listCourierOffers() : []);
+      setOffers(updated.online && !activeDelivery ? await listCourierOffers() : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to change courier status.");
     } finally {
@@ -107,7 +105,7 @@ export default function CourierHomeScreen() {
       setError(null);
       const claimed = await claimCourierOffer(offer.id);
       setOffers((current) => current.filter((item) => item.id !== offer.id));
-      setDeliveries((current) => [claimed, ...current.filter((item) => item.id !== claimed.id)]);
+      setActiveDelivery(claimed);
       router.push(`/(courier)/delivery/${claimed.id}` as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to accept this delivery offer.");
@@ -129,8 +127,8 @@ export default function CourierHomeScreen() {
         </View>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>LETSGORIDE COURIER</Text>
-          <Text style={styles.title}>{online ? "Ready for your next delivery." : "Your delivery day starts here."}</Text>
-          <Text style={styles.body}>{online ? "Nearby paid jobs will appear below. Accept one and we’ll guide the journey from pickup to verified handoff." : "Go online when you’re ready to receive nearby delivery work."}</Text>
+          <Text style={styles.title}>{activeDelivery ? "Delivery in progress." : online ? "Ready for your next delivery." : "Your delivery day starts here."}</Text>
+          <Text style={styles.body}>{activeDelivery ? (online ? "Your current route stays front and centre until the verified handoff is complete." : "Offline for new offers. Your current delivery remains active and trackable.") : online ? "Nearby paid jobs will appear below. Accept one and we’ll guide the journey from pickup to verified handoff." : "Go online when you’re ready to receive nearby delivery work."}</Text>
         </View>
       </View>
 
@@ -162,8 +160,8 @@ export default function CourierHomeScreen() {
             <MaterialCommunityIcons name={online ? "radar" : "power"} size={25} color={online ? "#FFFFFF" : v2Theme.colors.brandStrong} />
           </View>
           <View style={styles.controlCopy}>
-            <Text style={styles.controlValue}>{online ? "You’re receiving offers" : approved ? "You’re offline" : "Verification in progress"}</Text>
-            <Text style={styles.controlHint}>{approved ? online ? "Keep LetsGoRide open while you wait for nearby work." : "Go online whenever you’re ready to deliver." : `Courier status: ${profile.status.replaceAll("_", " ").toLowerCase()}.`}</Text>
+            <Text style={styles.controlValue}>{activeDelivery && !online ? "Offline for new offers" : online ? activeDelivery ? "Current delivery active" : "You’re receiving offers" : approved ? "You’re offline" : "Verification in progress"}</Text>
+            <Text style={styles.controlHint}>{approved ? activeDelivery ? "Your current delivery remains visible and live until handoff." : online ? "Keep LetsGoRide open while you wait for nearby work." : "Go online whenever you’re ready to deliver." : `Courier status: ${profile.status.replaceAll("_", " ").toLowerCase()}.`}</Text>
           </View>
           <Pressable accessibilityRole="button" disabled={!approved || busy} onPress={toggleOnline} style={[styles.onlineButton, online && styles.onlineButtonActive, (!approved || busy) && styles.disabled]}>
             {busy ? <ActivityIndicator size="small" color={online ? "#FFFFFF" : v2Theme.colors.ink} /> : <Text style={[styles.onlineButtonText, online && styles.onlineButtonTextActive]}>{online ? "Go offline" : "Go online"}</Text>}
@@ -184,36 +182,34 @@ export default function CourierHomeScreen() {
         </View>
       </View>
 
-      {activeDeliveries.length > 0 ? (
+      {activeDelivery ? (
         <View style={styles.section}>
           <View style={styles.sectionHeader}><View><Text style={styles.sectionEyebrow}>CURRENT</Text><Text style={styles.sectionTitle}>Active delivery</Text></View></View>
-          {activeDeliveries.map((delivery) => (
-            <Pressable key={delivery.id} accessibilityRole="button" onPress={() => router.push(`/(courier)/delivery/${delivery.id}` as never)} style={({ pressed }) => [styles.activeCard, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="button" onPress={() => router.push(`/(courier)/delivery/${activeDelivery.id}` as never)} style={({ pressed }) => [styles.activeCard, pressed && styles.pressed]}>
               <View style={styles.activeTop}>
-                <View style={styles.activeIcon}><MaterialCommunityIcons name={delivery.source_type === "FOOD_ORDER" ? "food-takeout-box-outline" : "package-variant-closed"} size={23} color={v2Theme.colors.brandStrong} /></View>
-                <View style={styles.activeCopy}><Text style={styles.activeStatus}>{humanCourierStatus(delivery.status)}</Text><Text style={styles.activeHint}>{activeDeliveryHint(delivery.status)}</Text></View>
+                <View style={styles.activeIcon}><MaterialCommunityIcons name={activeDelivery.source_type === "FOOD_ORDER" ? "food-takeout-box-outline" : "package-variant-closed"} size={23} color={v2Theme.colors.brandStrong} /></View>
+                <View style={styles.activeCopy}><Text style={styles.activeStatus}>{humanCourierStatus(activeDelivery.status)}</Text><Text style={styles.activeHint}>{activeDeliveryHint(activeDelivery.status)}</Text></View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
               </View>
-              <RouteLine pickup={delivery.pickup_address} dropoff={delivery.dropoff_address} />
+              <RouteLine pickup={activeDelivery.pickup_address} dropoff={activeDelivery.dropoff_address} />
             </Pressable>
-          ))}
         </View>
       ) : null}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <View><Text style={styles.sectionEyebrow}>NEARBY</Text><Text style={styles.sectionTitle}>Delivery offers</Text><Text style={styles.sectionSub}>{online ? "Priced jobs available to your courier account" : "Go online to start receiving work"}</Text></View>
-          {online ? <View style={styles.liveBadge}><View style={styles.liveBadgeDot} /><Text style={styles.liveBadgeText}>LIVE</Text></View> : null}
+          <View><Text style={styles.sectionEyebrow}>NEARBY</Text><Text style={styles.sectionTitle}>Delivery offers</Text><Text style={styles.sectionSub}>{activeDelivery ? "New offers pause while you complete the current delivery" : online ? "Priced jobs available to your courier account" : "Go online to start receiving work"}</Text></View>
+          {online && !activeDelivery ? <View style={styles.liveBadge}><View style={styles.liveBadgeDot} /><Text style={styles.liveBadgeText}>LIVE</Text></View> : null}
         </View>
 
-        {!loading && online && offers.length === 0 ? (
+        {!loading && online && !activeDelivery && offers.length === 0 ? (
           <View style={styles.listeningCard}>
             <View style={styles.radarWrap}><MaterialCommunityIcons name="radar" size={30} color={v2Theme.colors.brandStrong} /></View>
             <View style={styles.emptyCopy}><Text style={styles.emptyTitle}>Looking for nearby work…</Text><Text style={styles.emptyBody}>You’re online. New delivery offers will appear here automatically.</Text></View>
           </View>
         ) : null}
 
-        {!online && profile ? (
+        {!online && profile && !activeDelivery ? (
           <View style={styles.emptyCard}><MaterialCommunityIcons name="power-sleep" size={27} color={v2Theme.colors.inkSecondary} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>Offers are paused</Text><Text style={styles.emptyBody}>Your courier account stays quiet until you go online.</Text></View></View>
         ) : null}
 
@@ -236,7 +232,7 @@ export default function CourierHomeScreen() {
         ))}
       </View>
 
-      {activeDeliveries.length === 0 && !loading ? (
+      {!activeDelivery && !loading ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Current job</Text>
           <View style={styles.emptyCard}><MaterialCommunityIcons name="package-variant" size={27} color={v2Theme.colors.inkSecondary} /><View style={styles.emptyCopy}><Text style={styles.emptyTitle}>No active delivery</Text><Text style={styles.emptyBody}>When you accept an offer, the route and live journey will take over this workspace.</Text></View></View>
