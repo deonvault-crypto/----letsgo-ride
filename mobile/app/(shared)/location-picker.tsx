@@ -10,10 +10,10 @@ import { LocationChoice, useLocationDraft } from "../../contexts/LocationDraftCo
 import { getCurrentDeviceLocation } from "../../services/locationService";
 import {
   getLocationMemory,
-  LocationMemory,
   rememberLocation,
   saveNamedLocation,
 } from "../../services/locationMemoryService";
+import type { LocationMemory } from "../../services/locationMemoryService";
 import { autocompletePlaces, getPlaceDetail } from "../../services/routingService";
 import { PlaceSuggestion } from "../../types/routing.types";
 
@@ -343,50 +343,21 @@ function QuickPlace({
 }
 
 const styles = StyleSheet.create({
-  searchCard: {
-    borderRadius: v2Theme.radius.xxl,
-    backgroundColor: v2Theme.colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.lineStrong,
-    overflow: "hidden",
-  },
+  searchCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden" },
   searchRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14 },
   searchInput: { flex: 1, color: v2Theme.colors.ink, fontSize: 15, fontWeight: "700", paddingVertical: 12 },
   currentRow: { minHeight: 66, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: v2Theme.colors.line, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 13 },
   currentIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  currentCopy: { flex: 1, gap: 2 },
-  currentTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
-  currentBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
+  currentCopy: { flex: 1, gap: 2 }, currentTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, currentBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
   shortcutsCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 12, gap: 9 },
-  shortcutsTitle: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
-  shortcutRowWrap: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  quickPlace: { minWidth: 145, flexGrow: 1, flexBasis: "46%", borderRadius: 16, backgroundColor: v2Theme.colors.surfaceMuted, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 },
-  quickPlaceIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  quickPlaceCopy: { flex: 1, gap: 2 },
-  quickPlaceLabel: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
-  quickPlaceAddress: { color: v2Theme.colors.inkSecondary, fontSize: 8, lineHeight: 12 },
-  errorCard: { borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 11, flexDirection: "row", gap: 8, alignItems: "center" },
-  errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, lineHeight: 16, fontWeight: "700" },
+  shortcutsTitle: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" }, shortcutRowWrap: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  quickPlace: { minWidth: 145, flexGrow: 1, flexBasis: "46%", borderRadius: 16, backgroundColor: v2Theme.colors.surfaceMuted, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 }, quickPlaceIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, quickPlaceCopy: { flex: 1, gap: 2 }, quickPlaceLabel: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" }, quickPlaceAddress: { color: v2Theme.colors.inkSecondary, fontSize: 8, lineHeight: 12 },
+  errorCard: { borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 11, flexDirection: "row", gap: 8, alignItems: "center" }, errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, lineHeight: 16, fontWeight: "700" },
   resultsCard: { position: "absolute", left: 0, right: 0, top: 136, zIndex: 20, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
-  resultRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line },
-  resultIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
-  resultCopy: { flex: 1, gap: 2 },
-  resultTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
-  resultBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
-  mapCard: { flex: 1, minHeight: 300, borderRadius: v2Theme.radius.xxl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surfaceMuted },
-  map: { flex: 1 },
-  mapHint: { position: "absolute", left: 12, right: 12, bottom: 12, minHeight: 42, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 },
-  mapHintText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
-  confirmArea: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 12 },
-  selectedCopy: { gap: 3 },
-  selectedEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  selectedTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
-  selectedBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
-  saveRow: { flexDirection: "row", gap: 8 },
-  saveChip: { flex: 1, minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  saveChipText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },
-  confirmButton: { minHeight: 52, borderRadius: 18, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 17 },
-  confirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
-  disabled: { opacity: 0.4 },
-  pressed: { opacity: 0.72 },
+  resultRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line }, resultIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, resultCopy: { flex: 1, gap: 2 }, resultTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, resultBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
+  mapCard: { flex: 1, minHeight: 300, borderRadius: v2Theme.radius.xxl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surfaceMuted }, map: { flex: 1 },
+  mapHint: { position: "absolute", left: 12, right: 12, bottom: 12, minHeight: 42, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 }, mapHintText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
+  confirmArea: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 12 }, selectedCopy: { gap: 3 }, selectedEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1 }, selectedTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, selectedBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
+  saveRow: { flexDirection: "row", gap: 8 }, saveChip: { flex: 1, minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 }, saveChipText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },
+  confirmButton: { minHeight: 52, borderRadius: 18, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 17 }, confirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" }, disabled: { opacity: 0.4 }, pressed: { opacity: 0.72 },
 });
