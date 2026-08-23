@@ -74,6 +74,10 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
     if not requested_items:
         raise ValueError("Add at least one menu item.")
 
+    payment_method = str(payload.get("payment_method") or "CASH_ON_DELIVERY")
+    if payment_method != "CASH_ON_DELIVERY":
+        raise ValueError("That payment method is not available yet.")
+
     item_snapshots: List[Dict[str, Any]] = []
     subtotal = 0.0
     for requested in requested_items:
@@ -108,7 +112,8 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "status": "PLACED",
         "restaurant_status": "PLACED",
         "fulfillment_status": "NOT_STARTED",
-        "payment_status": "NOT_CONFIGURED",
+        "payment_method": payment_method,
+        "payment_status": "PAY_ON_DELIVERY",
         "items": item_snapshots,
         "subtotal_usd": round(subtotal, 2),
         "delivery_fee_usd": None,
@@ -125,7 +130,11 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         saved["id"],
         "ORDER_PLACED",
         actor_user_id=str(user.get("id") or ""),
-        data={"restaurant_id": restaurant["id"], "subtotal_usd": saved["subtotal_usd"]},
+        data={
+            "restaurant_id": restaurant["id"],
+            "subtotal_usd": saved["subtotal_usd"],
+            "payment_method": payment_method,
+        },
     )
     return saved
 
