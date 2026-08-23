@@ -122,9 +122,7 @@ async def verify_email(payload: VerifyEmailBody):
     if user.get("token"):
         response["token"] = user["token"]
         response["user"] = public_user(user)
-    return api_success(
-        response
-    )
+    return api_success(response)
 
 
 @router.post("/resend-email-verification")
@@ -183,10 +181,13 @@ async def update_me(payload: UserUpdate, authorization: str = Header(default="")
     if not user:
         api_error("User not found.", 404)
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
-    if updates.get("role") == "admin":
-        api_error("Admin role cannot be requested from the mobile app.", 403)
+
+    # Product identity is immutable. Customer, Driver, Courier and Merchant are
+    # separate account types; changing profile details must never switch products.
+    updates.pop("role", None)
     updates.pop("email_verified", None)
     updates.pop("profile_photo_verified", None)
+
     if updates.get("email") and updates["email"].lower().strip() != (user.get("email") or "").lower().strip():
         updates["email"] = updates["email"].lower().strip()
         updates["email_verified"] = False
