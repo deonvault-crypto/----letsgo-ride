@@ -8,6 +8,15 @@ import { FoodBasketProvider } from "../contexts/FoodBasketContext";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
 import { configureNotificationHandler } from "../services/pushNotificationService";
 
+const ALLOWED_NOTIFICATION_ROUTES = [
+  "/(customer)/",
+  "/(driver)/",
+  "/(courier)/",
+  "/(merchant)/",
+  "/(admin)/",
+  "/(shared)/",
+] as const;
+
 export default function RootLayout() {
   const router = useRouter();
 
@@ -15,6 +24,10 @@ export default function RootLayout() {
     configureNotificationHandler();
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data || {};
+      if (typeof data.target_route === "string" && ALLOWED_NOTIFICATION_ROUTES.some((prefix) => data.target_route.startsWith(prefix))) {
+        router.push(data.target_route as never);
+        return;
+      }
       if (typeof data.conversation_id === "string") {
         router.push(`/(shared)/conversation/${data.conversation_id}` as never);
         return;
@@ -31,17 +44,13 @@ export default function RootLayout() {
         router.push(`/(customer)/ride/${data.ride_id}` as never);
         return;
       }
-      const foodOrderId = typeof data.food_order_id === "string"
-        ? data.food_order_id
-        : typeof data.order_id === "string"
-          ? data.order_id
-          : null;
+      const foodOrderId = typeof data.food_order_id === "string" ? data.food_order_id : typeof data.order_id === "string" ? data.order_id : null;
       if (foodOrderId) {
         router.push(`/(shared)/food/order/${foodOrderId}` as never);
         return;
       }
       if (typeof data.delivery_id === "string") {
-        router.push(`/(shared)/courier/${data.delivery_id}` as never);
+        router.push(`/(customer)/courier/${data.delivery_id}` as never);
         return;
       }
       if (typeof data.support_message_id === "string") {
