@@ -3,27 +3,21 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.database import database
+from app.services.delivery_security_service import create_delivery_handoff
 from app.utils import new_id, now_iso
 
 
-FOOD_STATUS_RANK = {
-    "PLACED": 0,
-    "ACCEPTED": 1,
-    "PREPARING": 2,
-    "READY_FOR_PICKUP": 3,
-    "COURIER_ASSIGNED": 4,
-    "PICKED_UP": 5,
-    "OUT_FOR_DELIVERY": 6,
-    "DELIVERED": 7,
-}
-
-DELIVERY_TO_FOOD_STATUS = {
+DELIVERY_TO_FULFILLMENT_STATUS = {
+    "REQUESTED": "REQUESTED",
+    "MATCHING": "MATCHING",
     "ASSIGNED": "COURIER_ASSIGNED",
-    "COURIER_TO_PICKUP": "COURIER_ASSIGNED",
+    "COURIER_TO_PICKUP": "COURIER_TO_PICKUP",
     "PICKED_UP": "PICKED_UP",
     "IN_TRANSIT": "OUT_FOR_DELIVERY",
-    "ARRIVING": "OUT_FOR_DELIVERY",
+    "ARRIVING": "ARRIVING",
     "DELIVERED": "DELIVERED",
+    "CANCELLED": "CANCELLED",
+    "FAILED": "FAILED",
 }
 
 
@@ -72,7 +66,12 @@ async def ensure_food_order_delivery(
     *,
     actor_user_id: str | None = None,
 ) -> Dict[str, Any]:
-    """Create exactly one courier fulfillment record once food is ready for pickup."""
+    """Create exactly one courier fulfillment record after the restaurant accepts the order.
+
+    Restaurant preparation and courier matching intentionally run in parallel. The
+    restaurant can continue PREPARING -> READY_FOR_PICKUP while dispatch independently
+    moves REQUESTED -> MATCHING -> COURIER_TO_PICKUP.
+    """
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
         raise ValueError("Food order not found.")
@@ -127,17 +126,25 @@ async def ensure_food_order_delivery(
         "updated_at": now,
     }
     saved = await database.insert_one("courier_deliveries", delivery)
+    await create_delivery_handoff(saved["id"], str(order.get("customer_user_id") or ""))
 
     linked_order = await database.update_one_if(
         "food_orders",
         {"id": order_id, "courier_delivery_id": None},
-        {"courier_delivery_id": saved["id"], "updated_at": now_iso()},
+        {
+            "courier_delivery_id": saved["id"],
+            "fulfillment_status": "REQUESTED",
+            "updated_at": now_iso(),
+        },
     )
     if not linked_order:
         current = await database.find_one("food_orders", {"id": order_id})
         winner_id = current.get("courier_delivery_id") if current else None
         if winner_id and winner_id != saved["id"]:
             await database.delete_one("courier_deliveries", saved["id"])
+            handoff = await database.find_one("delivery_handoffs", {"delivery_id": saved["id"]})
+            if handoff:
+                await database.delete_one("delivery_handoffs", handoff["id"])
             winner = await database.find_one("courier_deliveries", {"id": winner_id})
             if winner:
                 return winner
@@ -152,7 +159,7 @@ async def ensure_food_order_delivery(
         order_id,
         "COURIER_FULFILLMENT_CREATED",
         actor_user_id=actor_user_id,
-        data={"delivery_id": saved["id"], "quote_status": "PENDING"},
+        data={"delivery_id": saved["id"], "fulfillment_status": "REQUESTED"},
     )
     return saved
 
@@ -173,16 +180,16 @@ async def sync_food_order_pricing(
     subtotal = float(order.get("subtotal_usd") or 0)
     delivery_fee = round(float(price), 2)
     total = round(subtotal + delivery_fee, 2)
-    await database.update_one(
-        "food_orders",
-        order_id,
-        {
-            "delivery_fee_usd": delivery_fee,
-            "total_usd": total,
-            "pricing_status": "READY",
-            "updated_at": now_iso(),
-        },
-    )
+    updates = {
+        "delivery_fee_usd": delivery_fee,
+        "total_usd": total,
+        "pricing_status": "READY",
+        "updated_at": now_iso(),
+    }
+    delivery_status = DELIVERY_TO_FULFILLMENT_STATUS.get(str(delivery.get("status") or ""))
+    if delivery_status:
+        updates["fulfillment_status"] = delivery_status
+    await database.update_one("food_orders", order_id, updates)
     await _append_food_event(
         order_id,
         "DELIVERY_PRICE_READY",
@@ -197,28 +204,29 @@ async def sync_food_order_from_delivery(
     actor_user_id: str | None = None,
 ) -> None:
     order_id = delivery.get("food_order_id")
-    target = DELIVERY_TO_FOOD_STATUS.get(str(delivery.get("status") or ""))
+    target = DELIVERY_TO_FULFILLMENT_STATUS.get(str(delivery.get("status") or ""))
     if not order_id or not target:
         return
 
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
         return
-    current = str(order.get("status") or "")
-    if current in {"CANCELLED", "REJECTED", "DELIVERED"}:
-        return
-    if FOOD_STATUS_RANK.get(target, -1) <= FOOD_STATUS_RANK.get(current, -1):
+    if order.get("restaurant_status") in {"REJECTED", "CANCELLED"}:
         return
 
-    updated = await database.update_one(
-        "food_orders",
-        order_id,
-        {"status": target, "updated_at": now_iso()},
-    )
+    updates: Dict[str, Any] = {
+        "fulfillment_status": target,
+        "updated_at": now_iso(),
+    }
+    if target == "DELIVERED":
+        updates["status"] = "DELIVERED"
+        updates["delivered_at"] = delivery.get("delivered_at") or now_iso()
+
+    updated = await database.update_one("food_orders", order_id, updates)
     if updated:
         await _append_food_event(
             order_id,
-            f"ORDER_{target}",
+            f"FULFILLMENT_{target}",
             actor_user_id=actor_user_id,
             data={"delivery_id": delivery.get("id"), "source": "courier"},
         )
