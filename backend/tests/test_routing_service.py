@@ -6,6 +6,7 @@ from app.services.routing_service import (
     RoutingNotConfiguredError,
     compute_route,
     geocode_address,
+    reverse_geocode_location,
     routing_status,
 )
 
@@ -81,6 +82,27 @@ class RoutingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["encoded_polyline"], "encoded-route")
         self.assertEqual(result["origin"], origin)
         self.assertEqual(result["destination"], destination)
+
+    async def test_reverse_geocode_returns_customer_facing_address(self):
+        provider_payload = {
+            "results": [
+                {
+                    "formattedAddress": "Samora Machel Ave, Harare, Zimbabwe",
+                    "placeId": "place-current",
+                    "location": {"latitude": -17.8252, "longitude": 31.0335},
+                }
+            ]
+        }
+        with patch("app.services.routing_service.get_settings", return_value=self.google_settings()), patch(
+            "app.services.routing_service._request_json", return_value=provider_payload
+        ) as request_json:
+            result = await reverse_geocode_location({"latitude": -17.8252, "longitude": 31.0335})
+
+        self.assertEqual(result["formatted_address"], "Samora Machel Ave, Harare, Zimbabwe")
+        self.assertEqual(result["place_id"], "place-current")
+        self.assertEqual(result["location"]["longitude"], 31.0335)
+        self.assertNotIn("api_key", result)
+        self.assertIn("-17.8252,31.0335", request_json.call_args.args[1])
 
 
 if __name__ == "__main__":

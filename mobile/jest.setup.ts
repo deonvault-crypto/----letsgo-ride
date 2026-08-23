@@ -43,11 +43,17 @@ jest.mock("expo-location", () => ({
 
 jest.mock("react-native-maps", () => {
   const { View } = jest.requireActual("react-native");
+  const Marker = View as typeof View & { Animated?: typeof View };
+  Marker.Animated = View;
+  class AnimatedRegion {
+    timing() { return { start: jest.fn() }; }
+  }
   return {
     __esModule: true,
     default: View,
-    Marker: View,
+    Marker,
     Polyline: View,
+    AnimatedRegion,
   };
 });
 

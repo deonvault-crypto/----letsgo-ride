@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
-from app.models.routing import GeocodeRequestBody, PlaceAutocompleteBody, ResolveRouteRequestBody, RouteRequestBody
+from app.models.routing import GeocodeRequestBody, PlaceAutocompleteBody, ResolveRouteRequestBody, ReverseGeocodeRequestBody, RouteRequestBody
 from app.services.routing_service import (
     RoutingError,
     RoutingNoResultError,
@@ -9,6 +9,7 @@ from app.services.routing_service import (
     autocomplete_places,
     compute_route,
     geocode_address,
+    reverse_geocode_location,
     resolve_place,
     resolve_route,
     routing_status,
@@ -60,6 +61,19 @@ async def geocode(payload: GeocodeRequestBody, user=Depends(get_current_user)):
         api_error(str(exc), 404)
     except RoutingError:
         api_error("Routing is temporarily unavailable.", 502)
+
+
+@router.post("/reverse-geocode")
+async def reverse_geocode(payload: ReverseGeocodeRequestBody):
+    # Map pin selection is available during guest browsing; credentials remain server-side.
+    try:
+        return api_success(await reverse_geocode_location(payload.location.model_dump()))
+    except RoutingNotConfiguredError as exc:
+        api_error(str(exc), 503)
+    except RoutingNoResultError as exc:
+        api_error(str(exc), 404)
+    except RoutingError:
+        api_error("Address lookup is temporarily unavailable.", 502)
 
 
 @router.post("/route")

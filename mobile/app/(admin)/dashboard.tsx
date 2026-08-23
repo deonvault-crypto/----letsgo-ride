@@ -52,6 +52,7 @@ type AdminSection =
   | "verifications"
   | "support"
   | "reports"
+  | "workforce"
   | "operations"
   | "actions";
 
@@ -71,6 +72,7 @@ const sections: Array<{ key: AdminSection; label: string; icon: keyof typeof Mat
   { key: "verifications", label: "Verifications", icon: "shield-check-outline" },
   { key: "support", label: "Support", icon: "lifebuoy" },
   { key: "reports", label: "Safety", icon: "shield-alert-outline" },
+  { key: "workforce", label: "Workforce", icon: "calendar-account-outline" },
   { key: "operations", label: "Ops log", icon: "clipboard-text-clock-outline" },
   { key: "actions", label: "Actions", icon: "cog-outline" },
 ];
@@ -391,6 +393,18 @@ export default function AdminDashboardScreen() {
             />
           ))}
         </AdminList>
+      ) : null}
+
+      {canRenderSection && active === "workforce" ? (
+        <View style={styles.section}>
+          <SectionTitle title="Workforce operations" subtitle="Review Courier, Driver and Merchant applications, then create and manage capacity-backed Courier shifts." />
+          <View style={styles.card}>
+            <StatusBadge label="Admin-authorized" tone="neutral" />
+            <Text style={styles.cardTitle}>Applications and Courier shifts</Text>
+            <Text style={styles.body}>Worker approval is never public. Shift changes are recorded in the operations audit log.</Text>
+            <AppButton title="Open workforce operations" onPress={() => router.push("/(admin)/workforce" as never)} />
+          </View>
+        </View>
       ) : null}
 
       {canRenderSection && active === "operations" ? (

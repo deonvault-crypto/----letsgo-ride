@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Href, useRouter } from "expo-router";
+import { Href, useRouter, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
 
 import { colors } from "../../constants/colors";
@@ -8,6 +8,8 @@ import { spacing } from "../../constants/spacing";
 import { getToken } from "../../services/api";
 import { listNotifications } from "../../services/notificationService";
 import { BrandLogo } from "./BrandLogo";
+
+const useSafeSegments: typeof useSegments = typeof useSegments === "function" ? useSegments : (() => [] as never);
 
 type AppTopBarProps = {
   title?: string;
@@ -23,6 +25,7 @@ export function AppTopBar({
   showNotifications = true,
 }: AppTopBarProps) {
   const router = useRouter();
+  const segments = useSafeSegments() as string[];
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -79,7 +82,11 @@ export function AppTopBar({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Notifications"
-          onPress={() => router.push("/(shared)/notifications" as never)}
+          onPress={() => {
+            const group = segments[0];
+            const product = group === "(driver)" ? "driver" : group === "(courier)" ? "courier" : group === "(merchant)" ? "merchant" : undefined;
+            router.push(product ? ({ pathname: "/(shared)/notifications", params: { product } } as never) : "/(shared)/notifications" as never);
+          }}
           style={styles.iconButton}
         >
           <MaterialCommunityIcons name="bell-outline" size={21} color={colors.whiteText} />

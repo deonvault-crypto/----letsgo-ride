@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from pymongo.errors import DuplicateKeyError
 
 from app.database import database
+from app.config import get_settings
 from app.services.delivery_security_service import (
     DELIVERY_ARRIVING_RADIUS_METERS,
     DELIVERY_HANDOFF_RADIUS_METERS,
@@ -25,6 +27,7 @@ from app.services.courier_state_service import (
     set_courier_active_reference,
 )
 from app.services.notification_service import create_app_notification
+from app.services.routing_service import RoutingError, compute_route
 from app.utils import new_id, now_iso
 
 
@@ -543,6 +546,39 @@ async def update_courier_location(
         raise ValueError("Delivery changed while location was updating. Refresh and try again.")
     await database.insert_one("courier_location_snapshots", snapshot)
 
+    # Refresh the road route at a restrained cadence. GPS can arrive every few
+    # seconds; route recomputation is intentionally throttled to protect latency
+    # and provider spend while keeping customer/courier remaining ETAs useful.
+    last_route_update = updated.get("remaining_route_updated_at")
+    should_refresh_route = True
+    if isinstance(last_route_update, str):
+        try:
+            parsed = datetime.fromisoformat(last_route_update.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            should_refresh_route = (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds() >= 45
+        except ValueError:
+            should_refresh_route = True
+    destination = updated.get("pickup_location") if updated.get("status") in {"ASSIGNED", "COURIER_TO_PICKUP"} else updated.get("dropoff_location")
+    if should_refresh_route and get_settings().routing_configured and isinstance(destination, dict):
+        try:
+            remaining = await compute_route(snapshot, destination, include_polyline=True)
+            refreshed = await database.update_one_if(
+                "courier_deliveries",
+                {"id": delivery_id, "status": updated.get("status")},
+                {
+                    "remaining_distance_km": remaining.get("distance_km"),
+                    "remaining_eta_minutes": remaining.get("estimated_duration_minutes"),
+                    "remaining_route_polyline": remaining.get("encoded_polyline"),
+                    "remaining_route_updated_at": now_iso(),
+                },
+            )
+            if refreshed:
+                updated = refreshed
+        except RoutingError:
+            # Location sharing must remain healthy during a routing-provider blip.
+            pass
+
     if updated.get("status") == "IN_TRANSIT" and is_inside_radius(
         snapshot,
         updated.get("dropoff_location"),
@@ -580,5 +616,9 @@ async def tracking_state(delivery_id: str, user: Dict[str, Any]) -> Dict[str, An
         "estimated_duration_minutes": delivery.get("estimated_duration_minutes"),
         "distance_km": delivery.get("distance_km"),
         "route_polyline": delivery.get("route_polyline"),
+        "remaining_distance_km": delivery.get("remaining_distance_km"),
+        "remaining_eta_minutes": delivery.get("remaining_eta_minutes"),
+        "remaining_route_polyline": delivery.get("remaining_route_polyline"),
+        "remaining_route_updated_at": delivery.get("remaining_route_updated_at"),
         "handoff_radius_meters": DELIVERY_HANDOFF_RADIUS_METERS,
     }

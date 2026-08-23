@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from pymongo.errors import DuplicateKeyError
@@ -30,6 +31,10 @@ async def list_availability(user: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 async def create_availability(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    if user.get("role") == "driver" and payload.get("mode") != "ride":
+        raise ValueError("Driver availability is only for passenger trips.")
+    if user.get("role") == "courier" and payload.get("mode") != "courier":
+        raise ValueError("Courier availability is only for delivery work.")
     if payload["start_time"] >= payload["end_time"]:
         raise ValueError("End time must be later than start time.")
     item = {
@@ -80,10 +85,37 @@ async def set_courier_online(user: Dict[str, Any], online: bool) -> Dict[str, An
         raise ValueError("Create your courier profile first.")
     if online and profile.get("status") != "APPROVED":
         raise PermissionError("Courier verification must be approved before going online.")
+    now = now_iso()
+    updates: Dict[str, Any] = {"online": online, "updated_at": now}
+    if online and not profile.get("online"):
+        updates["online_since"] = now
+    elif not online and profile.get("online"):
+        started_at = profile.get("online_since")
+        if isinstance(started_at, str):
+            try:
+                started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                ended = datetime.now(timezone.utc)
+                duration_seconds = max(0, int((ended - started.astimezone(timezone.utc)).total_seconds()))
+                await database.insert_one(
+                    "courier_online_sessions",
+                    {
+                        "id": new_id(),
+                        "courier_user_id": _user_id(user),
+                        "started_at": started.astimezone(timezone.utc).isoformat(),
+                        "ended_at": ended.isoformat(),
+                        "duration_seconds": duration_seconds,
+                        "created_at": now,
+                    },
+                )
+            except ValueError:
+                pass
+        updates["online_since"] = None
     updated = await database.update_one(
         "courier_profiles",
         profile["id"],
-        {"online": online, "updated_at": now_iso()},
+        updates,
     )
     if not updated:
         raise ValueError("Courier profile not found.")

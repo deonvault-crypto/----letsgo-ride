@@ -13,6 +13,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 GOOGLE_GEOCODE_URL = "https://geocode.googleapis.com/v4/geocode/address/{address}"
+GOOGLE_REVERSE_GEOCODE_URL = "https://geocode.googleapis.com/v4/geocode/location/{latitude},{longitude}"
 GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete"
 GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
@@ -125,6 +126,35 @@ async def geocode_address(address: str) -> Dict[str, Any]:
             "latitude": float(latitude),
             "longitude": float(longitude),
         },
+    }
+
+
+async def reverse_geocode_location(location: Dict[str, float]) -> Dict[str, Any]:
+    api_key, region_code, timeout = _google_config()
+    latitude = float(location["latitude"])
+    longitude = float(location["longitude"])
+    url = GOOGLE_REVERSE_GEOCODE_URL.format(latitude=latitude, longitude=longitude)
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "results.location,results.formattedAddress,results.placeId",
+    }
+    payload = await asyncio.to_thread(
+        _request_json,
+        "GET",
+        url,
+        headers=headers,
+        params={"regionCode": region_code},
+        timeout=timeout,
+    )
+    results = payload.get("results") or []
+    if not results:
+        raise RoutingNoResultError("No nearby address was found for that map position.")
+    first = results[0] if isinstance(results[0], dict) else {}
+    return {
+        "provider": "google",
+        "formatted_address": first.get("formattedAddress") or "Pinned location",
+        "place_id": first.get("placeId"),
+        "location": {"latitude": latitude, "longitude": longitude},
     }
 
 

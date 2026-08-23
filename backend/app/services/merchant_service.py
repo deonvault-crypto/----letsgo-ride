@@ -187,6 +187,29 @@ async def create_menu_category(
     return await database.insert_one("menu_categories", category)
 
 
+async def update_menu_category(category_id: str, payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    category = await database.find_one("menu_categories", {"id": category_id})
+    if not category:
+        raise ValueError("Menu category not found.")
+    await require_restaurant_access(category["restaurant_id"], user)
+    clean = {key: value for key, value in payload.items() if value is not None}
+    clean["updated_at"] = now_iso()
+    updated = await database.update_one("menu_categories", category_id, clean)
+    if not updated:
+        raise ValueError("Menu category not found.")
+    return updated
+
+
+async def delete_menu_category(category_id: str, user: Dict[str, Any]) -> bool:
+    category = await database.find_one("menu_categories", {"id": category_id})
+    if not category:
+        raise ValueError("Menu category not found.")
+    await require_restaurant_access(category["restaurant_id"], user)
+    if await database.count("menu_items", {"category_id": category_id}) > 0:
+        raise ValueError("Move or remove every item in this category first.")
+    return await database.delete_one("menu_categories", category_id)
+
+
 async def create_menu_item(
     restaurant_id: str,
     payload: Dict[str, Any],
@@ -225,6 +248,14 @@ async def update_menu_item(
     if not updated:
         raise ValueError("Menu item not found.")
     return updated
+
+
+async def delete_menu_item(item_id: str, user: Dict[str, Any]) -> bool:
+    item = await database.find_one("menu_items", {"id": item_id})
+    if not item:
+        raise ValueError("Menu item not found.")
+    await require_restaurant_access(item["restaurant_id"], user)
+    return await database.delete_one("menu_items", item_id)
 
 
 async def list_restaurant_orders(restaurant_id: str, user: Dict[str, Any]) -> List[Dict[str, Any]]:

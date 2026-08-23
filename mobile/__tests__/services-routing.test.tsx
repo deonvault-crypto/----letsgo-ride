@@ -8,10 +8,11 @@ jest.mock("expo-router", () => ({
   usePathname: () => "/services",
 }));
 
-describe("Ride and Intercity service routing", () => {
-  it("opens Intercity as an explicit intent within Ride search", () => {
+describe("consolidated Ride service routing", () => {
+  it("opens one Ride search for local intent and planned city-to-city trips", () => {
     const screen = render(<ServicesScreen />);
-    fireEvent.press(screen.getByText("Intercity"));
-    expect(mockPush).toHaveBeenCalledWith({ pathname: "/(customer)/search", params: { intent: "intercity" } });
+    fireEvent.press(screen.getByText("Rides"));
+    expect(mockPush).toHaveBeenCalledWith("/(customer)/search");
+    expect(screen.getByText("Search local intent and planned city-to-city trips in one place")).toBeOnTheScreen();
   });
 });

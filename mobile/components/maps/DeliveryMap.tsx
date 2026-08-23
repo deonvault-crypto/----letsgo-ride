@@ -1,6 +1,6 @@
-import { Animated, Platform, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import MapView, { Marker, Polyline, Region } from "react-native-maps";
+import MapView, { AnimatedRegion, Marker, Polyline, Region } from "react-native-maps";
 import { useEffect, useRef } from "react";
 
 import { v2Theme } from "../../constants/v2Theme";
@@ -15,6 +15,7 @@ type DeliveryMapProps = {
   dropoff?: Point | null;
   courier?: Point | null;
   route?: Array<{ latitude: number; longitude: number }>;
+  courierHeading?: number | null;
   height?: number;
 };
 
@@ -29,9 +30,11 @@ function validPoint(point?: Point | null): point is { latitude: number; longitud
   return typeof point?.latitude === "number" && typeof point?.longitude === "number";
 }
 
-export function DeliveryMap({ pickup, dropoff, courier, route = [], height = 340 }: DeliveryMapProps) {
+export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeading, height = 340 }: DeliveryMapProps) {
   const initialRegion = regionForPoints([pickup, dropoff, courier]);
   const mapRef = useRef<MapView | null>(null);
+  const initialCourier = validPoint(courier) ? courier : { latitude: initialRegion.latitude, longitude: initialRegion.longitude };
+  const courierCoordinate = useRef(new AnimatedRegion(initialCourier)).current;
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -41,7 +44,33 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], height = 340
       animated: true,
       edgePadding: { top: 54, right: 44, bottom: 54, left: 44 },
     });
-  }, [courier?.latitude, courier?.longitude, dropoff?.latitude, dropoff?.longitude, pickup?.latitude, pickup?.longitude, route]);
+  }, [dropoff?.latitude, dropoff?.longitude, pickup?.latitude, pickup?.longitude, route]);
+
+  useEffect(() => {
+    if (Platform.OS === "web" || !validPoint(courier)) return;
+    courierCoordinate.timing({
+      latitude: courier.latitude,
+      longitude: courier.longitude,
+      latitudeDelta: 0,
+      longitudeDelta: 0,
+      duration: 950,
+      useNativeDriver: false,
+      toValue: 0,
+    }).start();
+  }, [courier?.latitude, courier?.longitude, courierCoordinate]);
+
+  function recenter() {
+    if (!validPoint(courier)) return;
+    mapRef.current?.animateCamera(
+      {
+        center: courier,
+        heading: typeof courierHeading === "number" && courierHeading >= 0 ? courierHeading : 0,
+        pitch: 0,
+        zoom: 16,
+      },
+      { duration: 520 },
+    );
+  }
 
   if (Platform.OS === "web") {
     return (
@@ -59,7 +88,7 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], height = 340
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
-        rotateEnabled={false}
+        rotateEnabled
         pitchEnabled={false}
         toolbarEnabled={false}
       >
@@ -77,11 +106,16 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], height = 340
           </Marker>
         ) : null}
         {validPoint(courier) ? (
-          <Marker coordinate={courier} anchor={{ x: 0.5, y: 0.5 }}>
+          <Marker.Animated coordinate={courierCoordinate as unknown as { latitude: number; longitude: number }} anchor={{ x: 0.5, y: 0.5 }} rotation={typeof courierHeading === "number" && courierHeading >= 0 ? courierHeading : 0} flat>
             <CourierMarker />
-          </Marker>
+          </Marker.Animated>
         ) : null}
       </MapView>
+      {validPoint(courier) ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Recenter live courier" onPress={recenter} style={({ pressed }) => [styles.recenter, pressed && styles.recenterPressed]}>
+          <MaterialCommunityIcons name="crosshairs-gps" size={21} color={v2Theme.colors.ink} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -227,4 +261,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
   },
+  recenter: {
+    position: "absolute",
+    right: 13,
+    bottom: 13,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: v2Theme.colors.shadow,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 7,
+  },
+  recenterPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
 });

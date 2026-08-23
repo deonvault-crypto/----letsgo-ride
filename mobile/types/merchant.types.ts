@@ -5,6 +5,7 @@ export type MerchantRestaurant = Restaurant & {
   status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "ACTIVE" | "REJECTED" | "SUSPENDED" | "PENDING_REVIEW" | string;
   is_accepting_orders: boolean;
   location?: { latitude?: number | null; longitude?: number | null } | null;
+  business_registration_number?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -58,4 +59,25 @@ export type MerchantDashboardData = {
 export type MerchantOrderStatusPayload = {
   status: FoodOrderStatus;
   note?: string | null;
+};
+
+export type MerchantInsightsPeriod = {
+  orders: number;
+  completed_orders: number;
+  recorded_sales_usd: number;
+};
+
+export type MerchantInsights = {
+  currency: string;
+  total_orders: number;
+  accepted_orders: number;
+  completed_orders: number;
+  rejected_or_cancelled_orders: number;
+  recorded_sales_usd: number;
+  average_preparation_minutes?: number | null;
+  periods: { today: MerchantInsightsPeriod; week: MerchantInsightsPeriod; month: MerchantInsightsPeriod };
+  weekly_chart: Array<{ date: string; orders: number; recorded_sales_usd: number }>;
+  payment_method: "CASH_ON_DELIVERY";
+  settlement_integrated: false;
+  payout_history: [];
 };

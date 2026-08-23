@@ -73,6 +73,10 @@ export type CourierDelivery = CourierCreatePayload & {
   courier_payout_usd?: number | null;
   distance_km?: number | null;
   route_polyline?: string | null;
+  remaining_distance_km?: number | null;
+  remaining_eta_minutes?: number | null;
+  remaining_route_polyline?: string | null;
+  remaining_route_updated_at?: string | null;
   estimated_duration_minutes?: number | null;
   source_type?: "COURIER_REQUEST" | "FOOD_ORDER" | string;
   source_id?: string | null;
@@ -116,5 +120,9 @@ export type CourierTrackingState = {
   estimated_duration_minutes?: number | null;
   distance_km?: number | null;
   route_polyline?: string | null;
+  remaining_distance_km?: number | null;
+  remaining_eta_minutes?: number | null;
+  remaining_route_polyline?: string | null;
+  remaining_route_updated_at?: string | null;
   handoff_radius_meters?: number | null;
 };

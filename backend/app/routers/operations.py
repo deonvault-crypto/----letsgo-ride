@@ -1,7 +1,17 @@
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from app.auth import get_current_user
-from app.models.operations import AvailabilityCreateBody, CourierOnlineBody, CourierProfileCreateBody
+from app.models.operations import (
+    AvailabilityCreateBody,
+    CourierOnlineBody,
+    CourierProfileCreateBody,
+    CourierShiftCreateBody,
+    CourierShiftUpdateBody,
+    WorkerApplicationBody,
+    WorkerApplicationReviewBody,
+)
 from app.services.courier_earnings_service import courier_earnings_summary
 from app.services.operations_service import (
     active_courier_delivery,
@@ -17,6 +27,21 @@ from app.services.operations_service import (
     list_courier_offers,
     set_courier_online,
 )
+from app.services.workforce_service import (
+    available_courier_shifts,
+    book_courier_shift,
+    cancel_courier_shift_booking,
+    create_courier_shift,
+    list_courier_shifts,
+    list_my_applications,
+    list_worker_applications_for_admin,
+    my_courier_shift_bookings,
+    review_worker_application,
+    save_worker_application,
+    submit_worker_application,
+    update_courier_shift,
+    upload_worker_document,
+)
 from app.utils import api_error, api_success
 
 
@@ -31,6 +56,151 @@ def _require_work_account(user) -> None:
 def _require_courier_account(user) -> None:
     if user.get("role") not in {"courier", "admin"}:
         api_error("A Courier account is required for delivery work.", 403)
+
+
+def _require_admin(user) -> None:
+    if user.get("role") != "admin":
+        api_error("Administrator access is required.", 403)
+
+
+@router.get("/applications/my")
+async def my_worker_applications(user=Depends(get_current_user)):
+    return api_success(await list_my_applications(user))
+
+
+@router.post("/applications")
+async def save_application(payload: WorkerApplicationBody, user=Depends(get_current_user)):
+    try:
+        return api_success(await save_worker_application(payload.model_dump(), user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/applications/{application_id}/documents")
+async def upload_application_document(
+    application_id: str,
+    document_type: str = Form(...),
+    file: UploadFile = File(...),
+    user=Depends(get_current_user),
+):
+    try:
+        return api_success(await upload_worker_document(application_id, document_type, file, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+    except RuntimeError as exc:
+        api_error(str(exc), 503)
+
+
+@router.post("/applications/{application_id}/submit")
+async def submit_application(application_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await submit_worker_application(application_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.get("/admin/applications")
+async def admin_worker_applications(
+    status: Optional[str] = Query(default=None),
+    product: Optional[str] = Query(default=None),
+    user=Depends(get_current_user),
+):
+    _require_admin(user)
+    try:
+        return api_success(await list_worker_applications_for_admin(status, product))
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/admin/applications/{application_id}/review")
+async def admin_review_worker_application(
+    application_id: str,
+    payload: WorkerApplicationReviewBody,
+    user=Depends(get_current_user),
+):
+    _require_admin(user)
+    try:
+        return api_success(await review_worker_application(application_id, payload.status, payload.note, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.get("/admin/courier/shifts")
+async def admin_courier_shifts(user=Depends(get_current_user)):
+    _require_admin(user)
+    return api_success(await list_courier_shifts(include_inactive=True))
+
+
+@router.post("/admin/courier/shifts")
+async def admin_create_courier_shift(payload: CourierShiftCreateBody, user=Depends(get_current_user)):
+    _require_admin(user)
+    try:
+        return api_success(await create_courier_shift(payload.model_dump(), user))
+    except (PermissionError, ValueError) as exc:
+        api_error(str(exc), 400 if isinstance(exc, ValueError) else 403)
+
+
+@router.patch("/admin/courier/shifts/{shift_id}")
+async def admin_update_courier_shift(
+    shift_id: str,
+    payload: CourierShiftUpdateBody,
+    user=Depends(get_current_user),
+):
+    _require_admin(user)
+    try:
+        return api_success(await update_courier_shift(shift_id, payload.model_dump(exclude_unset=True), user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.get("/courier/shifts/available")
+async def courier_available_shifts(user=Depends(get_current_user)):
+    _require_courier_account(user)
+    try:
+        return api_success(await available_courier_shifts(user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+
+
+@router.get("/courier/shifts/my")
+async def courier_my_shifts(user=Depends(get_current_user)):
+    _require_courier_account(user)
+    try:
+        return api_success(await my_courier_shift_bookings(user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+
+
+@router.post("/courier/shifts/{shift_id}/book")
+async def courier_book_shift(shift_id: str, user=Depends(get_current_user)):
+    _require_courier_account(user)
+    try:
+        return api_success(await book_courier_shift(shift_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 409)
+
+
+@router.post("/courier/shift-bookings/{booking_id}/cancel")
+async def courier_cancel_shift(booking_id: str, user=Depends(get_current_user)):
+    _require_courier_account(user)
+    try:
+        return api_success(await cancel_courier_shift_booking(booking_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 409)
 
 
 @router.get("/availability")

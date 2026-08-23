@@ -34,8 +34,12 @@ COLLECTION_NAMES = [
     "courier_events",
     "courier_profiles",
     "courier_location_snapshots",
+    "courier_online_sessions",
     "delivery_handoffs",
     "work_availability",
+    "worker_applications",
+    "courier_shifts",
+    "courier_shift_bookings",
     "restaurants",
     "restaurant_categories",
     "menu_categories",
@@ -116,6 +120,24 @@ class Database:
         await self.db["restaurants"].create_index(
             [("status", 1), ("is_accepting_orders", 1), ("name", 1)],
             name="public_restaurant_availability",
+        )
+        await self.db["worker_applications"].create_index(
+            [("user_id", 1), ("product", 1)],
+            name="one_worker_application_per_product",
+            unique=True,
+        )
+        await self.db["courier_shifts"].create_index(
+            [("active", 1), ("starts_at", 1), ("zone", 1)],
+            name="available_courier_shifts",
+        )
+        await self.db["courier_shift_bookings"].create_index(
+            [("shift_id", 1), ("courier_user_id", 1)],
+            name="one_booking_per_courier_shift",
+            unique=True,
+        )
+        await self.db["courier_online_sessions"].create_index(
+            [("courier_user_id", 1), ("started_at", -1)],
+            name="courier_online_time_by_user",
         )
 
     async def close(self) -> None:

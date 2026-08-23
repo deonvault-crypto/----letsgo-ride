@@ -3,9 +3,10 @@ export type DriverProfile = {
   name?: string;
   phone?: string;
   city?: string;
+  vehicle?: string;
   status: string;
   verified: boolean;
-  verification_status?: "not_started" | "pending" | "needs_review" | "verified" | "rejected" | "active";
+  verification_status?: "not_started" | "pending" | "needs_review" | "verified" | "approved" | "rejected" | "active";
   verification_provider?: "manual";
   verification_submitted_at?: string | null;
   verification_checked_at?: string | null;

@@ -46,6 +46,13 @@ class MenuCategoryCreateBody(BaseModel):
     image_url: Optional[str] = Field(default=None, max_length=500)
 
 
+class MenuCategoryUpdateBody(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    description: Optional[str] = Field(default=None, max_length=240)
+    sort_order: Optional[int] = Field(default=None, ge=0, le=10000)
+    image_url: Optional[str] = Field(default=None, max_length=500)
+
+
 class RestaurantReviewBody(BaseModel):
     status: Literal["UNDER_REVIEW", "APPROVED", "REJECTED", "SUSPENDED"]
     note: Optional[str] = Field(default=None, max_length=500)

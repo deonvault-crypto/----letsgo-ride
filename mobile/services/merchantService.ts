@@ -4,6 +4,7 @@ import {
   MenuCategoryCreatePayload,
   MenuItemCreatePayload,
   MerchantDashboardData,
+  MerchantInsights,
   MerchantOrderStatusPayload,
   MerchantRestaurant,
   RestaurantCreatePayload,
@@ -34,12 +35,28 @@ export function createMenuCategory(restaurantId: string, payload: MenuCategoryCr
   return requestData<MenuCategory>({ method: "POST", url: `/merchant/restaurants/${restaurantId}/categories`, data: payload });
 }
 
+export function updateMenuCategory(categoryId: string, payload: Partial<MenuCategoryCreatePayload>) {
+  return requestData<MenuCategory>({ method: "PATCH", url: `/merchant/categories/${categoryId}`, data: payload });
+}
+
+export function deleteMenuCategory(categoryId: string) {
+  return requestData<{ deleted: boolean }>({ method: "DELETE", url: `/merchant/categories/${categoryId}` });
+}
+
 export function createMenuItem(restaurantId: string, payload: MenuItemCreatePayload) {
   return requestData<MenuItem>({ method: "POST", url: `/merchant/restaurants/${restaurantId}/menu-items`, data: payload });
 }
 
 export function updateMenuItem(itemId: string, payload: Partial<MenuItemCreatePayload>) {
   return requestData<MenuItem>({ method: "PATCH", url: `/merchant/menu-items/${itemId}`, data: payload });
+}
+
+export function deleteMenuItem(itemId: string) {
+  return requestData<{ deleted: boolean }>({ method: "DELETE", url: `/merchant/menu-items/${itemId}` });
+}
+
+export function getMerchantInsights(restaurantId: string) {
+  return requestData<MerchantInsights>({ method: "GET", url: `/merchant/restaurants/${restaurantId}/insights` });
 }
 
 export function listRestaurantOrders(restaurantId: string) {

@@ -1,9 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { LocationPickerMap, LocationPickerMapHandle, MapRegion as Region } from "../../components/maps/LocationPickerMap";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { LocationChoice, useLocationDraft } from "../../contexts/LocationDraftContext";
@@ -14,7 +14,7 @@ import {
   saveNamedLocation,
 } from "../../services/locationMemoryService";
 import type { LocationMemory } from "../../services/locationMemoryService";
-import { autocompletePlaces, getPlaceDetail } from "../../services/routingService";
+import { autocompletePlaces, getPlaceDetail, reverseGeocodeLocation } from "../../services/routingService";
 import { PlaceSuggestion } from "../../types/routing.types";
 
 const HARARE_REGION: Region = {
@@ -41,7 +41,9 @@ export default function LocationPickerScreen() {
     setFoodDropoff,
   } = useLocationDraft();
   const existing = kind === "pickup" ? pickup : kind === "dropoff" ? dropoff : foodDropoff;
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<LocationPickerMapHandle | null>(null);
+  const suppressNextMapLookup = useRef(true);
+  const reverseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [query, setQuery] = useState(existing?.address || "");
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [selected, setSelected] = useState<LocationChoice | null>(existing || null);
@@ -49,11 +51,13 @@ export default function LocationPickerScreen() {
   const [searching, setSearching] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [pinLookingUp, setPinLookingUp] = useState(false);
   const [saving, setSaving] = useState<"home" | "work" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getLocationMemory().then(setMemory).catch(() => undefined);
+    return () => { if (reverseTimer.current) clearTimeout(reverseTimer.current); };
   }, []);
 
   useEffect(() => {
@@ -80,13 +84,13 @@ export default function LocationPickerScreen() {
   }, [query, selected?.address]);
 
   function focusMap(choice: LocationChoice) {
-    mapRef.current?.animateToRegion(
+    suppressNextMapLookup.current = true;
+    mapRef.current?.focus(
       {
         ...choice.location,
         latitudeDelta: 0.018,
         longitudeDelta: 0.018,
       },
-      320,
     );
   }
 
@@ -148,20 +152,41 @@ export default function LocationPickerScreen() {
   }
 
   function adjustPin(latitude: number, longitude: number) {
-    const base = selected || {
-      label: "Pinned location",
-      address: "Pinned location",
-      location: { latitude, longitude },
-      placeId: null,
-    };
     const next: LocationChoice = {
-      ...base,
-      label: base.label === "Current location" ? "Pinned current location" : base.label,
-      address: base.address === "Current location" ? "Pinned current location" : base.address,
+      label: "Pinned location",
+      address: "Finding the nearest address…",
       location: { latitude, longitude },
       placeId: null,
     };
     setSelected(next);
+    setQuery("");
+    if (reverseTimer.current) clearTimeout(reverseTimer.current);
+    reverseTimer.current = setTimeout(async () => {
+      try {
+        setPinLookingUp(true);
+        const result = await reverseGeocodeLocation({ latitude, longitude });
+        const resolved: LocationChoice = {
+          label: result.formatted_address.split(",")[0] || "Pinned location",
+          address: result.formatted_address,
+          location: { latitude, longitude },
+          placeId: result.place_id,
+        };
+        setSelected(resolved);
+        setQuery(resolved.address);
+      } catch {
+        setSelected({ ...next, address: "Pinned map location" });
+      } finally {
+        setPinLookingUp(false);
+      }
+    }, 520);
+  }
+
+  function mapSettled(region: Region) {
+    if (suppressNextMapLookup.current) {
+      suppressNextMapLookup.current = false;
+      return;
+    }
+    adjustPin(region.latitude, region.longitude);
   }
 
   async function saveAs(placeKind: "home" | "work") {
@@ -281,20 +306,15 @@ export default function LocationPickerScreen() {
       ) : null}
 
       <View style={styles.mapCard}>
-        <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion}>
-          {selected ? (
-            <Marker
-              coordinate={selected.location}
-              draggable
-              onDragEnd={(event) => adjustPin(event.nativeEvent.coordinate.latitude, event.nativeEvent.coordinate.longitude)}
-              pinColor={v2Theme.colors.brandStrong}
-            />
-          ) : null}
-        </MapView>
-        <View pointerEvents="none" style={styles.mapHint}>
-          <MaterialCommunityIcons name="gesture-tap-hold" size={18} color={v2Theme.colors.inkSecondary} />
-          <Text style={styles.mapHintText}>Drag the pin to the exact gate or handoff point</Text>
-        </View>
+        <LocationPickerMap ref={mapRef} style={styles.map} initialRegion={initialRegion} onRegionChangeComplete={mapSettled} />
+        {Platform.OS !== "web" ? <View pointerEvents="none" style={styles.centerPin}>
+          <View style={styles.pinBubble}><MaterialCommunityIcons name="map-marker" size={30} color="#FFFFFF" /></View>
+          <View style={styles.pinShadow} />
+        </View> : null}
+        {Platform.OS !== "web" ? <View pointerEvents="none" style={styles.mapHint}>
+          {pinLookingUp ? <ActivityIndicator size="small" color={v2Theme.colors.brandStrong} /> : <MaterialCommunityIcons name="gesture-swipe" size={18} color={v2Theme.colors.inkSecondary} />}
+          <Text style={styles.mapHintText}>{pinLookingUp ? "Finding the nearest address…" : "Move the map to place the pin at the exact handoff"}</Text>
+        </View> : null}
       </View>
 
       <View style={styles.confirmArea}>
@@ -369,6 +389,7 @@ const styles = StyleSheet.create({
   resultsCard: { position: "absolute", left: 0, right: 0, top: 136, zIndex: 20, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
   resultRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line }, resultIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, resultCopy: { flex: 1, gap: 2 }, resultTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, resultBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
   mapCard: { flex: 1, minHeight: 300, borderRadius: v2Theme.radius.xxl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surfaceMuted }, map: { flex: 1 },
+  centerPin: { position: "absolute", left: "50%", top: "50%", marginLeft: -22, marginTop: -46, width: 44, height: 52, alignItems: "center" }, pinBubble: { width: 44, height: 44, borderRadius: 17, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 7 }, pinShadow: { width: 13, height: 5, borderRadius: 7, backgroundColor: "rgba(16,18,16,0.2)", marginTop: 3 },
   mapHint: { position: "absolute", left: 12, right: 12, bottom: 12, minHeight: 42, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 }, mapHintText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
   confirmArea: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 12 }, selectedCopy: { gap: 3 }, selectedEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1 }, selectedTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, selectedBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
   saveRow: { flexDirection: "row", gap: 8 }, saveChip: { flex: 1, minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 }, saveChipText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },

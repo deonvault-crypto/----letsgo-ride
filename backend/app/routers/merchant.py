@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from app.auth import get_current_user
 from app.models.merchant import (
     MenuCategoryCreateBody,
+    MenuCategoryUpdateBody,
     MenuItemCreateBody,
     MenuItemUpdateBody,
     MerchantOrderStatusBody,
@@ -18,12 +19,15 @@ from app.services.merchant_service import (
     create_restaurant,
     list_my_restaurants,
     list_restaurant_orders,
+    delete_menu_category,
+    delete_menu_item,
     review_restaurant,
     submit_restaurant_for_review,
     update_menu_item,
+    update_menu_category,
     update_restaurant,
 )
-from app.services.merchant_workspace_service import get_restaurant_workspace
+from app.services.merchant_workspace_service import get_restaurant_insights, get_restaurant_workspace
 from app.utils import api_error, api_success
 
 
@@ -124,6 +128,32 @@ async def merchant_create_category(
         api_error(str(exc), 400)
 
 
+@router.patch("/categories/{category_id}")
+async def merchant_update_category(
+    category_id: str,
+    payload: MenuCategoryUpdateBody,
+    user=Depends(get_current_user),
+):
+    _require_merchant_account(user)
+    try:
+        return api_success(await update_menu_category(category_id, payload.model_dump(), user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.delete("/categories/{category_id}")
+async def merchant_delete_category(category_id: str, user=Depends(get_current_user)):
+    _require_merchant_account(user)
+    try:
+        return api_success({"deleted": await delete_menu_category(category_id, user)})
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
 @router.post("/restaurants/{restaurant_id}/menu-items")
 async def merchant_create_menu_item(
     restaurant_id: str,
@@ -152,6 +182,28 @@ async def merchant_update_menu_item(
         api_error(str(exc), 403)
     except ValueError as exc:
         api_error(str(exc), 400)
+
+
+@router.delete("/menu-items/{item_id}")
+async def merchant_delete_menu_item(item_id: str, user=Depends(get_current_user)):
+    _require_merchant_account(user)
+    try:
+        return api_success({"deleted": await delete_menu_item(item_id, user)})
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.get("/restaurants/{restaurant_id}/insights")
+async def merchant_restaurant_insights(restaurant_id: str, user=Depends(get_current_user)):
+    _require_merchant_account(user)
+    try:
+        return api_success(await get_restaurant_insights(restaurant_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 404)
 
 
 @router.get("/restaurants/{restaurant_id}/orders")

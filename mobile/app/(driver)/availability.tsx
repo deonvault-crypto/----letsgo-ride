@@ -10,7 +10,7 @@ import { WorkAvailability } from "../../types/operations.types";
 
 export default function AvailabilityScreen() {
   const [items, setItems] = useState<WorkAvailability[]>([]);
-  const [mode, setMode] = useState<"ride" | "courier">("courier");
+  const mode = "ride" as const;
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -22,7 +22,7 @@ export default function AvailabilityScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      setItems(await listWorkAvailability());
+      setItems((await listWorkAvailability()).filter((item) => item.mode === "ride"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load availability.");
     } finally {
@@ -78,16 +78,11 @@ export default function AvailabilityScreen() {
   }
 
   return (
-    <Screen showBack fallbackRoute="/(driver)/work" title="Availability" showNotifications={false}>
+    <Screen navRole="driver" title="Calendar" showNotifications>
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>WORK CALENDAR</Text>
-        <Text style={styles.title}>Tell LetsGoRide when you work.</Text>
-        <Text style={styles.body}>Keep ride planning and courier availability separate, while managing both from one schedule.</Text>
-      </View>
-
-      <View style={styles.segmented}>
-        <ModeButton label="Courier" active={mode === "courier"} onPress={() => setMode("courier")} />
-        <ModeButton label="Ride" active={mode === "ride"} onPress={() => setMode("ride")} />
+        <Text style={styles.title}>Plan your driving calendar.</Text>
+        <Text style={styles.body}>Save the windows when you are available to post and operate intercity passenger trips.</Text>
       </View>
 
       <View style={styles.formCard}>
@@ -116,11 +111,11 @@ export default function AvailabilityScreen() {
           {items.map((item) => (
             <View key={item.id} style={styles.itemCard}>
               <View style={[styles.modeIcon, item.mode === "courier" && styles.modeIconCourier]}>
-                <MaterialCommunityIcons name={item.mode === "courier" ? "motorbike" : "car-clock"} size={22} color={item.mode === "courier" ? v2Theme.colors.brandStrong : v2Theme.colors.ink} />
+                <MaterialCommunityIcons name="car-clock" size={22} color={v2Theme.colors.ink} />
               </View>
               <View style={styles.itemCopy}>
                 <Text style={styles.itemTitle}>{formatDate(item.date)}</Text>
-                <Text style={styles.itemTime}>{item.start_time} – {item.end_time} · {item.mode === "courier" ? "Courier" : "Ride"}</Text>
+                <Text style={styles.itemTime}>{item.start_time} – {item.end_time} · Driver availability</Text>
                 {item.note ? <Text numberOfLines={1} style={styles.itemNote}>{item.note}</Text> : null}
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel={`Remove availability ${item.date}`} onPress={() => remove(item.id)} disabled={busy} hitSlop={8} style={styles.removeButton}>
@@ -132,10 +127,6 @@ export default function AvailabilityScreen() {
       </View>
     </Screen>
   );
-}
-
-function ModeButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}><Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>{label}</Text></Pressable>;
 }
 
 function formatDate(value: string) {

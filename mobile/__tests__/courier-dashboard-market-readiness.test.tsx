@@ -5,6 +5,7 @@ import {
   getActiveCourierDelivery,
   getCourierEarnings,
   getCourierProfile,
+  listAvailableCourierShifts,
   listCourierOffers,
 } from "../services/operationsService";
 
@@ -22,8 +23,11 @@ jest.mock("../services/operationsService", () => ({
   getCourierEarnings: jest.fn(),
   getCourierProfile: jest.fn(),
   listCourierOffers: jest.fn(),
+  listAvailableCourierShifts: jest.fn(),
   setCourierOnline: jest.fn(),
 }));
+
+jest.mock("../components/maps/DeliveryMap", () => ({ DeliveryMap: () => null }));
 
 const activeDelivery = {
   id: "54ec3842-dffc-4ffd-a073-7e300150656d",
@@ -46,14 +50,14 @@ describe("Courier dashboard priority", () => {
     (getActiveCourierDelivery as jest.Mock).mockResolvedValue(activeDelivery);
     (getCourierEarnings as jest.Mock).mockResolvedValue({ currency: "USD", completed_deliveries: 0, total_payout_usd: 0, today_payout_usd: 0, last_7_days_payout_usd: 0, latest_payouts: [] });
     (listCourierOffers as jest.Mock).mockResolvedValue([]);
+    (listAvailableCourierShifts as jest.Mock).mockResolvedValue([]);
   });
 
   it("keeps an active delivery dominant even when offline for new offers", async () => {
     const screen = render(<CourierHomeScreen />);
-    await waitFor(() => expect(screen.getByText("Delivery in progress.")).toBeOnTheScreen());
-    expect(screen.getByText("Offline for new offers. Your current delivery remains active and trackable.")).toBeOnTheScreen();
-    expect(screen.getByText("Active delivery")).toBeOnTheScreen();
-    expect(screen.queryByText("No active delivery")).toBeNull();
+    await waitFor(() => expect(screen.getByText("Stay with the journey.")).toBeOnTheScreen());
+    expect(screen.getByText("Open live journey")).toBeOnTheScreen();
+    expect(screen.queryByText("Nearby offers")).toBeNull();
     expect(listCourierOffers).not.toHaveBeenCalled();
   });
 
@@ -62,10 +66,9 @@ describe("Courier dashboard priority", () => {
 
     const screen = render(<CourierHomeScreen />);
 
-    await waitFor(() => expect(screen.getByText("You’re offline")).toBeOnTheScreen());
-    expect(screen.getByText("No active delivery")).toBeOnTheScreen();
-    expect(screen.queryByText("Delivery in progress.")).toBeNull();
-    expect(screen.queryByText("Active delivery")).toBeNull();
+    await waitFor(() => expect(screen.getByText("Start when you’re ready.")).toBeOnTheScreen());
+    expect(screen.getByText("Nearby offers")).toBeOnTheScreen();
+    expect(screen.queryByText("Stay with the journey.")).toBeNull();
     expect(listCourierOffers).not.toHaveBeenCalled();
   });
 });

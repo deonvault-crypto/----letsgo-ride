@@ -1,4 +1,5 @@
 import { Linking, Platform } from "react-native";
+import { getPreferredNavigationApp } from "../services/appPreferenceService";
 
 type NavigationDestination = string | { latitude?: number | null; longitude?: number | null; label?: string };
 
@@ -14,9 +15,16 @@ export async function openNavigation(destination: NavigationDestination) {
   if (!clean) throw new Error("Destination is unavailable for navigation.");
 
   const encoded = encodeURIComponent(clean);
-  const primary = Platform.OS === "ios"
+  const preference = await getPreferredNavigationApp();
+  const appleUrl = `http://maps.apple.com/?daddr=${encoded}&dirflg=d`;
+  const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}&travelmode=driving`;
+  const primary = preference === "google"
+    ? googleUrl
+    : preference === "apple" && Platform.OS === "ios"
+      ? appleUrl
+      : Platform.OS === "ios"
     ? `http://maps.apple.com/?daddr=${encoded}&dirflg=d`
-    : `https://www.google.com/maps/dir/?api=1&destination=${encoded}&travelmode=driving`;
+    : googleUrl;
   const fallback = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
 
   try {

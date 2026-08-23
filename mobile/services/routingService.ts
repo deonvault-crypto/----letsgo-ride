@@ -35,6 +35,14 @@ export function geocodeAddress(address: string) {
   });
 }
 
+export function reverseGeocodeLocation(location: RoutingPoint) {
+  return requestData<GeocodeResult>({
+    method: "POST",
+    url: "/routing/reverse-geocode",
+    data: { location },
+  });
+}
+
 export function computeRoute(
   origin: RoutingPoint,
   destination: RoutingPoint,

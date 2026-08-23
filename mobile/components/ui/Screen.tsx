@@ -10,17 +10,21 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Href } from "expo-router";
+import { Href, useLocalSearchParams, useSegments } from "expo-router";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { BottomNav } from "../layout/BottomNav";
 import { Header } from "../layout/Header";
+import { NavRole } from "../layout/BottomNav";
+
+const useSafeSegments: typeof useSegments = typeof useSegments === "function" ? useSegments : (() => [] as never);
+const useSafeLocalSearchParams: typeof useLocalSearchParams = typeof useLocalSearchParams === "function" ? useLocalSearchParams : (() => ({} as never));
 
 type ScreenProps = {
   children: ReactNode;
   title?: string;
-  navRole?: "customer" | "driver";
+  navRole?: NavRole;
   showHeader?: boolean;
   showBack?: boolean;
   fallbackRoute?: Href;
@@ -35,13 +39,51 @@ export function Screen({
   title,
   navRole,
   showHeader = true,
-  showBack = false,
+  showBack,
   fallbackRoute,
   showNotifications = true,
   scroll = true,
   refreshing = false,
   onRefresh,
 }: ScreenProps) {
+  const segments = useSafeSegments() as string[];
+  const params = useSafeLocalSearchParams<{ product?: string }>();
+  const group = segments[0];
+  const routeName = segments[segments.length - 1] || "";
+  const rootRoutes: Record<string, Set<string>> = {
+    "(customer)": new Set(["home"]),
+    "(driver)": new Set(["home", "trips", "post-trip", "availability", "account"]),
+    "(courier)": new Set(["home", "offers", "schedule", "earnings", "account"]),
+    "(merchant)": new Set(["home", "menu", "store", "insights", "account"]),
+    "(shared)": new Set(["services", "activity", "account"]),
+  };
+  const isProductRoute = Boolean(rootRoutes[group]);
+  const inferredBack = isProductRoute && !rootRoutes[group].has(routeName);
+  const resolvedShowBack = showBack ?? inferredBack;
+  const productHome: Partial<Record<NavRole, Href>> = {
+    customer: "/(customer)/home",
+    driver: "/(driver)/home",
+    courier: "/(courier)/home",
+    merchant: "/(merchant)/home",
+  };
+  const groupHome: Record<string, Href> = {
+    "(customer)": "/(customer)/home",
+    "(driver)": "/(driver)/home",
+    "(courier)": "/(courier)/home",
+    "(merchant)": "/(merchant)/home",
+  };
+  const contextualRole = params.product === "driver" || params.product === "courier" || params.product === "merchant" ? params.product : undefined;
+  const productAccount: Partial<Record<NavRole, Href>> = {
+    customer: "/(shared)/account",
+    driver: "/(driver)/account",
+    courier: "/(courier)/account",
+    merchant: "/(merchant)/account",
+  };
+  const fallbackText = String(fallbackRoute || "");
+  const genericSharedFallback = fallbackText.includes("/(shared)/account") || fallbackText.includes("/(shared)/profile");
+  const resolvedFallback = contextualRole && (genericSharedFallback || !fallbackRoute)
+    ? productAccount[contextualRole]
+    : fallbackRoute || (navRole ? productHome[navRole] : groupHome[group]);
   const contentPadding = navRole ? spacing.bottomNavHeight + 72 : spacing.xxl;
   const body = scroll ? (
     <ScrollView
@@ -72,8 +114,8 @@ export function Screen({
           {showHeader ? (
             <Header
               title={title}
-              showBack={showBack}
-              fallbackRoute={fallbackRoute}
+              showBack={resolvedShowBack}
+              fallbackRoute={resolvedFallback}
               showNotifications={showNotifications}
             />
           ) : null}

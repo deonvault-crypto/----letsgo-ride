@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
@@ -29,6 +29,12 @@ export default function AccountScreen() {
       : "customer";
   const verified = isIdentityVerified(user);
   const name = displayNameOrFallback(user?.name);
+
+  useEffect(() => {
+    if (user?.role === "driver") router.replace("/(driver)/account" as never);
+    else if (user?.role === "courier") router.replace("/(courier)/account" as never);
+    else if (user?.role === "merchant") router.replace("/(merchant)/account" as never);
+  }, [router, user?.role]);
 
   const loadVerification = useCallback(async () => {
     if (!user || user.role !== "driver") {
@@ -71,6 +77,7 @@ export default function AccountScreen() {
           >
             <Text style={styles.guestSecondaryText}>Create customer account</Text>
           </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push("/(shared)/work-with-us" as never)} style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}><Text style={styles.guestSecondaryText}>Work with LetsGoRide</Text></Pressable>
         </View>
 
         <View style={styles.guestNote}>
@@ -125,6 +132,7 @@ export default function AccountScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
+        {user?.role === "passenger" ? <AccountRow icon="briefcase-outline" title="Work with LetsGoRide" subtitle="Courier, Driver and Merchant applications" onPress={() => router.push("/(shared)/work-with-us" as never)} /> : null}
         <AccountRow icon="cog-outline" title="Settings" subtitle="Account, privacy and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
         <AccountRow icon="shield-lock-outline" title="Privacy" subtitle="Control your information and account" onPress={() => router.push("/(shared)/settings" as never)} />
         <AccountRow icon="lifebuoy" title="Support" subtitle="Get help from LetsGoRide" onPress={() => router.push("/(shared)/support" as never)} />

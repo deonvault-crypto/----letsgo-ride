@@ -1,173 +1,65 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
-import { listMyRestaurants } from "../../services/merchantService";
-import { MerchantRestaurant } from "../../types/merchant.types";
+import { useMerchantRestaurant } from "../../contexts/MerchantRestaurantContext";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { getRestaurantWorkspace, updateMerchantOrderStatus } from "../../services/merchantService";
+import { FoodOrder, FoodOrderStatus } from "../../types/food.types";
+import { MerchantDashboardData } from "../../types/merchant.types";
 
-export default function MerchantHomeScreen() {
+type OrderView = "new" | "preparing" | "ready" | "completed" | "closed";
+const GROUPS: Record<OrderView, string[]> = { new: ["PENDING_RESTAURANT"], preparing: ["PREPARING", "COURIER_ASSIGNED"], ready: ["READY_FOR_PICKUP", "PICKED_UP", "OUT_FOR_DELIVERY"], completed: ["DELIVERED"], closed: ["REJECTED", "CANCELLED"] };
+
+export default function MerchantOrdersScreen() {
   const router = useRouter();
-  const [restaurants, setRestaurants] = useState<MerchantRestaurant[]>([]);
+  const merchant = useMerchantRestaurant();
+  const [workspace, setWorkspace] = useState<MerchantDashboardData | null>(null);
+  const [view, setView] = useState<OrderView>("new");
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
   const load = useCallback(async () => {
-    try {
-      setError(null);
-      setRestaurants(await listMyRestaurants());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load merchant workspace.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    if (!merchant.selected) { setWorkspace(null); setLoading(false); return; }
+    try { setError(null); setWorkspace(await getRestaurantWorkspace(merchant.selected.id)); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to load restaurant orders."); }
+    finally { setLoading(false); }
+  }, [merchant.selected]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useLiveRefresh(load, 10000, Boolean(merchant.selected));
+  const orders = useMemo(() => (workspace?.orders || []).filter((order) => GROUPS[view].includes(String(order.status))), [workspace?.orders, view]);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
+  async function transition(order: FoodOrder, status: FoodOrderStatus) {
+    try { setBusyId(order.id); setError(null); await updateMerchantOrderStatus(order.id, { status }); await load(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to update this order."); }
+    finally { setBusyId(null); }
+  }
 
   return (
-    <Screen showBack fallbackRoute="/(shared)/account" title="Merchant" showNotifications={false}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>LETSGORIDE MERCHANT</Text>
-        <Text style={styles.title}>Run your restaurant.</Text>
-        <Text style={styles.body}>Menus, availability and incoming orders live in one operating workspace.</Text>
-      </View>
-
-      <View style={styles.topActions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push("/(merchant)/new" as never)} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
-          <View style={styles.primaryActionIcon}><MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" /></View>
-          <View style={styles.actionCopy}>
-            <Text style={styles.primaryActionTitle}>Add restaurant</Text>
-            <Text style={styles.primaryActionBody}>Create a merchant profile and menu</Text>
-          </View>
-          <MaterialCommunityIcons name="arrow-right" size={21} color="#FFFFFF" />
-        </Pressable>
-      </View>
-
-      {error ? (
-        <Pressable accessibilityRole="button" onPress={load} style={styles.errorCard}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={21} color={v2Theme.colors.danger} />
-          <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.retry}>Retry</Text>
-        </Pressable>
-      ) : null}
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Your restaurants</Text>
-            <Text style={styles.sectionSub}>{restaurants.length} merchant locations</Text>
-          </View>
-          <View style={styles.countPill}><Text style={styles.countText}>{restaurants.length}</Text></View>
-        </View>
-
-        {loading ? <Text style={styles.loading}>Loading restaurants…</Text> : null}
-
-        {!loading && !error && restaurants.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}><MaterialCommunityIcons name="storefront-outline" size={29} color={v2Theme.colors.brandStrong} /></View>
-            <Text style={styles.emptyTitle}>No restaurant yet</Text>
-            <Text style={styles.emptyBody}>Start with the business details, then build categories and menu items before submitting for review.</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.restaurantList}>
-          {restaurants.map((restaurant) => (
-            <Pressable
-              key={restaurant.id}
-              accessibilityRole="button"
-              onPress={() => router.push(`/(merchant)/restaurant/${restaurant.id}` as never)}
-              style={({ pressed }) => [styles.restaurantCard, pressed && styles.pressed]}
-            >
-              <View style={styles.restaurantIcon}><MaterialCommunityIcons name="storefront-outline" size={24} color={v2Theme.colors.ink} /></View>
-              <View style={styles.restaurantCopy}>
-                <View style={styles.restaurantTitleRow}>
-                  <Text numberOfLines={1} style={styles.restaurantName}>{restaurant.name}</Text>
-                  <StatusPill status={restaurant.status} />
-                </View>
-                <Text numberOfLines={1} style={styles.restaurantAddress}>{restaurant.address}</Text>
-                <View style={styles.restaurantMeta}>
-                  <View style={[styles.onlineDot, restaurant.is_accepting_orders && styles.onlineDotActive]} />
-                  <Text style={styles.restaurantMetaText}>{restaurant.is_accepting_orders ? "Accepting orders" : "Orders paused"}</Text>
-                </View>
-              </View>
-              <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.infoCard}>
-        <View style={styles.infoIcon}><MaterialCommunityIcons name="shield-check-outline" size={23} color={v2Theme.colors.brandStrong} /></View>
-        <View style={styles.infoCopy}>
-          <Text style={styles.infoTitle}>Merchant review stays separate from publishing</Text>
-          <Text style={styles.infoBody}>Draft restaurants can build menus privately. Customers only see restaurants after review and activation.</Text>
-        </View>
-      </View>
+    <Screen title="Orders" navRole="merchant" refreshing={loading} onRefresh={load}>
+      <LocationStrip />
+      {!merchant.loading && !merchant.selected ? <View style={styles.emptySetup}><MaterialCommunityIcons name="storefront-plus-outline" size={34} color={v2Theme.colors.brandStrong} /><Text style={styles.emptyTitle}>Create your first restaurant</Text><Text style={styles.emptyBody}>Business details and a real menu are required before order operations open.</Text><Pressable accessibilityRole="button" onPress={() => router.push("/(merchant)/new" as never)} style={styles.primary}><Text style={styles.primaryText}>Start restaurant onboarding</Text></Pressable></View> : null}
+      {merchant.selected ? <View style={styles.hero}><View><Text style={styles.eyebrow}>LIVE ORDER DESK</Text><Text numberOfLines={1} style={styles.title}>{merchant.selected.name}</Text><Text style={styles.heroBody}>{merchant.selected.is_accepting_orders ? "Open for orders" : "Orders paused"} · {merchant.selected.status.replaceAll("_", " ")}</Text></View><View style={[styles.openDot, merchant.selected.is_accepting_orders && styles.openDotLive]} /></View> : null}
+      <View style={styles.tabs}><Tab label="New" count={count(workspace, "new")} active={view === "new"} onPress={() => setView("new")} /><Tab label="Preparing" count={count(workspace, "preparing")} active={view === "preparing"} onPress={() => setView("preparing")} /><Tab label="Ready" count={count(workspace, "ready")} active={view === "ready"} onPress={() => setView("ready")} /><Tab label="Done" count={count(workspace, "completed")} active={view === "completed"} onPress={() => setView("completed")} /><Tab label="Closed" count={count(workspace, "closed")} active={view === "closed"} onPress={() => setView("closed")} /></View>
+      {loading ? <LoadingState label="Loading order tickets…" /> : null}
+      {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
+      {!loading && merchant.selected && orders.length === 0 ? <View style={styles.noOrders}><MaterialCommunityIcons name="receipt-text-outline" size={29} color={v2Theme.colors.inkSecondary} /><Text style={styles.emptyTitle}>No {view} orders</Text><Text style={styles.emptyBody}>Order tickets move here automatically as the restaurant and Courier lifecycle advances.</Text></View> : null}
+      <View style={styles.list}>{orders.map((order) => <OrderTicket key={order.id} order={order} busy={busyId === order.id} onAccept={() => transition(order, "PREPARING")} onDecline={() => transition(order, "REJECTED")} onReady={() => transition(order, "READY_FOR_PICKUP")} />)}</View>
     </Screen>
   );
 }
 
-function StatusPill({ status }: { status: string }) {
-  const active = status === "ACTIVE";
-  const pending = ["PENDING_REVIEW", "SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(status);
-  return (
-    <View style={[styles.statusPill, active && styles.statusPillActive, pending && styles.statusPillPending]}>
-      <Text style={[styles.statusText, active && styles.statusTextActive, pending && styles.statusTextPending]}>{status.replaceAll("_", " ")}</Text>
-    </View>
-  );
+function LocationStrip() { const { restaurants, selected, selectRestaurant } = useMerchantRestaurant(); if (restaurants.length < 2) return null; return <View style={styles.locationStrip}>{restaurants.map((item) => <Pressable key={item.id} accessibilityRole="button" onPress={() => selectRestaurant(item.id)} style={[styles.locationChip, selected?.id === item.id && styles.locationChipActive]}><Text numberOfLines={1} style={[styles.locationText, selected?.id === item.id && styles.locationTextActive]}>{item.name}</Text></Pressable>)}</View>; }
+function Tab({ label, count, active, onPress }: { label: string; count: number; active: boolean; onPress: () => void }) { return <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={onPress} style={[styles.tab, active && styles.tabActive]}><Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>{count ? <View style={[styles.tabCount, active && styles.tabCountActive]}><Text style={[styles.tabCountText, active && styles.tabCountTextActive]}>{count}</Text></View> : null}</Pressable>; }
+function count(workspace: MerchantDashboardData | null, view: OrderView) { return (workspace?.orders || []).filter((order) => GROUPS[view].includes(String(order.status))).length; }
+function OrderTicket({ order, busy, onAccept, onDecline, onReady }: { order: FoodOrder; busy: boolean; onAccept: () => void; onDecline: () => void; onReady: () => void }) {
+  const isNew = order.status === "PENDING_RESTAURANT"; const preparing = order.status === "PREPARING";
+  return <View style={styles.ticket}><View style={styles.ticketTop}><View><Text style={styles.orderRef}>ORDER {order.id.slice(-6).toUpperCase()}</Text><Text style={styles.elapsed}>{elapsed(order.created_at)}</Text></View><Text style={styles.total}>${Number(order.total_usd || 0).toFixed(2)}</Text></View><View style={styles.customer}><View style={styles.customerIcon}><MaterialCommunityIcons name="account-outline" size={20} color={v2Theme.colors.ink} /></View><View style={styles.flex}><Text style={styles.customerName}>{order.recipient_name}</Text><Text numberOfLines={1} style={styles.address}>{order.delivery_address}</Text></View></View><View style={styles.items}>{order.items.map((item, index) => <View key={`${item.menu_item_id}-${index}`} style={styles.itemRow}><Text style={styles.quantity}>{item.quantity}×</Text><View style={styles.flex}><Text style={styles.itemName}>{item.name || "Menu item"}</Text>{item.note ? <Text style={styles.itemNote}>{item.note}</Text> : null}</View><Text style={styles.itemPrice}>${item.line_total_usd.toFixed(2)}</Text></View>)}</View>{isNew ? <View style={styles.actions}><Pressable accessibilityRole="button" disabled={busy} onPress={onDecline} style={[styles.decline, busy && styles.disabled]}><Text style={styles.declineText}>Decline</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} onPress={onAccept} style={[styles.accept, busy && styles.disabled]}><Text style={styles.acceptText}>{busy ? "Updating…" : "Accept order"}</Text></Pressable></View> : null}{preparing ? <Pressable accessibilityRole="button" disabled={busy} onPress={onReady} style={[styles.ready, busy && styles.disabled]}><Text style={styles.readyText}>{busy ? "Updating…" : "Mark ready for Courier"}</Text><MaterialCommunityIcons name="bike-fast" size={20} color="#FFFFFF" /></Pressable> : null}<View style={styles.status}><View style={styles.statusDot} /><Text style={styles.statusText}>{String(order.status).replaceAll("_", " ")}</Text></View></View>;
 }
+function elapsed(value?: string) { if (!value) return "Time unavailable"; const start = new Date(value).getTime(); if (!Number.isFinite(start)) return value; const minutes = Math.max(0, Math.floor((Date.now() - start) / 60000)); return minutes < 60 ? `${minutes} min ago` : `${Math.floor(minutes / 60)}h ${minutes % 60}m ago`; }
 
-const styles = StyleSheet.create({
-  hero: { gap: 7 },
-  eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
-  title: { color: v2Theme.colors.ink, fontSize: 32, lineHeight: 37, fontWeight: "900", letterSpacing: -1.05 },
-  body: { color: v2Theme.colors.inkSecondary, fontSize: 14, lineHeight: 21 },
-  topActions: { gap: 10 },
-  primaryAction: { minHeight: 84, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 15, flexDirection: "row", alignItems: "center", gap: 12 },
-  primaryActionIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
-  actionCopy: { flex: 1, gap: 3 },
-  primaryActionTitle: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  primaryActionBody: { color: "rgba(255,255,255,0.62)", fontSize: 10 },
-  errorCard: { minHeight: 58, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
-  errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, fontWeight: "700" },
-  retry: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" },
-  section: { gap: 11 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
-  sectionSub: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 },
-  countPill: { minWidth: 34, minHeight: 30, borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center", paddingHorizontal: 9 },
-  countText: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
-  loading: { color: v2Theme.colors.inkSecondary, fontSize: 12 },
-  emptyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 20, gap: 9 },
-  emptyIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  emptyTitle: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
-  emptyBody: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
-  restaurantList: { gap: 9 },
-  restaurantCard: { minHeight: 86, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
-  restaurantIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
-  restaurantCopy: { flex: 1, gap: 5 },
-  restaurantTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  restaurantName: { flex: 1, color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  restaurantAddress: { color: v2Theme.colors.inkSecondary, fontSize: 10 },
-  restaurantMeta: { flexDirection: "row", alignItems: "center", gap: 5 },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.inkTertiary },
-  onlineDotActive: { backgroundColor: v2Theme.colors.success },
-  restaurantMetaText: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" },
-  statusPill: { borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 7, paddingVertical: 5 },
-  statusPillActive: { backgroundColor: v2Theme.colors.brandSoft },
-  statusPillPending: { backgroundColor: v2Theme.colors.warningSoft },
-  statusText: { color: v2Theme.colors.inkSecondary, fontSize: 7, fontWeight: "900" },
-  statusTextActive: { color: v2Theme.colors.brandStrong },
-  statusTextPending: { color: v2Theme.colors.warning },
-  infoCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 15, flexDirection: "row", gap: 11 },
-  infoIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  infoCopy: { flex: 1, gap: 4 },
-  infoTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
-  infoBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
-});
+const styles = StyleSheet.create({ flex: { flex: 1 }, locationStrip: { flexDirection: "row", flexWrap: "wrap", gap: 7 }, locationChip: { maxWidth: 160, borderRadius: 999, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 12, paddingVertical: 9 }, locationChipActive: { backgroundColor: v2Theme.colors.ink }, locationText: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900" }, locationTextActive: { color: "#FFFFFF" }, emptySetup: { borderRadius: 27, backgroundColor: v2Theme.colors.surface, padding: 20, gap: 9 }, hero: { borderRadius: 25, backgroundColor: v2Theme.colors.ink, padding: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }, eyebrow: { color: "#8FE6AE", fontSize: 8, fontWeight: "900", letterSpacing: 1 }, title: { color: "#FFFFFF", fontSize: 24, fontWeight: "900", letterSpacing: -0.6, marginTop: 4, maxWidth: 270 }, heroBody: { color: "rgba(255,255,255,0.6)", fontSize: 9, marginTop: 4 }, openDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: "#626662", borderWidth: 3, borderColor: "rgba(255,255,255,0.2)" }, openDotLive: { backgroundColor: "#63D88F" }, tabs: { flexDirection: "row", gap: 4, borderRadius: 16, backgroundColor: v2Theme.colors.surfaceMuted, padding: 4 }, tab: { flex: 1, minHeight: 43, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 2 }, tabActive: { backgroundColor: v2Theme.colors.surface }, tabText: { color: v2Theme.colors.inkSecondary, fontSize: 7, fontWeight: "900" }, tabTextActive: { color: v2Theme.colors.ink }, tabCount: { minWidth: 16, height: 16, borderRadius: 8, backgroundColor: v2Theme.colors.line, alignItems: "center", justifyContent: "center" }, tabCountActive: { backgroundColor: v2Theme.colors.brandSoft }, tabCountText: { color: v2Theme.colors.inkSecondary, fontSize: 6, fontWeight: "900" }, tabCountTextActive: { color: v2Theme.colors.brandStrong }, error: { borderRadius: 17, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", gap: 9 }, errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 10, fontWeight: "700" }, retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" }, emptyTitle: { color: v2Theme.colors.ink, fontSize: 16, fontWeight: "900" }, emptyBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, primary: { minHeight: 48, borderRadius: 15, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, primaryText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" }, noOrders: { borderRadius: 23, backgroundColor: v2Theme.colors.surface, padding: 18, alignItems: "center", gap: 7 }, list: { gap: 10 }, ticket: { borderRadius: 24, backgroundColor: v2Theme.colors.surface, padding: 14, gap: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line }, ticketTop: { flexDirection: "row", justifyContent: "space-between", gap: 12 }, orderRef: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 0.8 }, elapsed: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "700", marginTop: 3 }, total: { color: v2Theme.colors.ink, fontSize: 21, fontWeight: "900" }, customer: { flexDirection: "row", alignItems: "center", gap: 9 }, customerIcon: { width: 39, height: 39, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, customerName: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" }, address: { color: v2Theme.colors.inkSecondary, fontSize: 9, marginTop: 2 }, items: { borderRadius: 16, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 10 }, itemRow: { minHeight: 51, flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line }, quantity: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900" }, itemName: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "800" }, itemNote: { color: v2Theme.colors.inkSecondary, fontSize: 8, marginTop: 2 }, itemPrice: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" }, actions: { flexDirection: "row", gap: 8 }, decline: { flex: 1, minHeight: 48, borderRadius: 15, backgroundColor: v2Theme.colors.dangerSoft, alignItems: "center", justifyContent: "center" }, declineText: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" }, accept: { flex: 1.7, minHeight: 48, borderRadius: 15, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, acceptText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" }, ready: { minHeight: 50, borderRadius: 15, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }, readyText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" }, status: { flexDirection: "row", alignItems: "center", gap: 6 }, statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.brand }, statusText: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "900" }, disabled: { opacity: 0.44 } });

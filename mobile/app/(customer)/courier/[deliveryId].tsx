@@ -80,7 +80,7 @@ export default function CustomerCourierDeliveryScreen() {
     }).start();
   }, [delivery?.status, statusEntrance]);
 
-  const route = useMemo(() => decodePolyline(delivery?.route_polyline), [delivery?.route_polyline]);
+  const route = useMemo(() => decodePolyline(delivery?.remaining_route_polyline || delivery?.route_polyline), [delivery?.remaining_route_polyline, delivery?.route_polyline]);
 
   async function cancelDelivery() {
     if (!delivery || busy || !CAN_CANCEL.has(delivery.status)) return;
@@ -146,7 +146,7 @@ export default function CustomerCourierDeliveryScreen() {
           {isCourierHeading(delivery.status) ? <CourierFoundCard delivery={delivery} pulse={pulse} /> : null}
 
           <View style={styles.mapFrame}>
-            <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} route={route} height={315} />
+            <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} courierHeading={delivery.last_courier_location?.heading} route={route} height={315} />
             {delivery.live_tracking_active ? (
               <View style={styles.mapLivePill}>
                 <MaterialCommunityIcons name="crosshairs-gps" size={15} color={v2Theme.colors.brandStrong} />
@@ -182,7 +182,8 @@ export default function CustomerCourierDeliveryScreen() {
             <RouteRow icon="circle-slice-8" label="Pickup" value={delivery.pickup_address} />
             <RouteRow icon="map-marker-outline" label="Drop-off" value={delivery.dropoff_address} />
             {delivery.courier_name ? <RouteRow icon="motorbike" label="Courier" value={delivery.courier_name} /> : null}
-            {delivery.estimated_duration_minutes != null ? <RouteRow icon="clock-outline" label="Route estimate" value={`${delivery.estimated_duration_minutes} min`} /> : null}
+            {delivery.remaining_eta_minutes != null ? <RouteRow icon="clock-outline" label="Estimated arrival" value={`${delivery.remaining_eta_minutes} min`} /> : delivery.estimated_duration_minutes != null ? <RouteRow icon="clock-outline" label="Planned journey" value={`${delivery.estimated_duration_minutes} min`} /> : null}
+            {delivery.remaining_distance_km != null ? <RouteRow icon="map-marker-distance" label="Remaining route" value={`${delivery.remaining_distance_km.toFixed(1)} km`} /> : null}
           </View>
 
           {CAN_CANCEL.has(delivery.status) ? (

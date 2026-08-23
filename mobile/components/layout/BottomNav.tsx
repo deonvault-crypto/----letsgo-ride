@@ -4,7 +4,9 @@ import { usePathname, useRouter } from "expo-router";
 
 import { v2Theme } from "../../constants/v2Theme";
 
-type NavRole = "customer" | "driver";
+const useSafePathname: typeof usePathname = typeof usePathname === "function" ? usePathname : (() => "");
+
+export type NavRole = "customer" | "driver" | "courier" | "merchant";
 
 type NavItem = {
   label: string;
@@ -23,15 +25,34 @@ const customerItems: NavItem[] = [
 
 const driverItems: NavItem[] = [
   { label: "Home", icon: "view-dashboard-outline", activeIcon: "view-dashboard", href: "/(driver)/home" },
-  { label: "Post", icon: "plus-circle-outline", activeIcon: "plus-circle", href: "/(driver)/post-trip" },
   { label: "Trips", icon: "steering", href: "/(driver)/trips" },
-  { label: "Account", icon: "account-outline", activeIcon: "account", href: "/(shared)/account", aliases: ["/profile"] },
+  { label: "Post", icon: "plus-circle-outline", activeIcon: "plus-circle", href: "/(driver)/post-trip" },
+  { label: "Calendar", icon: "calendar-outline", activeIcon: "calendar", href: "/(driver)/availability" },
+  { label: "Account", icon: "account-outline", activeIcon: "account", href: "/(driver)/account" },
+];
+
+const courierItems: NavItem[] = [
+  { label: "Home", icon: "home-variant-outline", activeIcon: "home-variant", href: "/(courier)/home" },
+  { label: "Offers", icon: "radar", href: "/(courier)/offers" },
+  { label: "Schedule", icon: "calendar-outline", activeIcon: "calendar", href: "/(courier)/schedule" },
+  { label: "Earnings", icon: "chart-line", href: "/(courier)/earnings" },
+  { label: "Account", icon: "account-outline", activeIcon: "account", href: "/(courier)/account" },
+];
+
+const merchantItems: NavItem[] = [
+  { label: "Orders", icon: "receipt-text-outline", activeIcon: "receipt-text", href: "/(merchant)/home" },
+  { label: "Menu", icon: "food-fork-drink", href: "/(merchant)/menu" },
+  { label: "Store", icon: "storefront-outline", activeIcon: "storefront", href: "/(merchant)/store" },
+  { label: "Insights", icon: "chart-box-outline", activeIcon: "chart-box", href: "/(merchant)/insights" },
+  { label: "Account", icon: "account-outline", activeIcon: "account", href: "/(merchant)/account" },
 ];
 
 function navPath(href: string) {
   return href
     .replace("/(customer)", "")
     .replace("/(driver)", "")
+    .replace("/(courier)", "")
+    .replace("/(merchant)", "")
     .replace("/(shared)", "");
 }
 
@@ -43,8 +64,8 @@ function isItemActive(pathname: string, item: NavItem) {
 
 export function BottomNav({ role }: { role: NavRole }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const items = role === "driver" ? driverItems : customerItems;
+  const pathname = useSafePathname();
+  const items = role === "driver" ? driverItems : role === "courier" ? courierItems : role === "merchant" ? merchantItems : customerItems;
 
   return (
     <View pointerEvents="box-none" style={styles.positioner}>

@@ -167,7 +167,7 @@ export default function CourierDeliveryScreen() {
     }
   }
 
-  const route = useMemo(() => decodePolyline(delivery?.route_polyline), [delivery?.route_polyline]);
+  const route = useMemo(() => decodePolyline(delivery?.remaining_route_polyline || delivery?.route_polyline), [delivery?.remaining_route_polyline, delivery?.route_polyline]);
 
   async function confirmPickup() {
     if (!delivery || busy || !BEFORE_PICKUP.has(delivery.status)) return;
@@ -267,11 +267,11 @@ export default function CourierDeliveryScreen() {
             <Journey status={delivery.status} />
           </View>
 
-          <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} route={route} height={320} />
+          <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} courierHeading={delivery.last_courier_location?.heading} route={route} height={320} />
 
           <View style={styles.routeMetrics}>
-            <RouteMetric icon="map-marker-distance" label="PLANNED ROUTE" value={delivery.distance_km != null ? `${delivery.distance_km.toFixed(1)} km` : "Route unavailable"} />
-            <RouteMetric icon="clock-outline" label="ROUTE ETA" value={delivery.estimated_duration_minutes != null ? `${delivery.estimated_duration_minutes} min` : "ETA unavailable"} />
+            <RouteMetric icon="map-marker-distance" label={delivery.remaining_distance_km != null ? "REMAINING" : "PLANNED ROUTE"} value={delivery.remaining_distance_km != null ? `${delivery.remaining_distance_km.toFixed(1)} km` : delivery.distance_km != null ? `${delivery.distance_km.toFixed(1)} km` : "Route unavailable"} />
+            <RouteMetric icon="clock-outline" label={delivery.remaining_eta_minutes != null ? "LIVE ETA" : "ROUTE ETA"} value={delivery.remaining_eta_minutes != null ? `${delivery.remaining_eta_minutes} min` : delivery.estimated_duration_minutes != null ? `${delivery.estimated_duration_minutes} min` : "ETA unavailable"} />
           </View>
 
           {ACTIVE.has(delivery.status) ? (

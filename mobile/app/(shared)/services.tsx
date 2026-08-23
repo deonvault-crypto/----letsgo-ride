@@ -19,8 +19,7 @@ export default function ServicesScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Travel</Text>
-        <ServiceTile title="Ride" subtitle="Search shared and intercity rides" icon="car-outline" tone="brand" onPress={() => router.push("/(customer)/search" as never)} />
-        <ServiceTile title="Intercity" subtitle="Find planned city-to-city journeys" icon="road-variant" onPress={() => router.push({ pathname: "/(customer)/search", params: { intent: "intercity" } } as never)} />
+        <ServiceTile title="Rides" subtitle="Search local intent and planned city-to-city trips in one place" icon="car-outline" tone="brand" onPress={() => router.push("/(customer)/search" as never)} />
       </View>
 
       <View style={styles.section}>
