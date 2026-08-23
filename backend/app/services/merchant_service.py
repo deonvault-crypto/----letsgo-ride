@@ -3,15 +3,12 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
-from app.services.delivery_quote_service import maybe_auto_quote_delivery
 from app.services.food_service import append_order_event
-from app.services.fulfillment_link_service import ensure_food_order_delivery
+from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
 MERCHANT_ORDER_TRANSITIONS = {
-    "PLACED": {"ACCEPTED", "PREPARING", "REJECTED"},
-    "ACCEPTED": {"PREPARING"},
     "PREPARING": {"READY_FOR_PICKUP"},
 }
 
@@ -190,7 +187,7 @@ async def update_restaurant_order_status(
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
         raise ValueError("Order not found.")
-    await require_restaurant_access(order["restaurant_id"], user)
+    restaurant = await require_restaurant_access(order["restaurant_id"], user)
 
     current = str(order.get("restaurant_status") or order.get("status") or "")
     if status == current:
@@ -203,17 +200,11 @@ async def update_restaurant_order_status(
         "restaurant_status": status,
         "updated_at": now,
     }
-    if status in {"ACCEPTED", "PREPARING", "READY_FOR_PICKUP", "REJECTED"}:
-        updates["status"] = status
-    if current == "PLACED" and status in {"ACCEPTED", "PREPARING"}:
-        updates["accepted_at"] = now
-    if status == "PREPARING":
-        updates["preparing_at"] = now
     if status == "READY_FOR_PICKUP":
+        updates["status"] = "READY_FOR_PICKUP"
         updates["ready_for_pickup_at"] = now
-    if status == "REJECTED":
-        updates["fulfillment_status"] = "NOT_STARTED"
-        updates["rejected_at"] = now
+    elif _is_admin(user):
+        updates["status"] = status
 
     updated = await database.update_one_if(
         "food_orders",
@@ -223,14 +214,6 @@ async def update_restaurant_order_status(
     if not updated:
         raise ValueError("Order changed while it was being updated. Refresh and try again.")
 
-    if current == "PLACED" and status == "PREPARING":
-        await append_order_event(
-            order_id,
-            "RESTAURANT_ACCEPTED",
-            actor_user_id=_user_id(user),
-            data={"from": current, "to": "ACCEPTED", "note": note},
-        )
-
     await append_order_event(
         order_id,
         f"RESTAURANT_{status}",
@@ -238,22 +221,29 @@ async def update_restaurant_order_status(
         data={"from": current, "to": status, "note": note},
     )
 
-    # Accepting an order is the dispatch trigger. The merchant UI now combines
-    # acceptance and prep start into one action, while existing ACCEPTED orders
-    # remain supported for backward compatibility.
-    if current == "PLACED" and status in {"ACCEPTED", "PREPARING"}:
-        delivery = await ensure_food_order_delivery(order_id, actor_user_id=_user_id(user))
-        quoted = await maybe_auto_quote_delivery(delivery["id"], actor_user_id=_user_id(user))
-        await append_order_event(
-            order_id,
-            "COURIER_MATCHING_STARTED",
-            actor_user_id=_user_id(user),
-            data={
-                "delivery_id": quoted.get("id"),
-                "delivery_status": quoted.get("status"),
-                "quote_status": quoted.get("quote_status"),
-            },
-        )
+    if status == "READY_FOR_PICKUP":
+        customer_user_id = str(order.get("customer_user_id") or "")
+        if customer_user_id:
+            await create_app_notification(
+                customer_user_id,
+                "food_update",
+                "Your order is ready",
+                f"{restaurant.get('name') or 'The restaurant'} has finished preparing your order.",
+                {"order_id": order_id, "restaurant_id": restaurant["id"]},
+            )
+
+        delivery_id = str(order.get("courier_delivery_id") or "")
+        if delivery_id:
+            delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
+            courier_user_id = str(delivery.get("courier_user_id") or "") if delivery else ""
+            if courier_user_id:
+                await create_app_notification(
+                    courier_user_id,
+                    "food_update",
+                    "Order ready for pickup",
+                    f"{restaurant.get('name') or 'The restaurant'} has the order ready for collection.",
+                    {"order_id": order_id, "delivery_id": delivery_id},
+                )
 
     refreshed = await database.find_one("food_orders", {"id": order_id})
     return refreshed or updated
