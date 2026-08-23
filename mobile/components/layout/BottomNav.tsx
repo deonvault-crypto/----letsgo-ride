@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "expo-router";
 
 import { v2Theme } from "../../constants/v2Theme";
 
-type NavRole = "customer" | "driver" | "passenger";
+type NavRole = "customer" | "driver";
 
 type NavItem = {
   label: string;
