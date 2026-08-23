@@ -13,7 +13,7 @@ import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { createReport, myReports, SafetyReport } from "../../services/reportsService";
 import { formatStatus } from "../../utils/formatStatus";
 
-const reportTypes = ["Unsafe ride", "Scam", "Driver", "Passenger", "Payment issue", "Other"];
+const reportTypes = ["Ride", "Food order", "Courier delivery", "Scam", "Payment issue", "Other"];
 
 export default function ReportIssueScreen() {
   const { rideId } = useLocalSearchParams<{ rideId?: string }>();
@@ -50,7 +50,7 @@ export default function ReportIssueScreen() {
   }
 
   return (
-    <Screen title="Report" showBack fallbackRoute="/(shared)/safety" navRole="passenger">
+    <Screen title="Report" showBack fallbackRoute="/(shared)/safety" navRole="customer">
       <Text style={styles.title}>Report issue</Text>
       <View style={styles.chips}>
         {reportTypes.map((type) => (
