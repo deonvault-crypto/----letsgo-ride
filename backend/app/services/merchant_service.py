@@ -229,7 +229,11 @@ async def update_restaurant_order_status(
                 "food_update",
                 "Your order is ready",
                 f"{restaurant.get('name') or 'The restaurant'} has finished preparing your order.",
-                {"order_id": order_id, "restaurant_id": restaurant["id"]},
+                {
+                    "food_order_id": order_id,
+                    "restaurant_id": restaurant["id"],
+                    "notification_target": "customer_food_order",
+                },
             )
 
         delivery_id = str(order.get("courier_delivery_id") or "")
@@ -242,7 +246,11 @@ async def update_restaurant_order_status(
                     "food_update",
                     "Order ready for pickup",
                     f"{restaurant.get('name') or 'The restaurant'} has the order ready for collection.",
-                    {"order_id": order_id, "delivery_id": delivery_id},
+                    {
+                        "food_order_id": order_id,
+                        "delivery_id": delivery_id,
+                        "notification_target": "courier_delivery",
+                    },
                 )
 
     refreshed = await database.find_one("food_orders", {"id": order_id})
