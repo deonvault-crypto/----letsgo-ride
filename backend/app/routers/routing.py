@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
-from app.models.routing import GeocodeRequestBody, ResolveRouteRequestBody, RouteRequestBody
+from app.models.routing import GeocodeRequestBody, PlaceAutocompleteBody, ResolveRouteRequestBody, RouteRequestBody
 from app.services.routing_service import (
     RoutingError,
     RoutingNoResultError,
     RoutingNotConfiguredError,
+    autocomplete_places,
     compute_route,
     geocode_address,
+    resolve_place,
     resolve_route,
     routing_status,
 )
@@ -21,6 +23,30 @@ router = APIRouter(prefix="/routing", tags=["routing"])
 async def route_provider_status(user=Depends(get_current_user)):
     _ = user
     return api_success(routing_status())
+
+
+@router.post("/places/autocomplete")
+async def place_autocomplete(payload: PlaceAutocompleteBody):
+    # Place discovery is intentionally public so a new customer can explore the
+    # service before authentication. The provider key remains server-side.
+    try:
+        return api_success(await autocomplete_places(payload.query))
+    except RoutingNotConfiguredError as exc:
+        api_error(str(exc), 503)
+    except RoutingError:
+        api_error("Place search is temporarily unavailable.", 502)
+
+
+@router.get("/places/{place_id}")
+async def place_detail(place_id: str):
+    try:
+        return api_success(await resolve_place(place_id))
+    except RoutingNotConfiguredError as exc:
+        api_error(str(exc), 503)
+    except RoutingNoResultError as exc:
+        api_error(str(exc), 404)
+    except RoutingError:
+        api_error("Place details are temporarily unavailable.", 502)
 
 
 @router.post("/geocode")
