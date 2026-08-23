@@ -177,11 +177,26 @@ describe("settings account controls", () => {
     expect(screen.getByText("Delete account?")).toBeOnTheScreen();
     expect(screen.getByText("This permanently deletes your LetsGoRide account, activity, messages, verification records, and saved preferences.")).toBeOnTheScreen();
     expect(screen.getByText("Type DELETE to confirm.")).toBeOnTheScreen();
-    fireEvent.press(screen.getAllByRole("button", { name: "Delete account" }).at(-1)!);
+
+    const disabledConfirmationButton = screen
+      .getAllByRole("button", { name: "Delete account" })
+      .find((button) => button.props.disabled === true);
+    expect(disabledConfirmationButton).toBeDefined();
     expect(deleteAccount).not.toHaveBeenCalled();
 
     fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE");
-    fireEvent.press(screen.getAllByRole("button", { name: "Delete account" }).at(-1)!);
+
+    await waitFor(() => {
+      const confirmationButton = screen
+        .getAllByRole("button", { name: "Delete account" })
+        .find((button) => button.props.disabled === false);
+      expect(confirmationButton).toBeDefined();
+    });
+
+    const enabledConfirmationButton = screen
+      .getAllByRole("button", { name: "Delete account" })
+      .find((button) => button.props.disabled === false);
+    fireEvent.press(enabledConfirmationButton!);
 
     await waitFor(() => {
       expect(deleteAccount).toHaveBeenCalled();
