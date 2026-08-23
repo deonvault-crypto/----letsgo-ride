@@ -15,6 +15,11 @@ from app.utils import api_error, api_success, new_id, now_iso
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
 
+def _require_driver_account(user: Dict[str, Any]) -> None:
+    if user.get("role") not in {"driver", "admin"}:
+        api_error("A Driver account is required for carpool driver tools.", 403)
+
+
 def _public_photo_url(user: Optional[Dict[str, Any]]) -> Optional[str]:
     if not user:
         return None
@@ -65,6 +70,7 @@ async def public_driver_profile(driver):
 
 @router.post("/apply")
 async def apply(payload: DriverApplicationBody, user=Depends(get_current_user)):
+    _require_driver_account(user)
     return api_success(await create_driver_application(payload.model_dump(), user))
 
 
@@ -76,7 +82,16 @@ async def my_driver_profile(user=Depends(get_optional_current_user)):
                 "status": "not_signed_in",
                 "verified": False,
                 "verification_status": "not_started",
-                "message": "Sign in to manage a driver account.",
+                "message": "Sign in with a Driver account to manage carpool work.",
+            }
+        )
+    if user.get("role") not in {"driver", "admin"}:
+        return api_success(
+            {
+                "status": "wrong_account_type",
+                "verified": False,
+                "verification_status": "not_started",
+                "message": "This is not a Driver account.",
             }
         )
     profile = await database.find_one("drivers", {"user_id": user["id"]})
@@ -94,6 +109,7 @@ async def my_driver_profile(user=Depends(get_optional_current_user)):
 
 @router.post("/vehicle")
 async def add_vehicle(payload: VehicleBody, user=Depends(get_current_user)):
+    _require_driver_account(user)
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
         api_error("Create a driver profile before adding a vehicle.")
