@@ -27,7 +27,6 @@ import {
 import { NotificationPreferences } from "../../types/notification.types";
 import { formatStatus } from "../../utils/formatStatus";
 import { openExternalUrl } from "../../utils/openExternalUrl";
-import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 type PreferenceKey =
   | "trip_updates"
@@ -39,48 +38,13 @@ type PreferenceKey =
   | "marketing_messages";
 
 const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: string; defaultValue: boolean }> = [
-  {
-    key: "trip_updates",
-    title: "Service updates",
-    subtitle: "Ride, Food and Courier progress updates.",
-    defaultValue: true,
-  },
-  {
-    key: "booking_requests",
-    title: "Ride requests",
-    subtitle: "Seat request and driver response updates.",
-    defaultValue: true,
-  },
-  {
-    key: "messages",
-    title: "Messages",
-    subtitle: "New LetsGoRide conversation messages.",
-    defaultValue: true,
-  },
-  {
-    key: "verification_updates",
-    title: "Verification updates",
-    subtitle: "Identity or work-account verification updates.",
-    defaultValue: true,
-  },
-  {
-    key: "support_replies",
-    title: "Support replies",
-    subtitle: "Updates from LetsGoRide support.",
-    defaultValue: true,
-  },
-  {
-    key: "safety_alerts",
-    title: "Safety alerts",
-    subtitle: "Important account and service safety notices.",
-    defaultValue: true,
-  },
-  {
-    key: "marketing_messages",
-    title: "Product news",
-    subtitle: "Occasional LetsGoRide product updates.",
-    defaultValue: false,
-  },
+  { key: "trip_updates", title: "Service updates", subtitle: "Ride, Food and Courier progress updates.", defaultValue: true },
+  { key: "booking_requests", title: "Ride requests", subtitle: "Seat request and driver response updates.", defaultValue: true },
+  { key: "messages", title: "Messages", subtitle: "New LetsGoRide conversation messages.", defaultValue: true },
+  { key: "verification_updates", title: "Verification updates", subtitle: "Work-account verification updates.", defaultValue: true },
+  { key: "support_replies", title: "Support replies", subtitle: "Updates from LetsGoRide support.", defaultValue: true },
+  { key: "safety_alerts", title: "Safety alerts", subtitle: "Important account and service safety notices.", defaultValue: true },
+  { key: "marketing_messages", title: "Product news", subtitle: "Occasional LetsGoRide product updates.", defaultValue: false },
 ];
 
 export default function SettingsScreen() {
@@ -92,6 +56,7 @@ export default function SettingsScreen() {
       ? undefined
       : "customer";
   const verificationStatus = user?.verification_status || "not_started";
+
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricText, setBiometricText] = useState("Use biometrics");
@@ -103,7 +68,6 @@ export default function SettingsScreen() {
   const [notificationExplanationOpen, setNotificationExplanationOpen] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
   const [biometricExplanationOpen, setBiometricExplanationOpen] = useState(false);
-  const [verifiedBadgeModalOpen, setVerifiedBadgeModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [deleteSaving, setDeleteSaving] = useState(false);
@@ -127,9 +91,7 @@ export default function SettingsScreen() {
           const state = await phoneNotificationStatus();
           if (!active) return;
           setPhoneNotificationEnabled(state.enabled);
-          setPhoneNotificationMessage(
-            state.message || (state.enabled ? "Phone notifications are enabled." : "Phone notifications are off."),
-          );
+          setPhoneNotificationMessage(state.message || (state.enabled ? "Phone notifications are enabled." : "Phone notifications are off."));
         } catch {
           if (active) {
             setPhoneNotificationEnabled(false);
@@ -149,8 +111,7 @@ export default function SettingsScreen() {
     if (!phoneNotificationEnabled) return;
     try {
       setPreferenceSaving(key);
-      const updated = await updateNotificationPreferences({ [key]: value });
-      setPreferences(updated);
+      setPreferences(await updateNotificationPreferences({ [key]: value }));
     } finally {
       setPreferenceSaving("");
     }
@@ -221,14 +182,6 @@ export default function SettingsScreen() {
     }
   }
 
-  async function toggleBiometrics(nextValue: boolean) {
-    if (nextValue && !biometricEnabled) {
-      setBiometricExplanationOpen(true);
-      return;
-    }
-    await setBiometricLoginEnabled(nextValue);
-  }
-
   async function setBiometricLoginEnabled(nextValue: boolean) {
     try {
       setBiometricSaving(true);
@@ -249,6 +202,14 @@ export default function SettingsScreen() {
     }
   }
 
+  async function toggleBiometrics(nextValue: boolean) {
+    if (nextValue && !biometricEnabled) {
+      setBiometricExplanationOpen(true);
+      return;
+    }
+    await setBiometricLoginEnabled(nextValue);
+  }
+
   async function confirmBiometricExplanation() {
     setBiometricExplanationOpen(false);
     await setBiometricLoginEnabled(true);
@@ -262,34 +223,20 @@ export default function SettingsScreen() {
             <Text style={styles.modalTitle}>Delete account?</Text>
             <Text style={styles.body}>This permanently deletes your LetsGoRide account, activity, messages, verification records, and saved preferences.</Text>
             <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
-            <TextInput
-              value={deleteText}
-              onChangeText={setDeleteText}
-              autoCapitalize="characters"
-              placeholder="DELETE"
-              placeholderTextColor={colors.mutedText}
-              style={styles.confirmInput}
-            />
+            <TextInput value={deleteText} onChangeText={setDeleteText} autoCapitalize="characters" placeholder="DELETE" placeholderTextColor={colors.mutedText} style={styles.confirmInput} />
             <View style={styles.modalActions}>
               <AppButton title="Cancel" variant="secondary" onPress={() => setDeleteModalOpen(false)} />
-              <AppButton
-                title="Delete account"
-                variant="danger"
-                loading={deleteSaving}
-                disabled={deleteText.trim().toUpperCase() !== "DELETE"}
-                onPress={confirmDeleteAccount}
-              />
+              <AppButton title="Delete account" variant="danger" loading={deleteSaving} disabled={deleteText.trim().toUpperCase() !== "DELETE"} onPress={confirmDeleteAccount} />
             </View>
           </View>
         </View>
       </Modal>
+
       <Modal visible={notificationExplanationOpen} transparent animationType="fade" onRequestClose={skipNotificationExplanation}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Enable notifications?</Text>
-            <Text style={styles.body}>
-              LetsGoRide uses notifications for Ride, Food and Courier progress, messages, verification updates, support replies, and safety alerts.
-            </Text>
+            <Text style={styles.body}>LetsGoRide uses notifications for Ride, Food and Courier progress, messages, verification updates, support replies, and safety alerts.</Text>
             <View style={styles.modalActions}>
               <AppButton title="Enable notifications" loading={pushSaving} onPress={confirmNotificationExplanation} />
               <AppButton title="Not now" variant="secondary" onPress={skipNotificationExplanation} />
@@ -297,6 +244,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
       <Modal visible={biometricExplanationOpen} transparent animationType="fade" onRequestClose={() => setBiometricExplanationOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -309,43 +257,16 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-      <Modal visible={verifiedBadgeModalOpen} transparent animationType="fade" onRequestClose={() => setVerifiedBadgeModalOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Verified identity badge</Text>
-            <Text style={styles.body}>A verified badge means LetsGoRide has reviewed the account’s identity information. It helps build trust across the platform.</Text>
-            <View style={styles.modalActions}>
-              <AppButton
-                title={isVerifiedStatus(verificationStatus) ? "View status" : "Start verification"}
-                onPress={() => {
-                  setVerifiedBadgeModalOpen(false);
-                  router.push("/(shared)/verification" as never);
-                }}
-              />
-              <AppButton title="Close" variant="secondary" onPress={() => setVerifiedBadgeModalOpen(false)} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+
       <View style={styles.headerCopy}>
         <Text style={styles.title}>Settings</Text>
         <Text style={styles.body}>Manage this account, privacy, notifications, and device security.</Text>
       </View>
 
       <Section title="Account">
-        <ListTile
-          icon="account-edit-outline"
-          title="Edit profile"
-          subtitle="Name, photo, phone, city, and preferences"
-          onPress={() => router.push("/(shared)/edit-profile" as never)}
-        />
+        <ListTile icon="account-edit-outline" title="Edit profile" subtitle="Name, photo, phone, city, and preferences" onPress={() => router.push("/(shared)/edit-profile" as never)} />
         {user?.role === "driver" ? (
-          <ListTile
-            icon="shield-check-outline"
-            title="Driver verification status"
-            subtitle={formatStatus(verificationStatus)}
-            onPress={() => router.push("/(shared)/verification" as never)}
-          />
+          <ListTile icon="shield-check-outline" title="Driver verification status" subtitle={formatStatus(verificationStatus)} onPress={() => router.push("/(shared)/verification" as never)} />
         ) : null}
       </Section>
 
@@ -353,19 +274,12 @@ export default function SettingsScreen() {
         <View style={styles.notificationStatus}>
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Phone notifications: {phoneNotificationEnabled ? "On" : "Off"}</Text>
-            <Text style={styles.toggleSubtitle}>
-              Phone alerts for service progress, messages, support, and safety updates.
-            </Text>
-            {phoneNotificationMessage ? (
-              <Text style={[styles.noticeText, !phoneNotificationEnabled && styles.offNoticeText]}>
-                {phoneNotificationMessage}
-              </Text>
-            ) : null}
+            <Text style={styles.toggleSubtitle}>Phone alerts for service progress, messages, support, and safety updates.</Text>
+            {phoneNotificationMessage ? <Text style={[styles.noticeText, !phoneNotificationEnabled && styles.offNoticeText]}>{phoneNotificationMessage}</Text> : null}
           </View>
-          {!phoneNotificationEnabled ? (
-            <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} />
-          ) : null}
+          {!phoneNotificationEnabled ? <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} /> : null}
         </View>
+
         {preferenceRows.map((row) => {
           const value = phoneNotificationEnabled ? preferences?.[row.key] ?? row.defaultValue : false;
           const disabled = !phoneNotificationEnabled || preferenceSaving === row.key;
@@ -393,11 +307,7 @@ export default function SettingsScreen() {
         <View style={styles.toggleRow}>
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Biometric login</Text>
-            <Text style={styles.toggleSubtitle}>
-              {biometricSupported
-                ? `${biometricText} to unlock LetsGoRide on this device.`
-                : "Biometrics are not available or not enrolled on this device."}
-            </Text>
+            <Text style={styles.toggleSubtitle}>{biometricSupported ? `${biometricText} to unlock LetsGoRide on this device.` : "Biometrics are not available or not enrolled on this device."}</Text>
           </View>
           <Switch
             accessibilityLabel="Biometric login"
@@ -409,40 +319,18 @@ export default function SettingsScreen() {
             thumbColor={biometricEnabled ? colors.primaryGreen : "#FFFDF8"}
           />
         </View>
-        <ListTile
-          icon="check-decagram-outline"
-          title="Verified identity badge"
-          subtitle="What the verified badge means"
-          onPress={() => setVerifiedBadgeModalOpen(true)}
-        />
         <ListTile icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
         <ListTile icon="file-document-outline" title="Terms of Use" onPress={() => openExternalUrl(legalUrls.terms)} />
         <ListTile icon="shield-outline" title="Safety Policy" onPress={() => openExternalUrl(legalUrls.safety)} />
       </Section>
 
       <Section title="Support & Safety">
-        <ListTile
-          icon="lifebuoy"
-          title="Support"
-          subtitle="Contact LetsGoRide support"
-          onPress={() => router.push("/(shared)/support" as never)}
-        />
-        <ListTile
-          icon="shield-alert-outline"
-          title="Safety Center"
-          subtitle="Report issues and review platform safety"
-          onPress={() => router.push("/(shared)/safety" as never)}
-        />
+        <ListTile icon="lifebuoy" title="Support" subtitle="Contact LetsGoRide support" onPress={() => router.push("/(shared)/support" as never)} />
+        <ListTile icon="shield-alert-outline" title="Safety Center" subtitle="Report issues and review platform safety" onPress={() => router.push("/(shared)/safety" as never)} />
       </Section>
 
       <Section title="Account Control">
-        <ListTile
-          icon="logout"
-          title="Logout"
-          subtitle="Sign out and return to customer browsing"
-          onPress={confirmLogout}
-          danger
-        />
+        <ListTile icon="logout" title="Logout" subtitle="Sign out and return to customer browsing" onPress={confirmLogout} danger />
         <ListTile
           icon="delete-outline"
           title="Delete account"
@@ -471,116 +359,25 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 }
 
 const styles = StyleSheet.create({
-  headerCopy: {
-    gap: spacing.sm,
-  },
-  title: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 30,
-  },
-  body: {
-    color: colors.mutedText,
-    lineHeight: 21,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  sectionHeader: {
-    gap: 3,
-    paddingHorizontal: 2,
-  },
-  sectionTitle: {
-    color: colors.whiteText,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  sectionSubtitle: {
-    color: colors.mutedText,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  toggleRow: {
-    minHeight: 76,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.elevated,
-  },
-  disabledToggleRow: {
-    opacity: 0.58,
-  },
-  notificationStatus: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.elevated,
-  },
-  noticeText: {
-    color: colors.primaryGreen,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  offNoticeText: {
-    color: colors.mutedText,
-  },
-  toggleCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  toggleTitle: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 15,
-  },
-  toggleSubtitle: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: "center",
-    padding: spacing.xl,
-    backgroundColor: "rgba(17,20,23,0.26)",
-  },
-  modalCard: {
-    gap: spacing.md,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.xl,
-  },
-  modalTitle: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 24,
-  },
-  modalHelper: {
-    color: colors.whiteText,
-    fontWeight: "800",
-  },
-  confirmInput: {
-    minHeight: 54,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 18,
-    backgroundColor: colors.elevated,
-    paddingHorizontal: spacing.lg,
-    color: colors.whiteText,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  modalActions: {
-    gap: spacing.sm,
-  },
+  headerCopy: { gap: spacing.sm },
+  title: { color: colors.whiteText, fontWeight: "900", fontSize: 30 },
+  body: { color: colors.mutedText, lineHeight: 21 },
+  section: { gap: spacing.sm },
+  sectionHeader: { gap: 3, paddingHorizontal: 2 },
+  sectionTitle: { color: colors.whiteText, fontSize: 18, fontWeight: "900" },
+  sectionSubtitle: { color: colors.mutedText, fontSize: 13, lineHeight: 18 },
+  toggleRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated },
+  disabledToggleRow: { opacity: 0.58 },
+  notificationStatus: { gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated },
+  noticeText: { color: colors.primaryGreen, fontSize: 12, fontWeight: "800" },
+  offNoticeText: { color: colors.mutedText },
+  toggleCopy: { flex: 1, gap: 3 },
+  toggleTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 15 },
+  toggleSubtitle: { color: colors.mutedText, fontSize: 12, lineHeight: 17 },
+  modalBackdrop: { flex: 1, justifyContent: "center", padding: spacing.xl, backgroundColor: "rgba(17,20,23,0.26)" },
+  modalCard: { gap: spacing.md, borderRadius: 28, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.xl },
+  modalTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 24 },
+  modalHelper: { color: colors.whiteText, fontWeight: "800" },
+  confirmInput: { minHeight: 54, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: colors.elevated, paddingHorizontal: spacing.lg, color: colors.whiteText, fontSize: 16, fontWeight: "900" },
+  modalActions: { gap: spacing.sm },
 });
