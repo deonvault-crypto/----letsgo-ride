@@ -45,8 +45,6 @@ export type RestaurantMenu = {
 };
 
 export type FoodOrderStatus =
-  | "PLACED"
-  | "ACCEPTED"
   | "PREPARING"
   | "READY_FOR_PICKUP"
   | "COURIER_ASSIGNED"
@@ -67,12 +65,12 @@ export type FoodOrderItemPayload = {
 export type FoodOrderCreatePayload = {
   restaurant_id: string;
   delivery_address: string;
-  delivery_location?: { latitude?: number | null; longitude?: number | null } | null;
+  delivery_location: { latitude: number; longitude: number };
   recipient_name: string;
   recipient_phone: string;
   items: FoodOrderItemPayload[];
   customer_note?: string | null;
-  payment_method?: FoodPaymentMethod;
+  payment_method: FoodPaymentMethod;
 };
 
 export type FoodOrder = {
