@@ -11,16 +11,16 @@ export default function SafetyScreen() {
   const router = useRouter();
 
   return (
-    <Screen title="Safety" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
+    <Screen title="Safety" showBack fallbackRoute="/(shared)/account" navRole="customer">
       <View style={styles.hero}>
         <Text style={styles.title}>Safety Center</Text>
-        <Text style={styles.body}>Safety starts with accountable profiles, recorded trip details, and a simple reporting path.</Text>
+        <Text style={styles.body}>Safety across Ride, Food and Courier starts with accountable profiles, recorded activity, secure handoffs, and a clear reporting path.</Text>
       </View>
-      <SafetyCard title="Driver verification" body="Drivers submit identity and vehicle details for manual review before posting public rides." icon="account-check-outline" />
-      <SafetyCard title="Trip records" body="Ride requests and status updates stay visible in My Trips." icon="clipboard-text-clock-outline" />
-      <SafetyCard title="Unsafe driving reports" body="Report unsafe driving, scams, payment issues, or passenger problems." icon="alert-outline" />
-      <SafetyCard title="Support review" body="Reports are sent to LetsGoRide support for review and follow-up." icon="shield-search" />
-      <SafetyCard title="Privacy by design" body="Verification documents are reviewed by LetsGoRide admins only and are not visible to passengers or drivers." icon="lock-check-outline" />
+      <SafetyCard title="Verified work accounts" body="Drivers, couriers and merchants use separate work identities with their own approval and operating requirements." icon="account-check-outline" />
+      <SafetyCard title="Recorded activity" body="Ride requests, food orders and courier delivery updates remain visible in your activity history." icon="clipboard-text-clock-outline" />
+      <SafetyCard title="Secure delivery handoff" body="Courier and food deliveries can require the recipient’s 4-digit handoff code at the saved destination." icon="shield-key-outline" />
+      <SafetyCard title="Report problems" body="Report unsafe driving, scams, payment issues, delivery problems, or account concerns to LetsGoRide support." icon="alert-outline" />
+      <SafetyCard title="Privacy by design" body="Verification information is reviewed by authorized LetsGoRide operations staff and is not shown publicly." icon="lock-check-outline" />
       <SafetyCard title="Emergency guidance" body="For emergencies, contact the appropriate local emergency service first. LetsGoRide does not claim police or government integration." icon="phone-alert-outline" />
       <AppButton title="Report an issue" onPress={() => router.push("/(shared)/report" as never)} />
     </Screen>
