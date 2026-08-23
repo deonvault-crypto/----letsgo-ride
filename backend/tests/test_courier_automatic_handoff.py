@@ -103,8 +103,9 @@ class CourierAutomaticHandoffTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(handoff["pin"]), 4)
         self.assertTrue(handoff["pin"].isdigit())
 
+        wrong_pin = "9999" if handoff["pin"] != "9999" else "0000"
         with self.assertRaises(ValueError):
-            await complete_delivery_with_pin(self.delivery["id"], "99999"[-4:], self.courier) if handoff["pin"] != "9999" else complete_delivery_with_pin(self.delivery["id"], "0000", self.courier)
+            await complete_delivery_with_pin(self.delivery["id"], wrong_pin, self.courier)
 
         completed = await complete_delivery_with_pin(
             self.delivery["id"],
