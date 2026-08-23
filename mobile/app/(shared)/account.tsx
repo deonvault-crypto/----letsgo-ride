@@ -12,7 +12,6 @@ import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { getMyVerification } from "../../services/verificationService";
 import { VerificationProfile } from "../../types/verification.types";
 import { displayNameOrFallback } from "../../utils/displayName";
-import { formatStatus } from "../../utils/formatStatus";
 import {
   isPendingVerificationStatus,
   isVerifiedStatus,
@@ -21,28 +20,72 @@ import {
 
 export default function AccountScreen() {
   const router = useRouter();
-  const { user } = useCurrentUser();
+  const { user, loading, isGuest } = useCurrentUser();
   const [verification, setVerification] = useState<VerificationProfile | null>(null);
-  const role = user?.role === "driver" ? "driver" : "passenger";
+  const navRole = user?.role === "driver" || user?.role === "courier" ? "driver" : "passenger";
   const verified = isIdentityVerified(user);
   const name = displayNameOrFallback(user?.name);
 
   const loadVerification = useCallback(async () => {
+    if (!user) {
+      setVerification(null);
+      return;
+    }
     try {
       setVerification(await getMyVerification());
     } catch {
       setVerification(null);
     }
-  }, []);
+  }, [user]);
 
   useLiveRefresh(loadVerification, 30000);
+
+  if (!loading && isGuest) {
+    return (
+      <Screen navRole="passenger">
+        <View style={styles.guestHero}>
+          <View style={styles.guestIcon}>
+            <MaterialCommunityIcons name="account-circle-outline" size={36} color={v2Theme.colors.brandStrong} />
+          </View>
+          <Text style={styles.guestEyebrow}>YOUR LETSGORIDE ACCOUNT</Text>
+          <Text style={styles.guestTitle}>Browse freely. Sign in when you need to.</Text>
+          <Text style={styles.guestBody}>
+            You can explore rides, food and courier without an account. Sign in when you want to book, send, message, pay or save something.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/(auth)/email-login" as never)}
+            style={({ pressed }) => [styles.guestPrimary, pressed && styles.pressed]}
+          >
+            <Text style={styles.guestPrimaryText}>Sign in</Text>
+            <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/(auth)/email-register" as never)}
+            style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}
+          >
+            <Text style={styles.guestSecondaryText}>Create customer account</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.guestNote}>
+          <MaterialCommunityIcons name="information-outline" size={21} color={v2Theme.colors.inkSecondary} />
+          <Text style={styles.guestNoteText}>
+            Driver, Courier and Merchant accounts are separate products. A customer account never switches into those workspaces.
+          </Text>
+        </View>
+      </Screen>
+    );
+  }
 
   const driverVerificationStatus =
     verification?.verification_status || user?.verification_status || "not_started";
   const driverVerification = driverVerificationCopy(driverVerificationStatus);
+  const accountLabel = accountTypeLabel(user?.role);
 
   return (
-    <Screen navRole={role}>
+    <Screen navRole={navRole}>
       <View style={styles.profileHeader}>
         <Avatar name={name} imageUri={user?.profile_photo_url} size={68} />
         <View style={styles.profileCopy}>
@@ -52,7 +95,7 @@ export default function AccountScreen() {
           </View>
           <Text style={styles.meta}>{user?.city || "Zimbabwe"}</Text>
           <View style={styles.modePill}>
-            <Text style={styles.modeText}>Current mode · {formatStatus(role)}</Text>
+            <Text style={styles.modeText}>{accountLabel.toUpperCase()} ACCOUNT</Text>
           </View>
         </View>
       </View>
@@ -73,13 +116,15 @@ export default function AccountScreen() {
           tone={verified ? "success" : "neutral"}
           onPress={() => router.push("/(shared)/verification" as never)}
         />
-        <AccountRow
-          icon="steering"
-          title="Driver verification"
-          subtitle={driverVerification.subtitle}
-          tone={driverVerification.tone}
-          onPress={() => router.push("/(shared)/verification" as never)}
-        />
+        {user?.role === "driver" ? (
+          <AccountRow
+            icon="steering"
+            title="Driver verification"
+            subtitle={driverVerification.subtitle}
+            tone={driverVerification.tone}
+            onPress={() => router.push("/(shared)/verification" as never)}
+          />
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -89,33 +134,27 @@ export default function AccountScreen() {
         <AccountRow icon="lifebuoy" title="Support" subtitle="Get help from LetsGoRide" onPress={() => router.push("/(shared)/support" as never)} />
       </View>
 
-      <View style={styles.modeCard}>
-        <View style={styles.modeCardIcon}>
-          <MaterialCommunityIcons
-            name={role === "driver" ? "account-outline" : "steering"}
-            size={28}
-            color={v2Theme.colors.brandStrong}
-          />
+      <View style={styles.separationCard}>
+        <View style={styles.separationIcon}>
+          <MaterialCommunityIcons name="layers-triple-outline" size={25} color={v2Theme.colors.brandStrong} />
         </View>
-        <View style={styles.modeCardCopy}>
-          <Text style={styles.modeCardTitle}>{role === "driver" ? "Passenger mode" : "Driver mode"}</Text>
-          <Text style={styles.modeCardBody}>
-            {role === "driver"
-              ? "Switch back to booking and managing your own rides."
-              : "Post routes and manage passenger requests from the driver workspace."}
+        <View style={styles.separationCopy}>
+          <Text style={styles.separationTitle}>{accountLabel} stays {accountLabel.toLowerCase()}.</Text>
+          <Text style={styles.separationBody}>
+            LetsGoRide keeps Customer, Driver, Courier and Merchant identities separate so each workspace stays focused and safe.
           </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={role === "driver" ? "Switch to Passenger mode" : "Switch to Driver mode"}
-          onPress={() => router.replace(role === "driver" ? "/(passenger)/home" as never : "/(driver)/home" as never)}
-          style={({ pressed }) => [styles.switchButton, pressed && styles.pressed]}
-        >
-          <Text style={styles.switchText}>Switch</Text>
-        </Pressable>
       </View>
     </Screen>
   );
+}
+
+function accountTypeLabel(role?: string) {
+  if (role === "driver") return "Driver";
+  if (role === "courier") return "Courier";
+  if (role === "merchant") return "Merchant";
+  if (role === "admin") return "Admin";
+  return "Customer";
 }
 
 function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; onPress: () => void }) {
@@ -195,6 +234,74 @@ function driverVerificationCopy(status: string): {
 }
 
 const styles = StyleSheet.create({
+  guestHero: {
+    borderRadius: v2Theme.radius.xxl,
+    backgroundColor: v2Theme.colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: v2Theme.colors.lineStrong,
+    padding: 20,
+    gap: 12,
+    shadowColor: v2Theme.colors.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 4,
+  },
+  guestIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 22,
+    backgroundColor: v2Theme.colors.brandSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guestEyebrow: {
+    color: v2Theme.colors.brandStrong,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+  guestTitle: {
+    color: v2Theme.colors.ink,
+    fontSize: 28,
+    lineHeight: 33,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+  },
+  guestBody: {
+    color: v2Theme.colors.inkSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  guestPrimary: {
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: v2Theme.colors.brand,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    marginTop: 4,
+  },
+  guestPrimaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+  guestSecondary: {
+    minHeight: 50,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: v2Theme.colors.lineStrong,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  guestSecondaryText: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
+  guestNote: {
+    borderRadius: v2Theme.radius.xl,
+    backgroundColor: v2Theme.colors.surfaceMuted,
+    padding: 15,
+    flexDirection: "row",
+    gap: 11,
+    alignItems: "flex-start",
+  },
+  guestNoteText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -291,7 +398,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  modeCard: {
+  separationCard: {
     borderRadius: v2Theme.radius.xxl,
     backgroundColor: v2Theme.colors.brandSofter,
     padding: 16,
@@ -299,7 +406,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  modeCardIcon: {
+  separationIcon: {
     width: 50,
     height: 50,
     borderRadius: 17,
@@ -307,25 +414,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  modeCardCopy: { flex: 1, gap: 4 },
-  modeCardTitle: {
+  separationCopy: { flex: 1, gap: 4 },
+  separationTitle: {
     color: v2Theme.colors.ink,
     fontSize: 15,
     fontWeight: "900",
   },
-  modeCardBody: {
+  separationBody: {
     color: v2Theme.colors.inkSecondary,
     fontSize: 11,
     lineHeight: 16,
   },
-  switchButton: {
-    minHeight: 42,
-    borderRadius: 15,
-    backgroundColor: v2Theme.colors.brand,
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  switchText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   pressed: { opacity: 0.7 },
 });
