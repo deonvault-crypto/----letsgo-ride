@@ -68,8 +68,10 @@ export default function ConversationScreen() {
     }
   }
 
+  const navRole = user?.role === "driver" ? "driver" : "customer";
+
   return (
-    <Screen title="Messages" showBack fallbackRoute="/(shared)/messages" navRole={user?.role === "driver" ? "driver" : "passenger"}>
+    <Screen title="Messages" showBack fallbackRoute="/(shared)/messages" navRole={navRole}>
       {loading ? <LoadingState label="Loading messages..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && conversation ? (
@@ -130,103 +132,23 @@ function formatTime(value: string) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: spacing.md,
-  },
-  headerCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: colors.card,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-  },
-  copy: {
-    flex: 1,
-  },
-  title: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 20,
-  },
-  body: {
-    color: colors.mutedText,
-  },
-  messages: {
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  empty: {
-    color: colors.mutedText,
-    textAlign: "center",
-    padding: spacing.lg,
-  },
-  bubble: {
-    maxWidth: "84%",
-    borderRadius: 20,
-    padding: spacing.md,
-    gap: 4,
-  },
-  mine: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.primaryGreen,
-  },
-  theirs: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  messageText: {
-    color: colors.whiteText,
-    lineHeight: 21,
-  },
-  mineText: {
-    color: colors.card,
-    fontWeight: "700",
-  },
-  time: {
-    color: colors.mutedText,
-    fontSize: 11,
-  },
-  mineTime: {
-    color: "rgba(255,255,255,0.8)",
-  },
-  composer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  messageInput: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 112,
-    color: colors.whiteText,
-    fontSize: 15,
-    lineHeight: 21,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primaryGreen,
-  },
-  sendDisabled: {
-    backgroundColor: "#B7AEA1",
-  },
-  pressed: {
-    transform: [{ scale: 0.96 }],
-  },
+  wrap: { gap: spacing.md },
+  headerCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, backgroundColor: colors.card, borderRadius: 24, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+  copy: { flex: 1 },
+  title: { color: colors.whiteText, fontWeight: "900", fontSize: 20 },
+  body: { color: colors.mutedText },
+  messages: { gap: spacing.sm, paddingVertical: spacing.sm },
+  empty: { color: colors.mutedText, textAlign: "center", padding: spacing.lg },
+  bubble: { maxWidth: "84%", borderRadius: 20, padding: spacing.md, gap: 4 },
+  mine: { alignSelf: "flex-end", backgroundColor: colors.primaryGreen },
+  theirs: { alignSelf: "flex-start", backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  messageText: { color: colors.whiteText, lineHeight: 21 },
+  mineText: { color: colors.card, fontWeight: "700" },
+  time: { color: colors.mutedText, fontSize: 11 },
+  mineTime: { color: "rgba(255,255,255,0.8)" },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.sm, marginTop: spacing.sm },
+  messageInput: { flex: 1, minHeight: 44, maxHeight: 112, color: colors.whiteText, fontSize: 15, lineHeight: 21, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  sendButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.primaryGreen },
+  sendDisabled: { backgroundColor: "#B7AEA1" },
+  pressed: { transform: [{ scale: 0.96 }] },
 });
