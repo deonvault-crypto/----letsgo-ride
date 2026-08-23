@@ -56,6 +56,8 @@ export type FoodOrderStatus =
   | "CANCELLED"
   | "REJECTED";
 
+export type FoodPaymentMethod = "CASH_ON_DELIVERY";
+
 export type FoodOrderItemPayload = {
   menu_item_id: string;
   quantity: number;
@@ -70,6 +72,7 @@ export type FoodOrderCreatePayload = {
   recipient_phone: string;
   items: FoodOrderItemPayload[];
   customer_note?: string | null;
+  payment_method?: FoodPaymentMethod;
 };
 
 export type FoodOrder = {
@@ -81,6 +84,7 @@ export type FoodOrder = {
   status: FoodOrderStatus;
   restaurant_status?: string;
   fulfillment_status?: string;
+  payment_method?: FoodPaymentMethod | string;
   payment_status?: string;
   delivery_address: string;
   delivery_location?: { latitude?: number | null; longitude?: number | null } | null;
