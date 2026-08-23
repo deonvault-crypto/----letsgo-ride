@@ -19,7 +19,7 @@ import { Header } from "../layout/Header";
 type ScreenProps = {
   children: ReactNode;
   title?: string;
-  navRole?: "customer" | "driver" | "passenger";
+  navRole?: "customer" | "driver";
   showHeader?: boolean;
   showBack?: boolean;
   fallbackRoute?: Href;
