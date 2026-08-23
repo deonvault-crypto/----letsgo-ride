@@ -82,8 +82,16 @@ export type CourierDelivery = CourierCreatePayload & {
   picked_up_at?: string | null;
   delivered_at?: string | null;
   cancelled_at?: string | null;
+  delivery_verification_method?: "RECIPIENT_PIN" | string | null;
+  handoff_distance_meters?: number | null;
   created_at?: string;
   updated_at?: string;
+};
+
+export type CourierDeliveryPin = {
+  delivery_id: string;
+  pin: string;
+  verified: boolean;
 };
 
 export type CourierEvent = {
@@ -106,4 +114,5 @@ export type CourierTrackingState = {
   last_courier_location?: CourierLocation | null;
   estimated_duration_minutes?: number | null;
   distance_km?: number | null;
+  handoff_radius_meters?: number | null;
 };
