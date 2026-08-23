@@ -20,13 +20,13 @@ class PlatformV2FulfillmentTests(unittest.IsolatedAsyncioTestCase):
         }
         self.courier = {
             "id": "courier-1",
-            "role": "driver",
+            "role": "courier",
             "name": "Tafadzwa Courier",
             "phone": "+263770000002",
         }
         self.other_courier = {
             "id": "courier-2",
-            "role": "driver",
+            "role": "courier",
             "name": "Nyasha Courier",
             "phone": "+263770000003",
         }
