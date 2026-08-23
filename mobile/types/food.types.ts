@@ -50,10 +50,8 @@ export type FoodOrderStatus =
   | "PREPARING"
   | "READY_FOR_PICKUP"
   | "COURIER_ASSIGNED"
-  | "COURIER_TO_PICKUP"
   | "PICKED_UP"
   | "OUT_FOR_DELIVERY"
-  | "ARRIVING"
   | "DELIVERED"
   | "CANCELLED"
   | "REJECTED";
