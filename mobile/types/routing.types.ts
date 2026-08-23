@@ -9,6 +9,23 @@ export type RoutingStatus = {
   region_code: string;
 };
 
+export type PlaceSuggestion = {
+  provider: string;
+  place_id?: string | null;
+  primary_text: string;
+  secondary_text?: string;
+  description: string;
+  location?: RoutingPoint | null;
+};
+
+export type PlaceDetail = {
+  provider: string;
+  place_id?: string | null;
+  formatted_address: string;
+  display_name?: string;
+  location: RoutingPoint;
+};
+
 export type GeocodeResult = {
   provider: string;
   formatted_address: string;
