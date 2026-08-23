@@ -48,11 +48,9 @@ def _pricing_unavailable_error() -> None:
 
 
 @router.post("/quote-preview")
-async def preview_courier_quote(
-    payload: CourierQuotePreviewBody,
-    user=Depends(get_current_user),
-):
-    _ = user
+async def preview_courier_quote(payload: CourierQuotePreviewBody):
+    # Guests may explore real route pricing. Creating a delivery still requires
+    # authentication, so preview access cannot create work or mutate customer data.
     try:
         return api_success(
             await customer_quote_preview(
