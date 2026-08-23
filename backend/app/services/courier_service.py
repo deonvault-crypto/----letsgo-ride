@@ -353,6 +353,12 @@ async def update_delivery_status(
                 "Courier progress is automatic after acceptance. Only pickup confirmation, delay reporting and recipient PIN handoff require courier input."
             )
 
+        if delivery.get("source_type") == "FOOD_ORDER":
+            food_order_id = str(delivery.get("food_order_id") or delivery.get("source_id") or "")
+            food_order = await database.find_one("food_orders", {"id": food_order_id}) if food_order_id else None
+            if not food_order or food_order.get("restaurant_status") != "READY_FOR_PICKUP":
+                raise ValueError("The restaurant has not marked this order ready yet. Wait for the ready-for-pickup update before collecting it.")
+
         now = now_iso()
         picked_up = await database.update_one_if(
             "courier_deliveries",
