@@ -180,7 +180,7 @@ describe("settings account controls", () => {
 
     const disabledConfirmationButton = screen
       .getAllByRole("button", { name: "Delete account" })
-      .find((button) => button.props.disabled === true);
+      .find((button) => button.props.accessibilityState?.disabled === true);
     expect(disabledConfirmationButton).toBeDefined();
     expect(deleteAccount).not.toHaveBeenCalled();
 
@@ -189,13 +189,13 @@ describe("settings account controls", () => {
     await waitFor(() => {
       const confirmationButton = screen
         .getAllByRole("button", { name: "Delete account" })
-        .find((button) => button.props.disabled === false);
+        .find((button) => button.props.accessibilityState?.disabled === false);
       expect(confirmationButton).toBeDefined();
     });
 
     const enabledConfirmationButton = screen
       .getAllByRole("button", { name: "Delete account" })
-      .find((button) => button.props.disabled === false);
+      .find((button) => button.props.accessibilityState?.disabled === false);
     fireEvent.press(enabledConfirmationButton!);
 
     await waitFor(() => {
