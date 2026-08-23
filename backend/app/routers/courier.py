@@ -5,6 +5,8 @@ from app.models.courier import (
     CourierAssignBody,
     CourierCancelBody,
     CourierCreateBody,
+    CourierDelayBody,
+    CourierHandoffBody,
     CourierLocationBody,
     CourierQuoteBody,
     CourierQuotePreviewBody,
@@ -13,10 +15,13 @@ from app.models.courier import (
 from app.services.courier_service import (
     assign_delivery,
     cancel_delivery,
+    complete_delivery_with_pin,
     create_delivery,
     get_delivery,
+    get_delivery_pin,
     list_delivery_events,
     list_user_deliveries,
+    report_delivery_delay,
     set_delivery_quote,
     tracking_state,
     update_courier_location,
@@ -49,8 +54,6 @@ def _pricing_unavailable_error() -> None:
 
 @router.post("/quote-preview")
 async def preview_courier_quote(payload: CourierQuotePreviewBody):
-    # Guests may explore real route pricing. Creating a delivery still requires
-    # authentication, so preview access cannot create work or mutate customer data.
     try:
         return api_success(
             await customer_quote_preview(
@@ -72,8 +75,6 @@ async def preview_courier_quote(payload: CourierQuotePreviewBody):
 
 @router.post("/deliveries")
 async def create_courier_delivery(payload: CourierCreateBody, user=Depends(get_current_user)):
-    # Fail closed before writing a customer job. A direct courier request must have
-    # a real server-side route and price before it can enter the matching pool.
     try:
         calculated = await calculate_delivery_quote(
             payload.pickup_address,
@@ -118,6 +119,16 @@ async def courier_delivery_detail(delivery_id: str, user=Depends(get_current_use
 async def courier_delivery_events(delivery_id: str, user=Depends(get_current_user)):
     try:
         return api_success(await list_delivery_events(delivery_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 404)
+
+
+@router.get("/deliveries/{delivery_id}/handoff-pin")
+async def courier_delivery_handoff_pin(delivery_id: str, user=Depends(get_current_user)):
+    try:
+        return api_success(await get_delivery_pin(delivery_id, user))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
@@ -174,6 +185,34 @@ async def set_courier_delivery_status(
 ):
     try:
         return api_success(await update_delivery_status(delivery_id, payload.status, user, payload.note))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/deliveries/{delivery_id}/delay")
+async def report_courier_delivery_delay(
+    delivery_id: str,
+    payload: CourierDelayBody,
+    user=Depends(get_current_user),
+):
+    try:
+        return api_success(await report_delivery_delay(delivery_id, user, payload.note))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/deliveries/{delivery_id}/handoff")
+async def complete_courier_delivery_handoff(
+    delivery_id: str,
+    payload: CourierHandoffBody,
+    user=Depends(get_current_user),
+):
+    try:
+        return api_success(await complete_delivery_with_pin(delivery_id, payload.pin, user))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
