@@ -15,6 +15,9 @@ class Settings:
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
         self.mock_otp = os.getenv("MOCK_OTP", "123456")
+        self.allow_staging_email_mock = self._parse_bool(
+            os.getenv("ALLOW_STAGING_EMAIL_MOCK", "false")
+        )
         self.enable_demo_seed = self._parse_bool(os.getenv("ENABLE_DEMO_SEED", "false"))
         self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
@@ -167,6 +170,10 @@ class Settings:
     @property
     def resend_configured(self) -> bool:
         return bool(self.resend_api_key and self.resend_from_email)
+
+    @property
+    def staging_email_mock_allowed(self) -> bool:
+        return self.app_env != "production" and self.allow_staging_email_mock
 
 
 @lru_cache
