@@ -33,17 +33,17 @@ export default function MessagesScreen() {
   useLiveRefresh(load, 10000);
 
   return (
-    <Screen title="Messages" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
-      <Text style={styles.title}>Trip messages</Text>
+    <Screen title="Messages" showBack fallbackRoute="/(shared)/account" navRole="customer">
+      <Text style={styles.title}>Ride messages</Text>
       {loading ? <LoadingState label="Loading conversations..." /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
       {!loading && !error && conversations.length === 0 ? (
         <EmptyState
           title="No messages yet"
-          body="Trip conversations appear after a seat request is created."
+          body="Ride conversations appear after a seat request is created."
           icon="message-text-outline"
           actionLabel="Search rides"
-          onAction={() => router.replace("/(passenger)/search" as never)}
+          onAction={() => router.replace("/(customer)/search" as never)}
         />
       ) : null}
       {!loading && !error && conversations.map((conversation) => (
@@ -56,7 +56,7 @@ export default function MessagesScreen() {
           <Avatar name={conversation.other_user_name || "LetsGoRide user"} imageUri={conversation.other_user_profile_photo_url} size={46} />
           <View style={styles.copy}>
             <View style={styles.cardHeader}>
-              <Text numberOfLines={1} style={styles.name}>{conversation.other_user_name || "Trip conversation"}</Text>
+              <Text numberOfLines={1} style={styles.name}>{conversation.other_user_name || "Ride conversation"}</Text>
               {conversation.last_message_at ? <Text style={styles.time}>{formatTime(conversation.last_message_at)}</Text> : null}
             </View>
             <Text numberOfLines={1} style={styles.route}>{conversation.ride?.origin || "Ride"} to {conversation.ride?.destination || "destination"}</Text>
