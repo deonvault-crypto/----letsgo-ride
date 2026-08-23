@@ -12,6 +12,10 @@ class GeocodeRequestBody(BaseModel):
     address: str = Field(min_length=3, max_length=240)
 
 
+class PlaceAutocompleteBody(BaseModel):
+    query: str = Field(min_length=2, max_length=160)
+
+
 class RouteRequestBody(BaseModel):
     origin: RoutingPoint
     destination: RoutingPoint
