@@ -5,7 +5,7 @@ import re
 from pydantic import BaseModel, Field, field_validator
 
 
-UserRole = Literal["passenger", "driver", "admin"]
+UserRole = Literal["passenger", "driver", "courier", "merchant", "admin"]
 PHONE_PATTERN = re.compile(r"^\+[1-9]\d{7,14}$")
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PASSWORD_SYMBOL_PATTERN = re.compile(r"[^A-Za-z0-9]")
@@ -144,6 +144,7 @@ class UserUpdate(BaseModel):
     notification_support_replies: Optional[bool] = None
     notification_safety_alerts: Optional[bool] = None
     notification_marketing: Optional[bool] = None
+    # Account type is created during onboarding and intentionally cannot be changed via /auth/me.
     role: Optional[UserRole] = None
 
     @field_validator("phone")
