@@ -56,6 +56,8 @@ class PlatformV2FulfillmentTests(unittest.IsolatedAsyncioTestCase):
                 "customer_user_id": self.customer["id"],
                 "customer_name": self.customer["name"],
                 "status": "READY_FOR_PICKUP",
+                "restaurant_status": "READY_FOR_PICKUP",
+                "fulfillment_status": "NOT_STARTED",
                 "delivery_address": "20 Borrowdale Road, Harare",
                 "delivery_location": {"latitude": -17.78, "longitude": 31.08},
                 "recipient_name": self.customer["name"],
@@ -115,16 +117,22 @@ class PlatformV2FulfillmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(food_order["delivery_fee_usd"], 4.0)
         self.assertEqual(food_order["total_usd"], 16.0)
         self.assertEqual(food_order["pricing_status"], "READY")
+        self.assertEqual(food_order["fulfillment_status"], "MATCHING")
+        # Restaurant readiness stays independent from courier matching.
+        self.assertEqual(food_order["restaurant_status"], "READY_FOR_PICKUP")
+        self.assertEqual(food_order["status"], "READY_FOR_PICKUP")
 
         offers = await list_courier_offers(self.courier)
         self.assertEqual([item["id"] for item in offers], [delivery["id"]])
 
         claimed = await claim_courier_offer(delivery["id"], self.courier)
-        self.assertEqual(claimed["status"], "ASSIGNED")
+        self.assertEqual(claimed["status"], "COURIER_TO_PICKUP")
         self.assertEqual(claimed["courier_user_id"], self.courier["id"])
 
         food_order = await database.find_one("food_orders", {"id": "order-1"})
-        self.assertEqual(food_order["status"], "COURIER_ASSIGNED")
+        self.assertEqual(food_order["fulfillment_status"], "COURIER_TO_PICKUP")
+        self.assertEqual(food_order["restaurant_status"], "READY_FOR_PICKUP")
+        self.assertEqual(food_order["status"], "READY_FOR_PICKUP")
 
         with self.assertRaises(ValueError):
             await claim_courier_offer(delivery["id"], self.other_courier)
@@ -140,12 +148,12 @@ class PlatformV2FulfillmentTests(unittest.IsolatedAsyncioTestCase):
         first = await database.update_one_if(
             "courier_deliveries",
             {"id": "job-1", "status": "MATCHING", "courier_user_id": None},
-            {"status": "ASSIGNED", "courier_user_id": "courier-1"},
+            {"status": "COURIER_TO_PICKUP", "courier_user_id": "courier-1"},
         )
         second = await database.update_one_if(
             "courier_deliveries",
             {"id": "job-1", "status": "MATCHING", "courier_user_id": None},
-            {"status": "ASSIGNED", "courier_user_id": "courier-2"},
+            {"status": "COURIER_TO_PICKUP", "courier_user_id": "courier-2"},
         )
         self.assertEqual(first["courier_user_id"], "courier-1")
         self.assertIsNone(second)
