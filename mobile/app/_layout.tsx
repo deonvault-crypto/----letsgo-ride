@@ -15,6 +15,16 @@ export default function RootLayout() {
     configureNotificationHandler();
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data || {};
+      const target = typeof data.notification_target === "string" ? data.notification_target : "";
+
+      if (target === "merchant_order" && typeof data.restaurant_id === "string") {
+        router.push(`/(merchant)/restaurant/${data.restaurant_id}` as never);
+        return;
+      }
+      if (target === "courier_delivery" && typeof data.delivery_id === "string") {
+        router.push(`/(courier)/delivery/${data.delivery_id}` as never);
+        return;
+      }
       if (typeof data.conversation_id === "string") {
         router.push(`/(shared)/conversation/${data.conversation_id}` as never);
         return;
