@@ -1,5 +1,7 @@
 import { requestData } from "./api";
 import {
+  FoodCheckoutQuote,
+  FoodCheckoutQuotePayload,
   FoodOrder,
   FoodOrderCreatePayload,
   FoodOrderEvent,
@@ -17,6 +19,10 @@ export function getRestaurant(restaurantId: string) {
 
 export function getRestaurantMenu(restaurantId: string) {
   return requestData<RestaurantMenu>({ method: "GET", url: `/food/restaurants/${restaurantId}/menu` });
+}
+
+export function previewFoodCheckout(payload: FoodCheckoutQuotePayload) {
+  return requestData<FoodCheckoutQuote>({ method: "POST", url: "/food/checkout/quote", data: payload });
 }
 
 export function createFoodOrder(payload: FoodOrderCreatePayload) {
