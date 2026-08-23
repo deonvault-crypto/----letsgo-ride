@@ -8,6 +8,12 @@ import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { LocationChoice, useLocationDraft } from "../../contexts/LocationDraftContext";
 import { getCurrentDeviceLocation } from "../../services/locationService";
+import {
+  getLocationMemory,
+  LocationMemory,
+  rememberLocation,
+  saveNamedLocation,
+} from "../../services/locationMemoryService";
 import { autocompletePlaces, getPlaceDetail } from "../../services/routingService";
 import { PlaceSuggestion } from "../../types/routing.types";
 
@@ -17,6 +23,8 @@ const HARARE_REGION: Region = {
   latitudeDelta: 0.16,
   longitudeDelta: 0.16,
 };
+
+const emptyMemory: LocationMemory = { home: null, work: null, recent: [] };
 
 export default function LocationPickerScreen() {
   const router = useRouter();
@@ -28,10 +36,16 @@ export default function LocationPickerScreen() {
   const [query, setQuery] = useState(existing?.address || "");
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [selected, setSelected] = useState<LocationChoice | null>(existing || null);
+  const [memory, setMemory] = useState<LocationMemory>(emptyMemory);
   const [searching, setSearching] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [saving, setSaving] = useState<"home" | "work" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getLocationMemory().then(setMemory).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const clean = query.trim();
@@ -67,6 +81,14 @@ export default function LocationPickerScreen() {
     );
   }
 
+  function useChoice(choice: LocationChoice) {
+    setSelected(choice);
+    setQuery(choice.address);
+    setSuggestions([]);
+    setError(null);
+    focusMap(choice);
+  }
+
   async function chooseSuggestion(suggestion: PlaceSuggestion) {
     try {
       setResolving(true);
@@ -89,10 +111,7 @@ export default function LocationPickerScreen() {
           placeId: detail.place_id,
         };
       }
-      setSelected(choice);
-      setQuery(choice.address);
-      setSuggestions([]);
-      focusMap(choice);
+      useChoice(choice);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to open that place.");
     } finally {
@@ -111,10 +130,7 @@ export default function LocationPickerScreen() {
         location: { latitude: current.latitude, longitude: current.longitude },
         placeId: null,
       };
-      setSelected(choice);
-      setQuery(choice.address);
-      setSuggestions([]);
-      focusMap(choice);
+      useChoice(choice);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to get your current location.");
     } finally {
@@ -139,19 +155,33 @@ export default function LocationPickerScreen() {
     setSelected(next);
   }
 
-  function confirm() {
+  async function saveAs(placeKind: "home" | "work") {
+    if (!selected || saving) return;
+    try {
+      setSaving(placeKind);
+      setMemory(await saveNamedLocation(placeKind, selected));
+    } catch {
+      setError(`Unable to save ${placeKind} right now.`);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function confirm() {
     if (!selected) {
       setError("Search for a place, use your location, or place the pin first.");
       return;
     }
     if (kind === "pickup") setPickup(selected);
     else setDropoff(selected);
+    rememberLocation(selected).catch(() => undefined);
     router.back();
   }
 
   const initialRegion = selected
     ? { ...selected.location, latitudeDelta: 0.018, longitudeDelta: 0.018 }
     : HARARE_REGION;
+  const showShortcuts = suggestions.length === 0 && query.trim().length < 2;
 
   return (
     <Screen
@@ -165,7 +195,6 @@ export default function LocationPickerScreen() {
         <View style={styles.searchRow}>
           <MaterialCommunityIcons name="magnify" size={22} color={v2Theme.colors.inkSecondary} />
           <TextInput
-            autoFocus
             value={query}
             onChangeText={(value) => {
               setQuery(value);
@@ -196,6 +225,19 @@ export default function LocationPickerScreen() {
           <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
         </Pressable>
       </View>
+
+      {showShortcuts && (memory.home || memory.work || memory.recent.length > 0) ? (
+        <View style={styles.shortcutsCard}>
+          <Text style={styles.shortcutsTitle}>Quick places</Text>
+          <View style={styles.shortcutRowWrap}>
+            {memory.home ? <QuickPlace icon="home-outline" label="Home" choice={memory.home} onPress={useChoice} /> : null}
+            {memory.work ? <QuickPlace icon="briefcase-outline" label="Work" choice={memory.work} onPress={useChoice} /> : null}
+            {memory.recent.slice(0, 3).map((choice, index) => (
+              <QuickPlace key={`${choice.address}-${index}`} icon="history" label={index === 0 ? "Recent" : "Recent place"} choice={choice} onPress={useChoice} />
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       {error ? (
         <View style={styles.errorCard}>
@@ -250,6 +292,20 @@ export default function LocationPickerScreen() {
             {selected?.address || "Search above or use your current GPS position."}
           </Text>
         </View>
+
+        {selected ? (
+          <View style={styles.saveRow}>
+            <Pressable accessibilityRole="button" onPress={() => saveAs("home")} disabled={Boolean(saving)} style={({ pressed }) => [styles.saveChip, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name={memory.home && memory.home.address === selected.address ? "home-check-outline" : "home-plus-outline"} size={17} color={v2Theme.colors.ink} />
+              <Text style={styles.saveChipText}>{saving === "home" ? "Saving…" : "Save as Home"}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => saveAs("work")} disabled={Boolean(saving)} style={({ pressed }) => [styles.saveChip, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name={memory.work && memory.work.address === selected.address ? "briefcase-check-outline" : "briefcase-plus-outline"} size={17} color={v2Theme.colors.ink} />
+              <Text style={styles.saveChipText}>{saving === "work" ? "Saving…" : "Save as Work"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <Pressable
           accessibilityRole="button"
           disabled={!selected}
@@ -264,6 +320,28 @@ export default function LocationPickerScreen() {
   );
 }
 
+function QuickPlace({
+  icon,
+  label,
+  choice,
+  onPress,
+}: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  choice: LocationChoice;
+  onPress: (choice: LocationChoice) => void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" onPress={() => onPress(choice)} style={({ pressed }) => [styles.quickPlace, pressed && styles.pressed]}>
+      <View style={styles.quickPlaceIcon}><MaterialCommunityIcons name={icon} size={19} color={v2Theme.colors.brandStrong} /></View>
+      <View style={styles.quickPlaceCopy}>
+        <Text style={styles.quickPlaceLabel}>{label}</Text>
+        <Text numberOfLines={1} style={styles.quickPlaceAddress}>{choice.label || choice.address}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   searchCard: {
     borderRadius: v2Theme.radius.xxl,
@@ -272,132 +350,42 @@ const styles = StyleSheet.create({
     borderColor: v2Theme.colors.lineStrong,
     overflow: "hidden",
   },
-  searchRow: {
-    minHeight: 58,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-  },
-  searchInput: {
-    flex: 1,
-    color: v2Theme.colors.ink,
-    fontSize: 15,
-    fontWeight: "700",
-    paddingVertical: 12,
-  },
-  currentRow: {
-    minHeight: 66,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: v2Theme.colors.line,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    paddingHorizontal: 13,
-  },
-  currentIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: v2Theme.colors.brandSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  searchRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14 },
+  searchInput: { flex: 1, color: v2Theme.colors.ink, fontSize: 15, fontWeight: "700", paddingVertical: 12 },
+  currentRow: { minHeight: 66, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: v2Theme.colors.line, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 13 },
+  currentIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   currentCopy: { flex: 1, gap: 2 },
   currentTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
   currentBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
-  errorCard: {
-    borderRadius: v2Theme.radius.lg,
-    backgroundColor: v2Theme.colors.dangerSoft,
-    padding: 11,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
+  shortcutsCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 12, gap: 9 },
+  shortcutsTitle: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
+  shortcutRowWrap: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  quickPlace: { minWidth: 145, flexGrow: 1, flexBasis: "46%", borderRadius: 16, backgroundColor: v2Theme.colors.surfaceMuted, padding: 10, flexDirection: "row", alignItems: "center", gap: 9 },
+  quickPlaceIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
+  quickPlaceCopy: { flex: 1, gap: 2 },
+  quickPlaceLabel: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
+  quickPlaceAddress: { color: v2Theme.colors.inkSecondary, fontSize: 8, lineHeight: 12 },
+  errorCard: { borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 11, flexDirection: "row", gap: 8, alignItems: "center" },
   errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, lineHeight: 16, fontWeight: "700" },
-  resultsCard: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 136,
-    zIndex: 20,
-    borderRadius: v2Theme.radius.xl,
-    backgroundColor: v2Theme.colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.lineStrong,
-    overflow: "hidden",
-    shadowColor: v2Theme.colors.shadow,
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
-  },
-  resultRow: {
-    minHeight: 62,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: v2Theme.colors.line,
-  },
-  resultIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  resultsCard: { position: "absolute", left: 0, right: 0, top: 136, zIndex: 20, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
+  resultRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line },
+  resultIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   resultCopy: { flex: 1, gap: 2 },
   resultTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
   resultBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
-  mapCard: {
-    flex: 1,
-    minHeight: 330,
-    borderRadius: v2Theme.radius.xxl,
-    overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.lineStrong,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-  },
+  mapCard: { flex: 1, minHeight: 300, borderRadius: v2Theme.radius.xxl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surfaceMuted },
   map: { flex: 1 },
-  mapHint: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    minHeight: 42,
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.94)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
-    paddingHorizontal: 12,
-  },
+  mapHint: { position: "absolute", left: 12, right: 12, bottom: 12, minHeight: 42, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 },
   mapHintText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
-  confirmArea: {
-    borderRadius: v2Theme.radius.xxl,
-    backgroundColor: v2Theme.colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.line,
-    padding: 14,
-    gap: 12,
-  },
+  confirmArea: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 12 },
   selectedCopy: { gap: 3 },
   selectedEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   selectedTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
   selectedBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
-  confirmButton: {
-    minHeight: 52,
-    borderRadius: 18,
-    backgroundColor: v2Theme.colors.brand,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 17,
-  },
+  saveRow: { flexDirection: "row", gap: 8 },
+  saveChip: { flex: 1, minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  saveChipText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },
+  confirmButton: { minHeight: 52, borderRadius: 18, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 17 },
   confirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   disabled: { opacity: 0.4 },
   pressed: { opacity: 0.72 },
