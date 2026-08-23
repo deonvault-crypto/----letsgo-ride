@@ -54,7 +54,7 @@ describe("email login flow", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Use Face ID" })).toBeNull();
       expect(screen.getByRole("button", { name: "Login" })).toBeOnTheScreen();
-      expect(screen.getByRole("button", { name: "Create account" })).toBeOnTheScreen();
+      expect(screen.getByRole("button", { name: "Create customer account" })).toBeOnTheScreen();
     });
   });
 
