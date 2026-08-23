@@ -25,7 +25,7 @@ export default function ServicesScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Order & send</Text>
-        <ServiceTile title="Food" subtitle="Discover restaurants, menus and delivery" icon="food-fork-drink" badge="NEW" onPress={() => router.push("/(shared)/food" as never)} />
+        <ServiceTile title="Food" subtitle="Discover restaurants, menus and delivery" icon="food-fork-drink" badge="NEW" onPress={() => router.push("/(customer)/food" as never)} />
         <ServiceTile title="Courier" subtitle="Send packages from pickup to drop-off" icon="package-variant-closed" badge="NEW" onPress={() => router.push("/(shared)/courier" as never)} />
       </View>
 
