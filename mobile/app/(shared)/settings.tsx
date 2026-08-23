@@ -41,26 +41,26 @@ type PreferenceKey =
 const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: string; defaultValue: boolean }> = [
   {
     key: "trip_updates",
-    title: "Trip updates",
-    subtitle: "Ride status and trip record updates.",
+    title: "Service updates",
+    subtitle: "Ride, Food and Courier progress updates.",
     defaultValue: true,
   },
   {
     key: "booking_requests",
-    title: "Booking requests",
+    title: "Ride requests",
     subtitle: "Seat request and driver response updates.",
     defaultValue: true,
   },
   {
     key: "messages",
     title: "Messages",
-    subtitle: "New trip conversation messages.",
+    subtitle: "New LetsGoRide conversation messages.",
     defaultValue: true,
   },
   {
     key: "verification_updates",
     title: "Verification updates",
-    subtitle: "Driver verification approval or review updates.",
+    subtitle: "Identity or work-account verification updates.",
     defaultValue: true,
   },
   {
@@ -72,13 +72,13 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
   {
     key: "safety_alerts",
     title: "Safety alerts",
-    subtitle: "Important account and trip safety notices.",
+    subtitle: "Important account and service safety notices.",
     defaultValue: true,
   },
   {
     key: "marketing_messages",
-    title: "Marketing messages",
-    subtitle: "Occasional product and route updates.",
+    title: "Product news",
+    subtitle: "Occasional LetsGoRide product updates.",
     defaultValue: false,
   },
 ];
@@ -86,7 +86,11 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
 export default function SettingsScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
-  const role = user?.role === "driver" ? "driver" : "passenger";
+  const navRole: "customer" | "driver" | undefined = user?.role === "driver"
+    ? "driver"
+    : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
+      ? undefined
+      : "customer";
   const verificationStatus = user?.verification_status || "not_started";
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -195,7 +199,7 @@ export default function SettingsScreen() {
         style: "destructive",
         onPress: async () => {
           await logout();
-          router.replace("/(auth)/welcome" as never);
+          router.replace("/(customer)/home" as never);
         },
       },
     ]);
@@ -209,7 +213,7 @@ export default function SettingsScreen() {
       await disableBiometricLogin();
       setDeleteModalOpen(false);
       Alert.alert("Account deleted", "Your LetsGoRide account has been deleted.");
-      router.replace("/(auth)/welcome" as never);
+      router.replace("/(customer)/home" as never);
     } catch {
       Alert.alert("Delete account", "Could not delete your account. Please try again or contact support.");
     } finally {
@@ -251,12 +255,12 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Screen title="Settings" showBack fallbackRoute="/(shared)/profile" navRole={role}>
+    <Screen title="Settings" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
       <Modal visible={deleteModalOpen} transparent animationType="fade" onRequestClose={() => setDeleteModalOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete account?</Text>
-            <Text style={styles.body}>This permanently deletes your LetsGoRide account, trips, messages, verification records, and saved preferences.</Text>
+            <Text style={styles.body}>This permanently deletes your LetsGoRide account, activity, messages, verification records, and saved preferences.</Text>
             <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
             <TextInput
               value={deleteText}
@@ -284,7 +288,7 @@ export default function SettingsScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Enable notifications?</Text>
             <Text style={styles.body}>
-              LetsGoRide uses notifications for booking requests, trip updates, messages, verification updates, support replies, and safety alerts.
+              LetsGoRide uses notifications for Ride, Food and Courier progress, messages, verification updates, support replies, and safety alerts.
             </Text>
             <View style={styles.modalActions}>
               <AppButton title="Enable notifications" loading={pushSaving} onPress={confirmNotificationExplanation} />
@@ -297,7 +301,7 @@ export default function SettingsScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Biometric login</Text>
-            <Text style={styles.body}>Face ID will only unlock LetsGoRide on this device.</Text>
+            <Text style={styles.body}>Face ID or your device biometric only unlocks this LetsGoRide account on this device.</Text>
             <View style={styles.modalActions}>
               <AppButton title="Enable biometric login" loading={biometricSaving} onPress={confirmBiometricExplanation} />
               <AppButton title="Cancel" variant="secondary" onPress={() => setBiometricExplanationOpen(false)} />
@@ -309,7 +313,7 @@ export default function SettingsScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Verified identity badge</Text>
-            <Text style={styles.body}>A verified badge means LetsGoRide has reviewed your identity documents. It helps build trust with passengers and drivers.</Text>
+            <Text style={styles.body}>A verified badge means LetsGoRide has reviewed the account’s identity information. It helps build trust across the platform.</Text>
             <View style={styles.modalActions}>
               <AppButton
                 title={isVerifiedStatus(verificationStatus) ? "View status" : "Start verification"}
@@ -325,28 +329,24 @@ export default function SettingsScreen() {
       </Modal>
       <View style={styles.headerCopy}>
         <Text style={styles.title}>Settings</Text>
-        <Text style={styles.body}>Manage your account, privacy, notifications, and device security.</Text>
+        <Text style={styles.body}>Manage this account, privacy, notifications, and device security.</Text>
       </View>
 
       <Section title="Account">
         <ListTile
           icon="account-edit-outline"
           title="Edit profile"
-          subtitle="Name, photo, phone, city, and travel preferences"
+          subtitle="Name, photo, phone, city, and preferences"
           onPress={() => router.push("/(shared)/edit-profile" as never)}
         />
-        <ListTile
-          icon="account-switch-outline"
-          title="Manage passenger and driver mode"
-          subtitle="Open the app section that matches how you are travelling"
-          onPress={() => router.replace(role === "driver" ? "/(passenger)/home" as never : "/(driver)/home" as never)}
-        />
-        <ListTile
-          icon="shield-check-outline"
-          title="Driver verification status"
-          subtitle={formatStatus(verificationStatus)}
-          onPress={() => router.push("/(shared)/verification" as never)}
-        />
+        {user?.role === "driver" ? (
+          <ListTile
+            icon="shield-check-outline"
+            title="Driver verification status"
+            subtitle={formatStatus(verificationStatus)}
+            onPress={() => router.push("/(shared)/verification" as never)}
+          />
+        ) : null}
       </Section>
 
       <Section title="Notifications" subtitle="Choose which updates LetsGoRide should send you.">
@@ -354,7 +354,7 @@ export default function SettingsScreen() {
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Phone notifications: {phoneNotificationEnabled ? "On" : "Off"}</Text>
             <Text style={styles.toggleSubtitle}>
-              Phone alerts for trips, messages, support, and safety updates.
+              Phone alerts for service progress, messages, support, and safety updates.
             </Text>
             {phoneNotificationMessage ? (
               <Text style={[styles.noticeText, !phoneNotificationEnabled && styles.offNoticeText]}>
@@ -430,7 +430,7 @@ export default function SettingsScreen() {
         <ListTile
           icon="shield-alert-outline"
           title="Safety Center"
-          subtitle="Report issues and review trip safety"
+          subtitle="Report issues and review platform safety"
           onPress={() => router.push("/(shared)/safety" as never)}
         />
       </Section>
@@ -439,14 +439,14 @@ export default function SettingsScreen() {
         <ListTile
           icon="logout"
           title="Logout"
-          subtitle="Sign out of this LetsGoRide account"
+          subtitle="Sign out and return to customer browsing"
           onPress={confirmLogout}
           danger
         />
         <ListTile
           icon="delete-outline"
           title="Delete account"
-          subtitle="Permanently delete your LetsGoRide account"
+          subtitle="Permanently delete this LetsGoRide account"
           onPress={() => {
             setDeleteText("");
             setDeleteModalOpen(true);
