@@ -66,18 +66,20 @@ export default function CourierJobScreen() {
     };
   }, [load]);
 
-  useEffect(() => {
-    if (!delivery || !TRACKING_STATUSES.has(delivery.status)) stopSharing();
-  }, [delivery?.status]);
+  const stopSharing = useCallback(() => {
+    locationSubscription.current?.remove();
+    locationSubscription.current = null;
+    setSharing(false);
+  }, []);
 
-  async function startSharing() {
-    if (!delivery || sharing || !TRACKING_STATUSES.has(delivery.status)) return;
+  const startSharing = useCallback(async (activeDelivery: CourierDelivery) => {
+    if (locationSubscription.current || !TRACKING_STATUSES.has(activeDelivery.status)) return;
     try {
       setError(null);
       const subscription = await watchForegroundLocation(
         (location) => {
           setDelivery((current) => current ? { ...current, last_courier_location: location } : current);
-          updateCourierLocation(delivery.id, {
+          updateCourierLocation(activeDelivery.id, {
             latitude: location.latitude,
             longitude: location.longitude,
             accuracy: location.accuracy,
@@ -92,14 +94,24 @@ export default function CourierJobScreen() {
       setSharing(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start live location.");
+      setSharing(false);
     }
-  }
+  }, []);
 
-  function stopSharing() {
-    locationSubscription.current?.remove();
-    locationSubscription.current = null;
-    setSharing(false);
-  }
+  useEffect(() => {
+    if (!delivery) return;
+    if (!TRACKING_STATUSES.has(delivery.status)) {
+      stopSharing();
+      return;
+    }
+
+    // Once a courier owns an active job, foreground GPS restarts automatically on
+    // screen re-entry and remains continuous through pickup → transit → arriving.
+    // The courier no longer has to remember to press Start after each state change.
+    if (!locationSubscription.current) {
+      startSharing(delivery);
+    }
+  }, [delivery?.id, delivery?.status, startSharing, stopSharing]);
 
   async function navigate() {
     if (!delivery || navigating) return;
@@ -130,7 +142,6 @@ export default function CourierJobScreen() {
       const updated = await updateCourierDeliveryStatus(delivery.id, next);
       setDelivery(updated);
       setEvents(await getCourierEvents(delivery.id));
-      if (next === "COURIER_TO_PICKUP" && !sharing) await startSharing();
       if (next === "DELIVERED") stopSharing();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update delivery progress.");
@@ -181,9 +192,15 @@ export default function CourierJobScreen() {
 
           {TRACKING_STATUSES.has(delivery.status) ? (
             <View style={styles.trackingCard}>
-              <View style={[styles.trackingIcon, sharing && styles.trackingIconActive]}><MaterialCommunityIcons name="crosshairs-gps" size={24} color={sharing ? "#FFFFFF" : v2Theme.colors.brandStrong} /></View>
-              <View style={styles.trackingCopy}><Text style={styles.trackingTitle}>{sharing ? "Live location sharing" : "Share live courier location"}</Text><Text style={styles.trackingBody}>{sharing ? "Customer map receives foreground GPS updates while this job stays active." : "Start when working the job. Location sharing stops when this screen closes or delivery completes."}</Text></View>
-              <Pressable accessibilityRole="button" onPress={sharing ? stopSharing : startSharing} style={[styles.trackingButton, sharing && styles.trackingButtonActive]}><Text style={[styles.trackingButtonText, sharing && styles.trackingButtonTextActive]}>{sharing ? "Stop" : "Start"}</Text></Pressable>
+              <View style={[styles.trackingIcon, sharing && styles.trackingIconActive]}><MaterialCommunityIcons name={sharing ? "crosshairs-gps" : "map-marker-alert-outline"} size={24} color={sharing ? "#FFFFFF" : v2Theme.colors.brandStrong} /></View>
+              <View style={styles.trackingCopy}>
+                <Text style={styles.trackingTitle}>{sharing ? "Live location is sharing automatically" : "Starting live location…"}</Text>
+                <Text style={styles.trackingBody}>{sharing ? "It stays on continuously through pickup, transit and arrival while this job is active." : "LetsGoRide is requesting foreground GPS so the customer can follow the active delivery."}</Text>
+              </View>
+              <View style={[styles.trackingState, sharing && styles.trackingStateActive]}>
+                <View style={[styles.trackingStateDot, sharing && styles.trackingStateDotActive]} />
+                <Text style={[styles.trackingStateText, sharing && styles.trackingStateTextActive]}>{sharing ? "LIVE" : "AUTO"}</Text>
+              </View>
             </View>
           ) : null}
 
@@ -244,11 +261,11 @@ function nextLabel(status: CourierStatus) {
 }
 
 function nextHelp(status: CourierStatus) {
-  if (status === "COURIER_TO_PICKUP") return "Begin the pickup leg and live-location workflow";
+  if (status === "COURIER_TO_PICKUP") return "Begin the pickup leg · GPS stays live automatically";
   if (status === "PICKED_UP") return "Only confirm after the package is physically collected";
-  if (status === "IN_TRANSIT") return "Begin the delivery leg to the recipient";
+  if (status === "IN_TRANSIT") return "Begin the delivery leg · live tracking continues";
   if (status === "ARRIVING") return "Use when you are close to the drop-off";
-  if (status === "DELIVERED") return "Finish only after successful handover";
+  if (status === "DELIVERED") return "Finish after successful handover · tracking stops automatically";
   return "Update delivery progress";
 }
 
@@ -263,7 +280,6 @@ const styles = StyleSheet.create({
   errorCard: { minHeight: 58, borderRadius: v2Theme.radius.lg, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 9 },
   errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 10, fontWeight: "700" },
   retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" },
-
   heroCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 16, gap: 12 },
   heroTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   heroIcon: { width: 49, height: 49, borderRadius: 17, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
@@ -277,24 +293,23 @@ const styles = StyleSheet.create({
   heroMeta: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   metaPill: { minHeight: 27, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 8, justifyContent: "center" },
   heroMetaText: { color: "rgba(255,255,255,0.58)", fontSize: 8, fontWeight: "800", textTransform: "capitalize" },
-
   navigationButton: { minHeight: 72, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brand, padding: 12, flexDirection: "row", alignItems: "center", gap: 11 },
   navigationIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   navigationCopy: { flex: 1, gap: 3 },
   navigationTitle: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   navigationBody: { color: "rgba(255,255,255,0.72)", fontSize: 9, lineHeight: 13 },
-
   trackingCard: { minHeight: 84, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
   trackingIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   trackingIconActive: { backgroundColor: v2Theme.colors.brand },
   trackingCopy: { flex: 1, gap: 3 },
   trackingTitle: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
   trackingBody: { color: v2Theme.colors.inkSecondary, fontSize: 8, lineHeight: 13 },
-  trackingButton: { minHeight: 38, borderRadius: 14, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 12, alignItems: "center", justifyContent: "center" },
-  trackingButtonActive: { backgroundColor: v2Theme.colors.ink },
-  trackingButtonText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },
-  trackingButtonTextActive: { color: "#FFFFFF" },
-
+  trackingState: { minHeight: 34, borderRadius: 999, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", gap: 5 },
+  trackingStateActive: { backgroundColor: v2Theme.colors.brandSoft },
+  trackingStateDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.inkTertiary },
+  trackingStateDotActive: { backgroundColor: v2Theme.colors.brand },
+  trackingStateText: { color: v2Theme.colors.inkSecondary, fontSize: 7, fontWeight: "900" },
+  trackingStateTextActive: { color: v2Theme.colors.brandStrong },
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
@@ -305,17 +320,14 @@ const styles = StyleSheet.create({
   detailCopy: { flex: 1, gap: 3 },
   detailTitle: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" },
   detailBody: { color: v2Theme.colors.ink, fontSize: 11, lineHeight: 16, fontWeight: "800" },
-
   primaryButton: { minHeight: 66, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.ink, paddingHorizontal: 17, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   primaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   primarySub: { color: "rgba(255,255,255,0.62)", fontSize: 8, marginTop: 2, maxWidth: 270 },
-
   completedCard: { minHeight: 78, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 13, flexDirection: "row", alignItems: "center", gap: 11 },
   completedIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
   completedCopy: { flex: 1, gap: 3 },
   completedTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
   completedBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
-
   eventCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13 },
   eventRow: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10 },
   eventBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: v2Theme.colors.line },
@@ -323,7 +335,6 @@ const styles = StyleSheet.create({
   eventCopy: { flex: 1, gap: 3 },
   eventTitle: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
   eventTime: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "700" },
-
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.72 },
 });
