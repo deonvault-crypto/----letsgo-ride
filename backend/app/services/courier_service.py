@@ -3,6 +3,15 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
+from app.services.delivery_security_service import (
+    DELIVERY_ARRIVING_RADIUS_METERS,
+    DELIVERY_HANDOFF_RADIUS_METERS,
+    create_delivery_handoff,
+    distance_meters,
+    get_delivery_handoff,
+    is_inside_radius,
+    verify_delivery_handoff_pin,
+)
 from app.services.fulfillment_link_service import (
     sync_food_order_from_delivery,
     sync_food_order_pricing,
@@ -21,13 +30,13 @@ ACTIVE_TRACKING_STATUSES = {
 }
 
 ALLOWED_TRANSITIONS = {
-    "REQUESTED": {"MATCHING", "ASSIGNED", "CANCELLED"},
-    "MATCHING": {"ASSIGNED", "CANCELLED", "FAILED"},
-    "ASSIGNED": {"COURIER_TO_PICKUP", "CANCELLED", "FAILED"},
+    "REQUESTED": {"MATCHING", "ASSIGNED", "COURIER_TO_PICKUP", "CANCELLED"},
+    "MATCHING": {"ASSIGNED", "COURIER_TO_PICKUP", "CANCELLED", "FAILED"},
+    "ASSIGNED": {"COURIER_TO_PICKUP", "PICKED_UP", "CANCELLED", "FAILED"},
     "COURIER_TO_PICKUP": {"PICKED_UP", "CANCELLED", "FAILED"},
     "PICKED_UP": {"IN_TRANSIT", "FAILED"},
-    "IN_TRANSIT": {"ARRIVING", "DELIVERED", "FAILED"},
-    "ARRIVING": {"DELIVERED", "FAILED"},
+    "IN_TRANSIT": {"ARRIVING", "FAILED"},
+    "ARRIVING": {"FAILED"},
     "DELIVERED": set(),
     "CANCELLED": set(),
     "FAILED": set(),
@@ -39,7 +48,7 @@ CUSTOMER_STATUS_NOTIFICATIONS = {
     "PICKED_UP": ("Package collected", "Your courier confirmed pickup of the package."),
     "IN_TRANSIT": ("Your package is on the way", "The delivery is now moving toward the recipient."),
     "ARRIVING": ("Courier arriving soon", "The courier is close to the drop-off point."),
-    "DELIVERED": ("Delivery complete", "Your package was marked as delivered."),
+    "DELIVERED": ("Delivery complete", "The recipient handoff was confirmed with the 4-digit code."),
     "FAILED": ("Delivery needs attention", "Something interrupted this delivery. Open LetsGoRide for details."),
 }
 
@@ -62,7 +71,9 @@ def _can_view(delivery: Dict[str, Any], user: Dict[str, Any]) -> bool:
 
 
 def _can_operate_as_courier(delivery: Dict[str, Any], user: Dict[str, Any]) -> bool:
-    return _is_admin(user) or delivery.get("courier_user_id") == _user_id(user)
+    return _is_admin(user) or (
+        user.get("role") == "courier" and delivery.get("courier_user_id") == _user_id(user)
+    )
 
 
 async def _notify_customer_status(delivery: Dict[str, Any], status: str) -> None:
@@ -125,6 +136,7 @@ async def create_delivery(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict
         **payload,
     }
     saved = await database.insert_one("courier_deliveries", delivery)
+    await create_delivery_handoff(saved["id"], _user_id(user))
     await append_delivery_event(
         saved["id"],
         "DELIVERY_REQUESTED",
@@ -141,6 +153,20 @@ async def get_delivery(delivery_id: str, user: Dict[str, Any]) -> Dict[str, Any]
     if not _can_view(delivery, user):
         raise PermissionError("You do not have access to this delivery.")
     return delivery
+
+
+async def get_delivery_pin(delivery_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    delivery = await get_delivery(delivery_id, user)
+    if not (_is_admin(user) or delivery.get("sender_user_id") == _user_id(user)):
+        raise PermissionError("Only the customer can view the recipient delivery code.")
+    handoff = await get_delivery_handoff(delivery_id)
+    if not handoff:
+        handoff = await create_delivery_handoff(delivery_id, str(delivery.get("sender_user_id") or ""))
+    return {
+        "delivery_id": delivery_id,
+        "pin": str(handoff.get("pin") or ""),
+        "verified": bool(handoff.get("verified_at")),
+    }
 
 
 async def list_user_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -275,7 +301,7 @@ async def assign_delivery(
         {
             "courier_user_id": courier_user_id,
             "courier_name": courier.get("name") or "LetsGoRide Courier",
-            "status": "ASSIGNED",
+            "status": "COURIER_TO_PICKUP",
             "live_tracking_active": True,
             "assigned_at": now,
             "updated_at": now,
@@ -289,13 +315,19 @@ async def assign_delivery(
         actor_user_id=_user_id(actor),
         data={"courier_user_id": courier_user_id, "assignment_method": "admin"},
     )
-    await _notify_customer_status(updated, "ASSIGNED")
+    await append_delivery_event(
+        delivery_id,
+        "STATUS_COURIER_TO_PICKUP",
+        actor_user_id=_user_id(actor),
+        data={"source": "automatic_after_assignment"},
+    )
+    await _notify_customer_status(updated, "COURIER_TO_PICKUP")
     await create_app_notification(
         courier_user_id,
         "courier_update",
         "Delivery assigned",
-        "A delivery has been assigned to your Courier account.",
-        {"delivery_id": delivery_id, "courier_status": "ASSIGNED"},
+        "Head to the pickup point. Live location starts automatically in the Courier app.",
+        {"delivery_id": delivery_id, "courier_status": "COURIER_TO_PICKUP"},
     )
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(actor))
     return updated
@@ -314,6 +346,47 @@ async def update_delivery_status(
     current = str(delivery.get("status") or "")
     if status == current:
         return delivery
+
+    if not _is_admin(user):
+        if status != "PICKED_UP" or current not in {"ASSIGNED", "COURIER_TO_PICKUP"}:
+            raise ValueError(
+                "Courier progress is automatic after acceptance. Only pickup confirmation, delay reporting and recipient PIN handoff require courier input."
+            )
+
+        now = now_iso()
+        picked_up = await database.update_one_if(
+            "courier_deliveries",
+            {"id": delivery_id, "status": current},
+            {"status": "PICKED_UP", "picked_up_at": now, "updated_at": now},
+        )
+        if not picked_up:
+            raise ValueError("Delivery changed while pickup was being confirmed. Refresh and try again.")
+        await append_delivery_event(
+            delivery_id,
+            "STATUS_PICKED_UP",
+            actor_user_id=_user_id(user),
+            data={"from": current, "to": "PICKED_UP", "note": note},
+        )
+        await _notify_customer_status(picked_up, "PICKED_UP")
+        await sync_food_order_from_delivery(picked_up, actor_user_id=_user_id(user))
+
+        in_transit = await database.update_one_if(
+            "courier_deliveries",
+            {"id": delivery_id, "status": "PICKED_UP"},
+            {"status": "IN_TRANSIT", "updated_at": now_iso()},
+        )
+        if not in_transit:
+            return picked_up
+        await append_delivery_event(
+            delivery_id,
+            "STATUS_IN_TRANSIT",
+            actor_user_id=_user_id(user),
+            data={"from": "PICKED_UP", "to": "IN_TRANSIT", "source": "automatic_after_pickup"},
+        )
+        await _notify_customer_status(in_transit, "IN_TRANSIT")
+        await sync_food_order_from_delivery(in_transit, actor_user_id=_user_id(user))
+        return in_transit
+
     if status not in ALLOWED_TRANSITIONS.get(current, set()):
         raise ValueError(f"Delivery cannot move from {current} to {status}.")
 
@@ -321,9 +394,6 @@ async def update_delivery_status(
     updates: Dict[str, Any] = {"status": status, "updated_at": now}
     if status == "PICKED_UP":
         updates["picked_up_at"] = now
-    if status == "DELIVERED":
-        updates["delivered_at"] = now
-        updates["live_tracking_active"] = False
     if status in {"CANCELLED", "FAILED"}:
         updates["live_tracking_active"] = False
 
@@ -341,6 +411,83 @@ async def update_delivery_status(
         data={"from": current, "to": status, "note": note},
     )
     await _notify_customer_status(updated, status)
+    await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
+    return updated
+
+
+async def report_delivery_delay(
+    delivery_id: str,
+    user: Dict[str, Any],
+    note: str | None,
+) -> Dict[str, Any]:
+    delivery = await get_delivery(delivery_id, user)
+    if not _can_operate_as_courier(delivery, user):
+        raise PermissionError("Only the assigned courier can report a delay.")
+    if delivery.get("status") not in {"ASSIGNED", "COURIER_TO_PICKUP", "IN_TRANSIT", "ARRIVING"}:
+        raise ValueError("A delay cannot be reported for this delivery now.")
+    await append_delivery_event(
+        delivery_id,
+        "COURIER_DELAY_REPORTED",
+        actor_user_id=_user_id(user),
+        data={"note": note},
+    )
+    sender_user_id = str(delivery.get("sender_user_id") or "")
+    if sender_user_id:
+        await create_app_notification(
+            sender_user_id,
+            "courier_update",
+            "Courier reported a delay",
+            note or "Your courier reported a short delay. Live tracking remains active.",
+            {"delivery_id": delivery_id, "courier_status": delivery.get("status")},
+        )
+    return delivery
+
+
+async def complete_delivery_with_pin(
+    delivery_id: str,
+    pin: str,
+    user: Dict[str, Any],
+) -> Dict[str, Any]:
+    delivery = await get_delivery(delivery_id, user)
+    if not _can_operate_as_courier(delivery, user):
+        raise PermissionError("Only the assigned courier can complete this delivery.")
+    if delivery.get("status") not in {"IN_TRANSIT", "ARRIVING"}:
+        raise ValueError("Recipient handoff is only available after pickup.")
+
+    current_location = delivery.get("last_courier_location")
+    destination = delivery.get("dropoff_location")
+    handoff_distance = distance_meters(current_location, destination)
+    if handoff_distance is None:
+        raise ValueError("A recent courier GPS location and drop-off pin are required before handoff.")
+    if handoff_distance > DELIVERY_HANDOFF_RADIUS_METERS:
+        raise ValueError(
+            f"Move closer to the recipient before handoff. You must be within {int(DELIVERY_HANDOFF_RADIUS_METERS)} m of the drop-off pin."
+        )
+    if not await verify_delivery_handoff_pin(delivery_id, pin):
+        raise ValueError("That 4-digit delivery code is not correct.")
+
+    now = now_iso()
+    updated = await database.update_one_if(
+        "courier_deliveries",
+        {"id": delivery_id, "status": delivery.get("status")},
+        {
+            "status": "DELIVERED",
+            "delivered_at": now,
+            "live_tracking_active": False,
+            "delivery_verification_method": "RECIPIENT_PIN",
+            "handoff_distance_meters": round(handoff_distance, 1),
+            "updated_at": now,
+        },
+    )
+    if not updated:
+        raise ValueError("Delivery changed while the handoff was being confirmed. Refresh and try again.")
+    await append_delivery_event(
+        delivery_id,
+        "DELIVERY_CONFIRMED_BY_PIN",
+        actor_user_id=_user_id(user),
+        data={"handoff_distance_meters": round(handoff_distance, 1)},
+    )
+    await _notify_customer_status(updated, "DELIVERED")
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     return updated
 
@@ -375,6 +522,27 @@ async def update_courier_location(
     )
     if not updated:
         raise ValueError("Delivery not found.")
+
+    if updated.get("status") == "IN_TRANSIT" and is_inside_radius(
+        snapshot,
+        updated.get("dropoff_location"),
+        DELIVERY_ARRIVING_RADIUS_METERS,
+    ):
+        arriving = await database.update_one_if(
+            "courier_deliveries",
+            {"id": delivery_id, "status": "IN_TRANSIT"},
+            {"status": "ARRIVING", "updated_at": now_iso()},
+        )
+        if arriving:
+            await append_delivery_event(
+                delivery_id,
+                "STATUS_ARRIVING",
+                actor_user_id=_user_id(user),
+                data={"source": "automatic_geofence", "radius_meters": DELIVERY_ARRIVING_RADIUS_METERS},
+            )
+            await _notify_customer_status(arriving, "ARRIVING")
+            await sync_food_order_from_delivery(arriving, actor_user_id=_user_id(user))
+            return arriving
     return updated
 
 
@@ -391,4 +559,5 @@ async def tracking_state(delivery_id: str, user: Dict[str, Any]) -> Dict[str, An
         "last_courier_location": delivery.get("last_courier_location"),
         "estimated_duration_minutes": delivery.get("estimated_duration_minutes"),
         "distance_km": delivery.get("distance_km"),
+        "handoff_radius_meters": DELIVERY_HANDOFF_RADIUS_METERS,
     }
