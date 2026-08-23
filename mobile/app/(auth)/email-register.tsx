@@ -82,13 +82,13 @@ export default function EmailRegisterScreen() {
   }
 
   return (
-    <Screen title="Create customer account" showBack fallbackRoute="/(passenger)/home" showNotifications={false}>
+    <Screen title="Create customer account" showBack fallbackRoute="/(customer)/home" showNotifications={false}>
       <View style={styles.logoWrap}>
         <BrandLogo size="large" />
       </View>
       <View style={styles.card}>
         <Text style={styles.title}>Create your customer account</Text>
-        <Text style={styles.body}>One account for Ride, Food and Courier. Driver, Courier-worker and Merchant accounts stay separate.</Text>
+        <Text style={styles.body}>One account for Ride, Food and Courier. Driver, Courier and Merchant accounts stay separate.</Text>
         <AppInput label="Full name" value={name} onChangeText={setName} leftIcon="account-outline" placeholder="Your full name" />
         <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" placeholder="you@example.com" />
         <LocationPicker label="City" value={city} onChangeText={setCity} placeholder="Select your city" />
