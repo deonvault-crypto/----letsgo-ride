@@ -3,11 +3,13 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
+from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
 
 FINAL_ORDER_STATUSES = {"DELIVERED", "CANCELLED", "REJECTED"}
-CUSTOMER_CANCELLABLE_STATUSES = {"PLACED", "ACCEPTED"}
+CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES = {"PLACED", "ACCEPTED"}
+PRE_PICKUP_DELIVERY_STATUSES = {"REQUESTED", "MATCHING", "ASSIGNED", "COURIER_TO_PICKUP"}
 
 
 async def list_restaurants() -> List[Dict[str, Any]]:
@@ -94,7 +96,14 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "customer_name": user.get("name") or payload.get("recipient_name"),
         "restaurant_id": restaurant["id"],
         "restaurant_name": restaurant.get("name"),
+        # status remains the simple customer-facing summary. Operational state is
+        # split below so restaurant preparation and courier movement can overlap.
         "status": "PLACED",
+        "restaurant_status": "PLACED",
+        "fulfillment_status": "NOT_STARTED",
+        # A real payment provider has not been wired yet. Keeping this explicit
+        # prevents staging/demo checkout from being mistaken for a real charge.
+        "payment_status": "NOT_CONFIGURED",
         "items": item_snapshots,
         "subtotal_usd": round(subtotal, 2),
         "delivery_fee_usd": None,
@@ -138,21 +147,66 @@ async def list_order_events(order_id: str, user: Dict[str, Any]) -> List[Dict[st
 
 async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | None) -> Dict[str, Any]:
     order = await get_customer_order(order_id, user)
-    if order.get("status") not in CUSTOMER_CANCELLABLE_STATUSES:
+    restaurant_status = str(order.get("restaurant_status") or order.get("status") or "")
+    if restaurant_status not in CUSTOMER_CANCELLABLE_RESTAURANT_STATUSES:
         raise ValueError("This order can no longer be cancelled in the app.")
 
+    linked_delivery = None
+    delivery_id = str(order.get("courier_delivery_id") or "")
+    if delivery_id:
+        linked_delivery = await database.find_one("courier_deliveries", {"id": delivery_id})
+        if linked_delivery and linked_delivery.get("status") not in PRE_PICKUP_DELIVERY_STATUSES:
+            raise ValueError("The courier has already collected this order. Contact support for help.")
+
+    now = now_iso()
     updated = await database.update_one(
         "food_orders",
         order_id,
         {
             "status": "CANCELLED",
+            "restaurant_status": "CANCELLED",
+            "fulfillment_status": "CANCELLED",
             "cancellation_reason": reason,
-            "cancelled_at": now_iso(),
-            "updated_at": now_iso(),
+            "cancelled_at": now,
+            "updated_at": now,
         },
     )
     if not updated:
         raise ValueError("Order not found.")
+
+    if linked_delivery:
+        await database.update_one(
+            "courier_deliveries",
+            delivery_id,
+            {
+                "status": "CANCELLED",
+                "cancellation_reason": reason,
+                "cancelled_at": now,
+                "live_tracking_active": False,
+                "updated_at": now,
+            },
+        )
+        await database.insert_one(
+            "courier_events",
+            {
+                "id": new_id(),
+                "delivery_id": delivery_id,
+                "type": "DELIVERY_CANCELLED_FROM_FOOD_ORDER",
+                "actor_user_id": str(user.get("id") or ""),
+                "data": {"reason": reason},
+                "created_at": now_iso(),
+            },
+        )
+        courier_user_id = str(linked_delivery.get("courier_user_id") or "")
+        if courier_user_id:
+            await create_app_notification(
+                courier_user_id,
+                "food_update",
+                "Food delivery cancelled",
+                "The customer cancelled this order before pickup.",
+                {"order_id": order_id, "delivery_id": delivery_id},
+            )
+
     await append_order_event(
         order_id,
         "ORDER_CANCELLED",
