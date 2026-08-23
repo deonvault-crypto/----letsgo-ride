@@ -38,12 +38,21 @@ export default function NotificationsScreen() {
     await markNotificationRead(notification.id);
     await load();
     const data = notification.data || {};
+
     if (typeof data.conversation_id === "string") {
       router.push(`/(shared)/conversation/${data.conversation_id}` as never);
       return;
     }
     if (notification.type === "driver_verification" || typeof data.verification_status === "string") {
       router.push("/(shared)/verification" as never);
+      return;
+    }
+    if (typeof data.delivery_id === "string") {
+      router.push(`/(shared)/courier/${data.delivery_id}` as never);
+      return;
+    }
+    if (typeof data.food_order_id === "string") {
+      router.push(`/(shared)/food/order/${data.food_order_id}` as never);
       return;
     }
     if (typeof data.support_message_id === "string") {
@@ -55,7 +64,7 @@ export default function NotificationsScreen() {
       return;
     }
     if (typeof data.ride_id === "string") {
-      router.push(`/(passenger)/ride/${data.ride_id}` as never);
+      router.push(`/(customer)/ride/${data.ride_id}` as never);
     }
   }
 
@@ -67,7 +76,7 @@ export default function NotificationsScreen() {
   const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
-    <Screen title="Notifications" showBack fallbackRoute="/(shared)/profile" navRole="passenger">
+    <Screen title="Notifications" showBack fallbackRoute="/(shared)/account" navRole="customer">
       <View style={styles.headerRow}>
         <Text style={styles.title}>Notifications</Text>
         {unreadCount ? <StatusBadge label={`${unreadCount} unread`} tone="warning" /> : null}
@@ -78,7 +87,7 @@ export default function NotificationsScreen() {
       {!loading && !error && notifications.length === 0 ? (
         <EmptyState
           title="No notifications yet"
-          body="Trip updates, support replies, and safety updates will appear here."
+          body="Ride, Food, Courier, support, and safety updates will appear here."
           icon="bell-outline"
         />
       ) : null}
@@ -115,6 +124,8 @@ function formatTime(value: string) {
 }
 
 function iconForNotification(type: string): keyof typeof MaterialCommunityIcons.glyphMap {
+  if (type.includes("courier") || type.includes("delivery")) return "motorbike";
+  if (type.includes("food") || type.includes("order")) return "food-fork-drink";
   if (type.includes("message")) return "message-text-outline";
   if (type.includes("booking") || type.includes("request")) return "ticket-confirmation-outline";
   if (type.includes("verification")) return "shield-check-outline";
