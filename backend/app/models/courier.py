@@ -70,6 +70,14 @@ class CourierStatusBody(BaseModel):
     note: Optional[str] = Field(default=None, max_length=300)
 
 
+class CourierDelayBody(BaseModel):
+    note: Optional[str] = Field(default=None, max_length=300)
+
+
+class CourierHandoffBody(BaseModel):
+    pin: str = Field(min_length=4, max_length=4, pattern=r"^\d{4}$")
+
+
 class CourierLocationBody(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
