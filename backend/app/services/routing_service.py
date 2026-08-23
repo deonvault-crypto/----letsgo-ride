@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 from urllib.parse import quote
 
 import requests
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 GOOGLE_GEOCODE_URL = "https://geocode.googleapis.com/v4/geocode/address/{address}"
 GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete"
+GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 
 
 class RoutingError(RuntimeError):
@@ -119,6 +121,137 @@ async def geocode_address(address: str) -> Dict[str, Any]:
         "provider": "google",
         "formatted_address": first.get("formattedAddress") or clean_address,
         "place_id": first.get("placeId"),
+        "location": {
+            "latitude": float(latitude),
+            "longitude": float(longitude),
+        },
+    }
+
+
+async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
+    """Return customer-friendly place suggestions without exposing the Google key to mobile."""
+    api_key, region_code, timeout = _google_config()
+    clean_query = " ".join(query.strip().split())
+    if len(clean_query) < 2:
+        return []
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": (
+            "suggestions.placePrediction.placeId,"
+            "suggestions.placePrediction.text.text,"
+            "suggestions.placePrediction.structuredFormat.mainText.text,"
+            "suggestions.placePrediction.structuredFormat.secondaryText.text"
+        ),
+    }
+    body = {
+        "input": clean_query,
+        "regionCode": region_code,
+        "includedRegionCodes": [region_code.lower()],
+    }
+
+    try:
+        payload = await asyncio.to_thread(
+            _request_json,
+            "POST",
+            GOOGLE_PLACES_AUTOCOMPLETE_URL,
+            headers=headers,
+            json=body,
+            timeout=timeout,
+        )
+    except RoutingError:
+        # Some existing Maps projects may have Geocoding + Routes enabled before
+        # Places (New) is enabled. Keep address entry usable with one exact result.
+        result = await geocode_address(clean_query)
+        return [
+            {
+                "provider": "google_geocode_fallback",
+                "place_id": result.get("place_id"),
+                "primary_text": result.get("formatted_address") or clean_query,
+                "secondary_text": "",
+                "description": result.get("formatted_address") or clean_query,
+                "location": result.get("location"),
+            }
+        ]
+
+    suggestions = payload.get("suggestions") or []
+    results: List[Dict[str, Any]] = []
+    for item in suggestions[:8]:
+        if not isinstance(item, dict):
+            continue
+        prediction = item.get("placePrediction")
+        if not isinstance(prediction, dict):
+            continue
+        place_id = prediction.get("placeId")
+        text = prediction.get("text") or {}
+        structured = prediction.get("structuredFormat") or {}
+        main_text = (structured.get("mainText") or {}).get("text") if isinstance(structured, dict) else None
+        secondary_text = (structured.get("secondaryText") or {}).get("text") if isinstance(structured, dict) else None
+        description = text.get("text") if isinstance(text, dict) else None
+        if not place_id or not description:
+            continue
+        results.append(
+            {
+                "provider": "google_places",
+                "place_id": str(place_id),
+                "primary_text": str(main_text or description),
+                "secondary_text": str(secondary_text or ""),
+                "description": str(description),
+                "location": None,
+            }
+        )
+
+    if results:
+        return results
+
+    try:
+        fallback = await geocode_address(clean_query)
+    except RoutingNoResultError:
+        return []
+    return [
+        {
+            "provider": "google_geocode_fallback",
+            "place_id": fallback.get("place_id"),
+            "primary_text": fallback.get("formatted_address") or clean_query,
+            "secondary_text": "",
+            "description": fallback.get("formatted_address") or clean_query,
+            "location": fallback.get("location"),
+        }
+    ]
+
+
+async def resolve_place(place_id: str) -> Dict[str, Any]:
+    api_key, _, timeout = _google_config()
+    clean_place_id = place_id.strip()
+    if not clean_place_id:
+        raise RoutingNoResultError("Place is required.")
+
+    url = GOOGLE_PLACE_DETAILS_URL.format(place_id=quote(clean_place_id, safe=""))
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "id,displayName,formattedAddress,location",
+    }
+    payload = await asyncio.to_thread(
+        _request_json,
+        "GET",
+        url,
+        headers=headers,
+        timeout=timeout,
+    )
+    location = payload.get("location") or {}
+    latitude = location.get("latitude")
+    longitude = location.get("longitude")
+    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+        raise RoutingNoResultError("That place does not have usable map coordinates.")
+    display_name = payload.get("displayName") or {}
+    label = display_name.get("text") if isinstance(display_name, dict) else None
+    formatted_address = payload.get("formattedAddress") or label or "Selected location"
+    return {
+        "provider": "google_places",
+        "place_id": payload.get("id") or clean_place_id,
+        "formatted_address": formatted_address,
+        "display_name": label or formatted_address,
         "location": {
             "latitude": float(latitude),
             "longitude": float(longitude),
