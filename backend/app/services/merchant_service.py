@@ -4,6 +4,11 @@ from typing import Any, Dict, List
 
 from app.database import database
 from app.services.food_service import append_order_event
+from app.services.food_order_realtime_service import (
+    food_order_event_type,
+    publish_food_order_realtime,
+    update_versioned_food_order,
+)
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
@@ -278,6 +283,8 @@ async def update_restaurant_order_status(
     current = str(order.get("restaurant_status") or order.get("status") or "")
     if status == current:
         return order
+    if order.get("status") in {"DELIVERED", "CANCELLED", "REJECTED"}:
+        raise ValueError("A finalised order cannot be changed.")
     if not _is_admin(user) and status not in MERCHANT_ORDER_TRANSITIONS.get(current, set()):
         raise ValueError(f"Merchant cannot move order from {current} to {status}.")
 
@@ -300,15 +307,14 @@ async def update_restaurant_order_status(
     elif _is_admin(user):
         updates["status"] = status
 
-    updated = await database.update_one_if(
-        "food_orders",
+    updated = await update_versioned_food_order(
         {"id": order_id, "restaurant_status": order.get("restaurant_status") or order.get("status")},
         updates,
     )
     if not updated:
         raise ValueError("Order changed while it was being updated. Refresh and try again.")
 
-    await append_order_event(
+    journey_event = await append_order_event(
         order_id,
         f"RESTAURANT_{status}",
         actor_user_id=_user_id(user),
@@ -378,4 +384,6 @@ async def update_restaurant_order_status(
                 )
 
     refreshed = await database.find_one("food_orders", {"id": order_id})
-    return refreshed or updated
+    result = refreshed or updated
+    await publish_food_order_realtime(result, food_order_event_type(result), journey_event=journey_event)
+    return result

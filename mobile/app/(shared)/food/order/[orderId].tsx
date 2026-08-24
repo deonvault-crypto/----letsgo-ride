@@ -1,41 +1,21 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Screen } from "../../../../components/ui/Screen";
 import { v2Theme } from "../../../../constants/v2Theme";
-import { useLiveRefresh } from "../../../../hooks/useLiveRefresh";
-import { cancelFoodOrder, getFoodOrder, getFoodOrderEvents } from "../../../../services/foodService";
-import { FoodOrder, FoodOrderEvent } from "../../../../types/food.types";
+import { useFoodOrderRealtime } from "../../../../hooks/useFoodOrderRealtime";
+import { cancelFoodOrder } from "../../../../services/foodService";
+import { FoodOrder } from "../../../../types/food.types";
 
-const FINAL_STATUSES = new Set(["DELIVERED", "CANCELLED", "REJECTED"]);
 const PRE_PICKUP_FULFILLMENT = new Set(["NOT_STARTED", "REQUESTED", "MATCHING", "ASSIGNED", "COURIER_ASSIGNED", "COURIER_TO_PICKUP"]);
 
 export default function FoodOrderScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const router = useRouter();
-  const [order, setOrder] = useState<FoodOrder | null>(null);
-  const [events, setEvents] = useState<FoodOrderEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { order, events, loading, error, setError, acceptOrder, reconcile } = useFoodOrderRealtime(orderId);
   const [cancelling, setCancelling] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!orderId) return;
-    try {
-      setError(null);
-      const [nextOrder, nextEvents] = await Promise.all([getFoodOrder(orderId), getFoodOrderEvents(orderId)]);
-      setOrder(nextOrder);
-      setEvents(nextEvents);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load this order.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orderId]);
-
-  useLiveRefresh(load, 10000, !order || !FINAL_STATUSES.has(order.status));
 
   const canCancel = useMemo(() => {
     if (!order) return false;
@@ -47,8 +27,7 @@ export default function FoodOrderScreen() {
     try {
       setCancelling(true);
       setError(null);
-      setOrder(await cancelFoodOrder(order.id, "Cancelled by customer"));
-      await load();
+      acceptOrder(await cancelFoodOrder(order.id, "Cancelled by customer"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to cancel this order.");
     } finally {
@@ -61,7 +40,7 @@ export default function FoodOrderScreen() {
       {loading ? <StateCard icon="clock-outline" title="Opening your order" body="Getting the latest kitchen and courier updates…" /> : null}
 
       {error ? (
-        <Pressable accessibilityRole="button" onPress={load} style={styles.errorCard}>
+        <Pressable accessibilityRole="button" onPress={reconcile} style={styles.errorCard}>
           <MaterialCommunityIcons name="alert-circle-outline" size={22} color={v2Theme.colors.danger} />
           <View style={styles.flexCopy}><Text style={styles.errorTitle}>Something needs attention</Text><Text style={styles.errorBody}>{error}</Text></View>
           <Text style={styles.retry}>Retry</Text>

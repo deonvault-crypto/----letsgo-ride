@@ -1,14 +1,14 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { useMerchantRestaurant } from "../../contexts/MerchantRestaurantContext";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { getRestaurantWorkspace, updateMerchantOrderStatus } from "../../services/merchantService";
+import { useMerchantOrdersRealtime } from "../../hooks/useMerchantOrdersRealtime";
+import { updateMerchantOrderStatus } from "../../services/merchantService";
 import { FoodOrder, FoodOrderStatus } from "../../types/food.types";
 import { MerchantDashboardData } from "../../types/merchant.types";
 
@@ -17,35 +17,26 @@ export type MerchantOrderView = "new" | "preparing" | "ready" | "fulfilling" | "
 export default function MerchantOrdersScreen() {
   const router = useRouter();
   const merchant = useMerchantRestaurant();
-  const [workspace, setWorkspace] = useState<MerchantDashboardData | null>(null);
   const [view, setView] = useState<MerchantOrderView>("new");
-  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    if (!merchant.selected) { setWorkspace(null); setLoading(false); return; }
-    try { setError(null); setWorkspace(await getRestaurantWorkspace(merchant.selected.id)); }
-    catch (err) { setError(err instanceof Error ? err.message : "Unable to load restaurant orders."); }
-    finally { setLoading(false); }
-  }, [merchant.selected]);
-  useLiveRefresh(load, 10000, Boolean(merchant.selected));
+  const { workspace, loading, error, setError, acceptOrder, reconcile } = useMerchantOrdersRealtime(merchant.selected?.id);
   const visibleLoading = loading && (merchant.loading || Boolean(merchant.selected));
   const orders = useMemo(() => (workspace?.orders || []).filter((order) => merchantOrderView(order) === view), [workspace?.orders, view]);
 
   async function transition(order: FoodOrder, status: FoodOrderStatus) {
-    try { setBusyId(order.id); setError(null); await updateMerchantOrderStatus(order.id, { status }); await load(); }
+    try { setBusyId(order.id); setError(null); acceptOrder(await updateMerchantOrderStatus(order.id, { status })); }
     catch (err) { setError(err instanceof Error ? err.message : "Unable to update this order."); }
     finally { setBusyId(null); }
   }
 
   return (
-    <Screen title="Orders" navRole="merchant" refreshing={visibleLoading} onRefresh={load}>
+    <Screen title="Orders" navRole="merchant" refreshing={visibleLoading} onRefresh={reconcile}>
       <LocationStrip />
       {!merchant.loading && !merchant.selected ? <View style={styles.emptySetup}><MaterialCommunityIcons name="storefront-plus-outline" size={34} color={v2Theme.colors.brandStrong} /><Text style={styles.emptyTitle}>Create your first restaurant</Text><Text style={styles.emptyBody}>Business details and a real menu are required before order operations open.</Text><Pressable accessibilityRole="button" onPress={() => router.push("/(merchant)/new" as never)} style={styles.primary}><Text style={styles.primaryText}>Start restaurant onboarding</Text></Pressable></View> : null}
       {merchant.selected ? <View style={styles.hero}><View><Text style={styles.eyebrow}>Orders</Text><Text numberOfLines={1} style={styles.title}>{merchant.selected.name}</Text><Text style={styles.heroBody}>{merchant.selected.is_accepting_orders ? "Open for orders" : "Orders paused"} · {merchantStatus(merchant.selected.status)}</Text></View></View> : null}
       <View style={styles.tabs}><Tab label="New" count={count(workspace, "new")} active={view === "new"} onPress={() => setView("new")} /><Tab label="Preparing" count={count(workspace, "preparing")} active={view === "preparing"} onPress={() => setView("preparing")} /><Tab label="Ready" count={count(workspace, "ready")} active={view === "ready"} onPress={() => setView("ready")} /><Tab label="Delivery" count={count(workspace, "fulfilling")} active={view === "fulfilling"} onPress={() => setView("fulfilling")} /><Tab label="Done" count={count(workspace, "completed")} active={view === "completed"} onPress={() => setView("completed")} /><Tab label="Closed" count={count(workspace, "closed")} active={view === "closed"} onPress={() => setView("closed")} /></View>
       {visibleLoading ? <LoadingState label="Loading order tickets…" /> : null}
-      {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
+      {error ? <Pressable accessibilityRole="button" onPress={reconcile} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
       {!visibleLoading && merchant.selected && orders.length === 0 ? <View style={styles.noOrders}><MaterialCommunityIcons name="receipt-text-outline" size={29} color={v2Theme.colors.inkSecondary} /><Text style={styles.emptyTitle}>No {view === "fulfilling" ? "out-for-delivery" : view} orders</Text><Text style={styles.emptyBody}>Orders move here as the kitchen and delivery progress.</Text></View> : null}
       <View style={styles.list}>{orders.map((order) => <OrderTicket key={order.id} order={order} busy={busyId === order.id} onAccept={() => transition(order, "PREPARING")} onDecline={() => transition(order, "REJECTED")} onReady={() => transition(order, "READY_FOR_PICKUP")} />)}</View>
     </Screen>

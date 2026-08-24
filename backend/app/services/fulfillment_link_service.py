@@ -10,6 +10,12 @@ from app.services.courier_delivery_realtime_service import (
     publish_delivery_realtime,
 )
 from app.services.notification_service import create_app_notification
+from app.services.food_order_realtime_service import (
+    append_food_order_event,
+    food_order_event_type,
+    publish_food_order_realtime,
+    update_versioned_food_order,
+)
 from app.utils import new_id, now_iso
 
 
@@ -34,16 +40,11 @@ async def _append_food_event(
     actor_user_id: str | None = None,
     data: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    return await database.insert_one(
-        "food_order_events",
-        {
-            "id": new_id(),
-            "order_id": order_id,
-            "type": event_type,
-            "actor_user_id": actor_user_id,
-            "data": data or {},
-            "created_at": now_iso(),
-        },
+    return await append_food_order_event(
+        order_id,
+        event_type,
+        actor_user_id=actor_user_id,
+        data=data,
     )
 
 
@@ -130,8 +131,7 @@ async def ensure_food_order_delivery(
     saved = await insert_versioned_delivery(delivery)
     await create_delivery_handoff(saved["id"], str(order.get("customer_user_id") or ""))
 
-    linked_order = await database.update_one_if(
-        "food_orders",
+    linked_order = await update_versioned_food_order(
         {"id": order_id, "courier_delivery_id": None},
         {
             "courier_delivery_id": saved["id"],
@@ -158,12 +158,18 @@ async def ensure_food_order_delivery(
         data={"food_order_id": order_id, "quote_status": "PENDING"},
     )
     await publish_delivery_realtime(saved, "courier_delivery.updated", journey_event=journey_event)
-    await _append_food_event(
+    food_event = await _append_food_event(
         order_id,
         "COURIER_FULFILLMENT_CREATED",
         actor_user_id=actor_user_id,
         data={"delivery_id": saved["id"], "fulfillment_status": "REQUESTED"},
     )
+    if linked_order:
+        await publish_food_order_realtime(
+            linked_order,
+            "food_order.fulfillment_updated",
+            journey_event=food_event,
+        )
     return saved
 
 
@@ -180,6 +186,8 @@ async def sync_food_order_pricing(
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
         return
+    if order.get("status") in {"DELIVERED", "CANCELLED", "REJECTED"}:
+        return
     subtotal = float(order.get("subtotal_usd") or 0)
     delivery_fee = round(float(price), 2)
     total = round(subtotal + delivery_fee, 2)
@@ -192,12 +200,26 @@ async def sync_food_order_pricing(
     delivery_status = DELIVERY_TO_FULFILLMENT_STATUS.get(str(delivery.get("status") or ""))
     if delivery_status:
         updates["fulfillment_status"] = delivery_status
-    await database.update_one("food_orders", order_id, updates)
-    await _append_food_event(
+    changed = any(order.get(key) != value for key, value in updates.items() if key != "updated_at")
+    if not changed:
+        return
+    filters: Dict[str, Any] = {"id": order_id}
+    for key in updates:
+        if key != "updated_at":
+            filters[key] = order.get(key)
+    updated = await update_versioned_food_order(filters, updates)
+    if not updated:
+        return
+    food_event = await _append_food_event(
         order_id,
         "DELIVERY_PRICE_READY",
         actor_user_id=actor_user_id,
         data={"delivery_id": delivery.get("id"), "delivery_fee_usd": delivery_fee, "total_usd": total},
+    )
+    await publish_food_order_realtime(
+        updated,
+        "food_order.fulfillment_updated",
+        journey_event=food_event,
     )
 
 
@@ -214,7 +236,12 @@ async def sync_food_order_from_delivery(
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
         return
+    if order.get("status") in {"DELIVERED", "CANCELLED", "REJECTED"}:
+        return
     if order.get("restaurant_status") in {"REJECTED", "CANCELLED"}:
+        return
+
+    if order.get("fulfillment_status") == target:
         return
 
     updates: Dict[str, Any] = {
@@ -229,15 +256,23 @@ async def sync_food_order_from_delivery(
         updates["cancellation_reason"] = delivery.get("cancellation_reason") or "Delivery closed by LetsGoRide support."
         updates["cancelled_at"] = delivery.get("cancelled_at") or now_iso()
 
-    updated = await database.update_one("food_orders", order_id, updates)
+    updated = await update_versioned_food_order(
+        {"id": order_id, "fulfillment_status": order.get("fulfillment_status")},
+        updates,
+    )
     if not updated:
         return
 
-    await _append_food_event(
+    food_event = await _append_food_event(
         order_id,
         f"FULFILLMENT_{target}",
         actor_user_id=actor_user_id,
         data={"delivery_id": delivery.get("id"), "source": "courier"},
+    )
+    await publish_food_order_realtime(
+        updated,
+        food_order_event_type(updated, fulfillment=True),
+        journey_event=food_event,
     )
 
     if target in {"PICKED_UP", "DELIVERED"}:

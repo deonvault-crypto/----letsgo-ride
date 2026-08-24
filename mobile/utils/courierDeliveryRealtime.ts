@@ -1,5 +1,6 @@
 import type { CourierDelivery, CourierEvent, CourierStatus } from "../types/courier.types";
 import type { RealtimeEventEnvelope } from "../types/realtime.types";
+import { decideRealtimeVersion, normalizeRealtimeVersion } from "./realtimeResource";
 
 
 const TERMINAL = new Set<CourierStatus>(["DELIVERED", "CANCELLED", "FAILED"]);
@@ -47,14 +48,9 @@ export function applyCourierDeliveryEvent(
     || !DELIVERY_EVENT_TYPES.has(event.type)
   ) return ignored;
 
-  const currentVersion = normalizeVersion(current.realtime_version);
-  if (event.version <= currentVersion) return ignored;
-  if (event.version > currentVersion + 1) {
-    return { ...ignored, needsReconciliation: true };
-  }
-  if (normalizeVersion(event.payload.realtime_version) !== event.version) {
-    return { ...ignored, needsReconciliation: true };
-  }
+  const versionDecision = decideRealtimeVersion(current.realtime_version, event);
+  if (versionDecision === "ignore") return ignored;
+  if (versionDecision === "reconcile") return { ...ignored, needsReconciliation: true };
 
   const incomingStatus = event.payload.status;
   if (TERMINAL.has(current.status) && typeof incomingStatus === "string" && !TERMINAL.has(incomingStatus as CourierStatus)) {
@@ -79,8 +75,8 @@ export function applyCourierDeliveryEvent(
 
 export function authoritativeDelivery(current: CourierDelivery | null, next: CourierDelivery) {
   if (!current) return next;
-  const currentVersion = normalizeVersion(current.realtime_version);
-  const nextVersion = normalizeVersion(next.realtime_version);
+  const currentVersion = normalizeRealtimeVersion(current.realtime_version);
+  const nextVersion = normalizeRealtimeVersion(next.realtime_version);
   if (nextVersion < currentVersion) return current;
   if (TERMINAL.has(current.status) && !TERMINAL.has(next.status)) return current;
   return TERMINAL.has(next.status) ? { ...next, live_tracking_active: false } : next;
@@ -96,8 +92,4 @@ function parseJourneyEvent(value: unknown, deliveryId: string): CourierEvent | n
     type: item.type,
     created_at: item.created_at,
   };
-}
-
-function normalizeVersion(value: unknown) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
 }

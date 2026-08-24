@@ -106,6 +106,9 @@ export type FoodOrder = {
   currency?: string;
   courier_delivery_id?: string | null;
   cancellation_reason?: string | null;
+  delivered_at?: string | null;
+  cancelled_at?: string | null;
+  realtime_version?: number;
   created_at?: string;
   updated_at?: string;
 };

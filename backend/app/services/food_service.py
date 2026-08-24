@@ -10,6 +10,12 @@ from app.services.courier_delivery_realtime_service import (
     publish_delivery_realtime,
     update_versioned_delivery,
 )
+from app.services.food_order_realtime_service import (
+    append_food_order_event,
+    insert_versioned_food_order,
+    publish_food_order_realtime,
+    update_versioned_food_order,
+)
 from app.utils import new_id, now_iso
 
 
@@ -60,15 +66,12 @@ async def append_order_event(
     actor_user_id: str | None = None,
     data: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    event = {
-        "id": new_id(),
-        "order_id": order_id,
-        "type": event_type,
-        "actor_user_id": actor_user_id,
-        "data": data or {},
-        "created_at": now_iso(),
-    }
-    return await database.insert_one("food_order_events", event)
+    return await append_food_order_event(
+        order_id,
+        event_type,
+        actor_user_id=actor_user_id,
+        data=data,
+    )
 
 
 async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -135,10 +138,10 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
         "updated_at": now,
         **{key: value for key, value in payload.items() if key != "items"},
     }
-    saved = await database.insert_one("food_orders", order)
+    saved = await insert_versioned_food_order(order)
     customer_id = str(user.get("id") or "")
 
-    await append_order_event(
+    journey_event = await append_order_event(
         saved["id"],
         "ORDER_PLACED",
         actor_user_id=customer_id,
@@ -149,6 +152,7 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
             "restaurant_status": "PENDING_RESTAURANT",
         },
     )
+    await publish_food_order_realtime(saved, "food_order.created", journey_event=journey_event)
 
     merchant_user_id = str(restaurant.get("owner_user_id") or "")
     if merchant_user_id:
@@ -213,9 +217,8 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
             raise ValueError("The courier has already collected this order. Contact support for help.")
 
     now = now_iso()
-    updated = await database.update_one(
-        "food_orders",
-        order_id,
+    updated = await update_versioned_food_order(
+        {"id": order_id, "restaurant_status": order.get("restaurant_status")},
         {
             "status": "CANCELLED",
             "restaurant_status": "CANCELLED",
@@ -281,10 +284,11 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
             },
         )
 
-    await append_order_event(
+    journey_event = await append_order_event(
         order_id,
         "ORDER_CANCELLED",
         actor_user_id=str(user.get("id") or ""),
         data={"reason": reason},
     )
+    await publish_food_order_realtime(updated, "food_order.terminal", journey_event=journey_event)
     return updated
