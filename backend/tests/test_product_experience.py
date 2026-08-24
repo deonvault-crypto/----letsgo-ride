@@ -95,6 +95,40 @@ class FinalProductExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(driver["verification_status"], "approved")
         self.assertEqual((await database.find_one("users", {"id": customer["id"]}))["role"], "driver")
 
+    async def test_submitted_application_is_locked_until_admin_requests_changes(self):
+        customer = await self._insert_user("changes-applicant")
+        admin = await self._insert_user("changes-admin", "admin")
+        payload = {
+            "product": "courier",
+            "full_name": "Changes Applicant",
+            "phone": "+263770000019",
+            "service_area": "Harare",
+            "service_area_id": "harare",
+            "vehicle_type": "motorbike",
+            "vehicle_details": "Honda CB125",
+            "accepted_terms": True,
+        }
+        application = await save_worker_application(payload, customer)
+        documents = [
+            {"id": value, "document_type": value, "file_name": f"{value}.jpg", "file_url": f"https://files.example/{value}.jpg", "status": "PENDING"}
+            for value in ("identity_document", "selfie")
+        ]
+        await database.update_one("worker_applications", application["id"], {"documents": documents})
+        submitted = await submit_worker_application(application["id"], customer)
+        self.assertEqual(submitted["status"], "SUBMITTED")
+
+        with self.assertRaises(ValueError):
+            await save_worker_application({**payload, "vehicle_details": "Changed while submitted"}, customer)
+
+        changes_requested = await review_worker_application(
+            application["id"], "REJECTED", "Please provide clearer vehicle details.", admin
+        )
+        self.assertEqual(changes_requested["status"], "REJECTED")
+        reopened = await save_worker_application({**payload, "vehicle_details": "Honda CB125, red"}, customer)
+        self.assertEqual(reopened["status"], "DRAFT")
+        self.assertIsNone(reopened["review_note"])
+        self.assertIn("Honda CB125, red", reopened["vehicle"])
+
     async def test_worker_document_upload_is_persisted_before_success_returns(self):
         customer = await self._insert_user("document-applicant")
         application = await save_worker_application(

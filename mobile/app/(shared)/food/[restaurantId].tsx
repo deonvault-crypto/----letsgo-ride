@@ -101,7 +101,7 @@ function RestaurantHero({ menu }: { menu: RestaurantMenu }) {
   return (
     <View style={styles.heroCard}>
       <View style={styles.heroMedia}>
-        <FoodImage uri={restaurant.hero_image_url} photographicFallback label={`${restaurant.name} food`} style={styles.heroImage} />
+        <FoodImage uri={restaurant.hero_image_url} role="restaurant" label={restaurant.name} style={styles.heroImage} />
       </View>
       <View style={styles.heroInfo}>
         <View style={styles.heroTitleRow}><Text style={styles.heroTitle}>{restaurant.name}</Text>{restaurant.is_accepting_orders === false ? <Text style={styles.pausedBadge}>PAUSED</Text> : <Text style={styles.openBadge}>OPEN</Text>}</View>
@@ -129,7 +129,7 @@ function MenuItemCard({ item, quantity, onAdd, onRemove }: { item: MenuItem; qua
     <View style={styles.itemCard}>
       <View style={styles.itemCopy}><Text style={styles.itemTitle}>{item.name}</Text>{item.description ? <Text numberOfLines={3} style={styles.itemDescription}>{item.description}</Text> : null}<View style={styles.itemFooter}><Text style={styles.itemPrice}>${item.price_usd.toFixed(2)}</Text>{item.preparation_minutes ? <Text style={styles.prepTime}>{item.preparation_minutes} min prep</Text> : null}</View></View>
       <View style={styles.itemRight}>
-        <FoodImage uri={item.image_url} photographicFallback label={item.name} style={styles.itemImage} />
+        <FoodImage uri={item.image_url} role="menu-item" label={item.name} style={styles.itemImage} />
         {quantity > 0 ? <View style={styles.stepper}><Pressable accessibilityRole="button" accessibilityLabel={`Remove one ${item.name}`} onPress={onRemove} style={styles.stepButton}><MaterialCommunityIcons name="minus" size={17} color={v2Theme.colors.ink} /></Pressable><Text style={styles.quantity}>{quantity}</Text><Pressable accessibilityRole="button" accessibilityLabel={`Add another ${item.name}`} onPress={onAdd} style={styles.stepButton}><MaterialCommunityIcons name="plus" size={17} color={v2Theme.colors.ink} /></Pressable></View> : <Pressable accessibilityRole="button" accessibilityLabel={`Add ${item.name}`} onPress={onAdd} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}><MaterialCommunityIcons name="plus" size={19} color="#FFFFFF" /></Pressable>}
       </View>
     </View>

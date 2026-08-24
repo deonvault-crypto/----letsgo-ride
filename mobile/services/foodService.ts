@@ -7,8 +7,15 @@ import {
   RestaurantMenu,
 } from "../types/food.types";
 
+let restaurantsRequest: Promise<Restaurant[]> | null = null;
+
 export function listRestaurants() {
-  return requestData<Restaurant[]>({ method: "GET", url: "/food/restaurants" });
+  if (restaurantsRequest) return restaurantsRequest;
+  const request = requestData<Restaurant[]>({ method: "GET", url: "/food/restaurants" });
+  restaurantsRequest = request;
+  return request.finally(() => {
+    if (restaurantsRequest === request) restaurantsRequest = null;
+  });
 }
 
 export function getRestaurant(restaurantId: string) {

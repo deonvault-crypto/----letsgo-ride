@@ -8,7 +8,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Href, useLocalSearchParams, useSegments } from "expo-router";
 
@@ -46,6 +46,7 @@ export function Screen({
   refreshing = false,
   onRefresh,
 }: ScreenProps) {
+  const insets = useSafeAreaInsets();
   const segments = useSafeSegments() as string[];
   const params = useSafeLocalSearchParams<{ product?: string }>();
   const group = segments[0];
@@ -84,11 +85,14 @@ export function Screen({
   const resolvedFallback = contextualRole && (genericSharedFallback || !fallbackRoute)
     ? productAccount[contextualRole]
     : fallbackRoute || (navRole ? productHome[navRole] : groupHome[group]);
-  const contentPadding = navRole ? spacing.bottomNavHeight + 72 : spacing.xxl;
+  const contentPadding = navRole
+    ? spacing.bottomNavHeight + Math.max(insets.bottom, spacing.md) + spacing.xxl
+    : spacing.xxl;
   const body = scroll ? (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[styles.scrollContent, { paddingBottom: contentPadding }]}
+      scrollIndicatorInsets={{ bottom: contentPadding }}
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primaryGreen} /> : undefined}
     >
       {children}
