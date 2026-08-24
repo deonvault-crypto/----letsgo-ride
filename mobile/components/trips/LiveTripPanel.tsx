@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import * as Location from "expo-location";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../constants/colors";
 import { coordinateForPlace } from "../../constants/cityCoordinates";
 import { spacing } from "../../constants/spacing";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import { disableLiveTripLocation, endTrip, getLiveTripState, updateLiveTripLocation } from "../../services/ridesService";
 import { LiveTripLocation, Ride } from "../../types/ride.types";
 import { canonicalRideStatus, tripStatusLabel } from "../../utils/tripLifecycle";
@@ -37,6 +38,7 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const resumeDriverWatcher = useRef(false);
   const active = canonicalRideStatus(ride.status) === "IN_PROGRESS" || ride.legacy_status === "departed";
 
   const originPoint = useMemo(() => coordinateForPlace(ride.origin), [ride.origin]);
@@ -71,36 +73,27 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
 
   useEffect(() => {
     if (!active) {
+      resumeDriverWatcher.current = false;
       stopWatching();
       setLiveSharingEnabled(false);
     }
   }, [active, stopWatching]);
 
-  useEffect(() => {
-    if (!active || role !== "passenger") return undefined;
-    let cancelled = false;
-    async function loadLiveState() {
-      try {
-        const state = await getLiveTripState(ride.id);
-        if (cancelled) return;
-        setLiveSharingEnabled(Boolean(state.live_tracking_enabled));
-        setLiveLocation(state.last_driver_location || null);
-        setError("");
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load live trip updates.");
-        }
-      }
+  const loadPassengerLiveState = useCallback(async () => {
+    if (!active || role !== "passenger") return;
+    try {
+      const state = await getLiveTripState(ride.id);
+      setLiveSharingEnabled(Boolean(state.live_tracking_enabled));
+      setLiveLocation(state.last_driver_location || null);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load live trip updates.");
     }
-    loadLiveState();
-    const interval = setInterval(loadLiveState, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
   }, [active, ride.id, role]);
 
-  async function sendLocation(position: Location.LocationObject) {
+  useLiveRefresh(loadPassengerLiveState, 15000, active && role === "passenger");
+
+  const sendLocation = useCallback(async (position: Location.LocationObject) => {
     const nextLocation = {
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
@@ -116,9 +109,9 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not share live location.");
     }
-  }
+  }, [ride.id]);
 
-  async function enableLiveSharing() {
+  const enableLiveSharing = useCallback(async () => {
     try {
       setBusy(true);
       setError("");
@@ -134,6 +127,11 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
       watchRef.current = await Location.watchPositionAsync(LOCATION_OPTIONS, (position) => {
         void sendLocation(position);
       });
+      if (AppState.currentState !== "active") {
+        resumeDriverWatcher.current = true;
+        stopWatching();
+        return;
+      }
       setWatching(true);
       await onRefresh?.();
     } catch (err) {
@@ -141,12 +139,32 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
     } finally {
       setBusy(false);
     }
-  }
+  }, [onRefresh, sendLocation, stopWatching]);
+
+  useEffect(() => {
+    if (role !== "driver") return undefined;
+    if (AppState.currentState !== "active" && active && liveSharingEnabled) {
+      resumeDriverWatcher.current = true;
+    }
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") {
+        if (active && liveSharingEnabled) resumeDriverWatcher.current = true;
+        stopWatching();
+        return;
+      }
+      if (active && liveSharingEnabled && resumeDriverWatcher.current) {
+        resumeDriverWatcher.current = false;
+        void enableLiveSharing();
+      }
+    });
+    return () => subscription.remove();
+  }, [active, enableLiveSharing, liveSharingEnabled, role, stopWatching]);
 
   async function disableSharing() {
     try {
       setBusy(true);
       setError("");
+      resumeDriverWatcher.current = false;
       stopWatching();
       await disableLiveTripLocation(ride.id);
       setLiveSharingEnabled(false);

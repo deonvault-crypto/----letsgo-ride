@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 
 import { DeliveryMap } from "../../components/maps/DeliveryMap";
@@ -56,8 +56,7 @@ export default function CourierHomeScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  useLiveRefresh(load, 12000, Boolean(profile?.online || active));
+  useLiveRefresh(load, 12000, loading || Boolean(profile?.online || active));
 
   const activeRoute = useMemo(
     () => decodePolyline(active?.remaining_route_polyline || active?.route_polyline),

@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 import { listMyRestaurants } from "../services/merchantService";
@@ -18,19 +18,22 @@ export function MerchantRestaurantProvider({ children }: { children: ReactNode }
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => onSessionCleared(() => { setRestaurants([]); setSelectedId(null); setError(null); }), []);
+  const selectedIdRef = useRef<string | null>(null);
+  useEffect(() => onSessionCleared(() => { selectedIdRef.current = null; setRestaurants([]); setSelectedId(null); setError(null); }), []);
   const refreshRestaurants = useCallback(async () => {
     try {
       setError(null);
       const [next, stored] = await Promise.all([listMyRestaurants(), readSelected()]);
-      const nextId = next.some((item) => item.id === (selectedId || stored)) ? (selectedId || stored) : next[0]?.id || null;
+      const preferredId = selectedIdRef.current || stored;
+      const nextId = next.some((item) => item.id === preferredId) ? preferredId : next[0]?.id || null;
+      selectedIdRef.current = nextId;
       setRestaurants(next); setSelectedId(nextId);
       if (nextId) await saveSelected(nextId);
     } catch (err) { setError(err instanceof Error ? err.message : "Unable to load merchant locations."); }
     finally { setLoading(false); }
-  }, [selectedId]);
+  }, []);
   useEffect(() => { refreshRestaurants(); }, [refreshRestaurants]);
-  const selectRestaurant = useCallback(async (id: string) => { if (!restaurants.some((item) => item.id === id)) return; setSelectedId(id); await saveSelected(id); }, [restaurants]);
+  const selectRestaurant = useCallback(async (id: string) => { if (!restaurants.some((item) => item.id === id)) return; selectedIdRef.current = id; setSelectedId(id); await saveSelected(id); }, [restaurants]);
   const value = useMemo(() => ({ restaurants, selected: restaurants.find((item) => item.id === selectedId) || null, loading, error, selectRestaurant, refreshRestaurants }), [restaurants, selectedId, loading, error, selectRestaurant, refreshRestaurants]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

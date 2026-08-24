@@ -7,6 +7,13 @@ import { ApiResponse } from "../types/api.types";
 
 export const TOKEN_KEY = "letsgoride.auth.token";
 
+export class ApiRequestError extends Error {
+  constructor(message: string, public readonly status?: number) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 type WebStorage = {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
@@ -65,7 +72,7 @@ export async function requestData<T>(config: AxiosRequestConfig) {
     return response.data.data;
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      throw new Error(toFriendlyApiError(error));
+      throw new ApiRequestError(toFriendlyApiError(error), error.response?.status);
     }
     throw error;
   }

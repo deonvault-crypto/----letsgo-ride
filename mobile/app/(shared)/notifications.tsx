@@ -1,7 +1,7 @@
-import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useCallback } from "react";
 
 import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
@@ -12,16 +12,14 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../../services/notificationService";
+import { useNotifications } from "../../contexts/NotificationContext";
+import { markAllNotificationsRead, markNotificationRead } from "../../services/notificationService";
 import { AppNotification } from "../../types/notification.types";
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { notifications, unreadCount, loading, error, refreshNotifications, markReadLocally, markAllReadLocally } = useNotifications();
 
   const navRole: "customer" | "driver" | undefined = user?.role === "driver"
     ? "driver"
@@ -29,22 +27,15 @@ export default function NotificationsScreen() {
       ? undefined
       : "customer";
 
-  const load = useCallback(async () => {
-    try {
-      setError("");
-      setNotifications(await listNotifications());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load notifications.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useLiveRefresh(load, 10000);
+  useFocusEffect(useCallback(() => {
+    void refreshNotifications();
+  }, [refreshNotifications]));
 
   async function openNotification(notification: AppNotification) {
-    await markNotificationRead(notification.id);
-    await load();
+    if (!notification.read) {
+      await markNotificationRead(notification.id);
+      markReadLocally(notification.id);
+    }
     const data = notification.data || {};
     const target = typeof data.notification_target === "string" ? data.notification_target : "";
 
@@ -95,10 +86,8 @@ export default function NotificationsScreen() {
 
   async function readAll() {
     await markAllNotificationsRead();
-    await load();
+    markAllReadLocally();
   }
-
-  const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   return (
     <Screen title="Notifications" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
@@ -108,7 +97,7 @@ export default function NotificationsScreen() {
       </View>
       {notifications.length ? <AppButton title="Mark all read" variant="secondary" onPress={readAll} /> : null}
       {loading ? <LoadingState label="Loading notifications..." /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {error ? <ErrorState message={error} onRetry={refreshNotifications} /> : null}
       {!loading && !error && notifications.length === 0 ? (
         <EmptyState title="No notifications yet" body="Ride, Food, Courier, support, and safety updates will appear here." icon="bell-outline" />
       ) : null}

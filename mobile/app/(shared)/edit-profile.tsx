@@ -19,7 +19,7 @@ import { isValidPhone } from "../../utils/validation";
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user, reload } = useCurrentUser();
+  const { user } = useCurrentUser();
   const navRole: "customer" | "driver" | undefined = user?.role === "driver"
     ? "driver"
     : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
@@ -79,7 +79,6 @@ export default function EditProfileScreen() {
         profile_photo_name: profilePhotoName || undefined,
       });
       fillFormFromUser(updated);
-      await reload();
       setSavedAndLeaving(true);
       setMessage("Profile saved. Returning to account...");
       if (phoneChanged) {
@@ -114,7 +113,6 @@ export default function EditProfileScreen() {
         mimeType: asset.mimeType || "image/jpeg",
       });
       fillFormFromUser(updated);
-      await reload();
       setMessage("Profile photo saved.");
     } catch (err) {
       setIsError(true);

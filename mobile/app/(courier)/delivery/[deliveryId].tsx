@@ -63,16 +63,15 @@ export default function CourierDeliveryScreen() {
   }, [deliveryId]);
 
   useFocusEffect(useCallback(() => {
-    void refresh();
     return () => {
       locationWatcher.current?.remove();
       locationWatcher.current = null;
       locationStarting.current = false;
       locationWriteInFlight.current = false;
     };
-  }, [delivery?.status, refresh]));
+  }, []));
 
-  useLiveRefresh(refresh, 10000, Boolean(delivery?.status && ACTIVE.has(delivery.status)));
+  useLiveRefresh(refresh, 10000, loading || Boolean(delivery?.status && ACTIVE.has(delivery.status)));
 
   const stopGps = useCallback(() => {
     gpsGeneration.current += 1;

@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 
 import { DeliveryMap } from "../../components/maps/DeliveryMap";
@@ -39,8 +39,7 @@ export default function CourierOffersScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-  useLiveRefresh(load, 12000, Boolean(profile?.online && !hasActive));
+  useLiveRefresh(load, 12000, loading || Boolean(profile?.online && !hasActive));
   const selected = offers.find((offer) => offer.id === selectedId) || null;
   const route = useMemo(() => decodePolyline(selected?.route_polyline), [selected?.route_polyline]);
 

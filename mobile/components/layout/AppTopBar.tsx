@@ -1,12 +1,10 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useRouter, useSegments } from "expo-router";
-import { useEffect, useState } from "react";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { getToken } from "../../services/api";
-import { listNotifications } from "../../services/notificationService";
+import { useNotifications } from "../../contexts/NotificationContext";
 import { BrandLogo } from "./BrandLogo";
 
 const useSafeSegments: typeof useSegments = typeof useSegments === "function" ? useSegments : (() => [] as never);
@@ -26,31 +24,7 @@ export function AppTopBar({
 }: AppTopBarProps) {
   const router = useRouter();
   const segments = useSafeSegments() as string[];
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    if (!showNotifications) return;
-    let active = true;
-    async function loadUnread() {
-      try {
-        const token = await getToken();
-        if (!token) {
-          if (active) setUnreadCount(0);
-          return;
-        }
-        const notifications = await listNotifications();
-        if (active) setUnreadCount(notifications.filter((notification) => !notification.read).length);
-      } catch {
-        if (active) setUnreadCount(0);
-      }
-    }
-    loadUnread();
-    const interval = setInterval(loadUnread, 30000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [showNotifications]);
+  const { unreadCount } = useNotifications();
 
   function goBack() {
     if (router.canGoBack()) {

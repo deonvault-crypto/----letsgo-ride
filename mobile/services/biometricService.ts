@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 
 import { getCurrentUser } from "./authService";
 import { clearToken, getToken, saveToken } from "./api";
+import { publishSessionUser } from "./sessionLifecycle";
 
 const BIOMETRIC_ENABLED_KEY = "letsgoride.biometric.enabled";
 const BIOMETRIC_TOKEN_KEY = "letsgoride.biometric.token";
@@ -71,7 +72,9 @@ export async function loginWithBiometrics() {
   if (!token) throw new Error("Please log in with your password again.");
   await saveToken(token);
   try {
-    return await getCurrentUser();
+    const user = await getCurrentUser();
+    publishSessionUser(user);
+    return user;
   } catch {
     await clearToken();
     await disableBiometricLogin();

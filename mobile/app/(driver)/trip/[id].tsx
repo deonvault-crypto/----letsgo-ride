@@ -31,7 +31,7 @@ import { isVerifiedStatus } from "../../../utils/verificationStatus";
 export default function DriverTripDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, reload: reloadUser } = useCurrentUser();
+  const { user } = useCurrentUser();
   const [ride, setRide] = useState<Ride | null>(null);
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -140,7 +140,6 @@ export default function DriverTripDetailScreen() {
 
   async function savePhone() {
     await updateCurrentUser({ phone });
-    await reloadUser();
     setShowPhoneModal(false);
   }
 

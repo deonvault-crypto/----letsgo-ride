@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 
 import { LoadingState } from "../../components/states/LoadingState";
@@ -28,8 +28,8 @@ export default function MerchantOrdersScreen() {
     catch (err) { setError(err instanceof Error ? err.message : "Unable to load restaurant orders."); }
     finally { setLoading(false); }
   }, [merchant.selected]);
-  useFocusEffect(useCallback(() => { load(); }, [load]));
   useLiveRefresh(load, 10000, Boolean(merchant.selected));
+  const visibleLoading = loading && (merchant.loading || Boolean(merchant.selected));
   const orders = useMemo(() => (workspace?.orders || []).filter((order) => merchantOrderView(order) === view), [workspace?.orders, view]);
 
   async function transition(order: FoodOrder, status: FoodOrderStatus) {
@@ -39,14 +39,14 @@ export default function MerchantOrdersScreen() {
   }
 
   return (
-    <Screen title="Orders" navRole="merchant" refreshing={loading} onRefresh={load}>
+    <Screen title="Orders" navRole="merchant" refreshing={visibleLoading} onRefresh={load}>
       <LocationStrip />
       {!merchant.loading && !merchant.selected ? <View style={styles.emptySetup}><MaterialCommunityIcons name="storefront-plus-outline" size={34} color={v2Theme.colors.brandStrong} /><Text style={styles.emptyTitle}>Create your first restaurant</Text><Text style={styles.emptyBody}>Business details and a real menu are required before order operations open.</Text><Pressable accessibilityRole="button" onPress={() => router.push("/(merchant)/new" as never)} style={styles.primary}><Text style={styles.primaryText}>Start restaurant onboarding</Text></Pressable></View> : null}
       {merchant.selected ? <View style={styles.hero}><View><Text style={styles.eyebrow}>Orders</Text><Text numberOfLines={1} style={styles.title}>{merchant.selected.name}</Text><Text style={styles.heroBody}>{merchant.selected.is_accepting_orders ? "Open for orders" : "Orders paused"} · {merchantStatus(merchant.selected.status)}</Text></View></View> : null}
       <View style={styles.tabs}><Tab label="New" count={count(workspace, "new")} active={view === "new"} onPress={() => setView("new")} /><Tab label="Preparing" count={count(workspace, "preparing")} active={view === "preparing"} onPress={() => setView("preparing")} /><Tab label="Ready" count={count(workspace, "ready")} active={view === "ready"} onPress={() => setView("ready")} /><Tab label="Delivery" count={count(workspace, "fulfilling")} active={view === "fulfilling"} onPress={() => setView("fulfilling")} /><Tab label="Done" count={count(workspace, "completed")} active={view === "completed"} onPress={() => setView("completed")} /><Tab label="Closed" count={count(workspace, "closed")} active={view === "closed"} onPress={() => setView("closed")} /></View>
-      {loading ? <LoadingState label="Loading order tickets…" /> : null}
+      {visibleLoading ? <LoadingState label="Loading order tickets…" /> : null}
       {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
-      {!loading && merchant.selected && orders.length === 0 ? <View style={styles.noOrders}><MaterialCommunityIcons name="receipt-text-outline" size={29} color={v2Theme.colors.inkSecondary} /><Text style={styles.emptyTitle}>No {view === "fulfilling" ? "out-for-delivery" : view} orders</Text><Text style={styles.emptyBody}>Orders move here as the kitchen and delivery progress.</Text></View> : null}
+      {!visibleLoading && merchant.selected && orders.length === 0 ? <View style={styles.noOrders}><MaterialCommunityIcons name="receipt-text-outline" size={29} color={v2Theme.colors.inkSecondary} /><Text style={styles.emptyTitle}>No {view === "fulfilling" ? "out-for-delivery" : view} orders</Text><Text style={styles.emptyBody}>Orders move here as the kitchen and delivery progress.</Text></View> : null}
       <View style={styles.list}>{orders.map((order) => <OrderTicket key={order.id} order={order} busy={busyId === order.id} onAccept={() => transition(order, "PREPARING")} onDecline={() => transition(order, "REJECTED")} onReady={() => transition(order, "READY_FOR_PICKUP")} />)}</View>
     </Screen>
   );

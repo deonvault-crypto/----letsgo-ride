@@ -25,7 +25,7 @@ const PROFILE_PHOTO_REQUIRED_MESSAGE = "Please add a clear profile photo before 
 
 export default function PostTripScreen() {
   const router = useRouter();
-  const { user, loading: userLoading, error: userError, reload: reloadUser } = useCurrentUser();
+  const { user, loading: userLoading, error: userError } = useCurrentUser();
   const [verification, setVerification] = useState<VerificationProfile | null>(null);
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
@@ -59,7 +59,6 @@ export default function PostTripScreen() {
       setSaving(true);
       setError("");
       await updateCurrentUser({ phone });
-      await reloadUser();
       setShowPhoneModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save phone number.");

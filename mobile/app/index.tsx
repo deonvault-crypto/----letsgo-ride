@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 
 import { Screen } from "../components/ui/Screen";
-import { getCurrentUser, hasSession, logout } from "../services/authService";
+import { useSession } from "../contexts/SessionContext";
 
 const MIN_LAUNCH_MS = 460;
 
@@ -15,8 +15,10 @@ function wait(ms: number) {
 
 export default function IndexScreen() {
   const router = useRouter();
+  const { user, loading } = useSession();
   const entrance = useRef(new Animated.Value(0)).current;
   const serviceReveal = useRef(new Animated.Value(0)).current;
+  const launchedAt = useRef(Date.now());
 
   useEffect(() => {
     Animated.sequence([
@@ -34,36 +36,25 @@ export default function IndexScreen() {
       }),
     ]).start();
 
+  }, [entrance, serviceReveal]);
+
+  useEffect(() => {
+    if (loading) return undefined;
     let active = true;
-
     async function decideRoute() {
-      const startedAt = Date.now();
-      const session = await hasSession();
       let destination = "/(customer)/home";
+      if (user?.role === "admin") destination = "/(admin)/dashboard";
+      else if (user?.role === "driver") destination = "/(driver)/home";
+      else if (user?.role === "courier") destination = "/(courier)/home";
+      else if (user?.role === "merchant") destination = "/(merchant)/home";
 
-      if (session) {
-        try {
-          const user = await getCurrentUser();
-          if (user.role === "admin") destination = "/(admin)/dashboard";
-          else if (user.role === "driver") destination = "/(driver)/home";
-          else if (user.role === "courier") destination = "/(courier)/home";
-          else if (user.role === "merchant") destination = "/(merchant)/home";
-        } catch {
-          await logout();
-          destination = "/(customer)/home";
-        }
-      }
-
-      const remaining = Math.max(0, MIN_LAUNCH_MS - (Date.now() - startedAt));
+      const remaining = Math.max(0, MIN_LAUNCH_MS - (Date.now() - launchedAt.current));
       if (remaining > 0) await wait(remaining);
       if (active) router.replace(destination as never);
     }
-
-    decideRoute();
-    return () => {
-      active = false;
-    };
-  }, [entrance, router, serviceReveal]);
+    void decideRoute();
+    return () => { active = false; };
+  }, [loading, router, user?.role]);
 
   const brandStyle = {
     opacity: entrance,

@@ -5,25 +5,54 @@ import { AppState } from "react-native";
 export function useLiveRefresh(refresh: () => void | Promise<void>, intervalMs = 15000, enabled = true) {
   useFocusEffect(
     useCallback(() => {
+      if (!enabled) return undefined;
+
       let active = true;
       let appActive = !["background", "inactive"].includes(String(AppState.currentState || "active"));
+      let inFlight = false;
+      let interval: ReturnType<typeof setInterval> | null = null;
 
       const run = async () => {
-        if (!active || !appActive || !enabled) return;
-        await refresh();
+        if (!active || !appActive || !enabled || inFlight) return;
+        inFlight = true;
+        try {
+          await refresh();
+        } finally {
+          inFlight = false;
+        }
       };
 
-      void run();
-      const interval = setInterval(run, intervalMs);
+      const stopInterval = () => {
+        if (!interval) return;
+        clearInterval(interval);
+        interval = null;
+      };
+
+      const startInterval = () => {
+        if (!active || !appActive || interval) return;
+        interval = setInterval(run, intervalMs);
+      };
+
+      if (appActive) {
+        void run();
+        startInterval();
+      }
       const subscription = AppState.addEventListener("change", (nextState) => {
         const resumed = !appActive && nextState === "active";
         appActive = nextState === "active";
-        if (resumed) void run();
+        if (!appActive) {
+          stopInterval();
+          return;
+        }
+        if (resumed) {
+          void run();
+          startInterval();
+        }
       });
 
       return () => {
         active = false;
-        clearInterval(interval);
+        stopInterval();
         subscription.remove();
       };
     }, [refresh, intervalMs, enabled]),

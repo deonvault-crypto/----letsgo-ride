@@ -22,7 +22,7 @@ import { isRideBookable, tripStatusLabel, tripStatusTone } from "../../../utils/
 export default function RequestSeatScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, loading: userLoading, isGuest, reload: reloadUser } = useCurrentUser();
+  const { user, loading: userLoading, isGuest } = useCurrentUser();
   const [ride, setRide] = useState<Ride | null>(null);
   const [note, setNote] = useState("");
   const [phone, setPhone] = useState("");
@@ -77,7 +77,6 @@ export default function RequestSeatScreen() {
       setSaving(true);
       setError("");
       await updateCurrentUser({ phone });
-      await reloadUser();
       setShowPhoneModal(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save phone number.");

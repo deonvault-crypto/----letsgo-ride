@@ -6,6 +6,8 @@ import * as Notifications from "expo-notifications";
 
 import { FoodBasketProvider } from "../contexts/FoodBasketContext";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
+import { NotificationProvider } from "../contexts/NotificationContext";
+import { SessionProvider } from "../contexts/SessionContext";
 import { configureNotificationHandler } from "../services/pushNotificationService";
 
 export default function RootLayout() {
@@ -62,27 +64,31 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <LocationDraftProvider>
-        <FoodBasketProvider>
-          <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation: "fade",
-              animationDuration: 220,
-              animationTypeForReplace: "push",
-            }}
-          >
-            <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
-            <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
-          </Stack>
-        </FoodBasketProvider>
-      </LocationDraftProvider>
+      <SessionProvider>
+        <NotificationProvider>
+          <LocationDraftProvider>
+            <FoodBasketProvider>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  animation: "fade",
+                  animationDuration: 220,
+                  animationTypeForReplace: "push",
+                }}
+              >
+                <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
+                <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
+                <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
+                <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
+                <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
+                <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
+                <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
+              </Stack>
+            </FoodBasketProvider>
+          </LocationDraftProvider>
+        </NotificationProvider>
+      </SessionProvider>
     </SafeAreaProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -28,6 +28,7 @@ export default function ConversationScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const lastReadMessageId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -39,19 +40,20 @@ export default function ConversationScreen() {
       ]);
       setConversation(conversationData);
       setMessages(messageData);
-      await markConversationRead(id);
+      const latestUnread = [...messageData].reverse().find((message) => isUnreadForUser(message, conversationData, user?.id));
+      if (latestUnread && lastReadMessageId.current !== latestUnread.id) {
+        await markConversationRead(id);
+        lastReadMessageId.current = latestUnread.id;
+        setMessages((current) => current.map((message) => markReadForUser(message, conversationData, user?.id)));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load conversation.");
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, user?.id]);
 
   useLiveRefresh(load, 7000);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   async function send() {
     if (!id || !body.trim()) return;
@@ -123,6 +125,19 @@ export default function ConversationScreen() {
       ) : null}
     </Screen>
   );
+}
+
+function isUnreadForUser(message: TripMessage, conversation: Conversation, userId?: string) {
+  if (!userId || message.sender_id === userId) return false;
+  if (conversation.driver_user_id === userId) return message.read_by_driver !== true;
+  if (conversation.passenger_id === userId) return message.read_by_passenger !== true;
+  return false;
+}
+
+function markReadForUser(message: TripMessage, conversation: Conversation, userId?: string): TripMessage {
+  if (conversation.driver_user_id === userId) return { ...message, read_by_driver: true };
+  if (conversation.passenger_id === userId) return { ...message, read_by_passenger: true };
+  return message;
 }
 
 function formatTime(value: string) {

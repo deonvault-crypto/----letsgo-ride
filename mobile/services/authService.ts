@@ -1,8 +1,8 @@
 import axios from "axios";
 
-import { api, requestData, saveToken, clearToken, getToken, toFriendlyApiError } from "./api";
+import { api, requestData, saveToken, getToken, toFriendlyApiError } from "./api";
 import { User, UserRole } from "../types/user.types";
-import { clearPrivateSessionState } from "./sessionLifecycle";
+import { clearPrivateSessionState, publishSessionUser } from "./sessionLifecycle";
 import { disablePhoneNotifications } from "./pushNotificationService";
 
 type AuthPayload = { token: string; user: User };
@@ -29,6 +29,7 @@ export async function emailLogin(email: string, password: string) {
     data: { email, password },
   });
   await saveToken(result.token);
+  publishSessionUser(result.user);
   return result;
 }
 
@@ -53,6 +54,7 @@ export async function verifyEmail(email: string, code: string) {
     data: { email, code },
   });
   if (result.token) await saveToken(result.token);
+  if (result.user) publishSessionUser(result.user);
   return result;
 }
 
@@ -87,6 +89,7 @@ export async function verifyOtp(phone: string, otp: string, role: UserRole) {
     data: { phone, otp, role },
   });
   await saveToken(result.token);
+  publishSessionUser(result.user);
   return result;
 }
 
@@ -95,7 +98,9 @@ export async function getCurrentUser() {
 }
 
 export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "profile_photo_url" | "profile_photo_name" | "role" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
-  return requestData<User>({ method: "PATCH", url: "/auth/me", data });
+  const user = await requestData<User>({ method: "PATCH", url: "/auth/me", data });
+  publishSessionUser(user);
+  return user;
 }
 
 export async function uploadProfilePhoto(asset: { uri: string; fileName?: string | null; mimeType?: string | null; type?: string | null }) {
@@ -112,7 +117,9 @@ export async function uploadProfilePhoto(asset: { uri: string; fileName?: string
     if (!response.data.success) {
       throw new Error(response.data.error || "Unable to upload profile photo.");
     }
-    return response.data.data as User;
+    const user = response.data.data as User;
+    publishSessionUser(user);
+    return user;
   } catch (err) {
     if (axios.isAxiosError(err)) {
       throw new Error(toFriendlyApiError(err));
@@ -123,7 +130,7 @@ export async function uploadProfilePhoto(asset: { uri: string; fileName?: string
 
 export async function deleteAccount() {
   const result = await requestData<{ deleted: boolean }>({ method: "DELETE", url: "/auth/me" });
-  await clearToken();
+  await clearPrivateSessionState();
   return result;
 }
 
