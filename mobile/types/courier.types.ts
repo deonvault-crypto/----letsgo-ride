@@ -128,3 +128,23 @@ export type CourierTrackingState = {
   remaining_route_updated_at?: string | null;
   handoff_radius_meters?: number | null;
 };
+
+export type CourierOffer = {
+  id: string;
+  realtime_version: number;
+  source_type: "COURIER_REQUEST" | "FOOD_ORDER" | string;
+  status: "MATCHING";
+  quote_status: "READY";
+  pickup_address: string;
+  dropoff_address: string;
+  pickup_location?: CourierGeoPoint | null;
+  dropoff_location?: CourierGeoPoint | null;
+  currency?: string;
+  price_usd: number;
+  courier_payout_usd: number;
+  distance_km?: number | null;
+  estimated_duration_minutes?: number | null;
+  route_polyline?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};

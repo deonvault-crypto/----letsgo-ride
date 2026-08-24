@@ -1,3 +1,5 @@
+import type { CourierDelivery, CourierOffer } from "./courier.types";
+
 export type WorkAvailability = {
   id: string;
   user_id: string;
@@ -57,6 +59,14 @@ export type CourierEarningsSummary = {
   weekly_chart: Array<{ date: string; accrued_earnings_usd: number }>;
   settlement_integrated: false;
   payout_history: [];
+};
+
+export type CourierWorkspaceSnapshot = {
+  profile: CourierProfile | null;
+  active_delivery: CourierDelivery | null;
+  earnings: CourierEarningsSummary;
+  offers: CourierOffer[];
+  next_shift: CourierShift | null;
 };
 
 export type WorkerProduct = "courier" | "driver" | "merchant";

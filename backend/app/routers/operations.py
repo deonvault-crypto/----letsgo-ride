@@ -19,6 +19,7 @@ from app.services.operations_service import (
     assigned_courier_deliveries,
     claim_courier_offer,
     courier_delivery_history,
+    courier_workspace_snapshot,
     create_availability,
     create_courier_profile,
     delete_availability,
@@ -233,6 +234,15 @@ async def remove_availability(item_id: str, user=Depends(get_current_user)):
 async def courier_profile(user=Depends(get_current_user)):
     _require_courier_account(user)
     return api_success(await get_courier_profile(user))
+
+
+@router.get("/courier/workspace")
+async def courier_workspace(user=Depends(get_current_user)):
+    _require_courier_account(user)
+    try:
+        return api_success(await courier_workspace_snapshot(user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
 
 
 @router.post("/courier/profile")

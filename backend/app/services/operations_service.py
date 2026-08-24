@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -7,7 +8,12 @@ from pymongo.errors import DuplicateKeyError
 
 from app.database import database
 from app.services.courier_service import append_delivery_event
+from app.services.courier_earnings_service import courier_earnings_summary
 from app.services.courier_delivery_realtime_service import publish_delivery_realtime, update_versioned_delivery
+from app.services.courier_offer_realtime_service import (
+    list_offer_deliveries_for_courier,
+    publish_courier_offer_transition,
+)
 from app.services.courier_state_service import (
     ACTIVE_COURIER_STATUSES,
     TERMINAL_COURIER_STATUSES,
@@ -15,6 +21,7 @@ from app.services.courier_state_service import (
 )
 from app.services.fulfillment_link_service import sync_food_order_from_delivery
 from app.services.notification_service import create_app_notification
+from app.services.workforce_service import available_courier_shifts
 from app.utils import new_id, now_iso
 
 
@@ -183,26 +190,40 @@ async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     profile = await get_courier_profile(user)
     if not profile or profile.get("status") != "APPROVED":
         raise PermissionError("Approved courier verification is required to view delivery offers.")
-    if not profile.get("online"):
-        return []
-    if await active_courier_delivery(user):
-        return []
-
-    offers = await database.find_many(
-        "courier_deliveries",
-        {"status": "MATCHING", "courier_user_id": None, "quote_status": "READY"},
+    active = await active_courier_delivery(user)
+    return await list_offer_deliveries_for_courier(
+        user,
+        profile=profile,
+        has_active_delivery=bool(active),
     )
-    user_id = _user_id(user)
-    eligible = [
-        delivery
-        for delivery in offers
-        if delivery.get("sender_user_id") != user_id
-        and isinstance(delivery.get("price_usd"), (int, float))
-        and float(delivery.get("price_usd") or 0) > 0
-        and isinstance(delivery.get("courier_payout_usd"), (int, float))
-        and float(delivery.get("courier_payout_usd") or 0) > 0
-    ]
-    return sorted(eligible, key=lambda item: str(item.get("created_at") or ""))
+
+
+async def courier_workspace_snapshot(user: Dict[str, Any]) -> Dict[str, Any]:
+    """Compose the current Courier read models into one authoritative opening snapshot."""
+    profile = await get_courier_profile(user)
+    active = await active_courier_delivery(user)
+    if profile and profile.get("status") == "APPROVED":
+        earnings, offers, shifts = await asyncio.gather(
+            courier_earnings_summary(user),
+            list_offer_deliveries_for_courier(
+                user,
+                profile=profile,
+                has_active_delivery=bool(active),
+            ),
+            available_courier_shifts(user),
+        )
+    else:
+        earnings = await courier_earnings_summary(user)
+        offers = []
+        shifts = []
+    next_shift = next((shift for shift in shifts if shift.get("status") == "UPCOMING"), None)
+    return {
+        "profile": profile,
+        "active_delivery": active,
+        "earnings": earnings,
+        "offers": offers,
+        "next_shift": next_shift,
+    }
 
 
 async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -253,6 +274,8 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         raise ValueError("Finish your current delivery before accepting another offer.") from error
     if not updated:
         raise ValueError("Another courier accepted this delivery first.")
+
+    await publish_courier_offer_transition(delivery, updated)
 
     await append_delivery_event(
         delivery_id,

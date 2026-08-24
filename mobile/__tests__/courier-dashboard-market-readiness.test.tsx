@@ -1,13 +1,8 @@
 import { render, waitFor } from "@testing-library/react-native";
 
 import CourierHomeScreen from "../app/(courier)/home";
-import {
-  getActiveCourierDelivery,
-  getCourierEarnings,
-  getCourierProfile,
-  listAvailableCourierShifts,
-  listCourierOffers,
-} from "../services/operationsService";
+import { CourierWorkspaceProvider } from "../contexts/CourierWorkspaceContext";
+import { getCourierWorkspace, listCourierOffers } from "../services/operationsService";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -21,10 +16,17 @@ jest.mock("../services/operationsService", () => ({
   claimCourierOffer: jest.fn(),
   getActiveCourierDelivery: jest.fn(),
   getCourierEarnings: jest.fn(),
-  getCourierProfile: jest.fn(),
+  getCourierWorkspace: jest.fn(),
   listCourierOffers: jest.fn(),
-  listAvailableCourierShifts: jest.fn(),
   setCourierOnline: jest.fn(),
+}));
+
+jest.mock("../contexts/SessionContext", () => ({
+  useSession: () => ({ user: { id: "courier-1", role: "courier", name: "Courier" } }),
+}));
+
+jest.mock("../contexts/RealtimeContext", () => ({
+  useRealtime: () => ({ reconciliationRevision: 0, subscribe: () => jest.fn() }),
 }));
 
 jest.mock("../components/maps/DeliveryMap", () => ({ DeliveryMap: () => null }));
@@ -46,15 +48,18 @@ const activeDelivery = {
 describe("Courier dashboard priority", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (getCourierProfile as jest.Mock).mockResolvedValue({ id: "profile-1", user_id: "courier-1", status: "APPROVED", online: false });
-    (getActiveCourierDelivery as jest.Mock).mockResolvedValue(activeDelivery);
-    (getCourierEarnings as jest.Mock).mockResolvedValue({ currency: "USD", completed_deliveries: 0, total_payout_usd: 0, today_payout_usd: 0, last_7_days_payout_usd: 0, latest_payouts: [] });
+    (getCourierWorkspace as jest.Mock).mockResolvedValue({
+      profile: { id: "profile-1", user_id: "courier-1", status: "APPROVED", online: false },
+      active_delivery: activeDelivery,
+      earnings: { currency: "USD", completed_deliveries: 0, total_payout_usd: 0, today_payout_usd: 0, last_7_days_payout_usd: 0, latest_payouts: [] },
+      offers: [],
+      next_shift: null,
+    });
     (listCourierOffers as jest.Mock).mockResolvedValue([]);
-    (listAvailableCourierShifts as jest.Mock).mockResolvedValue([]);
   });
 
   it("keeps an active delivery dominant even when offline for new offers", async () => {
-    const screen = render(<CourierHomeScreen />);
+    const screen = render(<CourierWorkspaceProvider><CourierHomeScreen /></CourierWorkspaceProvider>);
     await waitFor(() => expect(screen.getByText("Stay with the journey.")).toBeOnTheScreen());
     expect(screen.getByText("Open live journey")).toBeOnTheScreen();
     expect(screen.queryByText("Nearby offers")).toBeNull();
@@ -62,9 +67,15 @@ describe("Courier dashboard priority", () => {
   });
 
   it("renders server idle truth after login instead of reviving a completed job", async () => {
-    (getActiveCourierDelivery as jest.Mock).mockResolvedValueOnce(null);
+    (getCourierWorkspace as jest.Mock).mockResolvedValueOnce({
+      profile: { id: "profile-1", user_id: "courier-1", status: "APPROVED", online: false },
+      active_delivery: null,
+      earnings: { currency: "USD", completed_deliveries: 0, total_payout_usd: 0, today_payout_usd: 0, last_7_days_payout_usd: 0, latest_payouts: [] },
+      offers: [],
+      next_shift: null,
+    });
 
-    const screen = render(<CourierHomeScreen />);
+    const screen = render(<CourierWorkspaceProvider><CourierHomeScreen /></CourierWorkspaceProvider>);
 
     await waitFor(() => expect(screen.getByText("Start when you’re ready.")).toBeOnTheScreen());
     expect(screen.getByText("Nearby offers")).toBeOnTheScreen();

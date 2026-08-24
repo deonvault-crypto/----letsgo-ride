@@ -10,6 +10,7 @@ from app.services.courier_delivery_realtime_service import (
     publish_delivery_realtime,
     update_versioned_delivery,
 )
+from app.services.courier_offer_realtime_service import publish_courier_offer_transition
 from app.services.pricing_service import PricingNotConfiguredError, calculate_delivery_pricing
 from app.services.routing_service import RoutingError, resolve_route, routing_status
 from app.utils import now_iso
@@ -142,6 +143,7 @@ async def apply_calculated_delivery_quote(
         },
     )
     await publish_delivery_realtime(updated, "courier_delivery.route_updated", journey_event=journey_event)
+    await publish_courier_offer_transition(delivery, updated)
     await sync_food_order_pricing(updated, actor_user_id=actor_user_id)
     return updated
 

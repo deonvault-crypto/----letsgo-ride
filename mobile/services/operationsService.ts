@@ -1,10 +1,11 @@
 import { ApiResponse } from "../types/api.types";
 import { api, requestData, toFriendlyApiError } from "./api";
 import axios from "axios";
-import { CourierDelivery } from "../types/courier.types";
+import { CourierDelivery, CourierOffer } from "../types/courier.types";
 import {
   CourierEarningsSummary,
   CourierProfile,
+  CourierWorkspaceSnapshot,
   CourierShift,
   CourierShiftBooking,
   WorkerApplication,
@@ -50,6 +51,10 @@ export function listAssignedCourierDeliveries() {
   return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/courier/deliveries" });
 }
 
+export function getCourierWorkspace() {
+  return requestData<CourierWorkspaceSnapshot>({ method: "GET", url: "/operations/courier/workspace" });
+}
+
 export function getActiveCourierDelivery() {
   return requestData<CourierDelivery | null>({ method: "GET", url: "/operations/courier/deliveries/active" });
 }
@@ -63,7 +68,7 @@ export function getCourierEarnings() {
 }
 
 export function listCourierOffers() {
-  return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/courier/offers" });
+  return requestData<CourierOffer[]>({ method: "GET", url: "/operations/courier/offers" });
 }
 
 export function claimCourierOffer(deliveryId: string) {

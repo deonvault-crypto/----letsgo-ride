@@ -10,6 +10,7 @@ from app.services.courier_delivery_realtime_service import (
     publish_delivery_realtime,
     update_versioned_delivery,
 )
+from app.services.courier_offer_realtime_service import publish_courier_offer_transition
 from app.services.food_order_realtime_service import (
     append_food_order_event,
     insert_versioned_food_order,
@@ -253,6 +254,7 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
             data={"reason": reason},
         )
         await publish_delivery_realtime(terminal_delivery, "courier_delivery.terminal", journey_event=journey_event)
+        await publish_courier_offer_transition(linked_delivery, terminal_delivery)
         courier_user_id = str(linked_delivery.get("courier_user_id") or "")
         if courier_user_id:
             await create_app_notification(

@@ -1,72 +1,58 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { DeliveryMap } from "../../components/maps/DeliveryMap";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { claimCourierOffer, getActiveCourierDelivery, getCourierProfile, listCourierOffers } from "../../services/operationsService";
-import { CourierDelivery } from "../../types/courier.types";
-import { CourierProfile } from "../../types/operations.types";
+import { useCourierWorkspace } from "../../contexts/CourierWorkspaceContext";
+import { claimCourierOffer } from "../../services/operationsService";
+import type { CourierOffer } from "../../types/courier.types";
 import { decodePolyline } from "../../utils/decodePolyline";
+import { selectedCourierOfferId } from "../../utils/courierOfferRealtime";
 
 export default function CourierOffersScreen() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CourierProfile | null>(null);
-  const [offers, setOffers] = useState<CourierDelivery[]>([]);
+  const {
+    profile, active, offers, loading, error, setError,
+    reconcile, reconcileOffers, acceptClaimedDelivery, removeOffer,
+  } = useCourierWorkspace();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [hasActive, setHasActive] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setError(null);
-      const [nextProfile, active] = await Promise.all([getCourierProfile(), getActiveCourierDelivery()]);
-      const nextOffers = nextProfile?.status === "APPROVED" && nextProfile.online && !active ? await listCourierOffers() : [];
-      setProfile(nextProfile);
-      setHasActive(Boolean(active));
-      setOffers(nextOffers);
-      setSelectedId((current) => nextOffers.some((offer) => offer.id === current) ? current : nextOffers[0]?.id || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load offers.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useLiveRefresh(load, 12000, loading || Boolean(profile?.online && !hasActive));
+  const hasActive = Boolean(active);
+  useEffect(() => {
+    setSelectedId((current) => selectedCourierOfferId(offers, current));
+  }, [offers]);
   const selected = offers.find((offer) => offer.id === selectedId) || null;
   const route = useMemo(() => decodePolyline(selected?.route_polyline), [selected?.route_polyline]);
 
-  async function accept(offer: CourierDelivery) {
+  async function accept(offer: CourierOffer) {
     if (claiming || hasActive) return;
     try {
       setClaiming(offer.id);
       setError(null);
       const claimed = await claimCourierOffer(offer.id);
-      setOffers([]);
+      acceptClaimedDelivery(claimed);
       router.push(`/(courier)/delivery/${claimed.id}` as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : "This offer could not be accepted.");
-      await load();
+      removeOffer(offer.id);
+      await reconcileOffers();
     } finally {
       setClaiming(null);
     }
   }
 
   return (
-    <Screen title="Offers" navRole="courier" onRefresh={load} refreshing={loading}>
+    <Screen title="Offers" navRole="courier" onRefresh={reconcile} refreshing={loading}>
       <View style={styles.heading}><View><Text style={styles.eyebrow}>AVAILABLE NOW</Text><Text style={styles.title}>Nearby work</Text></View><View style={styles.count}><Text style={styles.countText}>{offers.length}</Text></View></View>
       {loading ? <LoadingState label="Looking for delivery work…" /> : null}
-      {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
+      {error ? <Pressable accessibilityRole="button" onPress={reconcile} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
       {!loading && hasActive ? <StateCard icon="bike-fast" title="Your current delivery comes first" body="New offers are paused until the active handoff is complete." /> : null}
       {!loading && !hasActive && !profile?.online ? <StateCard icon="power" title="You’re offline" body="Go online from Home when you’re ready to receive work." /> : null}
-      {!loading && profile?.online && !hasActive && offers.length === 0 ? <StateCard icon="radar" title="No offers nearby yet" body="Keep this screen open. New Courier and Food delivery work refreshes automatically." /> : null}
+      {!loading && profile?.online && !hasActive && offers.length === 0 ? <StateCard icon="radar" title="No offers nearby yet" body="New Courier and Food delivery work will appear here as it becomes available." /> : null}
 
       {selected ? (
         <>

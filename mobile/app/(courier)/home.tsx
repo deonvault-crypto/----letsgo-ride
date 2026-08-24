@@ -1,62 +1,24 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { DeliveryMap } from "../../components/maps/DeliveryMap";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import {
-  getActiveCourierDelivery,
-  getCourierEarnings,
-  getCourierProfile,
-  listAvailableCourierShifts,
-  listCourierOffers,
-  setCourierOnline,
-} from "../../services/operationsService";
-import { CourierDelivery } from "../../types/courier.types";
-import { CourierEarningsSummary, CourierProfile, CourierShift } from "../../types/operations.types";
+import { useCourierWorkspace } from "../../contexts/CourierWorkspaceContext";
+import { setCourierOnline } from "../../services/operationsService";
 import { decodePolyline } from "../../utils/decodePolyline";
-
-const ACTIVE_DELIVERY_STATUSES = new Set(["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
 
 export default function CourierHomeScreen() {
   const router = useRouter();
-  const [profile, setProfile] = useState<CourierProfile | null>(null);
-  const [active, setActive] = useState<CourierDelivery | null>(null);
-  const [offerCount, setOfferCount] = useState(0);
-  const [nextShift, setNextShift] = useState<CourierShift | null>(null);
-  const [earnings, setEarnings] = useState<CourierEarningsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    profile, active, earnings, offers, nextShift, loading, error,
+    setError, reconcile, applyOnlineProfile,
+  } = useCourierWorkspace();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setError(null);
-      const nextProfile = await getCourierProfile();
-      const [nextActive, nextEarnings] = await Promise.all([getActiveCourierDelivery(), getCourierEarnings()]);
-      const [offers, shifts] = nextProfile?.status === "APPROVED"
-        ? await Promise.all([
-          nextProfile.online && !nextActive ? listCourierOffers() : Promise.resolve([]),
-          listAvailableCourierShifts().catch(() => []),
-        ])
-        : [[], [] as CourierShift[]];
-      setProfile(nextProfile);
-      setActive(nextActive && ACTIVE_DELIVERY_STATUSES.has(nextActive.status) ? nextActive : null);
-      setEarnings(nextEarnings);
-      setOfferCount(offers.length);
-      setNextShift(shifts.find((shift) => shift.status === "UPCOMING") || null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load your courier day.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useLiveRefresh(load, 12000, loading || Boolean(profile?.online || active));
+  const offerCount = offers.length;
 
   const activeRoute = useMemo(
     () => decodePolyline(active?.remaining_route_polyline || active?.route_polyline),
@@ -70,8 +32,8 @@ export default function CourierHomeScreen() {
     try {
       setBusy(true);
       setError(null);
-      setProfile(await setCourierOnline(!profile.online));
-      await load();
+      const updated = await setCourierOnline(!profile.online);
+      await applyOnlineProfile(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to change your work status.");
     } finally {
@@ -82,7 +44,7 @@ export default function CourierHomeScreen() {
   if (loading) return <Screen navRole="courier"><LoadingState label="Preparing your courier day…" /></Screen>;
 
   return (
-    <Screen navRole="courier" refreshing={loading} onRefresh={load} showNotifications>
+    <Screen navRole="courier" refreshing={loading} onRefresh={reconcile} showNotifications>
       {active ? (
         <>
           <View style={styles.activeHero}>
@@ -117,7 +79,7 @@ export default function CourierHomeScreen() {
             ) : null}
           </View>
 
-          {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={v2Theme.colors.danger} /><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
+          {error ? <Pressable accessibilityRole="button" onPress={reconcile} style={styles.error}><MaterialCommunityIcons name="alert-circle-outline" size={20} color={v2Theme.colors.danger} /><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
 
           {!profile ? (
             <View style={styles.setupCard}><MaterialCommunityIcons name="clipboard-account-outline" size={32} color={v2Theme.colors.brandStrong} /><Text style={styles.setupTitle}>Courier profile required</Text><Text style={styles.body}>Complete the approved Courier onboarding attached to your account.</Text><Pressable accessibilityRole="button" onPress={() => router.push("/(courier)/onboarding" as never)} style={styles.smallButton}><Text style={styles.smallButtonText}>Open onboarding</Text></Pressable></View>

@@ -109,6 +109,10 @@ class Database:
             [("status", 1), ("courier_user_id", 1), ("quote_status", 1), ("created_at", 1)],
             name="courier_offer_matching",
         )
+        await self.db["courier_profiles"].create_index(
+            [("status", 1), ("online", 1), ("user_id", 1)],
+            name="courier_offer_audience",
+        )
         await self.db["food_orders"].create_index(
             [("customer_user_id", 1), ("created_at", -1)],
             name="food_orders_by_customer",

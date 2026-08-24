@@ -33,6 +33,7 @@ from app.services.courier_delivery_realtime_service import (
     publish_delivery_realtime,
     update_versioned_delivery,
 )
+from app.services.courier_offer_realtime_service import publish_courier_offer_transition
 from app.services.notification_service import create_app_notification
 from app.services.routing_service import RoutingError, compute_route
 from app.utils import new_id, now_iso
@@ -234,6 +235,7 @@ async def cancel_delivery(
         data={"reason": reason},
     )
     await publish_delivery_realtime(updated, "courier_delivery.terminal", journey_event=journey_event)
+    await publish_courier_offer_transition(delivery, updated)
     courier_user_id = str(updated.get("courier_user_id") or "")
     if courier_user_id:
         await create_app_notification(
@@ -299,6 +301,7 @@ async def set_delivery_quote(
         },
     )
     await publish_delivery_realtime(updated, "courier_delivery.updated", journey_event=journey_event)
+    await publish_courier_offer_transition(delivery, updated)
     await sync_food_order_pricing(updated, actor_user_id=_user_id(actor))
     return updated
 
@@ -343,6 +346,7 @@ async def assign_delivery(
         raise ValueError("This courier already has an active delivery.") from error
     if not updated:
         raise ValueError("Delivery changed while it was being assigned. Refresh and try again.")
+    await publish_courier_offer_transition(delivery, updated)
     await append_delivery_event(
         delivery_id,
         "COURIER_ASSIGNED",
@@ -447,6 +451,7 @@ async def update_delivery_status(
         data={"from": current, "to": status, "note": note},
     )
     await publish_delivery_realtime(updated, delivery_event_type(updated), journey_event=journey_event)
+    await publish_courier_offer_transition(delivery, updated)
     await _notify_customer_status(updated, status)
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     if status in FINAL_STATUSES:
