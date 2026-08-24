@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
@@ -75,17 +76,11 @@ export default function AccountScreen() {
             onPress={() => router.push("/(auth)/email-register" as never)}
             style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}
           >
-            <Text style={styles.guestSecondaryText}>Create customer account</Text>
+            <Text style={styles.guestSecondaryText}>Create account</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(shared)/work-with-us" as never)} style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}><Text style={styles.guestSecondaryText}>Work with LetsGoRide</Text></Pressable>
         </View>
 
-        <View style={styles.guestNote}>
-          <MaterialCommunityIcons name="information-outline" size={21} color={v2Theme.colors.inkSecondary} />
-          <Text style={styles.guestNoteText}>
-            Driver, Courier and Merchant accounts are separate products. A customer account never switches into those workspaces.
-          </Text>
-        </View>
       </Screen>
     );
   }
@@ -105,17 +100,20 @@ export default function AccountScreen() {
           </View>
           <Text style={styles.meta}>{user?.city || "Zimbabwe"}</Text>
           <View style={styles.modePill}>
-            <Text style={styles.modeText}>{accountLabel.toUpperCase()} ACCOUNT</Text>
+            <Text style={styles.modeText}>{accountLabel === "Customer" ? "LETSGORIDE MEMBER" : accountLabel.toUpperCase()}</Text>
           </View>
         </View>
       </View>
 
-      <View style={styles.quickGrid}>
-        <QuickAction icon="lifebuoy" label="Help" onPress={() => router.push("/(shared)/support" as never)} />
-        <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
-        <QuickAction icon="shield-check-outline" label="Safety" onPress={() => router.push("/(shared)/safety" as never)} />
-        <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
-      </View>
+      <LinearGradient colors={["#17231B", "#0E130F"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.utilityPanel}>
+        <View style={styles.utilityHeading}><View><Text style={styles.utilityEyebrow}>YOUR ESSENTIALS</Text><Text style={styles.utilityTitle}>Everything within reach.</Text></View><View style={styles.utilityGlow} /></View>
+        <View style={styles.utilityGrid}>
+          <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
+          <QuickAction icon="lifebuoy" label="Help" onPress={() => router.push("/(shared)/support" as never)} />
+          <QuickAction icon="shield-check-outline" label="Safety" onPress={() => router.push("/(shared)/safety" as never)} />
+          <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
+        </View>
+      </LinearGradient>
 
       {user?.role === "driver" ? (
         <View style={styles.section}>
@@ -138,17 +136,6 @@ export default function AccountScreen() {
         <AccountRow icon="lifebuoy" title="Support" subtitle="Get help from LetsGoRide" onPress={() => router.push("/(shared)/support" as never)} />
       </View>
 
-      <View style={styles.separationCard}>
-        <View style={styles.separationIcon}>
-          <MaterialCommunityIcons name="layers-triple-outline" size={25} color={v2Theme.colors.brandStrong} />
-        </View>
-        <View style={styles.separationCopy}>
-          <Text style={styles.separationTitle}>{accountLabel} stays {accountLabel.toLowerCase()}.</Text>
-          <Text style={styles.separationBody}>
-            LetsGoRide keeps Customer, Driver, Courier and Merchant identities separate so each workspace stays focused and safe.
-          </Text>
-        </View>
-      </View>
     </Screen>
   );
 }
@@ -169,10 +156,9 @@ function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialComm
       onPress={onPress}
       style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
     >
-      <View style={styles.quickIcon}>
-        <MaterialCommunityIcons name={icon} size={24} color={v2Theme.colors.ink} />
-      </View>
+      <MaterialCommunityIcons name={icon} size={21} color="#B5E8C5" />
       <Text style={styles.quickLabel}>{label}</Text>
+      <MaterialCommunityIcons name="arrow-top-right" size={15} color="rgba(255,255,255,0.48)" />
     </Pressable>
   );
 }
@@ -229,8 +215,6 @@ const styles = StyleSheet.create({
   guestPrimaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   guestSecondary: { minHeight: 50, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center" },
   guestSecondaryText: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  guestNote: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 15, flexDirection: "row", gap: 11, alignItems: "flex-start" },
-  guestNoteText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
   profileHeader: { flexDirection: "row", alignItems: "center", gap: 15, paddingVertical: 5 },
   profileCopy: { flex: 1, gap: 5 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -238,10 +222,14 @@ const styles = StyleSheet.create({
   meta: { color: v2Theme.colors.inkSecondary, fontSize: 13 },
   modePill: { alignSelf: "flex-start", borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 9, paddingVertical: 5 },
   modeText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "900" },
-  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  quickCard: { width: "48%", minHeight: 94, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 13, justifyContent: "space-between" },
-  quickIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
-  quickLabel: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
+  utilityPanel: { borderRadius: v2Theme.radius.xxl, padding: 17, gap: 15, overflow: "hidden" },
+  utilityHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  utilityEyebrow: { color: "#89DBA5", fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
+  utilityTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", marginTop: 4, letterSpacing: -0.35 },
+  utilityGlow: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(50,190,99,0.18)", position: "absolute", right: -16, top: -30 },
+  utilityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  quickCard: { width: "48%", minHeight: 48, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
+  quickLabel: { flex: 1, color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
   section: { gap: 9 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   row: { minHeight: 74, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12 },
@@ -251,10 +239,5 @@ const styles = StyleSheet.create({
   rowCopy: { flex: 1, gap: 3 },
   rowTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
   rowSubtitle: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
-  separationCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
-  separationIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  separationCopy: { flex: 1, gap: 4 },
-  separationTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
-  separationBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
   pressed: { opacity: 0.7 },
 });

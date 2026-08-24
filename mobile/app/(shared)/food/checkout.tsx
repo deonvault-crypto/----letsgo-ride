@@ -88,7 +88,7 @@ export default function FoodCheckoutScreen() {
       {isGuest ? (
         <View style={styles.authCard}>
           <View style={styles.authIcon}><MaterialCommunityIcons name="account-lock-outline" size={24} color={v2Theme.colors.brandStrong} /></View>
-          <View style={styles.authCopy}><Text style={styles.authTitle}>You’re almost there</Text><Text style={styles.authBody}>Sign in or create a customer account when you’re ready to place this order. Your basket stays here.</Text></View>
+          <View style={styles.authCopy}><Text style={styles.authTitle}>You’re almost there</Text><Text style={styles.authBody}>Sign in or create an account to place this order. Your basket stays here.</Text></View>
         </View>
       ) : null}
 

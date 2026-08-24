@@ -519,8 +519,23 @@ async def update_courier_location(
         raise PermissionError("Only the assigned courier can share delivery location.")
     if delivery.get("status") not in ACTIVE_TRACKING_STATUSES:
         # Automatic sensor callbacks can arrive just after handoff. Returning
-        # server truth tells the client to stop without turning a safe race into
-        # a frightening courier-facing error.
+        # repaired server truth tells the client to stop without turning a safe
+        # race into a frightening courier-facing error. Legacy/stale tracking
+        # flags are cleared here as well; a GPS callback can never resurrect a
+        # terminal job.
+        if delivery.get("status") in FINAL_STATUSES:
+            repaired = await database.update_one_if(
+                "courier_deliveries",
+                {"id": delivery_id, "status": delivery.get("status")},
+                {
+                    "live_tracking_active": False,
+                    "tracking_stopped_at": delivery.get("tracking_stopped_at") or now_iso(),
+                    "updated_at": now_iso(),
+                },
+            )
+            if repaired:
+                delivery = repaired
+            await clear_courier_active_reference(delivery)
         return delivery
 
     snapshot = {

@@ -16,7 +16,7 @@ export default function SafetyScreen() {
         <Text style={styles.title}>Safety Center</Text>
         <Text style={styles.body}>Safety across Ride, Food and Courier starts with accountable profiles, recorded activity, secure handoffs, and a clear reporting path.</Text>
       </View>
-      <SafetyCard title="Verified work accounts" body="Drivers, couriers and merchants use separate work identities with their own approval and operating requirements." icon="account-check-outline" />
+      <SafetyCard title="Reviewed service partners" body="Drivers, couriers and merchants complete identity and operating checks before approval." icon="account-check-outline" />
       <SafetyCard title="Recorded activity" body="Ride requests, food orders and courier delivery updates remain visible in your activity history." icon="clipboard-text-clock-outline" />
       <SafetyCard title="Secure delivery handoff" body="Courier and food deliveries can require the recipient’s 4-digit handoff code at the saved destination." icon="shield-key-outline" />
       <SafetyCard title="Report problems" body="Report unsafe driving, scams, payment issues, delivery problems, or account concerns to LetsGoRide support." icon="alert-outline" />

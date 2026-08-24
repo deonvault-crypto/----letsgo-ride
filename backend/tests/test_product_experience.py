@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.database import COLLECTION_NAMES, database
 from app.services.courier_earnings_service import courier_earnings_summary
+from app.services.courier_service import update_courier_location
 from app.services.merchant_workspace_service import get_restaurant_insights
 from app.services.operations_service import active_courier_delivery, create_availability, list_courier_offers
 from app.services.workforce_service import (
@@ -119,9 +120,14 @@ class FinalProductExperienceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_terminal_deliveries_never_return_as_active_and_offers_pause_for_single_active_job(self):
         courier = await self._insert_user("courier", "courier")
-        await database.insert_one("courier_profiles", {"id": "profile", "user_id": courier["id"], "status": "APPROVED", "online": True})
-        await database.insert_one("courier_deliveries", {"id": "terminal", "courier_user_id": courier["id"], "status": "DELIVERED", "created_at": "2027-01-01T09:00:00+00:00"})
+        await database.insert_one("courier_profiles", {"id": "profile", "user_id": courier["id"], "status": "APPROVED", "online": True, "active_delivery_id": "terminal"})
+        await database.insert_one("courier_deliveries", {"id": "terminal", "courier_user_id": courier["id"], "status": "DELIVERED", "live_tracking_active": True, "created_at": "2027-01-01T09:00:00+00:00"})
         self.assertIsNone(await active_courier_delivery(courier))
+        self.assertIsNone((await database.find_one("courier_profiles", {"id": "profile"}))["active_delivery_id"])
+        terminal = await update_courier_location("terminal", {"latitude": -17.825, "longitude": 31.053}, courier)
+        self.assertEqual(terminal["status"], "DELIVERED")
+        self.assertFalse(terminal["live_tracking_active"])
+        self.assertEqual(await database.find_many("courier_location_snapshots", {"delivery_id": "terminal"}), [])
 
         await database.insert_one("courier_deliveries", {"id": "active", "courier_user_id": courier["id"], "status": "IN_TRANSIT", "created_at": "2027-01-01T10:00:00+00:00"})
         await database.insert_one("courier_deliveries", {"id": "offer", "courier_user_id": None, "status": "MATCHING", "created_at": "2027-01-01T11:00:00+00:00"})

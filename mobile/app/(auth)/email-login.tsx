@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -12,10 +12,14 @@ import { emailLogin, resendEmailVerification } from "../../services/authService"
 import { biometricLabel, hasBiometricLoginCredential, loginWithBiometrics } from "../../services/biometricService";
 import { enablePhoneNotifications, hasSeenNotificationExplanation, markNotificationExplanationSeen } from "../../services/pushNotificationService";
 import { normalizeEmail } from "../../utils/passwordRules";
+import { destinationAfterAuth, intentCopy, parseApplicationIntent } from "../../utils/authIntent";
 
 export default function EmailLoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string; returnTo?: string }>();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string; intent?: string }>();
+  const intent = parseApplicationIntent(params.intent);
+  const copy = intentCopy(intent);
+  const fallbackRoute = intent === "customer_signup" ? "/(auth)/welcome" : "/(shared)/work-with-us";
   const [email, setEmail] = useState(params.email || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -28,27 +32,19 @@ export default function EmailLoginScreen() {
   const [pendingRole, setPendingRole] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const biometricAttempted = useRef(false);
 
   useEffect(() => {
     async function loadBiometrics() {
-      setBiometricReady(await hasBiometricLoginCredential());
+      const ready = await hasBiometricLoginCredential();
+      setBiometricReady(ready);
       setBiometricText(await biometricLabel());
     }
     loadBiometrics().catch(() => setBiometricReady(false));
   }, []);
 
-  function safeCustomerReturnTo() {
-    const value = typeof params.returnTo === "string" ? params.returnTo : "";
-    const allowed = ["/(shared)/courier", "/(shared)/food", "/(customer)/"];
-    return allowed.some((prefix) => value === prefix || value.startsWith(prefix)) ? value : null;
-  }
-
   function routeForRole(role?: string | null) {
-    if (role === "admin") return router.replace("/(admin)/dashboard" as never);
-    if (role === "driver") return router.replace("/(driver)/home" as never);
-    if (role === "courier") return router.replace("/(courier)/home" as never);
-    if (role === "merchant") return router.replace("/(merchant)/home" as never);
-    router.replace((safeCustomerReturnTo() || "/(customer)/home") as never);
+    router.replace(destinationAfterAuth(role, intent, params.returnTo) as never);
   }
 
   async function continueAfterAuth(role?: string | null) {
@@ -89,18 +85,29 @@ export default function EmailLoginScreen() {
     }
   }
 
-  async function biometricLogin() {
+  async function biometricLogin(silentCancellation = false) {
     try {
       setLoading(true);
       setError("");
       const user = await loginWithBiometrics();
       await continueAfterAuth(user.role);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Please log in with your password again.");
+      const nextError = err instanceof Error ? err.message : "Please log in with your password again.";
+      if (!silentCancellation || !nextError.toLowerCase().includes("cancel")) setError(nextError);
     } finally {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!biometricReady || biometricAttempted.current) return;
+    biometricAttempted.current = true;
+    const timer = setTimeout(() => { void biometricLogin(true); }, 450);
+    return () => clearTimeout(timer);
+  // biometricLogin intentionally runs once per mounted login screen. Re-running
+  // after a cancelled prompt would trap the user in an authentication loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [biometricReady]);
 
   async function resendCode() {
     try {
@@ -120,25 +127,25 @@ export default function EmailLoginScreen() {
   const needsVerification = error.toLowerCase().includes("verify your email");
 
   return (
-    <Screen title="Login" showBack fallbackRoute="/(customer)/home" showNotifications={false}>
+    <Screen title={intent === "customer_signup" ? "Login" : copy.title} showBack fallbackRoute={fallbackRoute} showNotifications={false}>
       <Modal visible={notificationIntroOpen} transparent animationType="fade" onRequestClose={() => finishNotificationIntro(false)}>
         <View style={styles.modalBackdrop}><View style={styles.modalCard}><Text style={styles.modalTitle}>Enable notifications?</Text><Text style={styles.body}>LetsGoRide sends phone alerts for booking requests, trip updates, messages, verification reviews, support replies, and safety notices.</Text><View style={styles.modalActions}><AppButton title="Enable notifications" loading={notificationSaving} onPress={() => finishNotificationIntro(true)} /><AppButton title="Not now" variant="secondary" onPress={() => finishNotificationIntro(false)} /></View></View></View>
       </Modal>
       <View style={styles.logoWrap}><BrandLogo size="regular" /></View>
       <View style={styles.card}>
-        <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.body}>Sign in to your LetsGoRide account. Customer, Driver, Courier and Merchant accounts stay separate.</Text>
+        <Text style={styles.title}>{intent === "customer_signup" ? "Welcome back" : copy.title}</Text>
+        <Text style={styles.body}>{copy.authBody}</Text>
         <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" placeholder="Enter your email" />
         <View style={styles.passwordBlock}>
           <AppInput label="Password" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} leftIcon="lock-outline" rightIcon={showPassword ? "eye-off-outline" : "eye-outline"} onPressRightIcon={() => setShowPassword((current) => !current)} placeholder="Enter your password" />
-          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push({ pathname: "/(auth)/forgot-password", params: { email: normalizedEmail } } as never)}><Text style={styles.forgot}>Forgot password?</Text></Pressable>
+          <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.push({ pathname: "/(auth)/forgot-password", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)}><Text style={styles.forgot}>Forgot password?</Text></Pressable>
         </View>
         {message ? <Text style={styles.message}>{message}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {needsVerification ? <View style={styles.inlineActions}><AppButton title="Resend verification code" variant="secondary" loading={resending} onPress={resendCode} disabled={!normalizedEmail} /><AppButton title="Go to email verification" variant="ghost" onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail, returnTo: params.returnTo } } as never)} /></View> : null}
+        {needsVerification ? <View style={styles.inlineActions}><AppButton title="Resend verification code" variant="secondary" loading={resending} onPress={resendCode} disabled={!normalizedEmail} /><AppButton title="Go to email verification" variant="ghost" onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)} /></View> : null}
         <AppButton title="Login" loading={loading} onPress={submit} disabled={!normalizedEmail || password.length < 8} />
-        {biometricReady ? <AppButton title={biometricText} variant="secondary" onPress={biometricLogin} loading={loading} /> : null}
-        <AppButton title="Create customer account" variant="secondary" onPress={() => router.push({ pathname: "/(auth)/email-register", params: { returnTo: params.returnTo } } as never)} />
+        {biometricReady ? <AppButton title={biometricText} variant="secondary" onPress={() => biometricLogin(false)} loading={loading} /> : null}
+        <AppButton title={intent === "customer_signup" ? "Create account" : "Create account to continue"} variant="secondary" onPress={() => router.push({ pathname: "/(auth)/email-register", params: { returnTo: params.returnTo, intent } } as never)} />
       </View>
       <Text style={styles.footer}>Proudly Zimbabwean · Built for safer shared rides and deliveries</Text>
     </Screen>

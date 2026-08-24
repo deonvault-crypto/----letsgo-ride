@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -23,6 +23,7 @@ const PIN_VISIBLE = new Set<CourierStatus>(["PICKED_UP", "IN_TRANSIT", "ARRIVING
 const FINAL = new Set<CourierStatus>(["DELIVERED", "CANCELLED", "FAILED"]);
 
 export default function CustomerCourierDeliveryScreen() {
+  const router = useRouter();
   const { deliveryId } = useLocalSearchParams<{ deliveryId: string }>();
   const [delivery, setDelivery] = useState<CourierDelivery | null>(null);
   const [events, setEvents] = useState<CourierEvent[]>([]);
@@ -154,6 +155,14 @@ export default function CustomerCourierDeliveryScreen() {
               </View>
             ) : null}
           </View>
+
+          {delivery.courier_name && !FINAL.has(delivery.status) ? (
+            <View style={styles.trackingSheet}>
+              <View style={styles.trackingAvatar}><MaterialCommunityIcons name="motorbike" size={23} color="#FFFFFF" /></View>
+              <View style={styles.trackingCopy}><Text numberOfLines={1} style={styles.trackingTitle}>{customerStatusTitle(delivery)}</Text><Text style={styles.trackingMeta}>{trackingMetric(delivery)}</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Get delivery help" onPress={() => router.push("/(shared)/support" as never)} style={styles.helpButton}><MaterialCommunityIcons name="lifebuoy" size={20} color={v2Theme.colors.ink} /></Pressable>
+            </View>
+          ) : null}
 
           {handoff && PIN_VISIBLE.has(delivery.status) ? (
             <Animated.View style={[styles.pinCard, animatedStatus]}>
@@ -321,6 +330,13 @@ function customerStatusChip(status: CourierStatus) {
   return "Preparing";
 }
 
+function trackingMetric(delivery: CourierDelivery) {
+  const parts: string[] = [];
+  if (delivery.remaining_eta_minutes != null) parts.push(`${delivery.remaining_eta_minutes} min`);
+  if (delivery.remaining_distance_km != null) parts.push(`${delivery.remaining_distance_km.toFixed(1)} km`);
+  return parts.length ? parts.join(" · ") : "Live route updating";
+}
+
 function journeyStep(status: CourierStatus) {
   if (status === "DELIVERED") return 4;
   if (status === "ARRIVING" || status === "IN_TRANSIT") return 3;
@@ -380,6 +396,8 @@ const styles = StyleSheet.create({
   courierDot: { position: "absolute", width: 34, height: 34, borderRadius: 17, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 }, courierDotOne: { top: 5, right: 4 }, courierDotTwo: { bottom: 4, left: 1 }, courierDotThree: { bottom: 8, right: 0 }, matchCopy: { flex: 1, gap: 6 }, matchTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 }, matchBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, searchingRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 3 }, searchingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.brand }, searchingText: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900" },
   courierCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 14, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft }, courierAvatar: { width: 54, height: 54, borderRadius: 19, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, courierCopy: { flex: 1, gap: 3 }, courierEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 }, courierName: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, courierBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 }, liveBadge: { borderRadius: 999, backgroundColor: v2Theme.colors.brandSoft, paddingHorizontal: 8, paddingVertical: 5 }, liveBadgeText: { color: v2Theme.colors.brandStrong, fontSize: 7, fontWeight: "900" },
   mapFrame: { borderRadius: 26, overflow: "hidden", position: "relative" }, mapLivePill: { position: "absolute", left: 12, bottom: 12, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.94)", paddingHorizontal: 10, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 6 }, mapLiveText: { color: v2Theme.colors.ink, fontSize: 8, fontWeight: "900" },
+  trackingSheet: { minHeight: 74, marginTop: -22, marginHorizontal: 12, borderRadius: 22, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 11, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 7 },
+  trackingAvatar: { width: 46, height: 46, borderRadius: 17, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, trackingCopy: { flex: 1, gap: 4 }, trackingTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, trackingMeta: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900" }, helpButton: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 16, gap: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft }, pinHeader: { flexDirection: "row", gap: 11, alignItems: "center" }, pinIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, pinCopy: { flex: 1, gap: 3 }, pinTitle: { color: v2Theme.colors.ink, fontSize: 16, fontWeight: "900" }, pinBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, pinDigits: { flexDirection: "row", justifyContent: "center", gap: 9 }, pinDigit: { width: 52, height: 62, borderRadius: 18, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong }, pinDigitText: { color: v2Theme.colors.ink, fontSize: 27, fontWeight: "900" }, securityRow: { borderRadius: 16, backgroundColor: v2Theme.colors.surface, padding: 11, flexDirection: "row", gap: 8, alignItems: "flex-start" }, securityText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
   successCard: { borderRadius: v2Theme.radius.xl, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 }, successIcon: { width: 52, height: 52, borderRadius: 19, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, successCopy: { flex: 1, gap: 3 }, successTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" }, successBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   journeyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 15, gap: 15 }, journeyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }, journeyNow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900" }, journeyTrack: { flexDirection: "row" }, journeyItem: { flex: 1, minWidth: 0 }, journeyTop: { flexDirection: "row", alignItems: "center" }, journeyNode: { width: 24, height: 24, borderRadius: 12, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, journeyNodeComplete: { backgroundColor: v2Theme.colors.brand }, journeyNodeActive: { shadowColor: v2Theme.colors.brand, shadowOpacity: 0.32, shadowRadius: 8, elevation: 3 }, journeyNodeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.inkTertiary }, journeyConnector: { flex: 1, height: 3, backgroundColor: v2Theme.colors.surfaceMuted }, journeyConnectorComplete: { backgroundColor: v2Theme.colors.brand }, journeyLabel: { marginTop: 7, color: v2Theme.colors.inkTertiary, fontSize: 7, lineHeight: 10, fontWeight: "800", paddingRight: 2 }, journeyLabelComplete: { color: v2Theme.colors.ink }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },

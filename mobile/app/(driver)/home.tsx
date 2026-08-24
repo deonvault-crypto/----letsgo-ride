@@ -49,7 +49,7 @@ export default function DriverHomeScreen() {
       <View style={styles.heroCard}>
         <Text style={styles.eyebrow}>LETSGORIDE DRIVER</Text>
         <Text style={styles.heroTitle}>Plan intercity rides. Manage passengers.</Text>
-        <Text style={styles.heroBody}>This workspace is only for carpool and shared-ride driving. Courier delivery work does not exist inside the Driver product.</Text>
+        <Text style={styles.heroBody}>Share your route, set your available seats and keep every passenger request in one place.</Text>
         <View style={styles.heroActions}>
           <Pressable accessibilityRole="button" accessibilityLabel="Post trip" onPress={() => router.push("/(driver)/post-trip" as never)} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
             <MaterialCommunityIcons name="plus" size={21} color="#FFFFFF" />

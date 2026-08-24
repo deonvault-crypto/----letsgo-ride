@@ -11,8 +11,8 @@ jest.mock("expo-router", () => ({
 describe("consolidated Ride service routing", () => {
   it("opens one Ride search for local intent and planned city-to-city trips", () => {
     const screen = render(<ServicesScreen />);
-    fireEvent.press(screen.getByText("Rides"));
+    fireEvent.press(screen.getByText("Ride"));
     expect(mockPush).toHaveBeenCalledWith("/(customer)/search");
-    expect(screen.getByText("Search local intent and planned city-to-city trips in one place")).toBeOnTheScreen();
+    expect(screen.getByText("Search local journeys and planned city-to-city trips")).toBeOnTheScreen();
   });
 });

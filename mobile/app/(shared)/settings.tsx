@@ -41,7 +41,7 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
   { key: "trip_updates", title: "Service updates", subtitle: "Ride, Food and Courier progress updates.", defaultValue: true },
   { key: "booking_requests", title: "Ride requests", subtitle: "Seat request and driver response updates.", defaultValue: true },
   { key: "messages", title: "Messages", subtitle: "New LetsGoRide conversation messages.", defaultValue: true },
-  { key: "verification_updates", title: "Verification updates", subtitle: "Work-account verification updates.", defaultValue: true },
+  { key: "verification_updates", title: "Verification updates", subtitle: "Application and document review updates.", defaultValue: true },
   { key: "support_replies", title: "Support replies", subtitle: "Updates from LetsGoRide support.", defaultValue: true },
   { key: "safety_alerts", title: "Safety alerts", subtitle: "Important account and service safety notices.", defaultValue: true },
   { key: "marketing_messages", title: "Product news", subtitle: "Occasional LetsGoRide product updates.", defaultValue: false },
@@ -280,7 +280,7 @@ export default function SettingsScreen() {
           {!phoneNotificationEnabled ? <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} /> : null}
         </View>
 
-        {preferenceRows.map((row) => {
+        {phoneNotificationEnabled ? preferenceRows.map((row) => {
           const value = phoneNotificationEnabled ? preferences?.[row.key] ?? row.defaultValue : false;
           const disabled = !phoneNotificationEnabled || preferenceSaving === row.key;
           return (
@@ -300,7 +300,7 @@ export default function SettingsScreen() {
               />
             </View>
           );
-        })}
+        }) : <View style={styles.categoriesLocked}><Text style={styles.categoriesLockedTitle}>Notification categories</Text><Text style={styles.toggleSubtitle}>Enable phone notifications first, then choose exactly which updates you want.</Text></View>}
       </Section>
 
       <Section title="Security & Privacy">
@@ -330,7 +330,7 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Account Control">
-        <ListTile icon="logout" title="Logout" subtitle="Sign out and return to customer browsing" onPress={confirmLogout} danger />
+        <ListTile icon="logout" title="Logout" subtitle="Sign out on this device" onPress={confirmLogout} danger />
         <ListTile
           icon="delete-outline"
           title="Delete account"
@@ -369,6 +369,8 @@ const styles = StyleSheet.create({
   toggleRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated },
   disabledToggleRow: { opacity: 0.58 },
   notificationStatus: { gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated },
+  categoriesLocked: { minHeight: 76, justifyContent: "center", gap: 5, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderRadius: 20, backgroundColor: colors.elevated },
+  categoriesLockedTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 15 },
   noticeText: { color: colors.primaryGreen, fontSize: 12, fontWeight: "800" },
   offNoticeText: { color: colors.mutedText },
   toggleCopy: { flex: 1, gap: 3 },

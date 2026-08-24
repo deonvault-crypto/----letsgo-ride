@@ -104,7 +104,7 @@ export default function ActivityScreen() {
         <View style={styles.guestCard}>
           <View style={styles.guestIcon}><MaterialCommunityIcons name="history" size={30} color={v2Theme.colors.brandStrong} /></View>
           <Text style={styles.emptyTitle}>Keep every journey in reach</Text>
-          <Text style={styles.emptyBody}>Browse freely. When you’re ready to book, sign in or create your passenger account.</Text>
+          <Text style={styles.emptyBody}>Browse freely. When you’re ready to book, sign in or create an account.</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(auth)/email-login" as never)} style={styles.primaryAction}><Text style={styles.primaryActionText}>Sign in</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(auth)/email-register" as never)} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Create account</Text></Pressable>
         </View>

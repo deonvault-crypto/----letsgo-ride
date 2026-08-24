@@ -15,7 +15,7 @@ import {
   updateCourierDeliveryStatus,
   updateCourierLocation,
 } from "../../../services/courierService";
-import { watchForegroundLocation } from "../../../services/locationService";
+import { DeviceLocation, isReliableCourierLocation, watchForegroundLocation } from "../../../services/locationService";
 import { CourierDelivery, CourierEvent, CourierGeoPoint, CourierStatus } from "../../../types/courier.types";
 import { openNavigation } from "../../../utils/openNavigation";
 import { decodePolyline } from "../../../utils/decodePolyline";
@@ -43,6 +43,7 @@ export default function CourierDeliveryScreen() {
   const locationStarting = useRef(false);
   const locationWriteInFlight = useRef(false);
   const gpsGeneration = useRef(0);
+  const lastAcceptedLocation = useRef<DeviceLocation | null>(null);
 
   const refresh = useCallback(async () => {
     if (!deliveryId) return;
@@ -77,6 +78,7 @@ export default function CourierDeliveryScreen() {
     gpsGeneration.current += 1;
     locationWatcher.current?.remove();
     locationWatcher.current = null;
+    lastAcceptedLocation.current = null;
     setGpsLive(false);
   }, []);
 
@@ -88,6 +90,8 @@ export default function CourierDeliveryScreen() {
       const watcher = await watchForegroundLocation(
         (location) => {
           if (locationWriteInFlight.current) return;
+          if (!isReliableCourierLocation(location, lastAcceptedLocation.current)) return;
+          lastAcceptedLocation.current = location;
           setDelivery((current) => current ? { ...current, last_courier_location: location } : current);
           locationWriteInFlight.current = true;
           updateCourierLocation(job.id, {

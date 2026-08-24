@@ -20,6 +20,8 @@ import { CourierDelivery } from "../../types/courier.types";
 import { CourierEarningsSummary, CourierProfile, CourierShift } from "../../types/operations.types";
 import { decodePolyline } from "../../utils/decodePolyline";
 
+const ACTIVE_DELIVERY_STATUSES = new Set(["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
+
 export default function CourierHomeScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<CourierProfile | null>(null);
@@ -43,7 +45,7 @@ export default function CourierHomeScreen() {
         ])
         : [[], [] as CourierShift[]];
       setProfile(nextProfile);
-      setActive(nextActive);
+      setActive(nextActive && ACTIVE_DELIVERY_STATUSES.has(nextActive.status) ? nextActive : null);
       setEarnings(nextEarnings);
       setOfferCount(offers.length);
       setNextShift(shifts.find((shift) => shift.status === "UPCOMING") || null);
@@ -87,7 +89,7 @@ export default function CourierHomeScreen() {
           <View style={styles.activeHero}>
             <View style={styles.activeTop}>
               <View><Text style={styles.activeEyebrow}>ACTIVE DELIVERY</Text><Text style={styles.activeTitle}>Stay with the journey.</Text></View>
-              <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View>
+              <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{profile?.online ? "LIVE" : "OFFLINE FOR NEW OFFERS"}</Text></View>
             </View>
             <Text numberOfLines={2} style={styles.activeRoute}>{active.pickup_address} → {active.dropoff_address}</Text>
             <View style={styles.metricsRow}>

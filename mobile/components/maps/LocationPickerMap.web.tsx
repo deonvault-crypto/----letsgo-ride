@@ -17,6 +17,7 @@ export type LocationPickerMapHandle = {
 
 type LocationPickerMapProps = {
   initialRegion: MapRegion;
+  onMovementStart?: () => void;
   onRegionChangeComplete: (region: MapRegion) => void;
   style?: StyleProp<ViewStyle>;
 };

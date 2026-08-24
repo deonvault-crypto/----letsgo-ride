@@ -184,7 +184,7 @@ export default function CourierScreen() {
         onClose={() => setAuthPromptOpen(false)}
         returnTo="/(shared)/courier"
         title="Ready to send it?"
-        body="Sign in or create a customer account to request a real courier. Your selected map locations stay ready when you return."
+        body="Sign in or create an account to request a courier. Your selected locations will be ready when you return."
       />
 
       <CourierHero />

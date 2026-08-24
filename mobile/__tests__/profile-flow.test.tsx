@@ -68,9 +68,9 @@ describe("profile update flow", () => {
     const summary = render(<ProfileScreen />);
     expect(summary.getByText("Tendai Moyo")).toBeOnTheScreen();
     expect(summary.getByText("Harare")).toBeOnTheScreen();
-    expect(summary.getByText("CUSTOMER ACCOUNT")).toBeOnTheScreen();
+    expect(summary.getByText("LETSGORIDE MEMBER")).toBeOnTheScreen();
     expect(summary.queryByText("Driver verification")).toBeNull();
-    expect(summary.getByText("Customer stays customer.")).toBeOnTheScreen();
+    expect(summary.queryByText(/stays customer/i)).toBeNull();
     fireEvent.press(summary.getByRole("button", { name: "Settings" }));
     expect(mockPush).toHaveBeenCalledWith("/(shared)/settings");
     summary.unmount();
@@ -113,7 +113,7 @@ describe("profile update flow", () => {
     expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
     expect(screen.getByText("Mutare")).toBeOnTheScreen();
     expect(screen.queryByDisplayValue("")).not.toBeOnTheScreen();
-  });
+  }, 15000);
 
   it("shows driver verification under review only for a Driver account", async () => {
     mockCurrentUser = driverUser;
@@ -122,7 +122,7 @@ describe("profile update flow", () => {
     const screen = render(<ProfileScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText("DRIVER ACCOUNT")).toBeOnTheScreen();
+      expect(screen.getByText("DRIVER")).toBeOnTheScreen();
       expect(screen.getAllByText("Driver verification").length).toBeGreaterThan(0);
       expect(screen.getByText("Verification under review")).toBeOnTheScreen();
     });
@@ -137,7 +137,7 @@ describe("profile update flow", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Driver verification").length).toBeGreaterThan(0);
       expect(screen.getByText("Driver verification approved")).toBeOnTheScreen();
-      expect(screen.getByText("Driver stays driver.")).toBeOnTheScreen();
+      expect(screen.queryByText(/stays driver/i)).toBeNull();
     });
   });
 

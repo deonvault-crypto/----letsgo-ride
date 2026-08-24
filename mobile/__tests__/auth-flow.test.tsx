@@ -33,7 +33,7 @@ describe("email login flow", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Use Face ID" })).toBeNull();
       expect(screen.getByRole("button", { name: "Login" })).toBeOnTheScreen();
-      expect(screen.getByRole("button", { name: "Create customer account" })).toBeOnTheScreen();
+      expect(screen.getByRole("button", { name: "Create account" })).toBeOnTheScreen();
     });
   });
 
@@ -77,22 +77,22 @@ describe("email login flow", () => {
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it("shows biometric login after it was enabled and routes after successful unlock", async () => {
+  it("offers and automatically attempts biometric login once after it was enabled", async () => {
     (hasBiometricLoginCredential as jest.Mock).mockResolvedValueOnce(true);
     (loginWithBiometrics as jest.Mock).mockResolvedValueOnce(passengerUser);
     const screen = render(<EmailLoginScreen />);
-    fireEvent.press(await screen.findByRole("button", { name: "Use Face ID" }));
+    expect(await screen.findByRole("button", { name: "Use Face ID" })).toBeOnTheScreen();
     await waitFor(() => {
       expect(loginWithBiometrics).toHaveBeenCalled();
       expect(mockReplace).toHaveBeenCalledWith("/(customer)/home");
     });
   });
 
-  it("falls back to email and password when Face ID unlock fails", async () => {
+  it("falls back to email and password when the automatic Face ID unlock fails", async () => {
     (hasBiometricLoginCredential as jest.Mock).mockResolvedValueOnce(true);
     (loginWithBiometrics as jest.Mock).mockRejectedValueOnce(new Error("Please log in with your password again."));
     const screen = render(<EmailLoginScreen />);
-    fireEvent.press(await screen.findByRole("button", { name: "Use Face ID" }));
+    expect(await screen.findByRole("button", { name: "Use Face ID" })).toBeOnTheScreen();
     await waitFor(() => {
       expect(screen.getByText("Please log in with your password again.")).toBeOnTheScreen();
       expect(screen.getByRole("button", { name: "Login" })).toBeOnTheScreen();

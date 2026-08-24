@@ -11,10 +11,12 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { resetPassword } from "../../services/authService";
 import { isStrongPassword, normalizeEmail } from "../../utils/passwordRules";
+import { parseApplicationIntent } from "../../utils/authIntent";
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string; intent?: string }>();
+  const intent = parseApplicationIntent(params.intent);
   const [email, setEmail] = useState(params.email || "");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +48,7 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <Screen title="Reset password" showBack fallbackRoute="/(auth)/forgot-password" showNotifications={false}>
+    <Screen title="Reset password" showBack fallbackRoute={{ pathname: "/(auth)/forgot-password", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never} showNotifications={false}>
       <View style={styles.logoWrap}>
         <BrandLogo size="regular" />
       </View>
@@ -88,7 +90,7 @@ export default function ResetPasswordScreen() {
             <BrandLogo size="regular" />
             <Text style={styles.modalTitle}>Password reset successful</Text>
             <Text style={styles.modalBody}>Your password has been reset. You can now log in using your new password.</Text>
-            <AppButton title="Back to login" onPress={() => router.replace({ pathname: "/(auth)/email-login", params: { email: normalizedEmail } } as never)} />
+            <AppButton title="Back to login" onPress={() => router.replace({ pathname: "/(auth)/email-login", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)} />
           </View>
         </View>
       </Modal>

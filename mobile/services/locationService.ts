@@ -9,6 +9,31 @@ export type DeviceLocation = {
   timestamp: number;
 };
 
+export function isReliableCourierLocation(next: DeviceLocation, previous?: DeviceLocation | null) {
+  if (!Number.isFinite(next.latitude) || !Number.isFinite(next.longitude)) return false;
+  if (next.latitude < -90 || next.latitude > 90 || next.longitude < -180 || next.longitude > 180) return false;
+  if (typeof next.accuracy === "number" && next.accuracy > 100) return false;
+  if (!previous) return true;
+
+  const elapsedSeconds = Math.max(0.001, (next.timestamp - previous.timestamp) / 1000);
+  const movedMeters = distanceMeters(previous, next);
+  if (movedMeters < 3 && elapsedSeconds < 8) return false;
+
+  const impliedSpeed = movedMeters / elapsedSeconds;
+  const reportedSpeed = typeof next.speed === "number" ? next.speed : 0;
+  return impliedSpeed <= 55 || reportedSpeed >= impliedSpeed * 0.65;
+}
+
+function distanceMeters(a: Pick<DeviceLocation, "latitude" | "longitude">, b: Pick<DeviceLocation, "latitude" | "longitude">) {
+  const radians = (value: number) => value * Math.PI / 180;
+  const lat1 = radians(a.latitude);
+  const lat2 = radians(b.latitude);
+  const dLat = radians(b.latitude - a.latitude);
+  const dLng = radians(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
 function normalizeLocation(location: Location.LocationObject): DeviceLocation {
   const available = (value: number | null) => typeof value === "number" && value >= 0 ? value : null;
   return {
@@ -32,7 +57,7 @@ export async function ensureForegroundLocationPermission() {
 export async function getCurrentDeviceLocation(): Promise<DeviceLocation> {
   const granted = await ensureForegroundLocationPermission();
   if (!granted) {
-    throw new Error("Location permission is required to use live map features.");
+    throw new Error("Allow location access to use your current position. You can still search or move the map instead.");
   }
 
   const location = await Location.getCurrentPositionAsync({

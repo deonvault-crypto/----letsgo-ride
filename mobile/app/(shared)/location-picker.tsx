@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { LocationPickerMap, LocationPickerMapHandle, MapRegion as Region } from "../../components/maps/LocationPickerMap";
@@ -42,8 +42,13 @@ export default function LocationPickerScreen() {
   } = useLocationDraft();
   const existing = kind === "pickup" ? pickup : kind === "dropoff" ? dropoff : foodDropoff;
   const mapRef = useRef<LocationPickerMapHandle | null>(null);
-  const suppressNextMapLookup = useRef(true);
   const reverseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchGeneration = useRef(0);
+  const selectionGeneration = useRef(0);
+  const reverseGeneration = useRef(0);
+  const initialRegion = useRef<Region>(existing
+    ? { ...existing.location, latitudeDelta: 0.018, longitudeDelta: 0.018 }
+    : HARARE_REGION);
   const [query, setQuery] = useState(existing?.address || "");
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [selected, setSelected] = useState<LocationChoice | null>(existing || null);
@@ -62,8 +67,10 @@ export default function LocationPickerScreen() {
 
   useEffect(() => {
     const clean = query.trim();
+    const generation = ++searchGeneration.current;
     if (clean.length < 2 || clean === selected?.address) {
       setSuggestions([]);
+      setSearching(false);
       return;
     }
 
@@ -71,12 +78,15 @@ export default function LocationPickerScreen() {
       try {
         setSearching(true);
         setError(null);
-        setSuggestions(await autocompletePlaces(clean));
+        const nextSuggestions = await autocompletePlaces(clean);
+        if (generation === searchGeneration.current) setSuggestions(nextSuggestions);
       } catch (err) {
-        setSuggestions([]);
-        setError(err instanceof Error ? err.message : "Unable to search places right now.");
+        if (generation === searchGeneration.current) {
+          setSuggestions([]);
+          setError(err instanceof Error ? err.message : "Unable to search places right now.");
+        }
       } finally {
-        setSearching(false);
+        if (generation === searchGeneration.current) setSearching(false);
       }
     }, 320);
 
@@ -84,7 +94,6 @@ export default function LocationPickerScreen() {
   }, [query, selected?.address]);
 
   function focusMap(choice: LocationChoice) {
-    suppressNextMapLookup.current = true;
     mapRef.current?.focus(
       {
         ...choice.location,
@@ -94,15 +103,21 @@ export default function LocationPickerScreen() {
     );
   }
 
-  function useChoice(choice: LocationChoice) {
+  function useChoice(choice: LocationChoice, expectedSelectionGeneration?: number) {
+    if (expectedSelectionGeneration !== undefined && expectedSelectionGeneration !== selectionGeneration.current) return false;
+    if (expectedSelectionGeneration === undefined) selectionGeneration.current += 1;
+    reverseGeneration.current += 1;
+    if (reverseTimer.current) clearTimeout(reverseTimer.current);
     setSelected(choice);
     setQuery(choice.address);
     setSuggestions([]);
     setError(null);
     focusMap(choice);
+    return true;
   }
 
   async function chooseSuggestion(suggestion: PlaceSuggestion) {
+    const generation = ++selectionGeneration.current;
     try {
       setResolving(true);
       setError(null);
@@ -124,34 +139,65 @@ export default function LocationPickerScreen() {
           placeId: detail.place_id,
         };
       }
-      useChoice(choice);
+      useChoice(choice, generation);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to open that place.");
+      if (generation === selectionGeneration.current) {
+        setError(err instanceof Error ? err.message : "Unable to open that place.");
+      }
     } finally {
-      setResolving(false);
+      if (generation === selectionGeneration.current) setResolving(false);
     }
   }
 
   async function useCurrentLocation() {
+    const selection = ++selectionGeneration.current;
     try {
       setLocating(true);
       setError(null);
       const current = await getCurrentDeviceLocation();
+      if (selection !== selectionGeneration.current) return;
+      const coordinate = { latitude: current.latitude, longitude: current.longitude };
       const choice: LocationChoice = {
         label: "Current location",
-        address: "Current location",
-        location: { latitude: current.latitude, longitude: current.longitude },
+        address: "Finding the nearest address…",
+        location: coordinate,
         placeId: null,
       };
-      useChoice(choice);
+      if (!useChoice(choice, selection)) return;
+      const generation = ++reverseGeneration.current;
+      setPinLookingUp(true);
+      try {
+        const result = await reverseGeocodeLocation(coordinate);
+        if (generation === reverseGeneration.current) {
+          const resolved = {
+            label: result.formatted_address.split(",")[0] || "Current location",
+            address: result.formatted_address,
+            location: coordinate,
+            placeId: result.place_id,
+          };
+          setSelected(resolved);
+          setQuery(resolved.address);
+        }
+      } catch {
+        if (generation === reverseGeneration.current) {
+          setSelected({ ...choice, address: "Current map location" });
+          setQuery("Current map location");
+        }
+      } finally {
+        if (generation === reverseGeneration.current) setPinLookingUp(false);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to get your current location.");
+      if (selection === selectionGeneration.current) {
+        setError(err instanceof Error ? err.message : "Unable to get your current location.");
+      }
     } finally {
-      setLocating(false);
+      if (selection === selectionGeneration.current) setLocating(false);
     }
   }
 
-  function adjustPin(latitude: number, longitude: number) {
+  const adjustPin = useCallback((latitude: number, longitude: number) => {
+    selectionGeneration.current += 1;
+    const generation = ++reverseGeneration.current;
     const next: LocationChoice = {
       label: "Pinned location",
       address: "Finding the nearest address…",
@@ -163,6 +209,7 @@ export default function LocationPickerScreen() {
     if (reverseTimer.current) clearTimeout(reverseTimer.current);
     reverseTimer.current = setTimeout(async () => {
       try {
+        if (generation !== reverseGeneration.current) return;
         setPinLookingUp(true);
         const result = await reverseGeocodeLocation({ latitude, longitude });
         const resolved: LocationChoice = {
@@ -171,23 +218,31 @@ export default function LocationPickerScreen() {
           location: { latitude, longitude },
           placeId: result.place_id,
         };
-        setSelected(resolved);
-        setQuery(resolved.address);
+        if (generation === reverseGeneration.current) {
+          setSelected(resolved);
+          setQuery(resolved.address);
+        }
       } catch {
-        setSelected({ ...next, address: "Pinned map location" });
+        if (generation === reverseGeneration.current) {
+          setSelected({ ...next, address: "Pinned map location" });
+          setQuery("Pinned map location");
+        }
       } finally {
-        setPinLookingUp(false);
+        if (generation === reverseGeneration.current) setPinLookingUp(false);
       }
     }, 520);
-  }
+  }, []);
 
-  function mapSettled(region: Region) {
-    if (suppressNextMapLookup.current) {
-      suppressNextMapLookup.current = false;
-      return;
-    }
+  const mapSettled = useCallback((region: Region) => {
     adjustPin(region.latitude, region.longitude);
-  }
+  }, [adjustPin]);
+
+  const mapMovementStarted = useCallback(() => {
+    selectionGeneration.current += 1;
+    reverseGeneration.current += 1;
+    if (reverseTimer.current) clearTimeout(reverseTimer.current);
+    setPinLookingUp(false);
+  }, []);
 
   async function saveAs(placeKind: "home" | "work") {
     if (!selected || saving) return;
@@ -213,9 +268,6 @@ export default function LocationPickerScreen() {
     router.back();
   }
 
-  const initialRegion = selected
-    ? { ...selected.location, latitudeDelta: 0.018, longitudeDelta: 0.018 }
-    : HARARE_REGION;
   const showShortcuts = suggestions.length === 0 && query.trim().length < 2;
   const screenTitle = kind === "pickup" ? "Choose pickup" : kind === "dropoff" ? "Choose drop-off" : "Choose delivery location";
   const eyebrow = kind === "pickup" ? "PICKUP" : kind === "dropoff" ? "DROP-OFF" : "DELIVERY";
@@ -235,6 +287,10 @@ export default function LocationPickerScreen() {
           <TextInput
             value={query}
             onChangeText={(value) => {
+              selectionGeneration.current += 1;
+              reverseGeneration.current += 1;
+              if (reverseTimer.current) clearTimeout(reverseTimer.current);
+              setPinLookingUp(false);
               setQuery(value);
               if (value !== selected?.address) setSelected(null);
             }}
@@ -306,7 +362,7 @@ export default function LocationPickerScreen() {
       ) : null}
 
       <View style={styles.mapCard}>
-        <LocationPickerMap ref={mapRef} style={styles.map} initialRegion={initialRegion} onRegionChangeComplete={mapSettled} />
+        <LocationPickerMap ref={mapRef} style={styles.map} initialRegion={initialRegion.current} onMovementStart={mapMovementStarted} onRegionChangeComplete={mapSettled} />
         {Platform.OS !== "web" ? <View pointerEvents="none" style={styles.centerPin}>
           <View style={styles.pinBubble}><MaterialCommunityIcons name="map-marker" size={30} color="#FFFFFF" /></View>
           <View style={styles.pinShadow} />
@@ -322,7 +378,7 @@ export default function LocationPickerScreen() {
           <Text style={styles.selectedEyebrow}>{eyebrow}</Text>
           <Text numberOfLines={1} style={styles.selectedTitle}>{selected?.label || "Choose a location"}</Text>
           <Text numberOfLines={2} style={styles.selectedBody}>
-            {selected?.address || "Search above or use your current GPS position."}
+            {selected?.address || "Search above, move the map or use your current location."}
           </Text>
         </View>
 

@@ -11,10 +11,13 @@ import { spacing } from "../../constants/spacing";
 import { resendEmailVerification, verifyEmail } from "../../services/authService";
 import { enablePhoneNotifications, hasSeenNotificationExplanation, markNotificationExplanationSeen } from "../../services/pushNotificationService";
 import { normalizeEmail } from "../../utils/passwordRules";
+import { destinationAfterAuth, intentCopy, parseApplicationIntent } from "../../utils/authIntent";
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string; returnTo?: string }>();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string; intent?: string }>();
+  const intent = parseApplicationIntent(params.intent);
+  const copy = intentCopy(intent);
   const [email, setEmail] = useState(params.email || "");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,18 +31,8 @@ export default function EmailVerificationScreen() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  function safeCustomerReturnTo() {
-    const value = typeof params.returnTo === "string" ? params.returnTo : "";
-    const allowed = ["/(shared)/courier", "/(shared)/food", "/(customer)/"];
-    return allowed.some((prefix) => value === prefix || value.startsWith(prefix)) ? value : null;
-  }
-
   function routeForRole(role?: string | null) {
-    if (role === "admin") return router.replace("/(admin)/dashboard" as never);
-    if (role === "driver") return router.replace("/(driver)/home" as never);
-    if (role === "courier") return router.replace("/(courier)/home" as never);
-    if (role === "merchant") return router.replace("/(merchant)/home" as never);
-    router.replace((safeCustomerReturnTo() || "/(customer)/home") as never);
+    router.replace(destinationAfterAuth(role, intent, params.returnTo) as never);
   }
 
   async function continueAfterVerification(role?: string | null) {
@@ -98,7 +91,7 @@ export default function EmailVerificationScreen() {
   }
 
   return (
-    <Screen title="Verify email" showBack fallbackRoute="/(auth)/email-login" showNotifications={false}>
+    <Screen title="Verify email" showBack fallbackRoute={{ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email), returnTo: params.returnTo, intent } } as never} showNotifications={false}>
       <View style={styles.logoWrap}><BrandLogo size="regular" /></View>
       <View style={styles.copy}><Text style={styles.title}>Verify your email</Text><Text style={styles.body}>We sent a 6-digit code to your email. Enter it to activate your LetsGoRide account.</Text></View>
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" />
@@ -107,7 +100,7 @@ export default function EmailVerificationScreen() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <AppButton title="Verify email" loading={loading} onPress={submit} disabled={!email || code.length !== 6} />
       <AppButton title="Resend code" variant="secondary" loading={resending} onPress={resend} disabled={!email} />
-      <Modal visible={verificationComplete} transparent animationType="fade"><View style={styles.modalBackdrop}><View style={styles.modalCard}><BrandLogo size="regular" /><Text style={styles.modalTitle}>Account verified</Text><Text style={styles.modalBody}>You’re ready. We’ll take you to the correct LetsGoRide product.</Text><AppButton title={verifiedWithSession ? "Continue" : "Continue to login"} onPress={() => { if (verifiedWithSession) continueAfterVerification(verifiedRole); else router.replace({ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email), returnTo: params.returnTo } } as never); }} /></View></View></Modal>
+      <Modal visible={verificationComplete} transparent animationType="fade"><View style={styles.modalBackdrop}><View style={styles.modalCard}><BrandLogo size="regular" /><Text style={styles.modalTitle}>Email verified</Text><Text style={styles.modalBody}>{copy.verifiedBody}</Text><AppButton title={verifiedWithSession ? "Continue" : "Continue to login"} onPress={() => { if (verifiedWithSession) continueAfterVerification(verifiedRole); else router.replace({ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email), returnTo: params.returnTo, intent } } as never); }} /></View></View></Modal>
       <Modal visible={notificationIntroOpen} transparent animationType="fade" onRequestClose={() => finishNotificationIntro(false)}><View style={styles.modalBackdrop}><View style={styles.modalCard}><Text style={styles.modalTitle}>Enable notifications?</Text><Text style={styles.modalBody}>LetsGoRide sends phone alerts for booking requests, trip updates, messages, verification reviews, support replies, and safety notices.</Text><View style={styles.modalActions}><AppButton title="Enable notifications" loading={notificationSaving} onPress={() => finishNotificationIntro(true)} /><AppButton title="Not now" variant="secondary" onPress={() => finishNotificationIntro(false)} /></View></View></View></Modal>
     </Screen>
   );

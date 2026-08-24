@@ -91,7 +91,7 @@ describe("settings account controls", () => {
     });
   });
 
-  it("shows disabled notification categories when phone notifications are off", async () => {
+  it("explains how to enable notifications without showing a wall of dead toggles", async () => {
     const screen = render(<SettingsScreen />);
 
     await waitFor(() => {
@@ -108,11 +108,8 @@ describe("settings account controls", () => {
     expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
     expect(screen.queryByRole("button", { name: "Change phone number" })).toBeNull();
 
-    const serviceUpdatesSwitch = screen.getByLabelText("Service updates");
-    expect(serviceUpdatesSwitch.props.value).toBe(false);
-    expect(serviceUpdatesSwitch.props.disabled).toBe(true);
-
-    fireEvent(serviceUpdatesSwitch, "valueChange", true);
+    expect(screen.getByText("Enable phone notifications first, then choose exactly which updates you want.")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("Service updates")).toBeNull();
     expect(updateNotificationPreferences).not.toHaveBeenCalled();
   });
 

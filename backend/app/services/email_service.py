@@ -60,6 +60,8 @@ def _send_resend_email(to_email: str, subject: str, html: str, text: str, action
         "html": html,
         "text": text,
     }
+    if settings.resend_reply_to:
+        payload["reply_to"] = settings.resend_reply_to
 
     data = json.dumps(payload).encode("utf-8")
     payload_keys = list(payload.keys())

@@ -38,13 +38,13 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeadi
 
   useEffect(() => {
     if (Platform.OS === "web") return;
-    const points = [...route, pickup, dropoff, courier].filter(validPoint);
+    const points = [pickup, dropoff].filter(validPoint);
     if (points.length < 2) return;
     mapRef.current?.fitToCoordinates(points, {
       animated: true,
       edgePadding: { top: 54, right: 44, bottom: 54, left: 44 },
     });
-  }, [dropoff?.latitude, dropoff?.longitude, pickup?.latitude, pickup?.longitude, route]);
+  }, [dropoff?.latitude, dropoff?.longitude, pickup?.latitude, pickup?.longitude]);
 
   useEffect(() => {
     if (Platform.OS === "web" || !validPoint(courier)) return;
@@ -53,7 +53,7 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeadi
       longitude: courier.longitude,
       latitudeDelta: 0,
       longitudeDelta: 0,
-      duration: 950,
+      duration: 6500,
       useNativeDriver: false,
       toValue: 0,
     }).start();

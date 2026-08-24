@@ -12,10 +12,14 @@ import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { emailRegister, resendEmailVerification } from "../../services/authService";
 import { isStrongPassword, normalizeEmail } from "../../utils/passwordRules";
+import { intentCopy, parseApplicationIntent } from "../../utils/authIntent";
 
 export default function EmailRegisterScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string }>();
+  const params = useLocalSearchParams<{ returnTo?: string; intent?: string }>();
+  const intent = parseApplicationIntent(params.intent);
+  const copy = intentCopy(intent);
+  const fallbackRoute = intent === "customer_signup" ? "/(auth)/welcome" : "/(shared)/work-with-us";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
@@ -58,7 +62,7 @@ export default function EmailRegisterScreen() {
       });
       router.replace({
         pathname: "/(auth)/email-verification",
-        params: { email: normalizedEmail, returnTo: params.returnTo },
+        params: { email: normalizedEmail, returnTo: params.returnTo, intent },
       } as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account.");
@@ -82,13 +86,13 @@ export default function EmailRegisterScreen() {
   }
 
   return (
-    <Screen title="Create customer account" showBack fallbackRoute="/(customer)/home" showNotifications={false}>
+    <Screen title={intent === "customer_signup" ? "Create account" : copy.title} showBack fallbackRoute={fallbackRoute} showNotifications={false}>
       <View style={styles.logoWrap}>
         <BrandLogo size="large" />
       </View>
       <View style={styles.card}>
-        <Text style={styles.title}>Create your customer account</Text>
-        <Text style={styles.body}>One account for Ride, Food and Courier. Driver, Courier and Merchant accounts stay separate.</Text>
+        <Text style={styles.title}>{copy.registerTitle}</Text>
+        <Text style={styles.body}>{intent === "customer_signup" ? "Ride across town, order food or send something with one secure login." : copy.authBody}</Text>
         <AppInput label="Full name" value={name} onChangeText={setName} leftIcon="account-outline" placeholder="Your full name" />
         <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" placeholder="you@example.com" />
         <LocationPicker label="City" value={city} onChangeText={setCity} placeholder="Select your city" />
@@ -123,9 +127,9 @@ export default function EmailRegisterScreen() {
             <AppButton
               title="Log in"
               variant="secondary"
-              onPress={() => router.replace({ pathname: "/(auth)/email-login", params: { email: normalizedEmail, returnTo: params.returnTo } } as never)}
+              onPress={() => router.replace({ pathname: "/(auth)/email-login", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)}
             />
-            <AppButton title="Reset password" variant="ghost" onPress={() => router.push({ pathname: "/(auth)/forgot-password", params: { email: normalizedEmail } } as never)} />
+            <AppButton title="Reset password" variant="ghost" onPress={() => router.push({ pathname: "/(auth)/forgot-password", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)} />
           </View>
         ) : null}
         {existingUnverified ? (
@@ -134,11 +138,11 @@ export default function EmailRegisterScreen() {
             <AppButton
               title="Verify email"
               variant="ghost"
-              onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail, returnTo: params.returnTo } } as never)}
+              onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)}
             />
           </View>
         ) : null}
-        <AppButton title="Create customer account" loading={loading} onPress={submit} disabled={!valid} />
+        <AppButton title={copy.registerButton} loading={loading} onPress={submit} disabled={!valid} />
       </View>
     </Screen>
   );

@@ -39,7 +39,7 @@ export default function MerchantRestaurantScreen() {
       setWorkspace(data);
       setSelectedCategory((current) => current || data.categories[0]?.id || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load restaurant workspace.");
+      setError(err instanceof Error ? err.message : "Unable to load this restaurant.");
     } finally {
       setLoading(false);
     }
@@ -166,7 +166,7 @@ export default function MerchantRestaurantScreen() {
 
   return (
     <Screen showBack fallbackRoute="/(merchant)/home" title={workspace?.restaurant.name || "Restaurant"} showNotifications={false}>
-      {loading ? <Text style={styles.loading}>Loading restaurant workspace…</Text> : null}
+      {loading ? <Text style={styles.loading}>Loading restaurant…</Text> : null}
       {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.errorCard}><MaterialCommunityIcons name="alert-circle-outline" size={21} color={v2Theme.colors.danger} /><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
 
       {workspace ? (

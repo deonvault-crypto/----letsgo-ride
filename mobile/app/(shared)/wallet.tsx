@@ -11,25 +11,9 @@ export default function WalletScreen() {
         <View style={styles.heroIcon}>
           <MaterialCommunityIcons name="wallet-outline" size={30} color={v2Theme.colors.brandStrong} />
         </View>
-        <Text style={styles.title}>Payments, in one place.</Text>
-        <Text style={styles.body}>
-          Wallet and payment methods will connect here once the payment layer is enabled. No fake balances or payment history are shown before that integration exists.
-        </Text>
-      </View>
-
-      <View style={styles.row}>
-        <MaterialCommunityIcons name="credit-card-outline" size={23} color={v2Theme.colors.ink} />
-        <View style={styles.copy}>
-          <Text style={styles.rowTitle}>Payment methods</Text>
-          <Text style={styles.rowBody}>Securely saved methods will appear here.</Text>
-        </View>
-      </View>
-      <View style={styles.row}>
-        <MaterialCommunityIcons name="receipt-text-outline" size={23} color={v2Theme.colors.ink} />
-        <View style={styles.copy}>
-          <Text style={styles.rowTitle}>Receipts</Text>
-          <Text style={styles.rowBody}>Ride, food and courier receipts will share one history.</Text>
-        </View>
+        <Text style={styles.kicker}>NOT YET AVAILABLE</Text>
+        <Text style={styles.title}>Wallet is coming later.</Text>
+        <Text style={styles.body}>You’ll still see the exact price before confirming a ride, food order or delivery.</Text>
       </View>
     </Screen>
   );
@@ -50,6 +34,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  kicker: { color: v2Theme.colors.brandStrong, fontSize: 10, fontWeight: "900", letterSpacing: 1.1 },
   title: {
     color: v2Theme.colors.ink,
     fontSize: 27,
@@ -60,26 +45,5 @@ const styles = StyleSheet.create({
     color: v2Theme.colors.inkSecondary,
     fontSize: 14,
     lineHeight: 21,
-  },
-  row: {
-    minHeight: 78,
-    borderRadius: v2Theme.radius.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.line,
-    backgroundColor: v2Theme.colors.surface,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 13,
-  },
-  copy: { flex: 1, gap: 4 },
-  rowTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  rowBody: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 12,
   },
 });

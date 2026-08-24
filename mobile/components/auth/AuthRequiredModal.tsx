@@ -9,7 +9,7 @@ export function AuthRequiredModal({
   onClose,
   returnTo,
   title = "You’re almost there.",
-  body = "Sign in or create a customer account to continue.",
+  body = "Sign in or create an account to continue.",
 }: {
   visible: boolean;
   onClose: () => void;
@@ -50,7 +50,7 @@ export function AuthRequiredModal({
             }}
             style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}
           >
-            <Text style={styles.secondaryText}>Create customer account</Text>
+            <Text style={styles.secondaryText}>Create account</Text>
           </Pressable>
           <Text style={styles.note}>Browsing stays free. We only ask for an account when identity is needed for a real service.</Text>
         </View>

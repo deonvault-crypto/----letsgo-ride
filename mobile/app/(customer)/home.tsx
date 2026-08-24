@@ -1,9 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { RideCard } from "../../components/cards/RideCard";
 import { ServiceSwitcher, CustomerService } from "../../components/platform/ServiceSwitcher";
+import { ServiceStoryCard } from "../../components/platform/ServiceStoryCard";
 import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
@@ -47,11 +48,11 @@ export default function CustomerHomeScreen() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>For you</Text><Pressable onPress={() => router.push("/(shared)/services" as never)} hitSlop={8}><Text style={styles.textAction}>See all</Text></Pressable></View>
-        <View style={styles.quickRow}>
-          <QuickAction icon="car-outline" label="Ride" onPress={() => router.push("/(customer)/search" as never)} />
-          <QuickAction icon="food-fork-drink" label="Food" onPress={() => router.push("/(customer)/food" as never)} />
-          <QuickAction icon="package-variant-closed" label="Courier" onPress={() => router.push("/(shared)/courier" as never)} />
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRail}>
+          <ServiceStoryCard compact title="Ride" subtitle="Local and city-to-city journeys" eyebrow="GO" icon="car-outline" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push("/(customer)/search" as never)} />
+          <ServiceStoryCard compact title="Food" subtitle="Kitchens and dishes near you" eyebrow="EAT" icon="food-fork-drink" image={require("../../assets/images/food-marketplace-owned-v1.png")} onPress={() => router.push("/(customer)/food" as never)} />
+          <ServiceStoryCard compact title="Courier" subtitle="Parcels with live tracking" eyebrow="SEND" icon="package-variant-closed" image={require("../../assets/images/courier-handoff-owned-v2.jpg")} onPress={() => router.push("/(shared)/courier" as never)} />
+        </ScrollView>
       </View>
 
       <View style={styles.section}>
@@ -75,10 +76,6 @@ export default function CustomerHomeScreen() {
   );
 }
 
-function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; onPress: () => void }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}><View style={styles.quickIcon}><MaterialCommunityIcons name={icon} size={25} color={v2Theme.colors.ink} /></View><Text style={styles.quickLabel}>{label}</Text><MaterialCommunityIcons name="arrow-top-right" size={17} color={v2Theme.colors.inkTertiary} /></Pressable>;
-}
-
 const styles = StyleSheet.create({
   intro: { gap: 7, paddingTop: 2 },
   eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.35 },
@@ -95,9 +92,6 @@ const styles = StyleSheet.create({
   sectionTitle: { color: v2Theme.colors.ink, fontSize: v2Theme.type.section, fontWeight: "900", letterSpacing: -0.5 },
   sectionCaption: { color: v2Theme.colors.inkSecondary, fontSize: 12 },
   textAction: { color: v2Theme.colors.brandStrong, fontSize: 13, fontWeight: "900" },
-  quickRow: { flexDirection: "row", gap: 10 },
-  quickCard: { flex: 1, minHeight: 112, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 12, justifyContent: "space-between", alignItems: "flex-start" },
-  quickIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
-  quickLabel: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
+  storyRail: { gap: 10, paddingRight: 4 },
   pressed: { opacity: 0.7, transform: [{ scale: 0.992 }] },
 });

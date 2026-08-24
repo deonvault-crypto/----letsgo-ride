@@ -259,7 +259,7 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
     if attempts >= 5:
         return None
     settings = get_settings()
-    local_mock_allowed = settings.app_env != "production" and code == settings.mock_otp
+    local_mock_allowed = settings.mock_otp_allowed and code == settings.mock_otp
     if not local_mock_allowed and (not code_not_expired(user) or not code_matches(user, code)):
         await database.update_one(
             "users",
@@ -321,7 +321,7 @@ async def reset_email_password(email: str, code: str, password: str) -> bool:
     if attempts >= 5:
         return False
     settings = get_settings()
-    local_mock_allowed = settings.app_env != "production" and code == settings.mock_otp
+    local_mock_allowed = settings.mock_otp_allowed and code == settings.mock_otp
     if not local_mock_allowed and (not code_not_expired(user, "reset") or not code_matches(user, code, "reset")):
         await database.update_one(
             "users",
