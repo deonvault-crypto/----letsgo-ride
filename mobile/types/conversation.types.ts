@@ -23,6 +23,8 @@ export type Conversation = {
   other_user_profile_photo_url?: string;
   last_message?: string | null;
   last_message_at?: string | null;
+  last_message_sender_id?: string | null;
+  realtime_version?: number;
   created_at?: string;
   updated_at?: string;
 };
@@ -36,5 +38,13 @@ export type TripMessage = {
   read_by_driver?: boolean;
   read_by_passenger?: boolean;
   system?: boolean;
+  conversation_realtime_version?: number;
+};
+
+export type ConversationReadResult = {
+  read: boolean;
+  changed: number;
+  conversation_realtime_version: number;
+  read_through_message_id?: string | null;
 };
 

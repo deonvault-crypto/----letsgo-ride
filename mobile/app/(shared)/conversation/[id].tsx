@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -9,60 +9,33 @@ import { LoadingState } from "../../../components/states/LoadingState";
 import { Screen } from "../../../components/ui/Screen";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
+import { useConversationRealtime } from "../../../hooks/useConversationRealtime";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
-import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
-import {
-  getConversation,
-  getConversationMessages,
-  markConversationRead,
-  sendConversationMessage,
-} from "../../../services/conversationService";
-import { Conversation, TripMessage } from "../../../types/conversation.types";
+import { sendConversationMessage } from "../../../services/conversationService";
 
 export default function ConversationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useCurrentUser();
-  const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<TripMessage[]>([]);
+  const {
+    acceptSentMessage,
+    conversation,
+    error,
+    loading,
+    messages,
+    reconcile,
+    setError,
+  } = useConversationRealtime(id, user?.id);
   const [body, setBody] = useState("");
-  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");
-  const lastReadMessageId = useRef<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!id) return;
-    try {
-      setError("");
-      const [conversationData, messageData] = await Promise.all([
-        getConversation(id),
-        getConversationMessages(id),
-      ]);
-      setConversation(conversationData);
-      setMessages(messageData);
-      const latestUnread = [...messageData].reverse().find((message) => isUnreadForUser(message, conversationData, user?.id));
-      if (latestUnread && lastReadMessageId.current !== latestUnread.id) {
-        await markConversationRead(id);
-        lastReadMessageId.current = latestUnread.id;
-        setMessages((current) => current.map((message) => markReadForUser(message, conversationData, user?.id)));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load conversation.");
-    } finally {
-      setLoading(false);
-    }
-  }, [id, user?.id]);
-
-  useLiveRefresh(load, 7000);
 
   async function send() {
     if (!id || !body.trim()) return;
     try {
       setSending(true);
       setError("");
-      await sendConversationMessage(id, body);
+      const message = await sendConversationMessage(id, body);
+      acceptSentMessage(message);
       setBody("");
-      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send message.");
     } finally {
@@ -75,7 +48,7 @@ export default function ConversationScreen() {
   return (
     <Screen title="Messages" showBack fallbackRoute="/(shared)/messages" navRole={navRole}>
       {loading ? <LoadingState label="Loading messages..." /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {error ? <ErrorState message={error} onRetry={reconcile} /> : null}
       {!loading && conversation ? (
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.wrap}>
           <View style={styles.headerCard}>
@@ -125,19 +98,6 @@ export default function ConversationScreen() {
       ) : null}
     </Screen>
   );
-}
-
-function isUnreadForUser(message: TripMessage, conversation: Conversation, userId?: string) {
-  if (!userId || message.sender_id === userId) return false;
-  if (conversation.driver_user_id === userId) return message.read_by_driver !== true;
-  if (conversation.passenger_id === userId) return message.read_by_passenger !== true;
-  return false;
-}
-
-function markReadForUser(message: TripMessage, conversation: Conversation, userId?: string): TripMessage {
-  if (conversation.driver_user_id === userId) return { ...message, read_by_driver: true };
-  if (conversation.passenger_id === userId) return { ...message, read_by_passenger: true };
-  return message;
 }
 
 function formatTime(value: string) {

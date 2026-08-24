@@ -1,4 +1,3 @@
-import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -9,34 +8,17 @@ import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { listConversations } from "../../services/conversationService";
-import { Conversation } from "../../types/conversation.types";
+import { useConversationsRealtime } from "../../hooks/useConversationsRealtime";
 
 export default function MessagesScreen() {
   const router = useRouter();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const load = useCallback(async () => {
-    try {
-      setError("");
-      setConversations(await listConversations());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load messages.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useLiveRefresh(load, 10000);
+  const { conversations, error, loading, reconcile } = useConversationsRealtime();
 
   return (
     <Screen title="Messages" showBack fallbackRoute="/(shared)/account" navRole="customer">
       <Text style={styles.title}>Ride messages</Text>
       {loading ? <LoadingState label="Loading conversations..." /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
+      {error ? <ErrorState message={error} onRetry={reconcile} /> : null}
       {!loading && !error && conversations.length === 0 ? (
         <EmptyState
           title="No messages yet"

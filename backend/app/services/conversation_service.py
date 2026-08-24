@@ -2,6 +2,12 @@ from typing import Any, Dict, List, Optional
 
 from app.database import database
 from app.services.notification_service import create_app_notification
+from app.services.conversation_realtime_service import (
+    conversation_realtime_version,
+    insert_versioned_conversation,
+    publish_conversation_realtime,
+    update_versioned_conversation,
+)
 from app.utils import api_error, new_id, now_iso
 
 
@@ -31,8 +37,12 @@ async def ensure_conversation_for_request(request: Dict[str, Any], ride: Optiona
         "created_at": timestamp,
         "updated_at": timestamp,
         "last_message_at": None,
+        "last_message": None,
+        "last_message_sender_id": None,
     }
-    return await database.insert_one("conversations", conversation)
+    created = await insert_versioned_conversation(conversation)
+    await publish_conversation_realtime(created, "conversation.created")
+    return created
 
 
 async def list_conversations_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -47,8 +57,10 @@ async def enrich_conversation(conversation: Dict[str, Any], user: Optional[Dict[
     request = await database.find_one("ride_requests", {"id": conversation.get("request_id")}) if conversation.get("request_id") else None
     driver = await database.find_one("users", {"id": conversation.get("driver_user_id")}) if conversation.get("driver_user_id") else None
     passenger = await database.find_one("users", {"id": conversation.get("passenger_id")}) if conversation.get("passenger_id") else None
-    messages = await database.find_many("messages", {"conversation_id": conversation["id"]})
-    latest = sorted(messages, key=lambda item: item.get("created_at", ""))[-1] if messages else None
+    latest = None
+    if "last_message" not in conversation:
+        messages = await database.find_many("messages", {"conversation_id": conversation["id"]})
+        latest = sorted(messages, key=lambda item: item.get("created_at", ""))[-1] if messages else None
     other_user = passenger if user and user.get("id") == conversation.get("driver_user_id") else driver
     enriched.update(
         {
@@ -68,7 +80,7 @@ async def enrich_conversation(conversation: Dict[str, Any], user: Optional[Dict[
             "passenger_verification_status": passenger.get("verification_status") if passenger else None,
             "other_user_name": other_user.get("name") if other_user else None,
             "other_user_profile_photo_url": other_user.get("profile_photo_url") if other_user else None,
-            "last_message": latest.get("body") if latest else None,
+            "last_message": latest.get("body") if latest else conversation.get("last_message"),
             "last_message_at": latest.get("created_at") if latest else conversation.get("last_message_at"),
         }
     )
@@ -103,7 +115,17 @@ async def send_message(conversation: Dict[str, Any], sender: Dict[str, Any], bod
         "system": False,
     }
     created = await database.insert_one("messages", message)
-    await database.update_one("conversations", conversation["id"], {"last_message_at": timestamp, "updated_at": timestamp})
+    updated_conversation = await update_versioned_conversation(
+        {"id": conversation["id"]},
+        {
+            "last_message": cleaned_body,
+            "last_message_at": timestamp,
+            "last_message_sender_id": sender["id"],
+            "updated_at": timestamp,
+        },
+    )
+    if not updated_conversation:
+        api_error("Conversation not found.", 404)
 
     recipients = _participant_ids(conversation) - {sender["id"]}
     for recipient_id in recipients:
@@ -115,4 +137,79 @@ async def send_message(conversation: Dict[str, Any], sender: Dict[str, Any], bod
             "Open LetsGoRide to reply.",
             {"conversation_id": conversation["id"], "ride_id": conversation.get("ride_id"), "request_id": conversation.get("request_id")},
         )
-    return created
+    await publish_conversation_realtime(
+        updated_conversation,
+        "conversation.message_created",
+        message=created,
+    )
+    return {
+        **created,
+        "conversation_realtime_version": conversation_realtime_version(updated_conversation),
+    }
+
+
+async def mark_conversation_read(conversation: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    user_id = str(user.get("id") or "")
+    if user_id == conversation.get("driver_user_id"):
+        read_field = "read_by_driver"
+    elif user_id == conversation.get("passenger_id"):
+        read_field = "read_by_passenger"
+    else:
+        return {
+            "read": True,
+            "changed": 0,
+            "conversation_realtime_version": conversation_realtime_version(conversation),
+            "read_through_message_id": None,
+        }
+    unread = await database.find_many(
+        "messages",
+        {
+            "conversation_id": conversation["id"],
+            "sender_id": {"$ne": user_id},
+            read_field: {"$ne": True},
+        },
+    )
+    if not unread:
+        return {
+            "read": True,
+            "changed": 0,
+            "conversation_realtime_version": conversation_realtime_version(conversation),
+            "read_through_message_id": None,
+        }
+
+    unread_ids = [str(message["id"]) for message in unread]
+    timestamp = now_iso()
+    changed = await database.update_many(
+        "messages",
+        {"id": {"$in": unread_ids}, read_field: {"$ne": True}},
+        {read_field: True, "updated_at": timestamp},
+    )
+    if changed == 0:
+        current = await database.find_one("conversations", {"id": conversation["id"]}) or conversation
+        return {
+            "read": True,
+            "changed": 0,
+            "conversation_realtime_version": conversation_realtime_version(current),
+            "read_through_message_id": None,
+        }
+
+    updated_conversation = await update_versioned_conversation(
+        {"id": conversation["id"]},
+        {"updated_at": timestamp},
+    )
+    if not updated_conversation:
+        api_error("Conversation not found.", 404)
+    latest = max(unread, key=lambda item: str(item.get("created_at") or ""))
+    read_through_message_id = str(latest.get("id") or "")
+    await publish_conversation_realtime(
+        updated_conversation,
+        "conversation.read_updated",
+        reader_user_id=user_id,
+        read_through_message_id=read_through_message_id,
+    )
+    return {
+        "read": True,
+        "changed": changed,
+        "conversation_realtime_version": conversation_realtime_version(updated_conversation),
+        "read_through_message_id": read_through_message_id,
+    }

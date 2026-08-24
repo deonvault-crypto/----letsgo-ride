@@ -1,4 +1,4 @@
-import { Conversation, TripMessage } from "../types/conversation.types";
+import { Conversation, ConversationReadResult, TripMessage } from "../types/conversation.types";
 import { requestData } from "./api";
 
 export async function listConversations() {
@@ -22,6 +22,6 @@ export async function sendConversationMessage(id: string, body: string) {
 }
 
 export async function markConversationRead(id: string) {
-  return requestData<{ read: boolean }>({ method: "POST", url: `/conversations/${id}/read` });
+  return requestData<ConversationReadResult>({ method: "POST", url: `/conversations/${id}/read` });
 }
 

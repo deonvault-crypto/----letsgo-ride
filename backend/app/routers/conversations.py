@@ -7,9 +7,10 @@ from app.services.conversation_service import (
     enrich_conversation,
     get_conversation_for_user,
     list_conversations_for_user,
+    mark_conversation_read as mark_conversation_read_service,
     send_message,
 )
-from app.utils import api_success, now_iso
+from app.utils import api_success
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -47,9 +48,5 @@ async def create_message(conversation_id: str, payload: MessageBody, user=Depend
 @router.post("/{conversation_id}/read")
 async def mark_conversation_read(conversation_id: str, user=Depends(get_current_user)):
     conversation = await get_conversation_for_user(conversation_id, user)
-    messages = await database.find_many("messages", {"conversation_id": conversation["id"]})
-    read_field = "read_by_driver" if user.get("id") == conversation.get("driver_user_id") else "read_by_passenger"
-    for message in messages:
-        await database.update_one("messages", message["id"], {read_field: True, "updated_at": now_iso()})
-    return api_success({"read": True})
+    return api_success(await mark_conversation_read_service(conversation, user))
 

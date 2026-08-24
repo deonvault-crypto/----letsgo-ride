@@ -254,6 +254,26 @@ class Database:
                 return deepcopy(next_item)
         return None
 
+    async def update_many(
+        self,
+        collection: str,
+        filters: Dict[str, Any],
+        updates: Dict[str, Any],
+    ) -> int:
+        """Apply one ``$set`` operation to every matching row and return its count."""
+        if self.db is not None:
+            result = await self.db[collection].update_many(filters, {"$set": updates})
+            return int(result.modified_count)
+
+        changed = 0
+        for index, item in enumerate(self.memory[collection]):
+            if self._matches(item, filters):
+                next_item = {**item, **deepcopy(updates)}
+                if next_item != item:
+                    self.memory[collection][index] = next_item
+                    changed += 1
+        return changed
+
     async def delete_one(self, collection: str, item_id: str) -> bool:
         if self.db is not None:
             result = await self.db[collection].delete_one({"id": item_id})
