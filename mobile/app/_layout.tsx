@@ -7,6 +7,7 @@ import * as Notifications from "expo-notifications";
 import { FoodBasketProvider } from "../contexts/FoodBasketContext";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
 import { NotificationProvider } from "../contexts/NotificationContext";
+import { RealtimeProvider } from "../contexts/RealtimeContext";
 import { SessionProvider } from "../contexts/SessionContext";
 import { configureNotificationHandler } from "../services/pushNotificationService";
 
@@ -65,9 +66,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SessionProvider>
-        <NotificationProvider>
-          <LocationDraftProvider>
-            <FoodBasketProvider>
+        <RealtimeProvider>
+          <NotificationProvider>
+            <LocationDraftProvider>
+              <FoodBasketProvider>
               <StatusBar style="dark" />
               <Stack
                 screenOptions={{
@@ -85,9 +87,10 @@ export default function RootLayout() {
                 <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
                 <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
               </Stack>
-            </FoodBasketProvider>
-          </LocationDraftProvider>
-        </NotificationProvider>
+              </FoodBasketProvider>
+            </LocationDraftProvider>
+          </NotificationProvider>
+        </RealtimeProvider>
       </SessionProvider>
     </SafeAreaProvider>
   );

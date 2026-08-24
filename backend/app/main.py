@@ -8,8 +8,9 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, reports, requests, reviews, rides, routing, support, verification, waitlist
+from app.routers import admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
+from app.services.event_service import realtime_event_service
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
@@ -88,6 +89,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def on_startup():
     global ride_lifecycle_stop_event, ride_lifecycle_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     await database.connect()
+    await realtime_event_service.start()
     await ensure_admin_seed_user()
     if settings.enable_demo_seed:
         await seed_demo_rides()
@@ -125,6 +127,7 @@ async def on_shutdown():
         staging_routing_smoke_task.cancel()
     if staging_courier_dispatch_smoke_task:
         staging_courier_dispatch_smoke_task.cancel()
+    await realtime_event_service.close()
     await database.close()
 
 
@@ -136,6 +139,7 @@ app.include_router(requests.router)
 app.include_router(reviews.router)
 app.include_router(conversations.router)
 app.include_router(notifications.router)
+app.include_router(realtime.router)
 app.include_router(drivers.router)
 app.include_router(courier.router)
 app.include_router(food.router)

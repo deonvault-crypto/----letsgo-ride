@@ -26,6 +26,8 @@ class Settings:
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
         self.public_api_base_url = self._get_env_first("PUBLIC_API_BASE_URL", "API_PUBLIC_BASE_URL") or "https://letsgoride-backend.onrender.com"
+        self.realtime_redis_url = self._get_env_first("REALTIME_REDIS_URL", "REDIS_URL")
+        self.realtime_channel = os.getenv("REALTIME_CHANNEL", "letsgoride:realtime:v1").strip() or "letsgoride:realtime:v1"
 
         # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
         self.routing_provider = os.getenv("ROUTING_PROVIDER", "disabled").strip().lower()
