@@ -80,7 +80,10 @@ export type WorkerApplication = {
   full_name: string;
   phone: string;
   service_area: string;
+  service_area_id: string;
   vehicle?: string | null;
+  vehicle_type?: string | null;
+  vehicle_details?: string | null;
   experience?: string | null;
   business_name?: string | null;
   business_address?: string | null;

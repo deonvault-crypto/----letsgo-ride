@@ -136,7 +136,7 @@ export default function CustomerCourierDeliveryScreen() {
               <View style={styles.statusRow}>
                 <View style={styles.statusPill}>
                   <Animated.View style={[styles.statusDot, delivery.live_tracking_active && styles.statusDotLive, delivery.live_tracking_active && { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }) }]} />
-                  <Text style={styles.statusText}>{delivery.live_tracking_active ? "LIVE TRACKING" : customerStatusChip(delivery.status)}</Text>
+                  <Text style={styles.statusText}>{customerStatusChip(delivery.status)}</Text>
                 </View>
                 <Text style={styles.orderId}>{displayDeliveryReference(delivery.id)}</Text>
               </View>
@@ -242,7 +242,7 @@ function MatchingSearch({ pulse }: { pulse: Animated.Value }) {
       </View>
       <View style={styles.matchCopy}>
         <Text style={styles.matchTitle}>Finding someone nearby…</Text>
-        <Text style={styles.matchBody}>We’re checking approved couriers around your pickup. You can leave this screen — the request keeps running.</Text>
+        <Text style={styles.matchBody}>We’re checking approved couriers around your pickup. You can leave this screen while the request keeps running.</Text>
         <View style={styles.searchingRow}><Animated.View style={[styles.searchingDot, { opacity: pulse }]} /><Text style={styles.searchingText}>Searching nearby couriers</Text></View>
       </View>
     </View>
@@ -258,7 +258,6 @@ function CourierFoundCard({ delivery, pulse }: { delivery: CourierDelivery; puls
         <Text style={styles.courierName}>{delivery.courier_name || "Your courier"}</Text>
         <Text style={styles.courierBody}>Heading to your pickup now. Live location turns on automatically.</Text>
       </View>
-      <Animated.View style={[styles.liveBadge, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.65, 1] }) }]}><Text style={styles.liveBadgeText}>LIVE</Text></Animated.View>
     </View>
   );
 }

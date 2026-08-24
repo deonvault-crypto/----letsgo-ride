@@ -275,7 +275,7 @@ export default function CourierDeliveryScreen() {
 
           <View style={styles.routeMetrics}>
             <RouteMetric icon="map-marker-distance" label={delivery.remaining_distance_km != null ? "REMAINING" : "PLANNED ROUTE"} value={delivery.remaining_distance_km != null ? `${delivery.remaining_distance_km.toFixed(1)} km` : delivery.distance_km != null ? `${delivery.distance_km.toFixed(1)} km` : "Route unavailable"} />
-            <RouteMetric icon="clock-outline" label={delivery.remaining_eta_minutes != null ? "LIVE ETA" : "ROUTE ETA"} value={delivery.remaining_eta_minutes != null ? `${delivery.remaining_eta_minutes} min` : delivery.estimated_duration_minutes != null ? `${delivery.estimated_duration_minutes} min` : "ETA unavailable"} />
+            <RouteMetric icon="clock-outline" label="ETA" value={delivery.remaining_eta_minutes != null ? `${delivery.remaining_eta_minutes} min` : delivery.estimated_duration_minutes != null ? `${delivery.estimated_duration_minutes} min` : "ETA unavailable"} />
           </View>
 
           {ACTIVE.has(delivery.status) ? (
@@ -285,7 +285,7 @@ export default function CourierDeliveryScreen() {
                 <Text style={styles.cardTitle}>{gpsLive ? "Live journey active" : "Connecting live GPS…"}</Text>
                 <Text style={styles.muted}>{gpsCopy(delivery.status)}</Text>
               </View>
-              <View style={[styles.livePill, gpsLive && styles.livePillOn]}><Text style={[styles.liveText, gpsLive && styles.liveTextOn]}>{gpsLive ? "LIVE" : "AUTO"}</Text></View>
+              <Text style={styles.sharingState}>{gpsLive ? "Location sharing on" : "Waiting for location"}</Text>
             </View>
           ) : null}
 
@@ -537,10 +537,7 @@ const styles = StyleSheet.create({
   gpsIcon: { width: 47, height: 47, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
   gpsIconLive: { backgroundColor: v2Theme.colors.brand },
   cardTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  livePill: { borderRadius: 999, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 9, paddingVertical: 6 },
-  livePillOn: { backgroundColor: v2Theme.colors.brandSoft },
-  liveText: { color: v2Theme.colors.inkSecondary, fontSize: 7, fontWeight: "900" },
-  liveTextOn: { color: v2Theme.colors.brandStrong },
+  sharingState: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "800" },
   navigateButton: { minHeight: 72, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brand, padding: 12, flexDirection: "row", alignItems: "center", gap: 11 },
   navigateIcon: { width: 47, height: 47, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
   navigateTitle: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },

@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { LinearGradient } from "expo-linear-gradient";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
@@ -99,21 +98,19 @@ export default function AccountScreen() {
             <VerifiedBadge verified={verified} size="medium" />
           </View>
           <Text style={styles.meta}>{user?.city || "Zimbabwe"}</Text>
-          <View style={styles.modePill}>
-            <Text style={styles.modeText}>{accountLabel === "Customer" ? "LETSGORIDE MEMBER" : accountLabel.toUpperCase()}</Text>
-          </View>
+          <Text style={styles.accountType}>{accountLabel}</Text>
         </View>
       </View>
 
-      <LinearGradient colors={["#17231B", "#0E130F"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.utilityPanel}>
-        <View style={styles.utilityHeading}><View><Text style={styles.utilityEyebrow}>YOUR ESSENTIALS</Text><Text style={styles.utilityTitle}>Everything within reach.</Text></View><View style={styles.utilityGlow} /></View>
+      <View style={styles.utilityPanel}>
+        <Text style={styles.utilityTitle}>Your account</Text>
         <View style={styles.utilityGrid}>
           <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
           <QuickAction icon="lifebuoy" label="Help" onPress={() => router.push("/(shared)/support" as never)} />
           <QuickAction icon="shield-check-outline" label="Safety" onPress={() => router.push("/(shared)/safety" as never)} />
           <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
         </View>
-      </LinearGradient>
+      </View>
 
       {user?.role === "driver" ? (
         <View style={styles.section}>
@@ -156,9 +153,9 @@ function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialComm
       onPress={onPress}
       style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
     >
-      <MaterialCommunityIcons name={icon} size={21} color="#B5E8C5" />
+      <View style={styles.quickIcon}><MaterialCommunityIcons name={icon} size={21} color={v2Theme.colors.brandStrong} /></View>
       <Text style={styles.quickLabel}>{label}</Text>
-      <MaterialCommunityIcons name="arrow-top-right" size={15} color="rgba(255,255,255,0.48)" />
+      <MaterialCommunityIcons name="chevron-right" size={17} color={v2Theme.colors.inkTertiary} />
     </Pressable>
   );
 }
@@ -220,16 +217,13 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   name: { flexShrink: 1, color: v2Theme.colors.ink, fontSize: 26, fontWeight: "900", letterSpacing: -0.7 },
   meta: { color: v2Theme.colors.inkSecondary, fontSize: 13 },
-  modePill: { alignSelf: "flex-start", borderRadius: v2Theme.radius.pill, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 9, paddingVertical: 5 },
-  modeText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "900" },
-  utilityPanel: { borderRadius: v2Theme.radius.xxl, padding: 17, gap: 15, overflow: "hidden" },
-  utilityHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  utilityEyebrow: { color: "#89DBA5", fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
-  utilityTitle: { color: "#FFFFFF", fontSize: 19, fontWeight: "900", marginTop: 4, letterSpacing: -0.35 },
-  utilityGlow: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(50,190,99,0.18)", position: "absolute", right: -16, top: -30 },
+  accountType: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "800" },
+  utilityPanel: { gap: 10 },
+  utilityTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.35 },
   utilityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  quickCard: { width: "48%", minHeight: 48, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.08)", paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
-  quickLabel: { flex: 1, color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
+  quickCard: { width: "48%", minHeight: 68, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
+  quickIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: v2Theme.colors.brandSofter, alignItems: "center", justifyContent: "center" },
+  quickLabel: { flex: 1, color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
   section: { gap: 9 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   row: { minHeight: 74, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12 },

@@ -2,6 +2,8 @@ import axios from "axios";
 
 import { api, requestData, saveToken, clearToken, getToken, toFriendlyApiError } from "./api";
 import { User, UserRole } from "../types/user.types";
+import { clearPrivateSessionState } from "./sessionLifecycle";
+import { disablePhoneNotifications } from "./pushNotificationService";
 
 type AuthPayload = { token: string; user: User };
 type EmailVerificationPayload = {
@@ -126,7 +128,13 @@ export async function deleteAccount() {
 }
 
 export async function logout() {
-  await clearToken();
+  await disablePhoneNotifications().catch(() => undefined);
+  await clearPrivateSessionState();
+}
+
+export async function logoutToGuest(router: { replace: (href: never) => void }) {
+  await logout();
+  router.replace("/(customer)/home" as never);
 }
 
 export async function hasSession() {

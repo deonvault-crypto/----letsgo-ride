@@ -127,7 +127,7 @@ export default function ActivityScreen() {
               <Pressable accessibilityRole="button" onPress={() => router.push("/(shared)/services" as never)} hitSlop={8}><Text style={styles.action}>Explore services</Text></Pressable>
             </View>
           ) : null}
-          {!error && inProgress.length ? <ActivitySection title="In progress" items={inProgress} router={router} live /> : null}
+          {!error && inProgress.length ? <ActivitySection title="In progress" items={inProgress} router={router} /> : null}
           {!error && history.length ? <ActivitySection title="History" items={history} router={router} /> : null}
         </>
       ) : null}
@@ -135,10 +135,10 @@ export default function ActivityScreen() {
   );
 }
 
-function ActivitySection({ title, items, router, live = false }: { title: string; items: TimelineItem[]; router: ReturnType<typeof useRouter>; live?: boolean }) {
+function ActivitySection({ title, items, router }: { title: string; items: TimelineItem[]; router: ReturnType<typeof useRouter> }) {
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{title}</Text>{live ? <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View> : null}</View>
+      <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>{title}</Text></View>
       <View style={styles.list}>
         {items.map((item) => {
           if (item.kind === "ride") return <RideActivityCard key={item.id} trip={item.trip} onPress={() => router.push(`/(customer)/ride/${item.trip.ride_id}` as never)} />;

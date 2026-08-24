@@ -37,7 +37,7 @@ import {
   updateAdminSupportStatus,
   updateAdminUserStatus,
 } from "../../services/adminService";
-import { logout } from "../../services/authService";
+import { logoutToGuest } from "../../services/authService";
 import { AdminVerificationListItem, VerificationStatus } from "../../types/verification.types";
 import { formatTripDate } from "../../utils/formatDate";
 import { formatStatus } from "../../utils/formatStatus";
@@ -156,8 +156,7 @@ export default function AdminDashboardScreen() {
   }
 
   async function handleLogout() {
-    await logout();
-    router.replace("/(auth)/welcome" as never);
+    await logoutToGuest(router);
   }
 
   async function runReasonAction() {

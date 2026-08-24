@@ -222,6 +222,10 @@ async def sync_food_order_from_delivery(
     if target == "DELIVERED":
         updates["status"] = "DELIVERED"
         updates["delivered_at"] = delivery.get("delivered_at") or now_iso()
+    elif target in {"CANCELLED", "FAILED"}:
+        updates["status"] = "CANCELLED"
+        updates["cancellation_reason"] = delivery.get("cancellation_reason") or "Delivery closed by LetsGoRide support."
+        updates["cancelled_at"] = delivery.get("cancelled_at") or now_iso()
 
     updated = await database.update_one("food_orders", order_id, updates)
     if not updated:

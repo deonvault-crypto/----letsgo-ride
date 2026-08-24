@@ -197,13 +197,13 @@ async def cancel_delivery(
     reason: str | None,
 ) -> Dict[str, Any]:
     delivery = await get_delivery(delivery_id, user)
-    if delivery.get("source_type") == "FOOD_ORDER":
+    if delivery.get("source_type") == "FOOD_ORDER" and not _is_admin(user):
         raise ValueError("Food delivery cancellation must be handled from the food order or support flow.")
     if not (_is_admin(user) or delivery.get("sender_user_id") == _user_id(user)):
         raise PermissionError("Only the sender or an administrator can cancel this delivery.")
     if delivery.get("status") in FINAL_STATUSES:
         raise ValueError("This delivery can no longer be cancelled.")
-    if delivery.get("status") in {"PICKED_UP", "IN_TRANSIT", "ARRIVING"}:
+    if delivery.get("status") in {"PICKED_UP", "IN_TRANSIT", "ARRIVING"} and not _is_admin(user):
         raise ValueError("Contact support to stop a delivery after pickup.")
 
     stopped_at = now_iso()
@@ -230,10 +230,20 @@ async def cancel_delivery(
             courier_user_id,
             "courier_update",
             "Delivery cancelled",
-            "The customer cancelled this job before pickup.",
+            "LetsGoRide support cancelled this delivery." if _is_admin(user) else "The customer cancelled this job before pickup.",
             {"delivery_id": delivery_id, "courier_status": "CANCELLED"},
         )
     await clear_courier_active_reference(updated)
+    await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
+    sender_user_id = str(updated.get("sender_user_id") or "")
+    if sender_user_id and sender_user_id != _user_id(user):
+        await create_app_notification(
+            sender_user_id,
+            "courier_update",
+            "Delivery cancelled",
+            "LetsGoRide support cancelled this delivery. Open Activity for details.",
+            {"delivery_id": delivery_id, "courier_status": "CANCELLED"},
+        )
     return updated
 
 

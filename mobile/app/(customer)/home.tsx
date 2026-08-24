@@ -35,7 +35,7 @@ export default function CustomerHomeScreen() {
       <View style={styles.intro}>
         <Text style={styles.eyebrow}>MOVE • EAT • SEND</Text>
         <Text style={styles.headline}>What do you need today?</Text>
-        <Text style={styles.subhead}>Travel between cities, order food, or send a package — all from LetsGoRide.</Text>
+        <Text style={styles.subhead}>Travel between cities, order food or send a package with LetsGoRide.</Text>
       </View>
 
       <ServiceSwitcher value="ride" onChange={chooseService} />

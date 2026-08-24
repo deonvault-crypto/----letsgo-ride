@@ -96,7 +96,6 @@ export default function FoodOrderScreen() {
             <View style={styles.parallelCard}>
               <View style={styles.parallelHeader}>
                 <View><Text style={styles.parallelTitle}>Live order</Text><Text style={styles.parallelSub}>{order.restaurant_status === "PENDING_RESTAURANT" ? "Waiting for the restaurant to respond." : "Kitchen and courier move at the same time."}</Text></View>
-                <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>LIVE</Text></View>
               </View>
 
               <View style={styles.trackRow}>
@@ -191,11 +190,11 @@ function TrackCard({ icon, eyebrow, title, body, complete }: { icon: keyof typeo
 }
 
 function customerHeadline(order: FoodOrder) {
-  if (order.status === "DELIVERED") return "DELIVERED";
-  if (order.status === "CANCELLED" || order.status === "REJECTED") return "CLOSED";
-  if (["PICKED_UP", "OUT_FOR_DELIVERY"].includes(order.fulfillment_status || "")) return "ON THE WAY";
-  if (order.restaurant_status === "PENDING_RESTAURANT") return "AWAITING ACCEPTANCE";
-  return "IN PROGRESS";
+  if (order.status === "DELIVERED") return "Delivered";
+  if (order.status === "CANCELLED" || order.status === "REJECTED") return "Closed";
+  if (["PICKED_UP", "OUT_FOR_DELIVERY"].includes(order.fulfillment_status || "")) return "On the way";
+  if (order.restaurant_status === "PENDING_RESTAURANT") return "Awaiting acceptance";
+  return "In progress";
 }
 
 function customerMessage(order: FoodOrder) {

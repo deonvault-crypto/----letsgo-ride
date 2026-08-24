@@ -1,6 +1,6 @@
-import { API_BASE_URL } from "../constants/config";
 import { ApiResponse } from "../types/api.types";
-import { getToken, requestData } from "./api";
+import { api, requestData, toFriendlyApiError } from "./api";
+import axios from "axios";
 import { CourierDelivery } from "../types/courier.types";
 import {
   CourierEarningsSummary,
@@ -79,7 +79,10 @@ export function saveWorkerApplication(payload: {
   full_name: string;
   phone: string;
   service_area: string;
+  service_area_id: string;
   vehicle?: string | null;
+  vehicle_type?: string | null;
+  vehicle_details?: string | null;
   experience?: string | null;
   business_name?: string | null;
   business_address?: string | null;
@@ -103,17 +106,24 @@ export async function uploadWorkerApplicationDocument(data: {
     name: data.name,
     type: data.mimeType || (data.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
   } as unknown as Blob);
-  const token = await getToken();
-  const response = await fetch(`${API_BASE_URL}/operations/applications/${encodeURIComponent(data.applicationId)}/documents`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData as unknown as BodyInit,
-  });
-  const payload = await response.json() as ApiResponse<WorkerApplication>;
-  if (!response.ok || !payload.success) {
-    throw new Error(payload.success === false ? payload.error : "Document upload failed.");
+  try {
+    const response = await api.post<ApiResponse<WorkerApplication>>(`/operations/applications/${encodeURIComponent(data.applicationId)}/documents`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 45000,
+    });
+    if (!response.data.success) throw new Error(response.data.error || "Document upload failed.");
+    // The follow-up read is deliberate: the UI only reports success after the
+    // server can return the persisted document from the application record.
+    const persisted = await listMyWorkerApplications();
+    const application = persisted.find((item) => item.id === data.applicationId);
+    if (!application?.documents.some((item) => item.document_type === data.documentType)) {
+      throw new Error("The document was uploaded but could not be confirmed. Please try again.");
+    }
+    return application;
+  } catch (error) {
+    if (axios.isAxiosError(error)) throw new Error(toFriendlyApiError(error));
+    throw error;
   }
-  return payload.data;
 }
 
 export function submitWorkerApplication(applicationId: string) {

@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.services.routing_service import (
+    RoutingError,
     RoutingNotConfiguredError,
+    autocomplete_places,
     compute_route,
     geocode_address,
     reverse_geocode_location,
@@ -103,6 +105,17 @@ class RoutingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["location"]["longitude"], 31.0335)
         self.assertNotIn("api_key", result)
         self.assertIn("-17.8252,31.0335", request_json.call_args.args[1])
+
+    async def test_autocomplete_uses_zimbabwe_fallback_when_provider_is_unavailable(self):
+        with patch("app.services.routing_service.get_settings", return_value=self.google_settings()), patch(
+            "app.services.routing_service._request_json", side_effect=RoutingError("provider timeout")
+        ):
+            results = await autocomplete_places("Sam Levy")
+
+        self.assertTrue(results)
+        self.assertEqual(results[0]["provider"], "letsgoride_zw")
+        self.assertEqual(results[0]["location"]["latitude"], -17.7622)
+        self.assertIn("Borrowdale", results[0]["description"])
 
 
 if __name__ == "__main__":

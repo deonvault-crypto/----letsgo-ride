@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, Dict, List
 from urllib.parse import quote
 
@@ -18,6 +19,21 @@ GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
 GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete"
 GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 
+_AUTOCOMPLETE_CACHE_TTL_SECONDS = 15 * 60
+_autocomplete_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
+_ZIMBABWE_DISCOVERY = [
+    ("Harare", "Harare, Zimbabwe", -17.824858, 31.053028),
+    ("Bulawayo", "Bulawayo, Zimbabwe", -20.149812, 28.585388),
+    ("Mutare", "Mutare, Zimbabwe", -18.9707, 32.6709),
+    ("Gweru", "Gweru, Zimbabwe", -19.4513, 29.8152),
+    ("Masvingo", "Masvingo, Zimbabwe", -20.0744, 30.8328),
+    ("Victoria Falls", "Victoria Falls, Zimbabwe", -17.9243, 25.8560),
+    ("Joina City", "Joina City, Jason Moyo Avenue, Harare, Zimbabwe", -17.8313, 31.0477),
+    ("Sam Levy’s Village", "Sam Levy’s Village, Borrowdale, Harare, Zimbabwe", -17.7622, 31.0902),
+    ("Robert Gabriel Mugabe International Airport", "Harare Airport, Zimbabwe", -17.9318, 31.0928),
+    ("Joshua Mqabuko Nkomo International Airport", "Bulawayo Airport, Zimbabwe", -20.0174, 28.6179),
+]
+
 
 class RoutingError(RuntimeError):
     pass
@@ -29,6 +45,42 @@ class RoutingNotConfiguredError(RoutingError):
 
 class RoutingNoResultError(RoutingError):
     pass
+
+
+def _curated_suggestions(query: str) -> List[Dict[str, Any]]:
+    clean = " ".join(query.strip().lower().split())
+    if len(clean) < 2:
+        return []
+    matches = []
+    for name, address, latitude, longitude in _ZIMBABWE_DISCOVERY:
+        if clean not in name.lower() and clean not in address.lower():
+            continue
+        matches.append({
+            "provider": "letsgoride_zw",
+            "place_id": f"zw:{name.lower().replace(' ', '-')}",
+            "primary_text": name,
+            "secondary_text": address,
+            "description": address,
+            "location": {"latitude": latitude, "longitude": longitude},
+        })
+    return matches[:8]
+
+
+def _cached_suggestions(query: str) -> List[Dict[str, Any]] | None:
+    cached = _autocomplete_cache.get(query)
+    if not cached or time.monotonic() - cached[0] > _AUTOCOMPLETE_CACHE_TTL_SECONDS:
+        _autocomplete_cache.pop(query, None)
+        return None
+    return [dict(item) for item in cached[1]]
+
+
+def _remember_suggestions(query: str, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if results:
+        _autocomplete_cache[query] = (time.monotonic(), [dict(item) for item in results])
+        if len(_autocomplete_cache) > 200:
+            oldest = min(_autocomplete_cache, key=lambda key: _autocomplete_cache[key][0])
+            _autocomplete_cache.pop(oldest, None)
+    return results
 
 
 def routing_status() -> Dict[str, Any]:
@@ -160,10 +212,18 @@ async def reverse_geocode_location(location: Dict[str, float]) -> Dict[str, Any]
 
 async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
     """Return customer-friendly place suggestions without exposing the Google key to mobile."""
-    api_key, region_code, timeout = _google_config()
     clean_query = " ".join(query.strip().split())
     if len(clean_query) < 2:
         return []
+    cache_key = clean_query.lower()
+    cached = _cached_suggestions(cache_key)
+    if cached is not None:
+        return cached
+    curated = _curated_suggestions(clean_query)
+    try:
+        api_key, region_code, timeout = _google_config()
+    except RoutingNotConfiguredError:
+        return _remember_suggestions(cache_key, curated)
 
     headers = {
         "Content-Type": "application/json",
@@ -193,8 +253,11 @@ async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
     except RoutingError:
         # Some existing Maps projects may have Geocoding + Routes enabled before
         # Places (New) is enabled. Keep address entry usable with one exact result.
-        result = await geocode_address(clean_query)
-        return [
+        try:
+            result = await geocode_address(clean_query)
+        except RoutingError:
+            return _remember_suggestions(cache_key, curated)
+        return _remember_suggestions(cache_key, [
             {
                 "provider": "google_geocode_fallback",
                 "place_id": result.get("place_id"),
@@ -203,7 +266,7 @@ async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
                 "description": result.get("formatted_address") or clean_query,
                 "location": result.get("location"),
             }
-        ]
+        ] + curated)
 
     suggestions = payload.get("suggestions") or []
     results: List[Dict[str, Any]] = []
@@ -233,13 +296,13 @@ async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
         )
 
     if results:
-        return results
+        return _remember_suggestions(cache_key, results + [item for item in curated if item["description"] not in {result["description"] for result in results}])
 
     try:
         fallback = await geocode_address(clean_query)
     except RoutingNoResultError:
-        return []
-    return [
+        return _remember_suggestions(cache_key, curated)
+    return _remember_suggestions(cache_key, [
         {
             "provider": "google_geocode_fallback",
             "place_id": fallback.get("place_id"),
@@ -248,7 +311,7 @@ async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
             "description": fallback.get("formatted_address") or clean_query,
             "location": fallback.get("location"),
         }
-    ]
+    ] + curated)
 
 
 async def resolve_place(place_id: str) -> Dict[str, Any]:

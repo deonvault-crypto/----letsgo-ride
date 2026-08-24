@@ -8,7 +8,7 @@ import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { getPreferredNavigationApp, NavigationAppPreference, setPreferredNavigationApp } from "../../services/appPreferenceService";
-import { logout } from "../../services/authService";
+import { logoutToGuest } from "../../services/authService";
 import { getCourierProfile, listMyWorkerApplications } from "../../services/operationsService";
 import { CourierProfile, WorkerApplication } from "../../types/operations.types";
 
@@ -27,7 +27,7 @@ export default function CourierAccountScreen() {
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   async function chooseNavigation(value: NavigationAppPreference) { setNavigationApp(await setPreferredNavigationApp(value)); }
-  async function signOut() { await logout(); router.replace("/(auth)/welcome" as never); }
+  async function signOut() { await logoutToGuest(router); }
   const productParam = { product: "courier" };
 
   return (

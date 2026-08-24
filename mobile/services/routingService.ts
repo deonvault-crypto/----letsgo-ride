@@ -12,12 +12,25 @@ export function getRoutingStatus() {
   return requestData<RoutingStatus>({ method: "GET", url: "/routing/status" });
 }
 
-export function autocompletePlaces(query: string) {
-  return requestData<PlaceSuggestion[]>({
-    method: "POST",
-    url: "/routing/places/autocomplete",
-    data: { query },
-  });
+const suggestionCache = new Map<string, PlaceSuggestion[]>();
+
+export async function autocompletePlaces(query: string) {
+  const clean = query.trim().toLowerCase();
+  try {
+    const suggestions = await requestData<PlaceSuggestion[]>({
+      method: "POST",
+      url: "/routing/places/autocomplete",
+      data: { query },
+    });
+    if (suggestions.length) suggestionCache.set(clean, suggestions);
+    return suggestions;
+  } catch (error) {
+    const exact = suggestionCache.get(clean);
+    if (exact) return exact;
+    const nearby = [...suggestionCache.entries()].find(([key]) => key.startsWith(clean) || clean.startsWith(key))?.[1];
+    if (nearby) return nearby;
+    throw error;
+  }
 }
 
 export function getPlaceDetail(placeId: string) {

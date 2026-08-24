@@ -3,6 +3,7 @@ import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, 
 import { Platform } from "react-native";
 
 import { listMyRestaurants } from "../services/merchantService";
+import { onSessionCleared } from "../services/sessionLifecycle";
 import { MerchantRestaurant } from "../types/merchant.types";
 
 const KEY = "letsgoride.merchant.selected_restaurant";
@@ -17,6 +18,7 @@ export function MerchantRestaurantProvider({ children }: { children: ReactNode }
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => onSessionCleared(() => { setRestaurants([]); setSelectedId(null); setError(null); }), []);
   const refreshRestaurants = useCallback(async () => {
     try {
       setError(null);

@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
+import { cancelCourierDelivery, listMyCourierDeliveries } from "../../services/courierService";
 import {
   createAdminCourierShift,
   listAdminCourierShifts,
@@ -14,18 +15,22 @@ import {
   updateAdminCourierShift,
 } from "../../services/operationsService";
 import { CourierShift, WorkerApplication } from "../../types/operations.types";
+import { CourierDelivery } from "../../types/courier.types";
 
-type Area = "applications" | "shifts";
+type Area = "applications" | "shifts" | "deliveries";
 
 export default function WorkforceAdminScreen() {
   const [area, setArea] = useState<Area>("applications");
   const [applications, setApplications] = useState<WorkerApplication[]>([]);
   const [shifts, setShifts] = useState<CourierShift[]>([]);
+  const [deliveries, setDeliveries] = useState<CourierDelivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<WorkerApplication | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [cancelling, setCancelling] = useState<CourierDelivery | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [zone, setZone] = useState("");
   const [date, setDate] = useState(nextDate());
@@ -38,9 +43,10 @@ export default function WorkforceAdminScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const [nextApplications, nextShifts] = await Promise.all([listAdminWorkerApplications(), listAdminCourierShifts()]);
+      const [nextApplications, nextShifts, nextDeliveries] = await Promise.all([listAdminWorkerApplications(), listAdminCourierShifts(), listMyCourierDeliveries()]);
       setApplications(nextApplications);
       setShifts(nextShifts);
+      setDeliveries(nextDeliveries);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load workforce operations.");
     } finally {
@@ -100,17 +106,26 @@ export default function WorkforceAdminScreen() {
     finally { setBusy(false); }
   }
 
+  async function confirmDeliveryCancellation() {
+    if (!cancelling || !cancellationReason.trim()) return;
+    try { setBusy(true); setError(null); await cancelCourierDelivery(cancelling.id, cancellationReason.trim()); setCancelling(null); setCancellationReason(""); await load(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Unable to cancel delivery."); }
+    finally { setBusy(false); }
+  }
+
   return (
     <Screen title="Workforce" showBack fallbackRoute="/(admin)/dashboard" showNotifications={false} onRefresh={load} refreshing={loading}>
       <Modal visible={Boolean(rejecting)} transparent animationType="fade" onRequestClose={() => setRejecting(null)}>
         <View style={styles.backdrop}><View style={styles.modal}><View style={styles.modalTop}><Text style={styles.modalTitle}>Reject application</Text><Pressable accessibilityRole="button" accessibilityLabel="Close rejection" onPress={() => setRejecting(null)}><MaterialCommunityIcons name="close" size={23} color={v2Theme.colors.ink} /></Pressable></View><Text style={styles.body}>Give the applicant a clear, actionable reason. They can correct the application and resubmit.</Text><TextInput value={reviewNote} onChangeText={setReviewNote} placeholder="Required review note" placeholderTextColor={v2Theme.colors.inkTertiary} multiline style={[styles.input, styles.note]} /><Pressable accessibilityRole="button" disabled={busy || !reviewNote.trim()} onPress={() => rejecting && setReview(rejecting, "REJECTED", reviewNote.trim())} style={[styles.dangerButton, (busy || !reviewNote.trim()) && styles.disabled]}><Text style={styles.dangerText}>{busy ? "Saving…" : "Reject with note"}</Text></Pressable></View></View>
       </Modal>
+      <Modal visible={Boolean(cancelling)} transparent animationType="fade" onRequestClose={() => setCancelling(null)}><View style={styles.backdrop}><View style={styles.modal}><View style={styles.modalTop}><Text style={styles.modalTitle}>Cancel delivery</Text><Pressable accessibilityRole="button" accessibilityLabel="Close cancellation" onPress={() => setCancelling(null)}><MaterialCommunityIcons name="close" size={23} color={v2Theme.colors.ink} /></Pressable></View><Text style={styles.body}>Use this only for a support or safety exception. The customer, Courier and linked Food order will update together.</Text><TextInput value={cancellationReason} onChangeText={setCancellationReason} placeholder="Required operational reason" placeholderTextColor={v2Theme.colors.inkTertiary} multiline style={[styles.input, styles.note]} /><Pressable accessibilityRole="button" disabled={busy || !cancellationReason.trim()} onPress={confirmDeliveryCancellation} style={[styles.dangerButton, (busy || !cancellationReason.trim()) && styles.disabled]}><Text style={styles.dangerText}>{busy ? "Cancelling…" : "Cancel and synchronize"}</Text></Pressable></View></View></Modal>
       <View style={styles.hero}><Text style={styles.eyebrow}>ADMIN ONLY</Text><Text style={styles.title}>Workforce operations</Text><Text style={styles.heroBody}>Review applications without public role escalation and operate real Courier shift capacity.</Text></View>
-      <View style={styles.tabs}>{(["applications", "shifts"] as Area[]).map((item) => <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: area === item }} onPress={() => setArea(item)} style={[styles.tab, area === item && styles.tabActive]}><Text style={[styles.tabText, area === item && styles.tabTextActive]}>{item === "applications" ? `Applications · ${applications.length}` : `Shifts · ${shifts.length}`}</Text></Pressable>)}</View>
+      <View style={styles.tabs}>{(["applications", "shifts", "deliveries"] as Area[]).map((item) => <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: area === item }} onPress={() => setArea(item)} style={[styles.tab, area === item && styles.tabActive]}><Text style={[styles.tabText, area === item && styles.tabTextActive]}>{item === "applications" ? `Applications · ${applications.length}` : item === "shifts" ? `Shifts · ${shifts.length}` : `Deliveries · ${deliveries.length}`}</Text></Pressable>)}</View>
       {loading ? <LoadingState label="Loading workforce operations…" /> : null}
       {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
       {!loading && area === "applications" ? <View style={styles.list}>{reviewQueue.length === 0 ? <Empty icon="account-search-outline" title="No applications" body="Submitted Courier, Driver and Merchant applications appear here." /> : reviewQueue.map((application) => <View key={application.id} style={styles.card}><View style={styles.cardTop}><Status value={application.status} /><Text style={styles.product}>{application.product.toUpperCase()}</Text></View><Text style={styles.cardTitle}>{application.business_name || application.full_name}</Text><Text style={styles.body}>{application.full_name} · {application.phone}</Text><Text style={styles.body}>{application.service_area}{application.vehicle ? ` · ${application.vehicle}` : ""}</Text><View style={styles.documents}>{application.required_document_types.map((type) => { const document = application.documents.find((item) => item.document_type === type); return <Pressable key={type} accessibilityRole="button" disabled={!document?.file_url} onPress={() => document?.file_url && Linking.openURL(document.file_url)} style={[styles.document, !document && styles.documentMissing]}><MaterialCommunityIcons name={document ? "file-check-outline" : "file-alert-outline"} size={18} color={document ? v2Theme.colors.brandStrong : v2Theme.colors.danger} /><Text style={styles.documentText}>{type.replaceAll("_", " ")}</Text>{document?.file_url ? <MaterialCommunityIcons name="open-in-new" size={14} color={v2Theme.colors.inkSecondary} /> : null}</Pressable>; })}</View>{application.review_note ? <Text style={styles.noteCopy}>Review note: {application.review_note}</Text> : null}{["SUBMITTED", "UNDER_REVIEW"].includes(application.status) ? <View style={styles.actions}>{application.status === "SUBMITTED" ? <Action label="Begin review" onPress={() => setReview(application, "UNDER_REVIEW")} disabled={busy} /> : null}<Action label="Approve" primary onPress={() => approve(application)} disabled={busy || application.missing_document_types.length > 0} /><Action label="Reject" danger onPress={() => { setRejecting(application); setReviewNote(""); }} disabled={busy} /></View> : null}</View>)}</View> : null}
       {!loading && area === "shifts" ? <><View style={styles.form}><View style={styles.formTop}><Text style={styles.sectionTitle}>{editingId ? "Edit shift" : "Create shift"}</Text>{editingId ? <Pressable accessibilityRole="button" onPress={resetShiftForm}><Text style={styles.cancel}>Cancel edit</Text></Pressable> : null}</View><Field label="Zone" value={zone} onChangeText={setZone} placeholder="Harare Central" /><View style={styles.row}><Field label="Date" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" /><Field label="Start" value={startTime} onChangeText={setStartTime} placeholder="09:00" /><Field label="End" value={endTime} onChangeText={setEndTime} placeholder="13:00" /></View><View style={styles.row}><Field label="Capacity" value={capacity} onChangeText={setCapacity} keyboardType="number-pad" /><Field label="Cutoff min" value={cutoff} onChangeText={setCutoff} keyboardType="number-pad" /><Field label="Incentive USD" value={incentive} onChangeText={setIncentive} keyboardType="decimal-pad" placeholder="Optional" /></View><Pressable accessibilityRole="button" disabled={busy} onPress={saveShift} style={[styles.primaryButton, busy && styles.disabled]}><Text style={styles.primaryText}>{busy ? "Saving…" : editingId ? "Save shift changes" : "Publish available shift"}</Text></Pressable></View><View style={styles.list}>{sortedShifts.length === 0 ? <Empty icon="calendar-blank-outline" title="No Courier shifts" body="Create the first real shift above." /> : sortedShifts.map((shift) => <View key={shift.id} style={[styles.card, !shift.active && styles.inactive]}><View style={styles.cardTop}><Status value={shift.status} /><Text style={styles.product}>{shift.remaining_places}/{shift.capacity} PLACES</Text></View><Text style={styles.cardTitle}>{shift.zone}</Text><Text style={styles.body}>{formatShift(shift)} · booking cutoff {shift.booking_cutoff_minutes} min</Text>{shift.incentive_usd != null ? <Text style={styles.incentive}>${shift.incentive_usd.toFixed(2)} shift incentive</Text> : null}<View style={styles.actions}><Action label="Edit" onPress={() => editShift(shift)} disabled={busy} /><Action label={shift.active ? "Deactivate" : "Activate"} danger={shift.active} primary={!shift.active} onPress={() => toggleShift(shift)} disabled={busy} /></View></View>)}</View></> : null}
+      {!loading && area === "deliveries" ? <View style={styles.list}>{deliveries.length === 0 ? <Empty icon="package-variant-closed" title="No deliveries" body="Courier and Food delivery operations appear here." /> : deliveries.map((delivery) => { const terminal = ["DELIVERED", "CANCELLED", "FAILED"].includes(delivery.status); return <View key={delivery.id} style={[styles.card, terminal && styles.inactive]}><View style={styles.cardTop}><Status value={delivery.status} /><Text style={styles.product}>{delivery.source_type === "FOOD_ORDER" ? "FOOD" : "COURIER"}</Text></View><Text style={styles.cardTitle}>{delivery.pickup_address} → {delivery.dropoff_address}</Text><Text style={styles.body}>{delivery.courier_name || "Courier not assigned"} · {delivery.id.slice(0, 8).toUpperCase()}</Text>{!terminal ? <View style={styles.actions}><Action label="Support cancellation" danger disabled={busy} onPress={() => { setCancelling(delivery); setCancellationReason(""); }} /></View> : null}</View>; })}</View> : null}
     </Screen>
   );
 }

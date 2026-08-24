@@ -1,6 +1,7 @@
-import { ReactNode, createContext, useContext, useMemo, useState } from "react";
+import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { MenuItem, Restaurant } from "../types/food.types";
+import { onSessionCleared } from "../services/sessionLifecycle";
 
 export type FoodBasketLine = {
   item: MenuItem;
@@ -23,6 +24,8 @@ const FoodBasketContext = createContext<FoodBasketContextValue | null>(null);
 export function FoodBasketProvider({ children }: { children: ReactNode }) {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [lines, setLines] = useState<FoodBasketLine[]>([]);
+
+  useEffect(() => onSessionCleared(() => { setLines([]); setRestaurant(null); }), []);
 
   function addItem(nextRestaurant: Restaurant, item: MenuItem) {
     setRestaurant((currentRestaurant) => {

@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { FoodImage } from "../../components/food/FoodImage";
+import { AppNotice } from "../../components/ui/AppNotice";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { listRestaurants } from "../../services/foodService";
@@ -56,7 +57,6 @@ export default function CustomerFoodScreen() {
   }, [restaurants, query, category]);
 
   const acceptingCount = restaurants.filter((restaurant) => restaurant.is_orderable).length;
-  const otherCount = Math.max(0, restaurants.length - acceptingCount);
 
   function openRestaurant(restaurant: Restaurant) {
     if (!restaurant.is_orderable) return;
@@ -66,26 +66,14 @@ export default function CustomerFoodScreen() {
   return (
     <Screen title="Food" showBack fallbackRoute="/(customer)/home" navRole="customer">
       <View style={styles.hero}>
-        <View style={styles.heroGlowOne} />
-        <View style={styles.heroGlowTwo} />
-        <View style={styles.heroTop}>
-          <View style={styles.heroIcon}>
-            <MaterialCommunityIcons name="food-fork-drink" size={28} color="#FFFFFF" />
-          </View>
-          <View style={styles.heroBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.heroBadgeText}>LETSGORIDE FOOD</Text>
-          </View>
-        </View>
+        <FoodImage photographicFallback label="Fresh food from LetsGoRide" style={styles.heroPhoto} />
+        <View style={styles.heroScrim} />
         <View style={styles.heroCopy}>
           <Text style={styles.heroTitle}>Craving something?</Text>
           <Text style={styles.heroBody}>
             Browse restaurants, explore menus and order from locations currently accepting orders.
           </Text>
-        </View>
-        <View style={styles.heroStats}>
-          <HeroStat value={String(acceptingCount)} label="accepting orders" />
-          <HeroStat value={String(otherCount)} label="more restaurants" />
+          <Text style={styles.heroAvailability}>{acceptingCount ? `${acceptingCount} accepting orders now` : "Browse available menus"}</Text>
         </View>
       </View>
 
@@ -139,16 +127,7 @@ export default function CustomerFoodScreen() {
         </View>
       ) : null}
 
-      {error ? (
-        <Pressable accessibilityRole="button" onPress={load} style={styles.errorCard}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={22} color={v2Theme.colors.danger} />
-          <View style={styles.stateCopy}>
-            <Text style={styles.errorTitle}>Couldn’t load Food</Text>
-            <Text style={styles.stateBody}>{error}</Text>
-          </View>
-          <Text style={styles.retry}>Retry</Text>
-        </Pressable>
-      ) : null}
+      <AppNotice message={error} actionLabel="Retry" onAction={load} onDismiss={() => setError(null)} />
 
       {!loading && !error ? (
         <View style={styles.section}>
@@ -157,7 +136,7 @@ export default function CustomerFoodScreen() {
               <Text style={styles.sectionTitle}>Restaurants</Text>
               <Text style={styles.sectionSub}>{visible.length} available to browse</Text>
             </View>
-            <Text style={styles.sectionBadge}>NEAR YOU</Text>
+            <Text style={styles.sectionBadge}>{acceptingCount} accepting orders</Text>
           </View>
 
           {visible.map((restaurant) => (
@@ -185,15 +164,6 @@ export default function CustomerFoodScreen() {
         </Text>
       </View>
     </Screen>
-  );
-}
-
-function HeroStat({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.heroStat}>
-      <Text style={styles.heroStatValue}>{value}</Text>
-      <Text style={styles.heroStatLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -258,9 +228,10 @@ const styles = StyleSheet.create({
     borderRadius: v2Theme.radius.xxl,
     backgroundColor: v2Theme.colors.ink,
     padding: 19,
-    justifyContent: "space-between",
-    gap: 13,
+    justifyContent: "flex-end",
   },
+  heroPhoto: { ...StyleSheet.absoluteFillObject },
+  heroScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(8,18,12,0.48)" },
   heroGlowOne: {
     position: "absolute",
     width: 190,
@@ -302,6 +273,7 @@ const styles = StyleSheet.create({
   heroCopy: { gap: 7 },
   heroTitle: { color: "#FFFFFF", fontSize: 31, lineHeight: 35, fontWeight: "900", letterSpacing: -1 },
   heroBody: { color: "rgba(255,255,255,0.66)", fontSize: 12, lineHeight: 18, maxWidth: 330 },
+  heroAvailability: { color: "#C8F1D5", fontSize: 10, fontWeight: "900", marginTop: 3 },
   heroStats: { flexDirection: "row", gap: 8 },
   heroStat: { flex: 1, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.08)", padding: 11, gap: 2 },
   heroStatValue: { color: "#FFFFFF", fontSize: 20, fontWeight: "900" },

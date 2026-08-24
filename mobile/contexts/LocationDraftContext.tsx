@@ -1,6 +1,7 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 
 import { RoutingPoint } from "../types/routing.types";
+import { onSessionCleared } from "../services/sessionLifecycle";
 
 export type LocationChoice = {
   label: string;
@@ -26,6 +27,8 @@ export function LocationDraftProvider({ children }: { children: ReactNode }) {
   const [pickup, setPickup] = useState<LocationChoice | null>(null);
   const [dropoff, setDropoff] = useState<LocationChoice | null>(null);
   const [foodDropoff, setFoodDropoff] = useState<LocationChoice | null>(null);
+
+  useEffect(() => onSessionCleared(() => { setPickup(null); setDropoff(null); setFoodDropoff(null); }), []);
 
   const value = useMemo(
     () => ({

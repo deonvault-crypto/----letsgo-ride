@@ -13,6 +13,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.config import get_settings
 from app.database import database
+from app.domain.zimbabwe_operations import SERVICE_AREAS, canonical_service_area, validate_vehicle_type
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
@@ -109,6 +110,26 @@ async def save_worker_application(payload: Dict[str, Any], user: Dict[str, Any])
     product = str(payload.get("product") or "")
     if product not in REQUIRED_DOCUMENTS:
         raise ValueError("Unsupported worker product.")
+    legacy_area = str(payload.get("service_area") or "").strip().lower()
+    inferred_area_id = next((area_id for area_id, name in SERVICE_AREAS.items() if legacy_area == name.lower() or legacy_area.startswith(f"{name.lower()} ")), "")
+    payload["service_area_id"] = str(payload.get("service_area_id") or inferred_area_id)
+    payload["service_area"] = canonical_service_area(payload["service_area_id"])
+    if product in {"courier", "driver"}:
+        legacy_vehicle = str(payload.get("vehicle") or "").lower()
+        if product == "driver":
+            inferred_vehicle = next(
+                (candidate for candidate in ("minibus", "hatchback", "pickup", "suv", "van", "sedan") if candidate in legacy_vehicle),
+                "hatchback" if "aqua" in legacy_vehicle else "sedan",
+            )
+        else:
+            inferred_vehicle = next(
+                (candidate for candidate in ("motorbike", "bicycle", "scooter", "pickup", "van", "car") if candidate in legacy_vehicle),
+                "motorbike",
+            )
+        payload["vehicle_type"] = validate_vehicle_type(product, str(payload.get("vehicle_type") or inferred_vehicle))
+        details = str(payload.get("vehicle_details") or payload.get("vehicle") or "").strip()
+        payload["vehicle_details"] = details or None
+        payload["vehicle"] = f"{payload['vehicle_type'].replace('-', ' ').title()} · {details}" if details else payload["vehicle_type"].replace("-", " ").title()
     if product in {"courier", "driver"} and not str(payload.get("vehicle") or "").strip():
         raise ValueError("Vehicle details are required for this application.")
     if product == "merchant" and not all(str(payload.get(key) or "").strip() for key in ("business_name", "business_address", "business_registration_number")):
@@ -309,8 +330,8 @@ async def review_worker_application(application_id: str, status: str, note: str 
         )
         if product == "courier":
             profile = await database.find_one("courier_profiles", {"user_id": applicant["id"]})
-            vehicle = str(application.get("vehicle") or "").lower()
-            transport_mode = "bicycle" if "bicycle" in vehicle or "bike" in vehicle and "motor" not in vehicle else "van" if "van" in vehicle else "car" if "car" in vehicle else "motorbike"
+            vehicle_type = str(application.get("vehicle_type") or "motorbike")
+            transport_mode = "bicycle" if vehicle_type == "bicycle" else "van" if vehicle_type == "van" else "car" if vehicle_type in {"car", "pickup"} else "motorbike"
             profile_updates = {
                 "name": application.get("full_name") or applicant.get("name"),
                 "transport_mode": transport_mode,

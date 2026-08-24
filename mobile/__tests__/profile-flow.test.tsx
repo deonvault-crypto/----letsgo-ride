@@ -68,7 +68,7 @@ describe("profile update flow", () => {
     const summary = render(<ProfileScreen />);
     expect(summary.getByText("Tendai Moyo")).toBeOnTheScreen();
     expect(summary.getByText("Harare")).toBeOnTheScreen();
-    expect(summary.getByText("LETSGORIDE MEMBER")).toBeOnTheScreen();
+    expect(summary.getByText("Customer")).toBeOnTheScreen();
     expect(summary.queryByText("Driver verification")).toBeNull();
     expect(summary.queryByText(/stays customer/i)).toBeNull();
     fireEvent.press(summary.getByRole("button", { name: "Settings" }));
@@ -122,7 +122,7 @@ describe("profile update flow", () => {
     const screen = render(<ProfileScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText("DRIVER")).toBeOnTheScreen();
+      expect(screen.getByText("Driver")).toBeOnTheScreen();
       expect(screen.getAllByText("Driver verification").length).toBeGreaterThan(0);
       expect(screen.getByText("Verification under review")).toBeOnTheScreen();
     });

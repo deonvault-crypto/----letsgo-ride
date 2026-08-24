@@ -5,6 +5,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, Vi
 
 import { LocationPickerMap, LocationPickerMapHandle, MapRegion as Region } from "../../components/maps/LocationPickerMap";
 import { Screen } from "../../components/ui/Screen";
+import { AppNotice } from "../../components/ui/AppNotice";
 import { v2Theme } from "../../constants/v2Theme";
 import { LocationChoice, useLocationDraft } from "../../contexts/LocationDraftContext";
 import { getCurrentDeviceLocation } from "../../services/locationService";
@@ -69,8 +70,8 @@ export default function LocationPickerScreen() {
     const clean = query.trim();
     const generation = ++searchGeneration.current;
     if (clean.length < 2 || clean === selected?.address) {
-      setSuggestions([]);
-      setSearching(false);
+      if (suggestions.length > 0) setSuggestions([]);
+      if (searching) setSearching(false);
       return;
     }
 
@@ -333,12 +334,7 @@ export default function LocationPickerScreen() {
         </View>
       ) : null}
 
-      {error ? (
-        <View style={styles.errorCard}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={20} color={v2Theme.colors.danger} />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : null}
+      <AppNotice message={error} onDismiss={() => setError(null)} />
 
       {suggestions.length > 0 ? (
         <View style={styles.resultsCard}>

@@ -7,7 +7,7 @@ import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useDriver } from "../../hooks/useDriver";
-import { logout } from "../../services/authService";
+import { logoutToGuest } from "../../services/authService";
 
 export default function DriverAccountScreen() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export default function DriverAccountScreen() {
   const { driver } = useDriver();
   const verified = Boolean(driver?.verified || driver?.verification_status === "approved");
   const productParam = { product: "driver" };
-  async function signOut() { await logout(); router.replace("/(auth)/welcome" as never); }
+  async function signOut() { await logoutToGuest(router); }
   return (
     <Screen title="Account" navRole="driver">
       <View style={styles.profile}><Avatar name={user?.name || "Driver"} imageUri={user?.profile_photo_url} size={72} /><View style={styles.flex}><Text numberOfLines={1} style={styles.name}>{user?.name || "Driver"}</Text><Text style={styles.meta}>{user?.phone || "Phone not added"}</Text><Text style={styles.meta}>{user?.email || "Email not added"}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: productParam } as never)} style={styles.edit}><MaterialCommunityIcons name="pencil-outline" size={20} color={v2Theme.colors.ink} /></Pressable></View>

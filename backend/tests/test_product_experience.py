@@ -1,9 +1,15 @@
 import unittest
+import io
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from fastapi import UploadFile
+from starlette.datastructures import Headers
 
 from app.database import COLLECTION_NAMES, database
 from app.services.courier_earnings_service import courier_earnings_summary
-from app.services.courier_service import update_courier_location
+from app.services.courier_service import cancel_delivery, update_courier_location
 from app.services.merchant_workspace_service import get_restaurant_insights
 from app.services.operations_service import active_courier_delivery, create_availability, list_courier_offers
 from app.services.workforce_service import (
@@ -16,6 +22,7 @@ from app.services.workforce_service import (
     save_worker_application,
     submit_worker_application,
     update_courier_shift,
+    upload_worker_document,
 )
 
 
@@ -88,6 +95,23 @@ class FinalProductExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(driver["verification_status"], "approved")
         self.assertEqual((await database.find_one("users", {"id": customer["id"]}))["role"], "driver")
 
+    async def test_worker_document_upload_is_persisted_before_success_returns(self):
+        customer = await self._insert_user("document-applicant")
+        application = await save_worker_application(
+            {"product": "courier", "full_name": "Document Applicant", "phone": "+263770000010", "service_area": "Harare", "service_area_id": "harare", "vehicle_type": "motorbike", "vehicle_details": "Honda CB125", "accepted_terms": True},
+            customer,
+        )
+        upload = UploadFile(file=io.BytesIO(b"real-image-bytes"), filename="identity.jpg", headers=Headers({"content-type": "image/jpeg"}))
+        cloudinary_result = {"secure_url": "https://res.cloudinary.com/example/authenticated/image/upload/v1/identity.jpg", "public_id": "letsgoride/applications/courier/identity", "resource_type": "image", "format": "jpg", "version": 1}
+        with patch("app.services.workforce_service.cloudinary.config", return_value=SimpleNamespace(cloud_name="cloud", api_key="key", api_secret="secret")), patch("app.services.workforce_service.cloudinary.uploader.upload", return_value=cloudinary_result):
+            persisted = await upload_worker_document(application["id"], "identity_document", upload, customer)
+
+        reopened = (await list_my_applications(customer))[0]
+        self.assertEqual(persisted["documents"][0]["document_type"], "identity_document")
+        self.assertEqual(reopened["documents"][0]["file_name"], "identity.jpg")
+        stored = await database.find_one("worker_applications", {"id": application["id"]})
+        self.assertEqual(stored["documents"][0]["cloudinary_public_id"], cloudinary_result["public_id"])
+
     async def test_courier_shift_capacity_booking_and_cancellation_rules(self):
         admin = await self._insert_user("admin", "admin")
         courier = await self._insert_user("courier", "courier")
@@ -154,6 +178,24 @@ class FinalProductExperienceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(insights["recorded_sales_usd"], 18.5)
         self.assertFalse(insights["settlement_integrated"])
         self.assertEqual(insights["payout_history"], [])
+
+    async def test_admin_food_delivery_cancellation_synchronizes_every_product(self):
+        admin = await self._insert_user("support-admin", "admin")
+        customer = await self._insert_user("food-customer")
+        courier = await self._insert_user("food-courier", "courier")
+        await database.insert_one("courier_profiles", {"id": "food-profile", "user_id": courier["id"], "status": "APPROVED", "online": True, "active_delivery_id": "food-delivery"})
+        await database.insert_one("food_orders", {"id": "food-order", "customer_user_id": customer["id"], "restaurant_status": "READY_FOR_PICKUP", "fulfillment_status": "PICKED_UP", "status": "PICKED_UP"})
+        await database.insert_one("courier_deliveries", {"id": "food-delivery", "food_order_id": "food-order", "source_type": "FOOD_ORDER", "sender_user_id": customer["id"], "courier_user_id": courier["id"], "status": "PICKED_UP", "live_tracking_active": True})
+
+        with self.assertRaises(ValueError):
+            await cancel_delivery("food-delivery", courier, "Courier tried to cancel after pickup")
+        cancelled = await cancel_delivery("food-delivery", admin, "Cancelled by support after customer report")
+        order = await database.find_one("food_orders", {"id": "food-order"})
+        profile = await database.find_one("courier_profiles", {"id": "food-profile"})
+        self.assertEqual(cancelled["status"], "CANCELLED")
+        self.assertEqual(order["status"], "CANCELLED")
+        self.assertEqual(order["fulfillment_status"], "CANCELLED")
+        self.assertIsNone(profile["active_delivery_id"])
 
 
 if __name__ == "__main__":

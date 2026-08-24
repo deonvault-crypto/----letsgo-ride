@@ -9,7 +9,7 @@ import { colors } from "../../constants/colors";
 import { legalUrls } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { deleteAccount, logout } from "../../services/authService";
+import { deleteAccount, logoutToGuest } from "../../services/authService";
 import {
   biometricAvailable,
   biometricLabel,
@@ -159,8 +159,7 @@ export default function SettingsScreen() {
         text: "Logout",
         style: "destructive",
         onPress: async () => {
-          await logout();
-          router.replace("/(customer)/home" as never);
+          await logoutToGuest(router);
         },
       },
     ]);

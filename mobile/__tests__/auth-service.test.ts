@@ -1,4 +1,6 @@
-import { emailLogin } from "../services/authService";
+import * as SecureStore from "expo-secure-store";
+
+import { emailLogin, logoutToGuest } from "../services/authService";
 import { passengerUser } from "./fixtures";
 
 const mockRequestData = jest.fn();
@@ -28,5 +30,16 @@ describe("auth service", () => {
     });
     expect(mockSaveToken).toHaveBeenCalledWith("session-token");
     expect(result.user.name).toBe("Tendai Moyo");
+  });
+
+  it("clears private account state and routes every logout into guest browsing", async () => {
+    const router = { replace: jest.fn() };
+
+    await logoutToGuest(router);
+
+    expect(router.replace).toHaveBeenCalledWith("/(customer)/home");
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.auth.token");
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.biometric.token");
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.merchant.selected_restaurant");
   });
 });

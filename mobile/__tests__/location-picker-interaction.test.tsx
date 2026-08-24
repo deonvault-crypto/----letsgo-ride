@@ -3,6 +3,7 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import LocationPickerScreen from "../app/(shared)/location-picker";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
 import { autocompletePlaces, reverseGeocodeLocation } from "../services/routingService";
+import { getCurrentDeviceLocation } from "../services/locationService";
 
 const mockFocus = jest.fn();
 let mockMapCallbacks: {
@@ -91,5 +92,25 @@ describe("location picker interaction stability", () => {
     expect(reverseGeocodeLocation).not.toHaveBeenCalled();
     await waitFor(() => expect(reverseGeocodeLocation).toHaveBeenCalledTimes(1), { timeout: 3000 });
     expect(reverseGeocodeLocation).toHaveBeenCalledWith({ latitude: -17.7622, longitude: 31.0902 });
+  });
+
+  it("ignores stale autocomplete responses and never assumes current location", async () => {
+    let resolveFirst: (value: unknown[]) => void = () => undefined;
+    let resolveSecond: (value: unknown[]) => void = () => undefined;
+    (autocompletePlaces as jest.Mock)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    const screen = openPicker();
+    expect(getCurrentDeviceLocation).not.toHaveBeenCalled();
+
+    fireEvent.changeText(screen.getByPlaceholderText("Search a place, street or landmark"), "Joina");
+    await waitFor(() => expect(autocompletePlaces).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    fireEvent.changeText(screen.getByPlaceholderText("Search a place, street or landmark"), "Sam Levy");
+    await waitFor(() => expect(autocompletePlaces).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    await act(async () => { resolveSecond([{ place_id: "sam", primary_text: "Sam Levy’s Village", description: "Sam Levy’s Village, Borrowdale", location: { latitude: -17.7622, longitude: 31.0902 } }]); });
+    expect(await screen.findByText("Sam Levy’s Village")).toBeOnTheScreen();
+    await act(async () => { resolveFirst([{ place_id: "joina", primary_text: "Joina City", description: "Joina City, Harare", location: { latitude: -17.8316, longitude: 31.0488 } }]); });
+    expect(screen.queryByText("Joina City")).toBeNull();
+    expect(mockFocus).not.toHaveBeenCalled();
   });
 });
