@@ -6,17 +6,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeliveryMap } from "../../../components/maps/DeliveryMap";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
-import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
+import { useCourierDeliveryRealtime } from "../../../hooks/useCourierDeliveryRealtime";
 import {
   completeCourierDeliveryWithPin,
-  getCourierDelivery,
   getCourierEvents,
   reportCourierDelay,
   updateCourierDeliveryStatus,
   updateCourierLocation,
 } from "../../../services/courierService";
 import { DeviceLocation, isReliableCourierLocation, watchForegroundLocation } from "../../../services/locationService";
-import { CourierDelivery, CourierEvent, CourierGeoPoint, CourierStatus } from "../../../types/courier.types";
+import { CourierDelivery, CourierGeoPoint, CourierStatus } from "../../../types/courier.types";
 import { openNavigation } from "../../../utils/openNavigation";
 import { decodePolyline } from "../../../utils/decodePolyline";
 import { displayDeliveryReference } from "../../../utils/displayText";
@@ -28,9 +27,17 @@ const HANDOFF_RADIUS_METERS = 250;
 
 export default function CourierDeliveryScreen() {
   const { deliveryId } = useLocalSearchParams<{ deliveryId: string }>();
-  const [delivery, setDelivery] = useState<CourierDelivery | null>(null);
-  const [events, setEvents] = useState<CourierEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    delivery,
+    events,
+    loading,
+    error,
+    setError,
+    acceptDelivery,
+    updateDeliveryLocally,
+    replaceEvents,
+    reconcile,
+  } = useCourierDeliveryRealtime(deliveryId);
   const [busy, setBusy] = useState(false);
   const [gpsLive, setGpsLive] = useState(false);
   const [openingMaps, setOpeningMaps] = useState(false);
@@ -38,29 +45,11 @@ export default function CourierDeliveryScreen() {
   const [delayOpen, setDelayOpen] = useState(false);
   const [delayNote, setDelayNote] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const locationWatcher = useRef<{ remove: () => void } | null>(null);
   const locationStarting = useRef(false);
   const locationWriteInFlight = useRef(false);
   const gpsGeneration = useRef(0);
   const lastAcceptedLocation = useRef<DeviceLocation | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!deliveryId) return;
-    try {
-      const [job, journey] = await Promise.all([
-        getCourierDelivery(deliveryId),
-        getCourierEvents(deliveryId),
-      ]);
-      setDelivery(job);
-      setEvents(journey);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to open this delivery.");
-    } finally {
-      setLoading(false);
-    }
-  }, [deliveryId]);
 
   useFocusEffect(useCallback(() => {
     return () => {
@@ -70,8 +59,6 @@ export default function CourierDeliveryScreen() {
       locationWriteInFlight.current = false;
     };
   }, []));
-
-  useLiveRefresh(refresh, 10000, loading || Boolean(delivery?.status && ACTIVE.has(delivery.status)));
 
   const stopGps = useCallback(() => {
     gpsGeneration.current += 1;
@@ -91,7 +78,7 @@ export default function CourierDeliveryScreen() {
           if (locationWriteInFlight.current) return;
           if (!isReliableCourierLocation(location, lastAcceptedLocation.current)) return;
           lastAcceptedLocation.current = location;
-          setDelivery((current) => current ? { ...current, last_courier_location: location } : current);
+          updateDeliveryLocally((current) => current ? { ...current, last_courier_location: location } : current);
           locationWriteInFlight.current = true;
           updateCourierLocation(job.id, {
             latitude: location.latitude,
@@ -101,7 +88,7 @@ export default function CourierDeliveryScreen() {
             speed: location.speed,
             recorded_at: new Date(location.timestamp).toISOString(),
           }).then((updated) => {
-            setDelivery(updated);
+            acceptDelivery(updated);
             if (!ACTIVE.has(updated.status)) stopGps();
           }).catch((err) => {
             // Automatic sensor writes belong in engineering diagnostics. The
@@ -128,7 +115,7 @@ export default function CourierDeliveryScreen() {
     } finally {
       locationStarting.current = false;
     }
-  }, [stopGps]);
+  }, [acceptDelivery, stopGps, updateDeliveryLocally]);
 
   useEffect(() => {
     if (!delivery) return;
@@ -179,8 +166,8 @@ export default function CourierDeliveryScreen() {
       setNotice(null);
       setError(null);
       const updated = await updateCourierDeliveryStatus(delivery.id, "PICKED_UP");
-      setDelivery(updated);
-      setEvents(await getCourierEvents(delivery.id));
+      acceptDelivery(updated);
+      replaceEvents(await getCourierEvents(delivery.id));
       setNotice("Order collected. LetsGoRide has switched the journey to the recipient.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Pickup could not be confirmed.");
@@ -198,7 +185,7 @@ export default function CourierDeliveryScreen() {
       await reportCourierDelay(delivery.id, delayNote.trim() || undefined);
       setDelayOpen(false);
       setDelayNote("");
-      setEvents(await getCourierEvents(delivery.id));
+      replaceEvents(await getCourierEvents(delivery.id));
       setNotice("Delay update sent.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delay update could not be sent.");
@@ -214,9 +201,9 @@ export default function CourierDeliveryScreen() {
       setNotice(null);
       setError(null);
       const updated = await completeCourierDeliveryWithPin(delivery.id, pin);
-      setDelivery(updated);
+      acceptDelivery(updated);
       setPin("");
-      setEvents(await getCourierEvents(delivery.id));
+      replaceEvents(await getCourierEvents(delivery.id));
       stopGps();
       setNotice("Recipient code verified. Delivery complete.");
     } catch (err) {
@@ -241,7 +228,7 @@ export default function CourierDeliveryScreen() {
   return (
     <Screen showBack fallbackRoute="/(courier)/home" title="Delivery" showNotifications={false}>
       {error ? (
-        <Pressable accessibilityRole="button" onPress={refresh} style={styles.errorCard}>
+        <Pressable accessibilityRole="button" onPress={reconcile} style={styles.errorCard}>
           <MaterialCommunityIcons name="alert-circle-outline" size={21} color={v2Theme.colors.danger} />
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.retry}>Retry</Text>

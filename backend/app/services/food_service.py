@@ -5,6 +5,11 @@ from typing import Any, Dict, List
 from app.database import database
 from app.services.notification_service import create_app_notification
 from app.services.courier_state_service import clear_courier_active_reference
+from app.services.courier_delivery_realtime_service import (
+    append_delivery_journey_event,
+    publish_delivery_realtime,
+    update_versioned_delivery,
+)
 from app.utils import new_id, now_iso
 
 
@@ -224,9 +229,8 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
         raise ValueError("Order not found.")
 
     if linked_delivery:
-        await database.update_one(
-            "courier_deliveries",
-            delivery_id,
+        terminal_delivery = await update_versioned_delivery(
+            {"id": delivery_id, "status": linked_delivery.get("status")},
             {
                 "status": "CANCELLED",
                 "cancellation_reason": reason,
@@ -236,19 +240,16 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
                 "updated_at": now,
             },
         )
-        terminal_delivery = {**linked_delivery, "status": "CANCELLED", "id": delivery_id}
+        if not terminal_delivery:
+            raise ValueError("Delivery changed while the order was being cancelled. Refresh and try again.")
         await clear_courier_active_reference(terminal_delivery)
-        await database.insert_one(
-            "courier_events",
-            {
-                "id": new_id(),
-                "delivery_id": delivery_id,
-                "type": "DELIVERY_CANCELLED_FROM_FOOD_ORDER",
-                "actor_user_id": str(user.get("id") or ""),
-                "data": {"reason": reason},
-                "created_at": now_iso(),
-            },
+        journey_event = await append_delivery_journey_event(
+            delivery_id,
+            "DELIVERY_CANCELLED_FROM_FOOD_ORDER",
+            actor_user_id=str(user.get("id") or ""),
+            data={"reason": reason},
         )
+        await publish_delivery_realtime(terminal_delivery, "courier_delivery.terminal", journey_event=journey_event)
         courier_user_id = str(linked_delivery.get("courier_user_id") or "")
         if courier_user_id:
             await create_app_notification(

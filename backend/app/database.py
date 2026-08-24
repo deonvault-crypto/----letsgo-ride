@@ -217,6 +217,43 @@ class Database:
                 return deepcopy(self.memory[collection][index])
         return None
 
+    async def update_one_atomic(
+        self,
+        collection: str,
+        filters: Dict[str, Any],
+        updates: Dict[str, Any],
+        increments: Optional[Dict[str, int | float]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically apply ``$set`` and ``$inc`` and return committed truth.
+
+        This is intentionally collection-agnostic so domain services do not need
+        raw Motor calls when a mutation also advances a monotonic resource version.
+        Missing numeric fields follow MongoDB ``$inc`` semantics and start at zero.
+        """
+        increments = increments or {}
+        if self.db is not None:
+            operation: Dict[str, Any] = {"$set": updates}
+            if increments:
+                operation["$inc"] = increments
+            item = await self.db[collection].find_one_and_update(
+                filters,
+                operation,
+                return_document=ReturnDocument.AFTER,
+            )
+            return self._clean(item) if item else None
+
+        for index, item in enumerate(self.memory[collection]):
+            if self._matches(item, filters):
+                next_item = {**item, **deepcopy(updates)}
+                for field, amount in increments.items():
+                    current = next_item.get(field, 0)
+                    if not isinstance(current, (int, float)) or isinstance(current, bool):
+                        raise TypeError(f"Cannot increment non-numeric field {field}.")
+                    next_item[field] = current + amount
+                self.memory[collection][index] = next_item
+                return deepcopy(next_item)
+        return None
+
     async def delete_one(self, collection: str, item_id: str) -> bool:
         if self.db is not None:
             result = await self.db[collection].delete_one({"id": item_id})

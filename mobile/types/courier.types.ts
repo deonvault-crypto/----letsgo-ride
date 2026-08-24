@@ -61,6 +61,7 @@ export type CourierLocation = {
 
 export type CourierDelivery = CourierCreatePayload & {
   id: string;
+  realtime_version?: number;
   sender_user_id: string;
   sender_name?: string;
   sender_phone?: string | null;
@@ -110,6 +111,7 @@ export type CourierEvent = {
 
 export type CourierTrackingState = {
   delivery_id: string;
+  realtime_version?: number;
   status: CourierStatus;
   pickup_address?: string;
   dropoff_address?: string;

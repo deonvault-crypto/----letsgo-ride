@@ -7,6 +7,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.database import database
 from app.services.courier_service import append_delivery_event
+from app.services.courier_delivery_realtime_service import publish_delivery_realtime, update_versioned_delivery
 from app.services.courier_state_service import (
     ACTIVE_COURIER_STATUSES,
     TERMINAL_COURIER_STATUSES,
@@ -232,8 +233,7 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
 
     now = now_iso()
     try:
-        updated = await database.update_one_if(
-            "courier_deliveries",
+        updated = await update_versioned_delivery(
             {
                 "id": delivery_id,
                 "status": "MATCHING",
@@ -265,12 +265,13 @@ async def claim_courier_offer(delivery_id: str, user: Dict[str, Any]) -> Dict[st
         },
     )
     await set_courier_active_reference(updated)
-    await append_delivery_event(
+    status_event = await append_delivery_event(
         delivery_id,
         "STATUS_COURIER_TO_PICKUP",
         actor_user_id=_user_id(user),
         data={"source": "automatic_after_acceptance"},
     )
+    await publish_delivery_realtime(updated, "courier_delivery.status_changed", journey_event=status_event)
 
     sender_user_id = str(updated.get("sender_user_id") or "")
     if sender_user_id:

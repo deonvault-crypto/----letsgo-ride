@@ -5,9 +5,14 @@ from typing import Any, Dict
 
 from app.database import database
 from app.services.fulfillment_link_service import sync_food_order_pricing
+from app.services.courier_delivery_realtime_service import (
+    append_delivery_journey_event,
+    publish_delivery_realtime,
+    update_versioned_delivery,
+)
 from app.services.pricing_service import PricingNotConfiguredError, calculate_delivery_pricing
 from app.services.routing_service import RoutingError, resolve_route, routing_status
-from app.utils import new_id, now_iso
+from app.utils import now_iso
 
 
 logger = logging.getLogger(__name__)
@@ -112,8 +117,7 @@ async def apply_calculated_delivery_quote(
     if delivery.get("status") == "REQUESTED" and not delivery.get("courier_user_id"):
         updates["status"] = "MATCHING"
 
-    updated = await database.update_one_if(
-        "courier_deliveries",
+    updated = await update_versioned_delivery(
         {
             "id": delivery_id,
             "quote_status": delivery.get("quote_status"),
@@ -125,23 +129,19 @@ async def apply_calculated_delivery_quote(
         current = await database.find_one("courier_deliveries", {"id": delivery_id})
         return current or delivery
 
-    await database.insert_one(
-        "courier_events",
-        {
-            "id": new_id(),
-            "delivery_id": delivery_id,
-            "type": "DELIVERY_AUTO_QUOTED",
-            "actor_user_id": actor_user_id,
-            "data": {
-                "price_usd": updated.get("price_usd"),
-                "courier_payout_usd": updated.get("courier_payout_usd"),
-                "distance_km": updated.get("distance_km"),
-                "estimated_duration_minutes": updated.get("estimated_duration_minutes"),
-                "route_provider": updated.get("route_provider"),
-            },
-            "created_at": now_iso(),
+    journey_event = await append_delivery_journey_event(
+        delivery_id,
+        "DELIVERY_AUTO_QUOTED",
+        actor_user_id=actor_user_id,
+        data={
+            "price_usd": updated.get("price_usd"),
+            "courier_payout_usd": updated.get("courier_payout_usd"),
+            "distance_km": updated.get("distance_km"),
+            "estimated_duration_minutes": updated.get("estimated_duration_minutes"),
+            "route_provider": updated.get("route_provider"),
         },
     )
+    await publish_delivery_realtime(updated, "courier_delivery.route_updated", journey_event=journey_event)
     await sync_food_order_pricing(updated, actor_user_id=actor_user_id)
     return updated
 

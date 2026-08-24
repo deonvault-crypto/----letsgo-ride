@@ -26,6 +26,13 @@ from app.services.courier_state_service import (
     clear_courier_active_reference,
     set_courier_active_reference,
 )
+from app.services.courier_delivery_realtime_service import (
+    append_delivery_journey_event,
+    delivery_event_type,
+    insert_versioned_delivery,
+    publish_delivery_realtime,
+    update_versioned_delivery,
+)
 from app.services.notification_service import create_app_notification
 from app.services.routing_service import RoutingError, compute_route
 from app.utils import new_id, now_iso
@@ -103,15 +110,12 @@ async def append_delivery_event(
     actor_user_id: str | None = None,
     data: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    event = {
-        "id": new_id(),
-        "delivery_id": delivery_id,
-        "type": event_type,
-        "actor_user_id": actor_user_id,
-        "data": data or {},
-        "created_at": now_iso(),
-    }
-    return await database.insert_one("courier_events", event)
+    return await append_delivery_journey_event(
+        delivery_id,
+        event_type,
+        actor_user_id=actor_user_id,
+        data=data,
+    )
 
 
 async def create_delivery(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -138,16 +142,18 @@ async def create_delivery(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict
         "delivered_at": None,
         "created_at": now,
         "updated_at": now,
+        "realtime_version": 1,
         **payload,
     }
-    saved = await database.insert_one("courier_deliveries", delivery)
+    saved = await insert_versioned_delivery(delivery)
     await create_delivery_handoff(saved["id"], _user_id(user))
-    await append_delivery_event(
+    journey_event = await append_delivery_event(
         saved["id"],
         "DELIVERY_REQUESTED",
         actor_user_id=_user_id(user),
         data={"status": saved["status"], "quote_status": saved["quote_status"]},
     )
+    await publish_delivery_realtime(saved, "courier_delivery.updated", journey_event=journey_event)
     return saved
 
 
@@ -215,15 +221,19 @@ async def cancel_delivery(
         "tracking_stopped_at": stopped_at,
         "updated_at": stopped_at,
     }
-    updated = await database.update_one("courier_deliveries", delivery_id, updates)
+    updated = await update_versioned_delivery(
+        {"id": delivery_id, "status": delivery.get("status")},
+        updates,
+    )
     if not updated:
         raise ValueError("Delivery not found.")
-    await append_delivery_event(
+    journey_event = await append_delivery_event(
         delivery_id,
         "DELIVERY_CANCELLED",
         actor_user_id=_user_id(user),
         data={"reason": reason},
     )
+    await publish_delivery_realtime(updated, "courier_delivery.terminal", journey_event=journey_event)
     courier_user_id = str(updated.get("courier_user_id") or "")
     if courier_user_id:
         await create_app_notification(
@@ -271,10 +281,13 @@ async def set_delivery_quote(
     if delivery.get("status") == "REQUESTED" and not delivery.get("courier_user_id"):
         updates["status"] = "MATCHING"
 
-    updated = await database.update_one("courier_deliveries", delivery_id, updates)
+    updated = await update_versioned_delivery(
+        {"id": delivery_id, "status": delivery.get("status")},
+        updates,
+    )
     if not updated:
         raise ValueError("Delivery not found.")
-    await append_delivery_event(
+    journey_event = await append_delivery_event(
         delivery_id,
         "DELIVERY_QUOTED",
         actor_user_id=_user_id(actor),
@@ -285,6 +298,7 @@ async def set_delivery_quote(
             "estimated_duration_minutes": updated.get("estimated_duration_minutes"),
         },
     )
+    await publish_delivery_realtime(updated, "courier_delivery.updated", journey_event=journey_event)
     await sync_food_order_pricing(updated, actor_user_id=_user_id(actor))
     return updated
 
@@ -310,8 +324,7 @@ async def assign_delivery(
 
     now = now_iso()
     try:
-        updated = await database.update_one_if(
-            "courier_deliveries",
+        updated = await update_versioned_delivery(
             {
                 "id": delivery_id,
                 "courier_user_id": delivery.get("courier_user_id"),
@@ -336,12 +349,13 @@ async def assign_delivery(
         actor_user_id=_user_id(actor),
         data={"courier_user_id": courier_user_id, "assignment_method": "admin"},
     )
-    await append_delivery_event(
+    status_event = await append_delivery_event(
         delivery_id,
         "STATUS_COURIER_TO_PICKUP",
         actor_user_id=_user_id(actor),
         data={"source": "automatic_after_assignment"},
     )
+    await publish_delivery_realtime(updated, "courier_delivery.status_changed", journey_event=status_event)
     await _notify_customer_status(updated, "COURIER_TO_PICKUP")
     await create_app_notification(
         courier_user_id,
@@ -376,35 +390,35 @@ async def update_delivery_status(
             )
 
         now = now_iso()
-        picked_up = await database.update_one_if(
-            "courier_deliveries",
+        picked_up = await update_versioned_delivery(
             {"id": delivery_id, "status": current},
             {"status": "PICKED_UP", "picked_up_at": now, "updated_at": now},
         )
         if not picked_up:
             raise ValueError("Delivery changed while pickup was being confirmed. Refresh and try again.")
-        await append_delivery_event(
+        pickup_event = await append_delivery_event(
             delivery_id,
             "STATUS_PICKED_UP",
             actor_user_id=_user_id(user),
             data={"from": current, "to": "PICKED_UP", "note": note},
         )
+        await publish_delivery_realtime(picked_up, "courier_delivery.status_changed", journey_event=pickup_event)
         await _notify_customer_status(picked_up, "PICKED_UP")
         await sync_food_order_from_delivery(picked_up, actor_user_id=_user_id(user))
 
-        in_transit = await database.update_one_if(
-            "courier_deliveries",
+        in_transit = await update_versioned_delivery(
             {"id": delivery_id, "status": "PICKED_UP"},
             {"status": "IN_TRANSIT", "updated_at": now_iso()},
         )
         if not in_transit:
             return picked_up
-        await append_delivery_event(
+        transit_event = await append_delivery_event(
             delivery_id,
             "STATUS_IN_TRANSIT",
             actor_user_id=_user_id(user),
             data={"from": "PICKED_UP", "to": "IN_TRANSIT", "source": "automatic_after_pickup"},
         )
+        await publish_delivery_realtime(in_transit, "courier_delivery.status_changed", journey_event=transit_event)
         await _notify_customer_status(in_transit, "IN_TRANSIT")
         await sync_food_order_from_delivery(in_transit, actor_user_id=_user_id(user))
         return in_transit
@@ -420,19 +434,19 @@ async def update_delivery_status(
         updates["live_tracking_active"] = False
         updates["tracking_stopped_at"] = now
 
-    updated = await database.update_one_if(
-        "courier_deliveries",
+    updated = await update_versioned_delivery(
         {"id": delivery_id, "status": current},
         updates,
     )
     if not updated:
         raise ValueError("Delivery changed while progress was being updated. Refresh and try again.")
-    await append_delivery_event(
+    journey_event = await append_delivery_event(
         delivery_id,
         f"STATUS_{status}",
         actor_user_id=_user_id(user),
         data={"from": current, "to": status, "note": note},
     )
+    await publish_delivery_realtime(updated, delivery_event_type(updated), journey_event=journey_event)
     await _notify_customer_status(updated, status)
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     if status in FINAL_STATUSES:
@@ -450,12 +464,19 @@ async def report_delivery_delay(
         raise PermissionError("Only the assigned courier can report a delay.")
     if delivery.get("status") not in {"ASSIGNED", "COURIER_TO_PICKUP", "IN_TRANSIT", "ARRIVING"}:
         raise ValueError("A delay cannot be reported for this delivery now.")
-    await append_delivery_event(
+    updated = await update_versioned_delivery(
+        {"id": delivery_id, "status": delivery.get("status")},
+        {"updated_at": now_iso()},
+    )
+    if not updated:
+        raise ValueError("Delivery changed while the delay was being reported. Refresh and try again.")
+    journey_event = await append_delivery_event(
         delivery_id,
         "COURIER_DELAY_REPORTED",
         actor_user_id=_user_id(user),
         data={"note": note},
     )
+    await publish_delivery_realtime(updated, "courier_delivery.updated", journey_event=journey_event)
     sender_user_id = str(delivery.get("sender_user_id") or "")
     if sender_user_id:
         await create_app_notification(
@@ -465,7 +486,7 @@ async def report_delivery_delay(
             note or "Your courier reported a short delay. Live tracking remains active.",
             {"delivery_id": delivery_id, "courier_status": delivery.get("status")},
         )
-    return delivery
+    return updated
 
 
 async def complete_delivery_with_pin(
@@ -492,8 +513,7 @@ async def complete_delivery_with_pin(
         raise ValueError("That 4-digit delivery code is not correct.")
 
     now = now_iso()
-    updated = await database.update_one_if(
-        "courier_deliveries",
+    updated = await update_versioned_delivery(
         {"id": delivery_id, "status": delivery.get("status")},
         {
             "status": "DELIVERED",
@@ -507,12 +527,13 @@ async def complete_delivery_with_pin(
     )
     if not updated:
         raise ValueError("Delivery changed while the handoff was being confirmed. Refresh and try again.")
-    await append_delivery_event(
+    journey_event = await append_delivery_event(
         delivery_id,
         "DELIVERY_CONFIRMED_BY_PIN",
         actor_user_id=_user_id(user),
         data={"handoff_distance_meters": round(handoff_distance, 1)},
     )
+    await publish_delivery_realtime(updated, "courier_delivery.terminal", journey_event=journey_event)
     await _notify_customer_status(updated, "DELIVERED")
     await sync_food_order_from_delivery(updated, actor_user_id=_user_id(user))
     await clear_courier_active_reference(updated)
@@ -534,17 +555,18 @@ async def update_courier_location(
         # flags are cleared here as well; a GPS callback can never resurrect a
         # terminal job.
         if delivery.get("status") in FINAL_STATUSES:
-            repaired = await database.update_one_if(
-                "courier_deliveries",
-                {"id": delivery_id, "status": delivery.get("status")},
-                {
-                    "live_tracking_active": False,
-                    "tracking_stopped_at": delivery.get("tracking_stopped_at") or now_iso(),
-                    "updated_at": now_iso(),
-                },
-            )
-            if repaired:
-                delivery = repaired
+            if delivery.get("live_tracking_active") or not delivery.get("tracking_stopped_at"):
+                repaired = await update_versioned_delivery(
+                    {"id": delivery_id, "status": delivery.get("status")},
+                    {
+                        "live_tracking_active": False,
+                        "tracking_stopped_at": delivery.get("tracking_stopped_at") or now_iso(),
+                        "updated_at": now_iso(),
+                    },
+                )
+                if repaired:
+                    delivery = repaired
+                    await publish_delivery_realtime(delivery, "courier_delivery.terminal")
             await clear_courier_active_reference(delivery)
         return delivery
 
@@ -555,8 +577,7 @@ async def update_courier_location(
         **location,
         "recorded_at": now_iso(),
     }
-    updated = await database.update_one_if(
-        "courier_deliveries",
+    updated = await update_versioned_delivery(
         {"id": delivery_id, "status": delivery.get("status")},
         {
             "last_courier_location": snapshot,
@@ -570,6 +591,7 @@ async def update_courier_location(
             return current
         raise ValueError("Delivery changed while location was updating. Refresh and try again.")
     await database.insert_one("courier_location_snapshots", snapshot)
+    await publish_delivery_realtime(updated, "courier_delivery.location_updated")
 
     # Refresh the road route at a restrained cadence. GPS can arrive every few
     # seconds; route recomputation is intentionally throttled to protect latency
@@ -588,8 +610,7 @@ async def update_courier_location(
     if should_refresh_route and get_settings().routing_configured and isinstance(destination, dict):
         try:
             remaining = await compute_route(snapshot, destination, include_polyline=True)
-            refreshed = await database.update_one_if(
-                "courier_deliveries",
+            refreshed = await update_versioned_delivery(
                 {"id": delivery_id, "status": updated.get("status")},
                 {
                     "remaining_distance_km": remaining.get("distance_km"),
@@ -600,6 +621,7 @@ async def update_courier_location(
             )
             if refreshed:
                 updated = refreshed
+                await publish_delivery_realtime(updated, "courier_delivery.route_updated")
         except RoutingError:
             # Location sharing must remain healthy during a routing-provider blip.
             pass
@@ -609,18 +631,18 @@ async def update_courier_location(
         updated.get("dropoff_location"),
         DELIVERY_ARRIVING_RADIUS_METERS,
     ):
-        arriving = await database.update_one_if(
-            "courier_deliveries",
+        arriving = await update_versioned_delivery(
             {"id": delivery_id, "status": "IN_TRANSIT"},
             {"status": "ARRIVING", "updated_at": now_iso()},
         )
         if arriving:
-            await append_delivery_event(
+            journey_event = await append_delivery_event(
                 delivery_id,
                 "STATUS_ARRIVING",
                 actor_user_id=_user_id(user),
                 data={"source": "automatic_geofence", "radius_meters": DELIVERY_ARRIVING_RADIUS_METERS},
             )
+            await publish_delivery_realtime(arriving, "courier_delivery.status_changed", journey_event=journey_event)
             await _notify_customer_status(arriving, "ARRIVING")
             await sync_food_order_from_delivery(arriving, actor_user_id=_user_id(user))
             return arriving
@@ -646,4 +668,5 @@ async def tracking_state(delivery_id: str, user: Dict[str, Any]) -> Dict[str, An
         "remaining_route_polyline": delivery.get("remaining_route_polyline"),
         "remaining_route_updated_at": delivery.get("remaining_route_updated_at"),
         "handoff_radius_meters": DELIVERY_HANDOFF_RADIUS_METERS,
+        "realtime_version": delivery.get("realtime_version", 0),
     }

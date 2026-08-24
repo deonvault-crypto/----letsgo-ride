@@ -4,6 +4,11 @@ from typing import Any, Dict
 
 from app.database import database
 from app.services.delivery_security_service import create_delivery_handoff
+from app.services.courier_delivery_realtime_service import (
+    append_delivery_journey_event,
+    insert_versioned_delivery,
+    publish_delivery_realtime,
+)
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
 
@@ -49,16 +54,11 @@ async def _append_delivery_event(
     actor_user_id: str | None = None,
     data: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    return await database.insert_one(
-        "courier_events",
-        {
-            "id": new_id(),
-            "delivery_id": delivery_id,
-            "type": event_type,
-            "actor_user_id": actor_user_id,
-            "data": data or {},
-            "created_at": now_iso(),
-        },
+    return await append_delivery_journey_event(
+        delivery_id,
+        event_type,
+        actor_user_id=actor_user_id,
+        data=data,
     )
 
 
@@ -125,8 +125,9 @@ async def ensure_food_order_delivery(
         "delivered_at": None,
         "created_at": now,
         "updated_at": now,
+        "realtime_version": 1,
     }
-    saved = await database.insert_one("courier_deliveries", delivery)
+    saved = await insert_versioned_delivery(delivery)
     await create_delivery_handoff(saved["id"], str(order.get("customer_user_id") or ""))
 
     linked_order = await database.update_one_if(
@@ -150,12 +151,13 @@ async def ensure_food_order_delivery(
             if winner:
                 return winner
 
-    await _append_delivery_event(
+    journey_event = await _append_delivery_event(
         saved["id"],
         "FOOD_FULFILLMENT_CREATED",
         actor_user_id=actor_user_id,
         data={"food_order_id": order_id, "quote_status": "PENDING"},
     )
+    await publish_delivery_realtime(saved, "courier_delivery.updated", journey_event=journey_event)
     await _append_food_event(
         order_id,
         "COURIER_FULFILLMENT_CREATED",

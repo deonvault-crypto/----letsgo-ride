@@ -1,20 +1,18 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { DeliveryMap } from "../../../components/maps/DeliveryMap";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
-import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
+import { useCourierDeliveryRealtime } from "../../../hooks/useCourierDeliveryRealtime";
 import {
   cancelCourierDelivery,
-  getCourierDelivery,
-  getCourierDeliveryPin,
   getCourierEvents,
 } from "../../../services/courierService";
-import type { CourierDelivery, CourierDeliveryPin, CourierEvent, CourierStatus } from "../../../types/courier.types";
+import type { CourierDelivery, CourierDeliveryPin, CourierStatus } from "../../../types/courier.types";
 import { decodePolyline } from "../../../utils/decodePolyline";
 import { displayDeliveryReference } from "../../../utils/displayText";
 
@@ -25,38 +23,20 @@ const FINAL = new Set<CourierStatus>(["DELIVERED", "CANCELLED", "FAILED"]);
 export default function CustomerCourierDeliveryScreen() {
   const router = useRouter();
   const { deliveryId } = useLocalSearchParams<{ deliveryId: string }>();
-  const [delivery, setDelivery] = useState<CourierDelivery | null>(null);
-  const [events, setEvents] = useState<CourierEvent[]>([]);
-  const [handoff, setHandoff] = useState<CourierDeliveryPin | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    delivery,
+    events,
+    handoff,
+    loading,
+    error,
+    setError,
+    acceptDelivery,
+    replaceEvents,
+    reconcile,
+  } = useCourierDeliveryRealtime(deliveryId, { includeHandoffPin: true });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
   const statusEntrance = useRef(new Animated.Value(1)).current;
-
-  const load = useCallback(async () => {
-    if (!deliveryId) return;
-    try {
-      const [nextDelivery, nextEvents] = await Promise.all([
-        getCourierDelivery(deliveryId),
-        getCourierEvents(deliveryId),
-      ]);
-      setDelivery(nextDelivery);
-      setEvents(nextEvents);
-      setError(null);
-      if (PIN_VISIBLE.has(nextDelivery.status) || nextDelivery.status === "DELIVERED") {
-        setHandoff(await getCourierDeliveryPin(deliveryId));
-      } else {
-        setHandoff(null);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load this delivery.");
-    } finally {
-      setLoading(false);
-    }
-  }, [deliveryId]);
-
-  useLiveRefresh(load, 7000, !delivery || !FINAL.has(delivery.status));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -88,8 +68,8 @@ export default function CustomerCourierDeliveryScreen() {
     try {
       setBusy(true);
       setError(null);
-      setDelivery(await cancelCourierDelivery(delivery.id, "Cancelled by customer"));
-      setEvents(await getCourierEvents(delivery.id));
+      acceptDelivery(await cancelCourierDelivery(delivery.id, "Cancelled by customer"));
+      replaceEvents(await getCourierEvents(delivery.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to cancel this delivery.");
     } finally {
@@ -113,7 +93,7 @@ export default function CustomerCourierDeliveryScreen() {
   return (
     <Screen title="Delivery" showBack fallbackRoute="/(shared)/activity" navRole="customer">
       {error ? (
-        <Pressable accessibilityRole="button" onPress={load} style={styles.errorCard}>
+        <Pressable accessibilityRole="button" onPress={reconcile} style={styles.errorCard}>
           <MaterialCommunityIcons name="alert-circle-outline" size={21} color={v2Theme.colors.danger} />
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.retry}>Retry</Text>
