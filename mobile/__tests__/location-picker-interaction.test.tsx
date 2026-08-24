@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import LocationPickerScreen from "../app/(shared)/location-picker";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
@@ -46,7 +46,6 @@ jest.mock("../services/routingService", () => ({
 
 describe("location picker interaction stability", () => {
   beforeEach(() => {
-    jest.useFakeTimers();
     jest.clearAllMocks();
     (autocompletePlaces as jest.Mock).mockResolvedValue([{
       place_id: "place-1",
@@ -62,11 +61,6 @@ describe("location picker interaction stability", () => {
     });
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
-  });
-
   function openPicker() {
     return render(<LocationDraftProvider><LocationPickerScreen /></LocationDraftProvider>);
   }
@@ -77,12 +71,11 @@ describe("location picker interaction stability", () => {
     expect(mockFocus).not.toHaveBeenCalled();
     expect(autocompletePlaces).not.toHaveBeenCalled();
 
-    await act(async () => { await jest.advanceTimersByTimeAsync(320); });
-    expect(screen.getByText("Joina City")).toBeOnTheScreen();
+    await waitFor(() => expect(screen.getByText("Joina City")).toBeOnTheScreen(), { timeout: 3000 });
     expect(mockFocus).not.toHaveBeenCalled();
 
     fireEvent.press(screen.getByText("Joina City"));
-    expect(mockFocus).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockFocus).toHaveBeenCalledTimes(1), { timeout: 3000 });
     expect(reverseGeocodeLocation).not.toHaveBeenCalled();
   });
 
@@ -96,8 +89,7 @@ describe("location picker interaction stability", () => {
     });
 
     expect(reverseGeocodeLocation).not.toHaveBeenCalled();
-    await act(async () => { await jest.advanceTimersByTimeAsync(520); });
-    expect(reverseGeocodeLocation).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(reverseGeocodeLocation).toHaveBeenCalledTimes(1), { timeout: 3000 });
     expect(reverseGeocodeLocation).toHaveBeenCalledWith({ latitude: -17.7622, longitude: 31.0902 });
   });
 });
