@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
@@ -7,16 +7,19 @@ import { registerPushToken, unregisterPushToken } from "./notificationService";
 
 const PUSH_TOKEN_STORAGE_KEY = "letsgoride.push.token";
 const NOTIFICATION_EXPLANATION_STORAGE_KEY = "letsgoride.notifications.explanation.seen";
-const PUSH_PERMISSION_REQUESTED_STORAGE_KEY = "letsgoride.notifications.permission.requested";
+const NOTIFICATION_REMINDER_NEXT_AT_KEY = "letsgoride.notifications.reminder.next-at";
 const ANDROID_DEFAULT_CHANNEL_ID = "default";
 
-type PushRegistrationState = {
+export type PushRegistrationState = {
   enabled: boolean;
   status: "on" | "off";
   message?: string;
+  canAskAgain?: boolean;
+  requiresSettings?: boolean;
 };
 
-const DEVICE_SETTINGS_MESSAGE = "Enable notifications in device settings";
+const DEVICE_SETTINGS_MESSAGE = "Notifications are off in device settings. Open device settings to allow them.";
+const READY_TO_ENABLE_MESSAGE = "Tap below to allow phone notifications.";
 
 function projectId() {
   const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
@@ -52,6 +55,8 @@ async function ensureAndroidDefaultNotificationChannel(): Promise<PushRegistrati
       enabled: false,
       status: "off",
       message: "Could not prepare Android notifications. Please try again.",
+      canAskAgain: true,
+      requiresSettings: false,
     };
   }
 }
@@ -83,24 +88,6 @@ async function removeStoredPushToken() {
   }
 }
 
-async function hasRequestedPhonePermission(): Promise<boolean> {
-  if (Platform.OS === "web") return true;
-  try {
-    return (await SecureStore.getItemAsync(PUSH_PERMISSION_REQUESTED_STORAGE_KEY)) === "true";
-  } catch {
-    return false;
-  }
-}
-
-async function markPhonePermissionRequested() {
-  if (Platform.OS === "web") return;
-  try {
-    await SecureStore.setItemAsync(PUSH_PERMISSION_REQUESTED_STORAGE_KEY, "true");
-  } catch {
-    // ignore storage failures
-  }
-}
-
 export async function hasSeenNotificationExplanation(): Promise<boolean> {
   if (Platform.OS === "web") return true;
   try {
@@ -114,6 +101,37 @@ export async function markNotificationExplanationSeen() {
   if (Platform.OS === "web") return;
   try {
     await SecureStore.setItemAsync(NOTIFICATION_EXPLANATION_STORAGE_KEY, "true");
+  } catch {
+    // ignore storage failures
+  }
+}
+
+export async function notificationReminderDue(): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  try {
+    const value = await SecureStore.getItemAsync(NOTIFICATION_REMINDER_NEXT_AT_KEY);
+    if (!value) return true;
+    const nextAt = Number(value);
+    return !Number.isFinite(nextAt) || Date.now() >= nextAt;
+  } catch {
+    return true;
+  }
+}
+
+export async function snoozeNotificationReminder(days = 7) {
+  if (Platform.OS === "web") return;
+  try {
+    const nextAt = Date.now() + days * 24 * 60 * 60 * 1000;
+    await SecureStore.setItemAsync(NOTIFICATION_REMINDER_NEXT_AT_KEY, String(nextAt));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+async function clearNotificationReminder() {
+  if (Platform.OS === "web") return;
+  try {
+    await SecureStore.deleteItemAsync(NOTIFICATION_REMINDER_NEXT_AT_KEY);
   } catch {
     // ignore storage failures
   }
@@ -135,18 +153,36 @@ async function unregisterSavedPushToken() {
   await removeStoredPushToken();
 }
 
-async function registerCurrentPushToken(): Promise<PushRegistrationState> {
+type NotificationPermissionState = Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>;
+
+function permissionGranted(permissions: NotificationPermissionState) {
+  if (permissions.granted) return true;
+  if (Platform.OS !== "ios") return false;
+  const status = permissions.ios?.status;
+  return status === Notifications.IosAuthorizationStatus.AUTHORIZED
+    || status === Notifications.IosAuthorizationStatus.PROVISIONAL
+    || status === Notifications.IosAuthorizationStatus.EPHEMERAL;
+}
+
+function disabledPermissionState(permissions: NotificationPermissionState): PushRegistrationState {
+  const canAskAgain = permissions.canAskAgain !== false;
+  return {
+    enabled: false,
+    status: "off",
+    canAskAgain,
+    requiresSettings: !canAskAgain,
+    message: canAskAgain ? READY_TO_ENABLE_MESSAGE : DEVICE_SETTINGS_MESSAGE,
+  };
+}
+
+async function registerCurrentPushToken(permissions?: NotificationPermissionState): Promise<PushRegistrationState> {
   const channelError = await ensureAndroidDefaultNotificationChannel();
   if (channelError) return channelError;
 
-  const currentPermissions = await Notifications.getPermissionsAsync();
-  if (!currentPermissions.granted) {
+  const currentPermissions = permissions || await Notifications.getPermissionsAsync();
+  if (!permissionGranted(currentPermissions)) {
     await unregisterSavedPushToken();
-    return {
-      enabled: false,
-      status: "off",
-      message: DEVICE_SETTINGS_MESSAGE,
-    };
+    return disabledPermissionState(currentPermissions);
   }
 
   let expoPushToken: string;
@@ -159,7 +195,9 @@ async function registerCurrentPushToken(): Promise<PushRegistrationState> {
     return {
       enabled: false,
       status: "off",
-      message: "Could not obtain a push token. Please try again or restart the app.",
+      canAskAgain: true,
+      requiresSettings: false,
+      message: "Notification permission is on, but this device could not get a push token. Please try again.",
     };
   }
 
@@ -171,10 +209,13 @@ async function registerCurrentPushToken(): Promise<PushRegistrationState> {
       device_name: Constants.deviceName || undefined,
     });
     await saveStoredPushToken(expoPushToken);
+    await clearNotificationReminder();
 
     return {
       enabled: true,
       status: "on",
+      canAskAgain: true,
+      requiresSettings: false,
       message: "Phone notifications are enabled.",
     };
   } catch {
@@ -182,7 +223,9 @@ async function registerCurrentPushToken(): Promise<PushRegistrationState> {
     return {
       enabled: false,
       status: "off",
-      message: "Phone notification permission is on, but LetsGoRide could not register this device. Please try again.",
+      canAskAgain: true,
+      requiresSettings: false,
+      message: "Notification permission is on, but LetsGoRide could not register this device. Please try again.",
     };
   }
 }
@@ -191,33 +234,37 @@ export async function phoneNotificationStatus(): Promise<PushRegistrationState> 
   return registerCurrentPushToken();
 }
 
+export async function openPhoneNotificationSettings() {
+  if (Platform.OS === "web") return;
+  await Linking.openSettings();
+}
+
 export async function enablePhoneNotifications(): Promise<PushRegistrationState> {
   const channelError = await ensureAndroidDefaultNotificationChannel();
   if (channelError) return channelError;
 
   const current = await Notifications.getPermissionsAsync();
-  const alreadyRequested = await hasRequestedPhonePermission();
-  if (!current.granted && alreadyRequested) {
-    return {
-      enabled: false,
-      status: "off",
-      message: DEVICE_SETTINGS_MESSAGE,
-    };
-  }
-  const permissions = current.granted ? current : await Notifications.requestPermissionsAsync();
-  if (!current.granted) {
-    await markPhonePermissionRequested();
+  if (permissionGranted(current)) return registerCurrentPushToken(current);
+
+  if (current.canAskAgain === false) {
+    await openPhoneNotificationSettings();
+    return disabledPermissionState(current);
   }
 
-  if (!permissions.granted) {
-    return {
-      enabled: false,
-      status: "off",
-      message: DEVICE_SETTINGS_MESSAGE,
-    };
+  const permissions = await Notifications.requestPermissionsAsync({
+    ios: {
+      allowAlert: true,
+      allowBadge: true,
+      allowSound: true,
+    },
+  });
+
+  if (!permissionGranted(permissions)) {
+    await unregisterSavedPushToken();
+    return disabledPermissionState(permissions);
   }
 
-  return registerCurrentPushToken();
+  return registerCurrentPushToken(permissions);
 }
 
 export async function disablePhoneNotifications(): Promise<PushRegistrationState> {
@@ -225,6 +272,8 @@ export async function disablePhoneNotifications(): Promise<PushRegistrationState
   return {
     enabled: false,
     status: "off",
+    canAskAgain: true,
+    requiresSettings: false,
     message: "Phone notifications are disabled for this device.",
   };
 }

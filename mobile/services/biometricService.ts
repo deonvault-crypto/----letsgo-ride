@@ -8,6 +8,7 @@ import { publishSessionUser } from "./sessionLifecycle";
 
 const BIOMETRIC_ENABLED_KEY = "letsgoride.biometric.enabled";
 const BIOMETRIC_TOKEN_KEY = "letsgoride.biometric.token";
+const BIOMETRIC_REMINDER_NEXT_AT_KEY = "letsgoride.biometric.reminder.next-at";
 
 export async function biometricAvailable() {
   const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -33,6 +34,39 @@ export async function isBiometricEnabled() {
   return biometricAvailable();
 }
 
+export async function biometricReminderDue(): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  try {
+    if (!await biometricAvailable()) return false;
+    if (await isBiometricEnabled()) return false;
+    const value = await SecureStore.getItemAsync(BIOMETRIC_REMINDER_NEXT_AT_KEY);
+    if (!value) return true;
+    const nextAt = Number(value);
+    return !Number.isFinite(nextAt) || Date.now() >= nextAt;
+  } catch {
+    return false;
+  }
+}
+
+export async function snoozeBiometricReminder(days = 30) {
+  if (Platform.OS === "web") return;
+  try {
+    const nextAt = Date.now() + days * 24 * 60 * 60 * 1000;
+    await SecureStore.setItemAsync(BIOMETRIC_REMINDER_NEXT_AT_KEY, String(nextAt));
+  } catch {
+    // ignore reminder storage failures
+  }
+}
+
+async function clearBiometricReminder() {
+  if (Platform.OS === "web") return;
+  try {
+    await SecureStore.deleteItemAsync(BIOMETRIC_REMINDER_NEXT_AT_KEY);
+  } catch {
+    // ignore reminder storage failures
+  }
+}
+
 export async function hasBiometricLoginCredential() {
   return isBiometricEnabled();
 }
@@ -51,6 +85,7 @@ export async function enableBiometricLogin() {
   if (!result.success) throw new Error("Biometric confirmation was cancelled.");
   await SecureStore.setItemAsync(BIOMETRIC_TOKEN_KEY, token);
   await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, "true");
+  await clearBiometricReminder();
 }
 
 export async function disableBiometricLogin() {

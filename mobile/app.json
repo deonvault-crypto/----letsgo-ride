@@ -41,6 +41,13 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-notifications",
+        {
+          "defaultChannel": "default",
+          "color": "#118B44"
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow LetsGoRide to use Face ID for faster secure login."
