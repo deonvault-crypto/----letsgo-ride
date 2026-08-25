@@ -23,6 +23,8 @@ export type LiveTripLocation = {
 
 export type Ride = {
   id: string;
+  realtime_version?: number;
+  user_id?: string;
   driver_id?: string;
   driver_user_id?: string;
   driver_name: string;
@@ -58,10 +60,16 @@ export type Ride = {
   is_demo?: boolean;
   created_at?: string;
   updated_at?: string;
+  boarding_started_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  expired_at?: string | null;
 };
 
 export type RideRequest = {
   id: string;
+  realtime_version?: number;
   ride_id: string;
   user_id?: string;
   passenger_name: string;
@@ -84,6 +92,7 @@ export type RideRequest = {
 
 export type LiveTripState = {
   ride_id: string;
+  realtime_version?: number;
   status: RideStatus;
   departure_at?: string | null;
   estimated_arrival_at?: string | null;
@@ -92,6 +101,11 @@ export type LiveTripState = {
   last_driver_location?: LiveTripLocation | null;
   origin?: string;
   destination?: string;
+};
+
+export type DriverWorkspaceSnapshot = {
+  rides: Ride[];
+  requests: RideRequest[];
 };
 
 export type RideSearchParams = {

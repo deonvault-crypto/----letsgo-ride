@@ -6,6 +6,10 @@ import { LiveTripPanel } from "../components/trips/LiveTripPanel";
 import { updateLiveTripLocation } from "../services/ridesService";
 import { ride } from "./fixtures";
 
+jest.mock("../hooks/useRideLiveRealtime", () => ({
+  useRideLiveRealtime: () => ({ state: null, loading: false, error: "", reconcile: jest.fn() }),
+}));
+
 jest.mock("expo-router", () => ({
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = require("react");

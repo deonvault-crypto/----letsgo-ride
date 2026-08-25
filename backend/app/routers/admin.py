@@ -15,7 +15,9 @@ from app.models.user import AdminRoleUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
-from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, cleanup_demo_rides
+from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, cleanup_demo_rides, is_final_trip_status
+from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
+from app.services.ride_request_realtime_service import publish_ride_request_realtime, ride_request_event_type, update_versioned_ride_request
 from app.services.verification_service import (
     apply_admin_verification_status,
     manual_verification_documents,
@@ -455,12 +457,27 @@ async def update_ride_status(
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     if not updates:
         api_error("No ride updates provided.", 400)
-    if updates.get("status") == "cancelled" and not reason:
-        api_error("Admin cancellation reason is required.", 400)
-    updates["updated_at"] = now_iso()
-    ride = await database.update_one("rides", ride_id, updates)
-    if not ride:
+    existing = await database.find_one("rides", {"id": ride_id})
+    if not existing:
         api_error("Ride not found.", 404)
+    if updates.get("status"):
+        updates["status"] = canonical_trip_status(updates["status"])
+        if is_final_trip_status(existing.get("status")) and not is_final_trip_status(updates["status"]):
+            api_error("Terminal trips cannot be reopened.", 400)
+        if is_final_trip_status(updates["status"]):
+            updates["live_tracking_enabled"] = False
+    if updates.get("status") == "CANCELLED" and not reason:
+        api_error("Admin cancellation reason is required.", 400)
+    if updates.get("status") == "CANCELLED":
+        updates["cancelled_at"] = now_iso()
+    updates["updated_at"] = now_iso()
+    ride = await update_versioned_ride(
+        {"id": ride_id, "status": existing.get("status")},
+        updates,
+    )
+    if not ride:
+        api_error("Ride changed while it was being updated. Refresh and try again.", 409)
+    await publish_ride_realtime(ride, ride_event_type(ride) if updates.get("status") else "ride.updated")
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),
@@ -534,20 +551,26 @@ async def update_request_status(request_id: str, payload: RideRequestUpdateBody,
     if not payload.reason:
         api_error("Admin cancellation reason is required.", 400)
     ride = await database.find_one("rides", {"id": existing.get("ride_id")})
-    if existing.get("status") == "confirmed" and ride:
-        await database.update_one(
-            "rides",
-            ride["id"],
-            {
-                "available_seats": int(ride.get("available_seats", 0)) + int(existing.get("seats", 1)),
-                "updated_at": now_iso(),
-            },
-        )
-    request = await database.update_one(
-        "ride_requests",
-        request_id,
+    if existing.get("status") == "cancelled_by_admin":
+        return api_success(existing)
+    timestamp = now_iso()
+    request = await update_versioned_ride_request(
+        {"id": request_id, "status": existing.get("status")},
         {"status": "cancelled_by_admin", "admin_cancellation_reason": payload.reason, "updated_at": now_iso()},
     )
+    if not request:
+        api_error("Ride request changed while it was being updated. Refresh and try again.", 409)
+    updated_ride = ride
+    if existing.get("status") == "confirmed" and ride:
+        updated_ride = await update_versioned_ride(
+            {"id": ride["id"]},
+            {"updated_at": timestamp},
+            {"available_seats": int(existing.get("seats", 1))},
+        ) or ride
+    if ride:
+        await publish_ride_request_realtime(request, updated_ride or ride, ride_request_event_type(request))
+    if updated_ride is not ride and updated_ride:
+        await publish_ride_realtime(updated_ride, "ride.updated")
     if existing.get("user_id"):
         await create_app_notification(
             existing["user_id"],

@@ -143,6 +143,18 @@ class Database:
             [("courier_user_id", 1), ("started_at", -1)],
             name="courier_online_time_by_user",
         )
+        await self.db["rides"].create_index(
+            [("user_id", 1), ("updated_at", -1)],
+            name="driver_rides_workspace",
+        )
+        await self.db["ride_requests"].create_index(
+            [("ride_id", 1), ("status", 1), ("updated_at", -1)],
+            name="ride_requests_by_ride",
+        )
+        await self.db["ride_requests"].create_index(
+            [("user_id", 1), ("updated_at", -1)],
+            name="ride_requests_by_passenger",
+        )
 
     async def close(self) -> None:
         if self.client:
@@ -313,6 +325,14 @@ class Database:
                     if operator == "$nin" and actual in value:
                         return False
                     if operator == "$ne" and actual == value:
+                        return False
+                    if operator == "$gte" and (actual is None or actual < value):
+                        return False
+                    if operator == "$gt" and (actual is None or actual <= value):
+                        return False
+                    if operator == "$lte" and (actual is None or actual > value):
+                        return False
+                    if operator == "$lt" and (actual is None or actual >= value):
                         return False
                 continue
             if actual != expected:

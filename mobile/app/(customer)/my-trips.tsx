@@ -28,7 +28,7 @@ import { isVerifiedStatus } from "../../utils/verificationStatus";
 
 export default function CustomerTripsScreen() {
   const router = useRouter();
-  const { trips, loading, error, reload } = useTrips();
+  const { trips, loading, error, reload, upsertTrip } = useTrips();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [busyRequestId, setBusyRequestId] = useState("");
@@ -66,8 +66,7 @@ export default function CustomerTripsScreen() {
     try {
       setBusyRequestId(trip.id);
       setActionError("");
-      await cancelMyRideRequest(trip.id);
-      await reload();
+      upsertTrip(await cancelMyRideRequest(trip.id));
       setConversations(await listConversations());
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Could not cancel booking.");
@@ -80,8 +79,7 @@ export default function CustomerTripsScreen() {
     try {
       setBusyRequestId(trip.id);
       setActionError("");
-      await checkInRideRequest(trip.id);
-      await reload();
+      upsertTrip(await checkInRideRequest(trip.id));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Could not check in for this trip.");
     } finally {
@@ -109,7 +107,7 @@ export default function CustomerTripsScreen() {
             <Text style={styles.body}>{formatTripDate(trip.ride_snapshot?.date || "", trip.ride_snapshot?.time)} - {trip.seats} {trip.seats === 1 ? "seat" : "seats"}</Text>
             {trip.checked_in ? <StatusBadge label="Checked in" tone="success" /> : null}
             {trip.passenger_note ? <Text style={styles.body}>{trip.passenger_note}</Text> : null}
-            {trip.ride_snapshot && isTripActive(trip.ride_snapshot) && trip.status === "confirmed" ? <LiveTripPanel ride={trip.ride_snapshot} role="passenger" onRefresh={reload} /> : null}
+            {trip.ride_snapshot && isTripActive(trip.ride_snapshot) && trip.status === "confirmed" ? <LiveTripPanel ride={trip.ride_snapshot} role="passenger" /> : null}
             {trip.status === "pending" || trip.status === "confirmed" ? <View style={styles.actions}>{canCheckIn(trip) ? <AppButton title="I'm in the car" loading={busyRequestId === trip.id} onPress={() => checkIn(trip)} /> : null}{conversationFor(trip) ? <AppButton title="Message driver" variant="secondary" onPress={() => router.push(`/(shared)/conversation/${conversationFor(trip)?.id}` as never)} /> : null}{canCancelTrip(trip) ? <AppButton title={trip.status === "pending" ? "Cancel request" : "Cancel booking"} variant="danger" loading={busyRequestId === trip.id} onPress={() => cancelTrip(trip)} /> : null}</View> : null}
           </View>
         );

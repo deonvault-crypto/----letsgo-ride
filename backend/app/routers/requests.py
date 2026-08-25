@@ -6,6 +6,15 @@ from app.models.request import RideRequestCreateBody, RideRequestUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.conversation_service import ensure_conversation_for_request
 from app.services.notification_service import create_app_notification
+from app.services.ride_realtime_service import publish_ride_realtime, update_versioned_ride
+from app.services.ride_request_realtime_service import (
+    enrich_ride_request,
+    insert_versioned_ride_request,
+    list_driver_ride_requests,
+    publish_ride_request_realtime,
+    ride_request_event_type,
+    update_versioned_ride_request,
+)
 from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, enrich_ride, is_bookable_public_ride, is_public_ride
 from app.utils import api_error, api_success, new_id, now_iso
 
@@ -26,19 +35,6 @@ async def _load_request_and_ride(request_id: str):
     if not ride:
         api_error("Ride not found.", 404)
     return existing, ride
-
-
-async def _enrich_request_for_user(request, user):
-    enriched = dict(request)
-    ride = await database.find_one("rides", {"id": request.get("ride_id")}) if request.get("ride_id") else None
-    passenger = await database.find_one("users", {"id": request.get("user_id")}) if request.get("user_id") else None
-    if ride:
-        enriched["ride_snapshot"] = await enrich_ride(ride, user)
-    if passenger:
-        enriched["passenger_name"] = passenger.get("name") or request.get("passenger_name")
-        enriched["passenger_profile_photo_url"] = passenger.get("profile_photo_url") or request.get("passenger_profile_photo_url")
-        enriched["passenger_verification_status"] = passenger.get("verification_status") or request.get("passenger_verification_status")
-    return enriched
 
 
 async def _create_request_notification(request, ride):
@@ -67,17 +63,31 @@ async def _accept_request(existing, ride, user):
         api_error("Not enough seats available.", 400)
 
     timestamp = now_iso()
-    updated_request = await database.update_one(
-        "ride_requests",
-        existing["id"],
+    reserved_ride = await update_versioned_ride(
+        {
+            "id": ride["id"],
+            "status": ride.get("status"),
+            "available_seats": available_seats,
+        },
+        {"updated_at": timestamp},
+        {"available_seats": -requested_seats},
+    )
+    if not reserved_ride:
+        api_error("Seat availability changed. Refresh and try again.", 409)
+    updated_request = await update_versioned_ride_request(
+        {"id": existing["id"], "status": "pending"},
         {"status": "confirmed", "updated_at": timestamp},
     )
-    await database.update_one(
-        "rides",
-        ride["id"],
-        {"available_seats": max(0, available_seats - requested_seats), "updated_at": timestamp},
-    )
+    if not updated_request:
+        await update_versioned_ride(
+            {"id": ride["id"]},
+            {"updated_at": now_iso()},
+            {"available_seats": requested_seats},
+        )
+        api_error("This request changed while it was being accepted. Refresh and try again.", 409)
     await ensure_conversation_for_request(updated_request or existing, ride)
+    await publish_ride_request_realtime(updated_request, reserved_ride, "ride_request.updated")
+    await publish_ride_realtime(reserved_ride, "ride.updated")
     await create_app_notification(
         existing.get("user_id"),
         "booking_confirmed",
@@ -93,7 +103,7 @@ async def _accept_request(existing, ride, user):
         target_id=existing["id"],
         metadata={"ride_id": ride["id"], "seats": requested_seats},
     )
-    return updated_request or existing
+    return await enrich_ride_request(updated_request, user)
 
 
 async def _decline_request(existing, ride, user, reason=None):
@@ -105,7 +115,13 @@ async def _decline_request(existing, ride, user, reason=None):
     updates = {"status": "declined", "updated_at": timestamp}
     if reason:
         updates["driver_decision_reason"] = reason
-    updated_request = await database.update_one("ride_requests", existing["id"], updates)
+    updated_request = await update_versioned_ride_request(
+        {"id": existing["id"], "status": "pending"},
+        updates,
+    )
+    if not updated_request:
+        api_error("This request changed while it was being declined. Refresh and try again.", 409)
+    await publish_ride_request_realtime(updated_request, ride, ride_request_event_type(updated_request))
     await create_app_notification(
         existing.get("user_id"),
         "booking_declined",
@@ -113,7 +129,7 @@ async def _decline_request(existing, ride, user, reason=None):
         f"Your ride request from {ride.get('origin')} to {ride.get('destination')} was declined.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
-    return updated_request or existing
+    return await enrich_ride_request(updated_request, user)
 
 
 async def _cancel_by_passenger(existing, ride, user, reason=None):
@@ -122,16 +138,25 @@ async def _cancel_by_passenger(existing, ride, user, reason=None):
     if existing.get("status") not in {"pending", "confirmed"}:
         api_error("This booking cannot be cancelled.", 400)
     timestamp = now_iso()
-    if existing.get("status") == "confirmed":
-        await database.update_one(
-            "rides",
-            ride["id"],
-            {"available_seats": int(ride.get("available_seats", 0)) + int(existing.get("seats", 1)), "updated_at": timestamp},
-        )
     updates = {"status": "cancelled_by_passenger", "updated_at": timestamp}
     if reason:
         updates["cancellation_reason"] = reason
-    updated_request = await database.update_one("ride_requests", existing["id"], updates)
+    updated_request = await update_versioned_ride_request(
+        {"id": existing["id"], "status": existing.get("status")},
+        updates,
+    )
+    if not updated_request:
+        api_error("This booking changed while it was being cancelled. Refresh and try again.", 409)
+    updated_ride = ride
+    if existing.get("status") == "confirmed":
+        updated_ride = await update_versioned_ride(
+            {"id": ride["id"]},
+            {"updated_at": timestamp},
+            {"available_seats": int(existing.get("seats", 1))},
+        ) or ride
+    await publish_ride_request_realtime(updated_request, updated_ride, ride_request_event_type(updated_request))
+    if updated_ride is not ride:
+        await publish_ride_realtime(updated_ride, "ride.updated")
     await create_app_notification(
         ride.get("user_id"),
         "booking_cancelled",
@@ -139,7 +164,7 @@ async def _cancel_by_passenger(existing, ride, user, reason=None):
         f"{existing.get('passenger_name') or 'A passenger'} cancelled a booking for {ride.get('origin')} to {ride.get('destination')}.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
-    return updated_request or existing
+    return await enrich_ride_request(updated_request, user)
 
 
 async def _cancel_by_driver(existing, ride, user, reason=None):
@@ -150,17 +175,22 @@ async def _cancel_by_driver(existing, ride, user, reason=None):
     if existing.get("status") not in {"pending", "confirmed"}:
         api_error("This booking cannot be cancelled.", 400)
     timestamp = now_iso()
-    if existing.get("status") == "confirmed":
-        await database.update_one(
-            "rides",
-            ride["id"],
-            {"available_seats": int(ride.get("available_seats", 0)) + int(existing.get("seats", 1)), "updated_at": timestamp},
-        )
-    updated_request = await database.update_one(
-        "ride_requests",
-        existing["id"],
+    updated_request = await update_versioned_ride_request(
+        {"id": existing["id"], "status": existing.get("status")},
         {"status": "cancelled_by_driver", "driver_cancellation_reason": reason, "updated_at": timestamp},
     )
+    if not updated_request:
+        api_error("This booking changed while it was being cancelled. Refresh and try again.", 409)
+    updated_ride = ride
+    if existing.get("status") == "confirmed":
+        updated_ride = await update_versioned_ride(
+            {"id": ride["id"]},
+            {"updated_at": timestamp},
+            {"available_seats": int(existing.get("seats", 1))},
+        ) or ride
+    await publish_ride_request_realtime(updated_request, updated_ride, ride_request_event_type(updated_request))
+    if updated_ride is not ride:
+        await publish_ride_realtime(updated_ride, "ride.updated")
     await create_app_notification(
         existing.get("user_id"),
         "booking_cancelled",
@@ -168,7 +198,7 @@ async def _cancel_by_driver(existing, ride, user, reason=None):
         f"Your booking for {ride.get('origin')} to {ride.get('destination')} was cancelled. Open LetsGoRide for details.",
         {"ride_id": ride.get("id"), "request_id": existing.get("id")},
     )
-    return updated_request or existing
+    return await enrich_ride_request(updated_request, user)
 
 
 @router.post("")
@@ -206,25 +236,22 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
         "passenger_profile_photo_url": user.get("profile_photo_url"),
         "passenger_verification_status": user.get("verification_status"),
     }
-    created = await database.insert_one("ride_requests", request)
+    created = await insert_versioned_ride_request(request)
     await ensure_conversation_for_request(created, ride)
     await _create_request_notification(created, ride)
-    return api_success(created)
+    await publish_ride_request_realtime(created, ride, ride_request_event_type(created, created=True))
+    return api_success(await enrich_ride_request(created, user))
 
 
 @router.get("/my")
 async def my_requests(user=Depends(get_current_user)):
     requests = await database.find_many("ride_requests", {"user_id": user["id"]})
-    return api_success([await _enrich_request_for_user(request, user) for request in requests])
+    return api_success([await enrich_ride_request(request, user) for request in requests])
 
 
 @router.get("/driver")
 async def driver_requests(user=Depends(get_current_user)):
-    rides = await database.find_many("rides", {"user_id": user["id"]})
-    ride_ids = {ride["id"] for ride in rides}
-    requests = await database.find_many("ride_requests")
-    scoped = [request for request in requests if request.get("ride_id") in ride_ids and request.get("user_id") != user["id"]]
-    return api_success([await _enrich_request_for_user(request, user) for request in scoped])
+    return api_success(await list_driver_ride_requests(user))
 
 
 @router.patch("/{request_id}")
@@ -239,8 +266,24 @@ async def update_request(request_id: str, payload: RideRequestUpdateBody, user=D
     if payload.status == "cancelled_by_driver":
         return api_success(await _cancel_by_driver(existing, ride, user, payload.reason))
     if payload.status == "cancelled_by_admin" and user.get("role") == "admin":
-        updated = await database.update_one("ride_requests", request_id, {"status": "cancelled_by_admin", "updated_at": now_iso()})
-        return api_success(updated)
+        if existing.get("status") == "cancelled_by_admin":
+            return api_success(await enrich_ride_request(existing, user))
+        updated = await update_versioned_ride_request(
+            {"id": request_id, "status": existing.get("status")},
+            {"status": "cancelled_by_admin", "updated_at": now_iso()},
+        )
+        if updated:
+            updated_ride = ride
+            if existing.get("status") == "confirmed":
+                updated_ride = await update_versioned_ride(
+                    {"id": ride["id"]},
+                    {"updated_at": now_iso()},
+                    {"available_seats": int(existing.get("seats", 1))},
+                ) or ride
+            await publish_ride_request_realtime(updated, updated_ride, ride_request_event_type(updated))
+            if updated_ride is not ride:
+                await publish_ride_realtime(updated_ride, "ride.updated")
+        return api_success(await enrich_ride_request(updated or existing, user))
     api_error("Unsupported request status update.", 400)
 
 
@@ -279,11 +322,16 @@ async def check_in_request(request_id: str, user=Depends(get_current_user)):
     if canonical_trip_status(ride.get("status")) not in {TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}:
         api_error("Passenger check-in opens when the trip is boarding or in progress.", 400)
     timestamp = now_iso()
-    updated = await database.update_one(
-        "ride_requests",
-        request_id,
+    if existing.get("checked_in"):
+        return api_success(await enrich_ride_request(existing, user))
+    updated = await update_versioned_ride_request(
+        {"id": request_id, "status": "confirmed", "checked_in": {"$ne": True}},
         {"checked_in": True, "checked_in_at": timestamp, "updated_at": timestamp},
     )
+    if not updated:
+        current = await database.find_one("ride_requests", {"id": request_id})
+        return api_success(await enrich_ride_request(current or existing, user))
+    await publish_ride_request_realtime(updated, ride, "ride_request.updated")
     await create_app_notification(
         ride.get("user_id"),
         "trip_updates",
@@ -291,7 +339,7 @@ async def check_in_request(request_id: str, user=Depends(get_current_user)):
         f"{existing.get('passenger_name') or 'A passenger'} marked themselves in the car.",
         {"ride_id": ride.get("id"), "request_id": request_id},
     )
-    return api_success(updated or existing)
+    return api_success(await enrich_ride_request(updated, user))
 
 
 @router.delete("/{request_id}")

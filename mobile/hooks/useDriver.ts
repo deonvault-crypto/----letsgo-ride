@@ -1,8 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { DriverProfile } from "../types/driver.types";
 import { getDriverProfile } from "../services/driverService";
-import { useLiveRefresh } from "./useLiveRefresh";
 
 export function useDriver() {
   const [driver, setDriver] = useState<DriverProfile | null>(null);
@@ -21,7 +20,7 @@ export function useDriver() {
     }
   }, []);
 
-  useLiveRefresh(load);
+  useEffect(() => { void load(); }, [load]);
 
   return { driver, loading, error, reload: load };
 }

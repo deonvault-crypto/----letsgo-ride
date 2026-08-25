@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -15,11 +15,12 @@ import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { VerifiedBadge } from "../../../components/ui/VerifiedBadge";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
+import { useDriverWorkspace } from "../../../contexts/DriverWorkspaceContext";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { updateCurrentUser } from "../../../services/authService";
 import { listConversations } from "../../../services/conversationService";
 import { listPendingReviews } from "../../../services/reviewService";
-import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, driverRideRequests, endTrip, getRide, startTrip } from "../../../services/ridesService";
+import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, endTrip, getRide, startTrip } from "../../../services/ridesService";
 import { Conversation } from "../../../types/conversation.types";
 import { Ride, RideRequest } from "../../../types/ride.types";
 import { PendingReview } from "../../../types/review.types";
@@ -32,8 +33,9 @@ export default function DriverTripDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useCurrentUser();
-  const [ride, setRide] = useState<Ride | null>(null);
-  const [requests, setRequests] = useState<RideRequest[]>([]);
+  const { rides, requests: workspaceRequests, loading: workspaceLoading, error: workspaceError, reconcile, upsertRide, upsertRequest } = useDriverWorkspace();
+  const ride = useMemo(() => rides.find((item) => item.id === id) || null, [id, rides]);
+  const requests = useMemo(() => workspaceRequests.filter((request) => request.ride_id === id), [id, workspaceRequests]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [phone, setPhone] = useState("");
@@ -43,12 +45,13 @@ export default function DriverTripDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function load() {
+  const loadDetail = useCallback(async () => {
+    if (!id) return;
     try {
       setLoading(true);
-      const [rideData, requestData, conversationData, pendingReviewData] = await Promise.all([getRide(id), driverRideRequests(), listConversations(), listPendingReviews()]);
-      setRide(rideData);
-      setRequests(requestData.filter((request) => request.ride_id === id));
+      setError("");
+      const [rideData, conversationData, pendingReviewData] = await Promise.all([getRide(id), listConversations(), listPendingReviews()]);
+      upsertRide(rideData);
       setConversations(conversationData);
       setPendingReviews(pendingReviewData.filter((review) => review.trip_id === id));
     } catch (err) {
@@ -56,11 +59,11 @@ export default function DriverTripDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id, upsertRide]);
 
   useEffect(() => {
-    if (id) load();
-  }, [id]);
+    void loadDetail();
+  }, [loadDetail]);
 
   function conversationFor(request: RideRequest) {
     return conversations.find((conversation) => conversation.request_id === request.id);
@@ -101,10 +104,11 @@ export default function DriverTripDetailScreen() {
     try {
       setBusyRequestId(requestId);
       setError("");
-      if (status === "confirmed") await acceptRideRequest(requestId);
-      if (status === "declined") await declineRideRequest(requestId);
-      if (status === "cancelled_by_driver") await cancelPassengerRideRequest(requestId, "Cancelled by driver from trip management.");
-      await load();
+      let updated: RideRequest | null = null;
+      if (status === "confirmed") updated = await acceptRideRequest(requestId);
+      if (status === "declined") updated = await declineRideRequest(requestId);
+      if (status === "cancelled_by_driver") updated = await cancelPassengerRideRequest(requestId, "Cancelled by driver from trip management.");
+      if (updated) upsertRequest(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update passenger request.");
     } finally {
@@ -116,8 +120,7 @@ export default function DriverTripDetailScreen() {
     try {
       setBusyTripAction("start");
       setError("");
-      setRide(await startTrip(id));
-      await load();
+      upsertRide(await startTrip(id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start this trip.");
     } finally {
@@ -129,8 +132,9 @@ export default function DriverTripDetailScreen() {
     try {
       setBusyTripAction("end");
       setError("");
-      setRide(await endTrip(id));
-      await load();
+      upsertRide(await endTrip(id));
+      const nextReviews = await listPendingReviews();
+      setPendingReviews(nextReviews.filter((review) => review.trip_id === id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not end this trip.");
     } finally {
@@ -143,7 +147,7 @@ export default function DriverTripDetailScreen() {
     setShowPhoneModal(false);
   }
 
-  if (loading) {
+  if (loading || workspaceLoading) {
     return (
       <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
         <LoadingState label="Loading trip..." />
@@ -151,10 +155,10 @@ export default function DriverTripDetailScreen() {
     );
   }
 
-  if (error || !ride) {
+  if (!ride) {
     return (
       <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
-        <ErrorState message={error || "Trip not found."} />
+        <ErrorState message={error || workspaceError || "Trip not found."} onRetry={() => { void Promise.all([reconcile(), loadDetail()]); }} />
       </Screen>
     );
   }
@@ -173,6 +177,7 @@ export default function DriverTripDetailScreen() {
         onSave={savePhone}
         onClose={() => setShowPhoneModal(false)}
       />
+      {error ? <ErrorState message={error} /> : null}
       <View style={styles.card}>
         <StatusBadge label={tripStatusLabel(tripStatus)} tone={tripStatusTone(tripStatus)} />
         <Text style={styles.title}>{ride.origin} to {ride.destination}</Text>
@@ -212,7 +217,7 @@ export default function DriverTripDetailScreen() {
           <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
         </View>
       ) : null}
-      {isTripActive(ride) ? <LiveTripPanel ride={ride} role="driver" onRefresh={load} /> : null}
+      {isTripActive(ride) ? <LiveTripPanel ride={ride} role="driver" onRideMutation={upsertRide} /> : null}
       <Text style={styles.sectionTitle}>Passenger requests</Text>
       {requests.length === 0 ? (
         <View style={styles.card}>

@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -11,6 +12,7 @@ from app.services.ride_service import (
     end_trip,
     enrich_ride,
     apply_ride_lifecycle,
+    canonical_trip_status,
     is_final_trip_status,
     is_public_ride,
     live_trip_state,
@@ -20,6 +22,8 @@ from app.services.ride_service import (
     start_trip,
     update_live_location,
 )
+from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
+from app.services.ride_request_realtime_service import list_driver_ride_requests
 from app.utils import api_error, api_success, now_iso
 
 
@@ -45,6 +49,17 @@ async def search(
 @router.get("/my")
 async def my_rides(user=Depends(get_current_user)):
     return api_success(await list_user_rides(user))
+
+
+@router.get("/driver/workspace")
+async def driver_workspace(user=Depends(get_current_user)):
+    if user.get("role") not in {"driver", "admin"}:
+        api_error("A Driver account is required for this workspace.", 403)
+    rides, requests = await asyncio.gather(
+        list_user_rides(user),
+        list_driver_ride_requests(user),
+    )
+    return api_success({"rides": rides, "requests": requests})
 
 
 @router.get("/{ride_id}")
@@ -95,10 +110,25 @@ async def update_ride(ride_id: str, payload: RideUpdateBody, user=Depends(get_cu
     if is_final_trip_status(existing.get("status")):
         api_error("Completed, expired, or cancelled trips can no longer be edited.", 400)
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
+    if not updates:
+        api_error("No ride updates provided.", 400)
+    if updates.get("status"):
+        updates["status"] = canonical_trip_status(updates["status"])
+        if updates["status"] in {"COMPLETED", "CANCELLED", "EXPIRED"}:
+            updates["live_tracking_enabled"] = False
+        if updates["status"] == "CANCELLED":
+            updates["cancelled_at"] = now_iso()
     updates["updated_at"] = now_iso()
-    ride = await database.update_one("rides", ride_id, updates)
+    ride = await update_versioned_ride(
+        {"id": ride_id, "status": existing.get("status")},
+        updates,
+    )
     if not ride:
-        api_error("Ride not found.", 404)
+        api_error("Ride changed while it was being updated. Refresh and try again.", 409)
+    await publish_ride_realtime(
+        ride,
+        ride_event_type(ride) if updates.get("status") else "ride.updated",
+    )
     return api_success(ride)
 
 

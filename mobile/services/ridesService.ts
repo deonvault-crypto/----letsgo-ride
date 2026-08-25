@@ -1,4 +1,4 @@
-import { LiveTripLocation, LiveTripState, Ride, RideRequest, RideSearchParams } from "../types/ride.types";
+import { DriverWorkspaceSnapshot, LiveTripLocation, LiveTripState, Ride, RideRequest, RideSearchParams, RideStatus } from "../types/ride.types";
 import { requestData } from "./api";
 
 export async function listRides() {
@@ -7,6 +7,10 @@ export async function listRides() {
 
 export async function myRides() {
   return requestData<Ride[]>({ method: "GET", url: "/rides/my" });
+}
+
+export async function getDriverWorkspace() {
+  return requestData<DriverWorkspaceSnapshot>({ method: "GET", url: "/rides/driver/workspace" });
 }
 
 export async function searchRides(params: RideSearchParams) {
@@ -43,7 +47,7 @@ export async function getLiveTripState(id: string) {
 }
 
 export async function updateLiveTripLocation(id: string, location: LiveTripLocation) {
-  return requestData<{ ride_id: string; location: LiveTripLocation; live_tracking_enabled: boolean }>({
+  return requestData<{ ride_id: string; realtime_version: number; status: RideStatus; location: LiveTripLocation; last_driver_location: LiveTripLocation; live_tracking_enabled: boolean }>({
     method: "POST",
     url: `/rides/${id}/live-location`,
     data: location,

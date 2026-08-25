@@ -7,8 +7,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../constants/colors";
 import { coordinateForPlace } from "../../constants/cityCoordinates";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { disableLiveTripLocation, endTrip, getLiveTripState, updateLiveTripLocation } from "../../services/ridesService";
+import { useRideLiveRealtime } from "../../hooks/useRideLiveRealtime";
+import { disableLiveTripLocation, endTrip, updateLiveTripLocation } from "../../services/ridesService";
 import { LiveTripLocation, Ride } from "../../types/ride.types";
 import { canonicalRideStatus, tripStatusLabel } from "../../utils/tripLifecycle";
 import { AppButton } from "../ui/AppButton";
@@ -17,7 +17,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 type LiveTripPanelProps = {
   ride: Ride;
   role: "driver" | "passenger";
-  onRefresh?: () => Promise<void> | void;
+  onRideMutation?: (ride: Ride) => void;
 };
 
 type MapPoint = {
@@ -31,7 +31,8 @@ const LOCATION_OPTIONS: Location.LocationOptions = {
   distanceInterval: 100,
 };
 
-export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
+export function LiveTripPanel({ ride, role, onRideMutation }: LiveTripPanelProps) {
+  const passengerRealtime = useRideLiveRealtime(ride, role === "passenger");
   const [liveLocation, setLiveLocation] = useState<LiveTripLocation | null>(ride.last_driver_location || null);
   const [liveSharingEnabled, setLiveSharingEnabled] = useState(Boolean(ride.live_tracking_active));
   const [watching, setWatching] = useState(false);
@@ -39,7 +40,8 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
   const [error, setError] = useState("");
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const resumeDriverWatcher = useRef(false);
-  const active = canonicalRideStatus(ride.status) === "IN_PROGRESS" || ride.legacy_status === "departed";
+  const effectiveStatus = role === "passenger" && passengerRealtime.state ? passengerRealtime.state.status : ride.status;
+  const active = canonicalRideStatus(effectiveStatus) === "IN_PROGRESS" || (role === "driver" && ride.legacy_status === "departed");
 
   const originPoint = useMemo(() => coordinateForPlace(ride.origin), [ride.origin]);
   const destinationPoint = useMemo(() => coordinateForPlace(ride.destination), [ride.destination]);
@@ -79,19 +81,12 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
     }
   }, [active, stopWatching]);
 
-  const loadPassengerLiveState = useCallback(async () => {
-    if (!active || role !== "passenger") return;
-    try {
-      const state = await getLiveTripState(ride.id);
-      setLiveSharingEnabled(Boolean(state.live_tracking_enabled));
-      setLiveLocation(state.last_driver_location || null);
-      setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load live trip updates.");
-    }
-  }, [active, ride.id, role]);
-
-  useLiveRefresh(loadPassengerLiveState, 15000, active && role === "passenger");
+  useEffect(() => {
+    if (role !== "passenger" || !passengerRealtime.state) return;
+    setLiveSharingEnabled(Boolean(passengerRealtime.state.live_tracking_enabled));
+    setLiveLocation(passengerRealtime.state.last_driver_location || null);
+    setError(passengerRealtime.error);
+  }, [passengerRealtime.error, passengerRealtime.state, role]);
 
   const sendLocation = useCallback(async (position: Location.LocationObject) => {
     const nextLocation = {
@@ -105,11 +100,18 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
     try {
       const response = await updateLiveTripLocation(ride.id, nextLocation);
       setLiveSharingEnabled(response.live_tracking_enabled);
+      onRideMutation?.({
+        ...ride,
+        realtime_version: response.realtime_version,
+        status: response.status,
+        live_tracking_active: response.live_tracking_enabled,
+        last_driver_location: response.last_driver_location,
+      });
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not share live location.");
     }
-  }, [ride.id]);
+  }, [onRideMutation, ride]);
 
   const enableLiveSharing = useCallback(async () => {
     try {
@@ -133,13 +135,12 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
         return;
       }
       setWatching(true);
-      await onRefresh?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start live sharing.");
     } finally {
       setBusy(false);
     }
-  }, [onRefresh, sendLocation, stopWatching]);
+  }, [sendLocation, stopWatching]);
 
   useEffect(() => {
     if (role !== "driver") return undefined;
@@ -166,9 +167,9 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
       setError("");
       resumeDriverWatcher.current = false;
       stopWatching();
-      await disableLiveTripLocation(ride.id);
+      const updated = await disableLiveTripLocation(ride.id);
       setLiveSharingEnabled(false);
-      await onRefresh?.();
+      onRideMutation?.(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not stop live sharing.");
     } finally {
@@ -181,8 +182,7 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
       setBusy(true);
       setError("");
       stopWatching();
-      await endTrip(ride.id);
-      await onRefresh?.();
+      onRideMutation?.(await endTrip(ride.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete this trip.");
     } finally {
@@ -207,7 +207,7 @@ export function LiveTripPanel({ ride, role, onRefresh }: LiveTripPanelProps) {
       <View style={styles.titleRow}>
         <MaterialCommunityIcons name="map-marker-path" size={22} color={colors.primaryGreen} />
         <Text style={styles.title}>Live trip</Text>
-        <StatusBadge label={tripStatusLabel(ride.status)} tone="warning" />
+        <StatusBadge label={tripStatusLabel(effectiveStatus)} tone="warning" />
       </View>
       <Text style={styles.body}>
         {role === "driver"

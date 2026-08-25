@@ -8,6 +8,13 @@ from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification, notify_users
 from app.services.profile_photo_service import absolute_profile_photo_url
 from app.services.review_service import completed_trips_count_for_user, public_review_summary_for_user
+from app.services.ride_realtime_service import (
+    insert_versioned_ride,
+    publish_ride_realtime,
+    ride_event_type,
+    ride_realtime_version,
+    update_versioned_ride,
+)
 from app.utils import new_id, now_iso
 
 
@@ -201,8 +208,13 @@ async def apply_ride_lifecycle(ride: Dict[str, Any], *, persist: bool = True) ->
 
     if updates and persist:
         updates["updated_at"] = now_iso()
-        updated = await database.update_one("rides", ride["id"], updates)
+        updated = await update_versioned_ride(
+            {"id": ride["id"], "status": ride.get("status")},
+            updates,
+        )
         ride = updated or {**ride, **updates}
+        if updated:
+            await publish_ride_realtime(updated, ride_event_type(updated))
         if next_status == TRIP_STATUS_IN_PROGRESS and not ride.get("started_notification_sent_at"):
             await database.update_one("rides", ride["id"], {"started_notification_sent_at": now_iso()})
             await _notify_confirmed_passengers(
@@ -418,7 +430,8 @@ async def create_ride(payload: Dict[str, Any]) -> Dict[str, Any]:
         "updated_at": timestamp,
         **payload,
     }
-    created = await database.insert_one("rides", ride)
+    created = await insert_versioned_ride(ride)
+    await publish_ride_realtime(created, ride_event_type(created, created=True))
     return await enrich_ride(created, {"id": payload.get("user_id")})
 
 
@@ -449,9 +462,8 @@ async def start_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Start Trip becomes available 15 minutes before departure.")
 
     timestamp = now_iso()
-    updated = await database.update_one(
-        "rides",
-        ride_id,
+    updated = await update_versioned_ride(
+        {"id": ride_id, "status": ride.get("status")},
         {
             "status": TRIP_STATUS_IN_PROGRESS,
             "started_at": timestamp,
@@ -460,7 +472,9 @@ async def start_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
             "updated_at": timestamp,
         },
     )
-    updated = updated or ride
+    if not updated:
+        raise ValueError("This trip changed while it was being started. Refresh and try again.")
+    await publish_ride_realtime(updated, "ride.status_changed")
     await _notify_confirmed_passengers(
         updated,
         "ride_departure",
@@ -491,9 +505,8 @@ async def end_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Only trips in progress can be ended.")
 
     timestamp = now_iso()
-    updated = await database.update_one(
-        "rides",
-        ride_id,
+    updated = await update_versioned_ride(
+        {"id": ride_id, "status": ride.get("status")},
         {
             "status": TRIP_STATUS_COMPLETED,
             "completed_at": timestamp,
@@ -502,7 +515,9 @@ async def end_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
             "updated_at": timestamp,
         },
     )
-    updated = updated or ride
+    if not updated:
+        raise ValueError("This trip changed while it was being completed. Refresh and try again.")
+    await publish_ride_realtime(updated, "ride.terminal")
     await _notify_confirmed_passengers(
         updated,
         "trip_updates",
@@ -544,9 +559,8 @@ async def update_live_location(ride_id: str, user: Dict[str, Any], location: Dic
         "speed": location.get("speed"),
         "updated_at": timestamp,
     }
-    updated = await database.update_one(
-        "rides",
-        ride_id,
+    updated = await update_versioned_ride(
+        {"id": ride_id, "status": ride.get("status")},
         {
             "last_driver_location": safe_location,
             "live_tracking_enabled": True,
@@ -554,7 +568,19 @@ async def update_live_location(ride_id: str, user: Dict[str, Any], location: Dic
             "updated_at": timestamp,
         },
     )
-    return {"ride_id": ride_id, "trip_status": TRIP_STATUS_IN_PROGRESS, "location": safe_location, "updated_at": timestamp, "live_tracking_enabled": bool((updated or ride).get("live_tracking_enabled", True))}
+    if not updated:
+        raise ValueError("This trip changed while its live location was being updated.")
+    await publish_ride_realtime(updated, ride_event_type(updated, location=True))
+    return {
+        "ride_id": ride_id,
+        "realtime_version": ride_realtime_version(updated),
+        "trip_status": TRIP_STATUS_IN_PROGRESS,
+        "status": TRIP_STATUS_IN_PROGRESS,
+        "location": safe_location,
+        "last_driver_location": safe_location,
+        "updated_at": timestamp,
+        "live_tracking_enabled": bool(updated.get("live_tracking_enabled", True)),
+    }
 
 
 async def disable_live_location(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -563,11 +589,14 @@ async def disable_live_location(ride_id: str, user: Dict[str, Any]) -> Dict[str,
         raise ValueError("Ride not found.")
     if not user_owns_ride(user, ride):
         raise PermissionError("Only the driver can change live sharing for this trip.")
-    updated = await database.update_one(
-        "rides",
-        ride_id,
+    if not ride.get("live_tracking_enabled"):
+        return await enrich_ride(ride, user)
+    updated = await update_versioned_ride(
+        {"id": ride_id, "live_tracking_enabled": True},
         {"live_tracking_enabled": False, "updated_at": now_iso()},
     )
+    if updated:
+        await publish_ride_realtime(updated, "ride.updated")
     return await enrich_ride(updated or ride, user)
 
 
@@ -580,6 +609,7 @@ async def live_trip_state(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     enriched = await enrich_ride(ride, user)
     return {
         "ride_id": ride_id,
+        "realtime_version": ride_realtime_version(enriched),
         "status": enriched.get("status"),
         "departure_at": enriched.get("departure_at"),
         "estimated_arrival_at": enriched.get("estimated_arrival_at"),

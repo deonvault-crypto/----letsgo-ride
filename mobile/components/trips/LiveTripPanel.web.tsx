@@ -6,7 +6,7 @@ import { spacing } from "../../constants/spacing";
 import { Ride } from "../../types/ride.types";
 import { canonicalRideStatus } from "../../utils/tripLifecycle";
 
-type LiveTripPanelProps = { ride: Ride; role: "driver" | "passenger"; onRefresh?: () => Promise<void> | void };
+type LiveTripPanelProps = { ride: Ride; role: "driver" | "passenger"; onRideMutation?: (ride: Ride) => void };
 
 export function LiveTripPanel({ ride, role }: LiveTripPanelProps) {
   const active = canonicalRideStatus(ride.status) === "IN_PROGRESS" || ride.legacy_status === "departed";
