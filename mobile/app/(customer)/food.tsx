@@ -10,13 +10,21 @@ import { v2Theme } from "../../constants/v2Theme";
 import { listRestaurants } from "../../services/foodService";
 import { Restaurant } from "../../types/food.types";
 
-const categories = [
-  ["silverware-fork-knife", "All"],
-  ["food-drumstick", "Chicken"],
-  ["pizza", "Pizza"],
-  ["bread-slice-outline", "Bakery"],
-  ["coffee-outline", "Café"],
-] as const;
+const categories: Array<{
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  accent: string;
+  background: string;
+  activeBackground: string;
+  iconBackground: string;
+  border: string;
+}> = [
+  { icon: "silverware-fork-knife", label: "All", accent: "#167A45", background: "#F1F8F3", activeBackground: "#E3F5E9", iconBackground: "#D5EFDE", border: "#BCE3C9" },
+  { icon: "food-drumstick", label: "Chicken", accent: "#C47A12", background: "#FFF8E9", activeBackground: "#FFF0CD", iconBackground: "#FFE4A8", border: "#F1CE86" },
+  { icon: "pizza", label: "Pizza", accent: "#C95032", background: "#FFF4F0", activeBackground: "#FFE7DF", iconBackground: "#FFD5C9", border: "#F0B7A5" },
+  { icon: "bread-slice-outline", label: "Bakery", accent: "#98643D", background: "#FBF6EF", activeBackground: "#F5E8D8", iconBackground: "#EFD8BE", border: "#DEC19E" },
+  { icon: "coffee-outline", label: "Café", accent: "#397653", background: "#F1F7F3", activeBackground: "#E4F1E8", iconBackground: "#D4E9DB", border: "#BAD9C5" },
+];
 
 export default function CustomerFoodScreen() {
   const router = useRouter();
@@ -101,9 +109,26 @@ export default function CustomerFoodScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-        {categories.map(([icon, label]) => {
-          const active = label === category;
-          return <Pressable key={label} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => setCategory(label)} style={({ pressed }) => [styles.category, active && styles.categoryActive, pressed && styles.pressed]}><View style={[styles.categoryIcon, active && styles.categoryIconActive]}><MaterialCommunityIcons name={icon} size={21} color={active ? v2Theme.colors.brandStrong : v2Theme.colors.ink} /></View><Text style={[styles.categoryText, active && styles.categoryTextActive]}>{label}</Text></Pressable>;
+        {categories.map((item) => {
+          const active = item.label === category;
+          return (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => setCategory(item.label)}
+              style={({ pressed }) => [
+                styles.category,
+                { backgroundColor: active ? item.activeBackground : item.background, borderColor: active ? item.border : "transparent" },
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={[styles.categoryIcon, { backgroundColor: item.iconBackground }]}>
+                <MaterialCommunityIcons name={item.icon} size={22} color={item.accent} />
+              </View>
+              <Text style={[styles.categoryText, active && styles.categoryTextActive, active && { color: item.accent }]}>{item.label}</Text>
+            </Pressable>
+          );
         })}
       </ScrollView>
 
@@ -133,11 +158,12 @@ function RestaurantSkeleton() {
 
 function RestaurantCard({ restaurant, onPress }: { restaurant: Restaurant; onPress: () => void }) {
   const orderable = Boolean(restaurant.is_orderable);
+  const hasPhoto = Boolean(restaurant.hero_image_url) || restaurant.name.toLowerCase().includes("letsgoride kitchen");
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={restaurant.name} accessibilityState={{ disabled: !orderable }} disabled={!orderable} onPress={onPress} style={({ pressed }) => [styles.restaurantCard, !orderable && styles.restaurantCardUnavailable, pressed && orderable && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={restaurant.name} accessibilityState={{ disabled: !orderable }} disabled={!orderable} onPress={onPress} style={({ pressed }) => [styles.restaurantCard, pressed && orderable && styles.pressed]}>
       <View style={[styles.restaurantVisual, orderable ? styles.restaurantVisualOpen : styles.restaurantVisualUnavailable]}>
-        <FoodImage uri={restaurant.hero_image_url} role="restaurant" label={restaurant.name} style={styles.restaurantPhoto} />
-        {orderable ? <View style={styles.photoScrim} /> : null}
+        <FoodImage uri={restaurant.hero_image_url} logoUri={restaurant.logo_url} role="restaurant" label={restaurant.name} style={styles.restaurantPhoto} />
+        {orderable && hasPhoto ? <View style={styles.photoScrim} /> : null}
         <View style={styles.availabilityBadge}><Text style={styles.availabilityText}>{orderable ? "Accepting orders" : "Ordering unavailable"}</Text></View>
       </View>
       <View style={styles.restaurantInfo}>
@@ -160,12 +186,10 @@ const styles = StyleSheet.create({
   searchCard: { minHeight: 58, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 10 },
   searchInput: { flex: 1, color: v2Theme.colors.ink, fontSize: 14, fontWeight: "700" },
   categoryRow: { gap: 8, paddingRight: 20 },
-  category: { minWidth: 86, minHeight: 84, borderRadius: 20, backgroundColor: v2Theme.colors.surfaceMuted, padding: 10, justifyContent: "space-between", borderWidth: 1, borderColor: "transparent" },
-  categoryActive: { backgroundColor: v2Theme.colors.brandSofter, borderColor: v2Theme.colors.brandSoft },
-  categoryIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
-  categoryIconActive: { backgroundColor: v2Theme.colors.brandSoft },
+  category: { minWidth: 86, minHeight: 84, borderRadius: 20, padding: 10, justifyContent: "space-between", borderWidth: 1 },
+  categoryIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   categoryText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
-  categoryTextActive: { color: v2Theme.colors.brandStrong },
+  categoryTextActive: { fontWeight: "900" },
   skeleton: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 14, gap: 10 },
   skeletonHeading: { width: "42%", height: 15, borderRadius: 8, backgroundColor: v2Theme.colors.surfaceMuted },
   skeletonMedia: { height: 118, borderRadius: 18, backgroundColor: v2Theme.colors.surfaceMuted },
@@ -178,12 +202,11 @@ const styles = StyleSheet.create({
   sectionSub: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 },
   sectionBadge: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.4 },
   restaurantCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, overflow: "hidden" },
-  restaurantCardUnavailable: { opacity: 0.84 },
   restaurantVisual: { height: 132, padding: 13, alignItems: "flex-end", justifyContent: "flex-end" },
   restaurantPhoto: { ...StyleSheet.absoluteFillObject },
   photoScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(9,25,17,0.18)" },
   restaurantVisualOpen: { backgroundColor: v2Theme.colors.brandSofter },
-  restaurantVisualUnavailable: { backgroundColor: v2Theme.colors.surfaceMuted },
+  restaurantVisualUnavailable: { backgroundColor: "#FBF7F1" },
   availabilityBadge: { borderRadius: 12, backgroundColor: "rgba(255,255,255,0.94)", paddingHorizontal: 9, paddingVertical: 6 },
   availabilityText: { color: v2Theme.colors.ink, fontSize: 8, fontWeight: "900" },
   restaurantInfo: { padding: 14, gap: 7 },

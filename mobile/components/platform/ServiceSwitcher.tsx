@@ -14,10 +14,15 @@ const items: Array<{
   key: CustomerService;
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  accent: string;
+  background: string;
+  activeBackground: string;
+  iconBackground: string;
+  border: string;
 }> = [
-  { key: "ride", label: "Ride", icon: "car-outline" },
-  { key: "food", label: "Food", icon: "food-fork-drink" },
-  { key: "courier", label: "Courier", icon: "package-variant-closed" },
+  { key: "ride", label: "Ride", icon: "car-outline", accent: "#157A45", background: "#F1F8F3", activeBackground: "#E5F5EA", iconBackground: "#D5EFDE", border: "#BDE2CA" },
+  { key: "food", label: "Food", icon: "food-fork-drink", accent: "#B65E16", background: "#FFF8ED", activeBackground: "#FFF0DA", iconBackground: "#FFE3B9", border: "#F3CFA0" },
+  { key: "courier", label: "Courier", icon: "package-variant-closed", accent: "#2E68A2", background: "#F2F7FD", activeBackground: "#E7F1FD", iconBackground: "#D9E8FA", border: "#C2D8F1" },
 ];
 
 export function ServiceSwitcher({ value, onChange }: ServiceSwitcherProps) {
@@ -33,16 +38,15 @@ export function ServiceSwitcher({ value, onChange }: ServiceSwitcherProps) {
             onPress={() => onChange(item.key)}
             style={({ pressed }) => [
               styles.item,
+              { backgroundColor: active ? item.activeBackground : item.background, borderColor: active ? item.border : "transparent" },
               active && styles.activeItem,
               pressed && styles.pressed,
             ]}
           >
-            <MaterialCommunityIcons
-              name={item.icon}
-              size={19}
-              color={active ? v2Theme.colors.ink : v2Theme.colors.inkSecondary}
-            />
-            <Text style={[styles.label, active && styles.activeLabel]}>{item.label}</Text>
+            <View style={[styles.iconBadge, { backgroundColor: item.iconBackground }]}>
+              <MaterialCommunityIcons name={item.icon} size={19} color={item.accent} />
+            </View>
+            <Text style={[styles.label, active && styles.activeLabel, active && { color: item.accent }]}>{item.label}</Text>
           </Pressable>
         );
       })}
@@ -51,41 +55,11 @@ export function ServiceSwitcher({ value, onChange }: ServiceSwitcherProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    minHeight: 58,
-    borderRadius: v2Theme.radius.xl,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    padding: 5,
-    flexDirection: "row",
-    gap: 5,
-  },
-  item: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: v2Theme.radius.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 7,
-  },
-  activeItem: {
-    backgroundColor: v2Theme.colors.surface,
-    shadowColor: v2Theme.colors.shadow,
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  pressed: {
-    opacity: 0.72,
-  },
-  label: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  activeLabel: {
-    color: v2Theme.colors.ink,
-    fontWeight: "900",
-  },
+  wrap: { minHeight: 58, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: 5, flexDirection: "row", gap: 5 },
+  item: { flex: 1, minHeight: 48, borderRadius: v2Theme.radius.lg, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7 },
+  activeItem: { shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  iconBadge: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  pressed: { opacity: 0.72 },
+  label: { color: v2Theme.colors.inkSecondary, fontSize: 13, fontWeight: "800" },
+  activeLabel: { fontWeight: "900" },
 });
