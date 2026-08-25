@@ -5,14 +5,10 @@ import * as SecureStore from "expo-secure-store";
 import { registerPushToken, unregisterPushToken } from "../services/notificationService";
 import { enablePhoneNotifications, phoneNotificationStatus } from "../services/pushNotificationService";
 
-jest.mock("react-native", () => {
-  const actual = jest.requireActual("react-native");
-  return {
-    ...actual,
-    Platform: { ...actual.Platform, OS: "ios" },
-    Linking: { ...actual.Linking, openSettings: jest.fn() },
-  };
-});
+jest.mock("react-native", () => ({
+  Platform: { OS: "ios" },
+  Linking: { openSettings: jest.fn() },
+}));
 
 jest.mock("expo-constants", () => ({
   expoConfig: { version: "1.0.1", extra: { eas: { projectId: "test-project" } } },
