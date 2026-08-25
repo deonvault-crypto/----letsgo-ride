@@ -1,9 +1,10 @@
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
-import { RefreshControl } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet } from "react-native";
 
 import CustomerFoodScreen from "../app/(customer)/food";
 import { listRestaurants } from "../services/foodService";
 import { Restaurant } from "../types/food.types";
+import { spacing } from "../constants/spacing";
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: () => true }),
@@ -32,6 +33,21 @@ const bakery: Restaurant = {
   cuisine_tags: ["Bakery"],
   is_orderable: false,
 };
+const kfc: Restaurant = {
+  id: "directory-kfc-zimbabwe",
+  name: "KFC Zimbabwe",
+  description: "Fried chicken, burgers, meals and quick-service favourites.",
+  address: "Zimbabwe",
+  cuisine_tags: ["Chicken", "Fast food"],
+  is_orderable: false,
+  logo_url: null,
+};
+const directoryRestaurants: Restaurant[] = [
+  kfc,
+  { ...kfc, id: "directory-chicken-inn-zimbabwe", name: "Chicken Inn Zimbabwe" },
+  { ...kfc, id: "directory-pizza-inn-zimbabwe", name: "Pizza Inn Zimbabwe", cuisine_tags: ["Pizza", "Fast food"] },
+  { ...kfc, id: "directory-bakers-inn-zimbabwe", name: "Baker's Inn Zimbabwe", cuisine_tags: ["Bakery", "Quick service"] },
+];
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -92,5 +108,36 @@ describe("Food restaurant data stability", () => {
     await act(async () => { oldRequest.reject(new Error("old failure")); });
     expect(screen.getByText("LetsGoRide Kitchen")).toBeOnTheScreen();
     expect(screen.queryByText(/old failure/i)).toBeNull();
+  });
+
+  it("visually separates the orderable restaurant from compact directory entries", async () => {
+    mockListRestaurants.mockResolvedValueOnce([kitchen, ...directoryRestaurants]);
+    const screen = render(<CustomerFoodScreen />);
+
+    await screen.findByText("AVAILABLE NOW");
+    expect(screen.getByText("MORE IN ZIMBABWE")).toBeOnTheScreen();
+    expect(screen.getByTestId("orderable-restaurant-kitchen-1")).toBeOnTheScreen();
+    expect(screen.getByTestId("food-image-kitchen-owned")).toBeOnTheScreen();
+    expect(screen.getAllByText("KFC Zimbabwe")).toHaveLength(1);
+    expect(screen.getAllByText("Currently unavailable")).toHaveLength(4);
+    expect(screen.queryByText("KFC")).toBeNull();
+    expect(screen.getAllByTestId("food-image-official-logo")).toHaveLength(4);
+
+    const browseStyle = StyleSheet.flatten(screen.getByTestId("browse-restaurant-directory-kfc-zimbabwe").props.style);
+    const orderableStyle = StyleSheet.flatten(screen.getByTestId("orderable-restaurant-kitchen-1").props.style);
+    expect(browseStyle.height).toBeGreaterThanOrEqual(105);
+    expect(browseStyle.height).toBeLessThanOrEqual(140);
+    expect(orderableStyle.height).not.toBe(browseStyle.height);
+    expect(orderableStyle.shadowOpacity).toBeGreaterThan(0);
+  });
+
+  it("uses the canonical bottom-navigation clearance for the final content", async () => {
+    mockListRestaurants.mockResolvedValueOnce([kitchen, kfc]);
+    const screen = render(<CustomerFoodScreen />);
+    await screen.findByText("KFC Zimbabwe");
+
+    const pageScroll = screen.UNSAFE_getAllByType(ScrollView).find((node) => !node.props.horizontal);
+    const contentStyle = StyleSheet.flatten(pageScroll?.props.contentContainerStyle);
+    expect(contentStyle.paddingBottom).toBeGreaterThan(spacing.bottomNavHeight);
   });
 });
