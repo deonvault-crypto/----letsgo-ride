@@ -16,7 +16,7 @@ import { isRideBookable } from "../../utils/tripLifecycle";
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
-  const { rides, loading, error, reload } = useRides();
+  const { rides, loading, refreshing, error, reload } = useRides();
   const upcomingRides = rides.filter((ride) => isRideBookable(ride));
 
   function chooseService(service: CustomerService) {
@@ -31,7 +31,7 @@ export default function CustomerHomeScreen() {
   }
 
   return (
-    <Screen navRole="customer">
+    <Screen navRole="customer" refreshing={refreshing} onRefresh={reload}>
       <View style={styles.intro}>
         <Text style={styles.eyebrow}>MOVE • EAT • SEND</Text>
         <Text style={styles.headline}>What do you need today?</Text>

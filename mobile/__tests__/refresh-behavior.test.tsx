@@ -28,7 +28,7 @@ describe("live refresh behavior", () => {
     jest.useRealTimers();
   });
 
-  it("keeps existing rides visible during background refresh instead of flashing a spinner", async () => {
+  it("keeps existing rides visible during manual reconciliation without a timer", async () => {
     let finishRefresh: (value: Ride[]) => void = () => undefined;
     const refreshPromise = new Promise<Ride[]>((resolve) => {
       finishRefresh = resolve;
@@ -45,9 +45,10 @@ describe("live refresh behavior", () => {
       expect(result.current.rides).toEqual([ride]);
     });
 
-    act(() => {
-      jest.advanceTimersByTime(15000);
-    });
+    act(() => { jest.advanceTimersByTime(60000); });
+    expect(listRides).toHaveBeenCalledTimes(1);
+
+    act(() => { void result.current.reload(); });
 
     expect(listRides).toHaveBeenCalledTimes(2);
     expect(result.current.loading).toBe(false);

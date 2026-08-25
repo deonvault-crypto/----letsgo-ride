@@ -116,8 +116,7 @@ describe("profile update flow", () => {
   }, 15000);
 
   it("shows driver verification under review only for a Driver account", async () => {
-    mockCurrentUser = driverUser;
-    (getMyVerification as jest.Mock).mockResolvedValueOnce(pendingProfile);
+    mockCurrentUser = { ...driverUser, verification_status: pendingProfile.verification_status };
 
     const screen = render(<ProfileScreen />);
 
@@ -129,8 +128,7 @@ describe("profile update flow", () => {
   });
 
   it("uses clear approved driver verification wording for a Driver account", async () => {
-    mockCurrentUser = driverUser;
-    (getMyVerification as jest.Mock).mockResolvedValueOnce(verifiedProfile);
+    mockCurrentUser = { ...driverUser, verification_status: verifiedProfile.verification_status };
 
     const screen = render(<ProfileScreen />);
 

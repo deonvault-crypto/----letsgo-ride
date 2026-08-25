@@ -11,7 +11,7 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
 import { listAdminVerifications } from "../../services/adminService";
 import { AdminVerificationListItem } from "../../types/verification.types";
 import { formatStatus } from "../../utils/formatStatus";
@@ -38,7 +38,7 @@ export default function AdminVerificationsScreen() {
     }
   }, []);
 
-  useLiveRefresh(load, 15000);
+  useScreenReconciliation(load);
 
   const pendingCount = items.filter((item) => isPendingVerificationStatus(item.verification_status) || needsVerificationReview(item.verification_status)).length;
   const filteredItems = useMemo(
@@ -53,7 +53,7 @@ export default function AdminVerificationsScreen() {
   );
 
   return (
-    <Screen title="Admin">
+    <Screen title="Admin" refreshing={loading} onRefresh={load}>
       <View style={styles.hero}>
         <StatusBadge label={`${pendingCount} pending`} tone={pendingCount > 0 ? "warning" : "success"} />
         <Text style={styles.title}>Driver verifications</Text>

@@ -10,13 +10,13 @@ import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
-import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
+import { useScreenReconciliation } from "../../../hooks/useScreenReconciliation";
 import {
   getAdminVerification,
   getAdminDocumentUrl,
   updateAdminVerificationStatus,
 } from "../../../services/adminService";
-import { AdminVerificationDetail, VerificationStatus } from "../../../types/verification.types";
+import { AdminVerificationDetail, VerificationDocument, VerificationStatus } from "../../../types/verification.types";
 import { formatStatus } from "../../../utils/formatStatus";
 import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../../utils/verificationStatus";
 
@@ -44,7 +44,7 @@ export default function AdminVerificationDetailScreen() {
     }
   }, [id]);
 
-  useLiveRefresh(load, 15000);
+  useScreenReconciliation(load);
 
   async function updateStatus(status: Extract<VerificationStatus, "needs_review" | "approved" | "rejected" | "needs_resubmission">) {
     if (!id) return;
@@ -55,13 +55,13 @@ export default function AdminVerificationDetailScreen() {
     try {
       setSaving(status);
       setError("");
-      await updateAdminVerificationStatus({
+      const updated = await updateAdminVerificationStatus({
         driverId: id,
         status,
         admin_verification_notes: notes,
         rejection_reason: rejectionReason,
       });
-      await load();
+      applyUpdatedDriver(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update verification.");
     } finally {
@@ -77,7 +77,7 @@ export default function AdminVerificationDetailScreen() {
     }
     try {
       setError("");
-      await updateAdminVerificationStatus({
+      const updated = await updateAdminVerificationStatus({
         driverId: id,
         status: "needs_review",
         admin_verification_notes: notes,
@@ -85,10 +85,18 @@ export default function AdminVerificationDetailScreen() {
         document_id: documentId,
         document_status: documentStatus,
       });
-      await load();
+      applyUpdatedDriver(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update document.");
     }
+  }
+
+  function applyUpdatedDriver(updated: Record<string, unknown>) {
+    setDetail((current) => current ? {
+      ...current,
+      driver: { ...current.driver, ...updated },
+      documents: Array.isArray(updated.documents) ? updated.documents as VerificationDocument[] : current.documents,
+    } : current);
   }
 
   async function viewDocument(documentId: string, fileName?: string, contentType?: string | null) {
@@ -122,7 +130,7 @@ export default function AdminVerificationDetailScreen() {
   const status = String(driver.verification_status || "not_started") as VerificationStatus;
 
   return (
-    <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications">
+    <Screen title="Verification" showBack fallbackRoute="/(admin)/verifications" refreshing={loading} onRefresh={load}>
       <Modal transparent visible={Boolean(previewUrl)} animationType="fade" onRequestClose={() => setPreviewUrl("")}>
         <View style={styles.previewBackdrop}>
           <View style={styles.previewCard}>

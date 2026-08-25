@@ -1,27 +1,19 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { v2Theme } from "../../constants/v2Theme";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { getMyVerification } from "../../services/verificationService";
-import { VerificationProfile } from "../../types/verification.types";
 import { displayNameOrFallback } from "../../utils/displayName";
-import {
-  isPendingVerificationStatus,
-  isVerifiedStatus,
-  needsVerificationReview,
-} from "../../utils/verificationStatus";
+import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../utils/verificationStatus";
 
 export default function AccountScreen() {
   const router = useRouter();
   const { user, loading, isGuest } = useCurrentUser();
-  const [verification, setVerification] = useState<VerificationProfile | null>(null);
   const navRole: "customer" | "driver" | undefined = user?.role === "driver"
     ? "driver"
     : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
@@ -35,20 +27,6 @@ export default function AccountScreen() {
     else if (user?.role === "courier") router.replace("/(courier)/account" as never);
     else if (user?.role === "merchant") router.replace("/(merchant)/account" as never);
   }, [router, user?.role]);
-
-  const loadVerification = useCallback(async () => {
-    if (!user || user.role !== "driver") {
-      setVerification(null);
-      return;
-    }
-    try {
-      setVerification(await getMyVerification());
-    } catch {
-      setVerification(null);
-    }
-  }, [user]);
-
-  useLiveRefresh(loadVerification, 30000);
 
   if (!loading && isGuest) {
     return (
@@ -84,9 +62,8 @@ export default function AccountScreen() {
     );
   }
 
-  const driverVerificationStatus = verification?.verification_status || user?.verification_status || "not_started";
-  const driverVerification = driverVerificationCopy(driverVerificationStatus);
   const accountLabel = accountTypeLabel(user?.role);
+  const driverVerification = driverVerificationCopy(user?.verification_status || "not_started");
 
   return (
     <Screen navRole={navRole}>
@@ -145,6 +122,13 @@ function accountTypeLabel(role?: string) {
   return "Customer";
 }
 
+function driverVerificationCopy(status: string): { subtitle: string; tone: "neutral" | "success" | "warning" } {
+  if (isVerifiedStatus(status)) return { subtitle: "Driver verification approved", tone: "success" };
+  if (isPendingVerificationStatus(status)) return { subtitle: "Verification under review", tone: "warning" };
+  if (needsVerificationReview(status)) return { subtitle: "Action needed · review your documents", tone: "warning" };
+  return { subtitle: "Required before posting driver trips", tone: "neutral" };
+}
+
 function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; onPress: () => void }) {
   return (
     <Pressable
@@ -193,13 +177,6 @@ function AccountRow({
       <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
     </Pressable>
   );
-}
-
-function driverVerificationCopy(status: string): { subtitle: string; tone: "neutral" | "success" | "warning" } {
-  if (isVerifiedStatus(status)) return { subtitle: "Driver verification approved", tone: "success" };
-  if (isPendingVerificationStatus(status)) return { subtitle: "Verification under review", tone: "warning" };
-  if (needsVerificationReview(status)) return { subtitle: "Action needed · review your documents", tone: "warning" };
-  return { subtitle: "Required before posting driver trips", tone: "neutral" };
 }
 
 const styles = StyleSheet.create({

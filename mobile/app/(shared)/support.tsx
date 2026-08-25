@@ -10,7 +10,7 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { supportEmail } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
 import { mySupportMessages, sendSupportMessage, SupportMessage } from "../../services/supportService";
 import { formatStatus } from "../../utils/formatStatus";
 
@@ -29,15 +29,15 @@ export default function SupportScreen() {
     }
   }, []);
 
-  useLiveRefresh(loadMessages);
+  useScreenReconciliation(loadMessages);
 
   async function submit() {
     try {
       setSaving(true);
       setError("");
-      await sendSupportMessage({ subject, message });
+      const created = await sendSupportMessage({ subject, message });
       setMessage("");
-      await loadMessages();
+      setMessages((current) => [created, ...current.filter((item) => item.id !== created.id)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send support message.");
     } finally {
@@ -46,7 +46,7 @@ export default function SupportScreen() {
   }
 
   return (
-    <Screen title="Support" showBack fallbackRoute="/(shared)/account" navRole="customer">
+    <Screen title="Support" showBack fallbackRoute="/(shared)/account" navRole="customer" refreshing={false} onRefresh={loadMessages}>
       <Text style={styles.title}>Support</Text>
       <Text style={styles.body}>
         Send a message to LetsGoRide support for Ride, Food, Courier, account, payment, safety, or delivery help. You can also reach us at {supportEmail}.

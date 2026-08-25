@@ -11,7 +11,7 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
 import {
   getMyVerification,
   submitManualVerification,
@@ -88,7 +88,7 @@ export default function DriverVerificationScreen() {
     }
   }, []);
 
-  useLiveRefresh(load, 15000);
+  useScreenReconciliation(load);
 
   async function captureDocument(documentType: VerificationDocumentType) {
     let capturedPhoto = false;
@@ -167,7 +167,7 @@ export default function DriverVerificationScreen() {
   const showSubmittedState = status === "pending_auto_check" || status === "approved";
 
   return (
-    <Screen title="Driver verification" showBack fallbackRoute="/(shared)/profile" navRole="driver">
+    <Screen title="Driver verification" showBack fallbackRoute="/(shared)/profile" navRole="driver" refreshing={loading} onRefresh={load}>
       {loading ? <LoadingState label="Loading verification..." /> : null}
       {!loading && loadError ? <ErrorState message={loadError} onRetry={load} /> : null}
 

@@ -1,21 +1,23 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import { hasSession } from "../../services/authService";
-import { listMyCourierDeliveries } from "../../services/courierService";
-import { listMyFoodOrders } from "../../services/foodService";
-import { myRideRequests } from "../../services/ridesService";
+import { useRealtime } from "../../contexts/RealtimeContext";
+import { useSession } from "../../contexts/SessionContext";
+import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
+import { getActivitySnapshot } from "../../services/activityService";
 import { CourierDelivery } from "../../types/courier.types";
 import { FoodOrder } from "../../types/food.types";
 import { RideRequest } from "../../types/ride.types";
 import { displayPlace } from "../../utils/displayText";
+import { applyCourierDeliveryEvent, authoritativeDelivery } from "../../utils/courierDeliveryRealtime";
+import { applyFoodOrderEvent, authoritativeFoodOrder } from "../../utils/foodOrderRealtime";
+import { applyRideEvent, applyRideRequestEvent, authoritativeRideRequest, rideRequestFromEvent } from "../../utils/rideRealtime";
 
 type Filter = "all" | "rides" | "food" | "courier";
 type TimelineItem =
@@ -29,6 +31,8 @@ const RIDE_TERMINAL = new Set(["COMPLETED", "CANCELLED", "EXPIRED", "completed",
 
 export default function ActivityScreen() {
   const router = useRouter();
+  const { loading: sessionLoading, isGuest } = useSession();
+  const { reconciliationRevision, subscribe } = useRealtime();
   const [trips, setTrips] = useState<RideRequest[]>([]);
   const [foodOrders, setFoodOrders] = useState<FoodOrder[]>([]);
   const [courierDeliveries, setCourierDeliveries] = useState<CourierDelivery[]>([]);
@@ -37,36 +41,56 @@ export default function ActivityScreen() {
   const [guest, setGuest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const tripsRef = useRef(new Map<string, RideRequest>());
+  const foodRef = useRef(new Map<string, FoodOrder>());
+  const deliveriesRef = useRef(new Map<string, CourierDelivery>());
+  const inFlight = useRef<Promise<void> | null>(null);
+  const seenRevision = useRef(reconciliationRevision);
 
-  const load = useCallback(async () => {
-    try {
-      const signedIn = await hasSession();
-      if (!signedIn) {
+  const replaceTrips = useCallback((next: RideRequest[]) => {
+    tripsRef.current = new Map(next.map((item) => [item.id, item]));
+    setTrips(next);
+  }, []);
+  const replaceFood = useCallback((next: FoodOrder[]) => {
+    foodRef.current = new Map(next.map((item) => [item.id, item]));
+    setFoodOrders(next);
+  }, []);
+  const replaceDeliveries = useCallback((next: CourierDelivery[]) => {
+    deliveriesRef.current = new Map(next.map((item) => [item.id, item]));
+    setCourierDeliveries(next);
+  }, []);
+
+  const load = useCallback(() => {
+    if (inFlight.current) return inFlight.current;
+    let request!: Promise<void>;
+    request = (async () => {
+      try {
+        if (isGuest) {
         setGuest(true);
-        setTrips([]);
-        setFoodOrders([]);
-        setCourierDeliveries([]);
+        replaceTrips([]);
+        replaceFood([]);
+        replaceDeliveries([]);
         setError(null);
         return;
+        }
+        const snapshot = await getActivitySnapshot();
+        setGuest(false);
+        replaceTrips(snapshot.rides);
+        replaceFood(snapshot.food_orders);
+        replaceDeliveries(snapshot.courier_deliveries);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Your activity could not be loaded.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-
-      setGuest(false);
-      const [rides, orders, deliveries] = await Promise.all([
-        myRideRequests(),
-        listMyFoodOrders(),
-        listMyCourierDeliveries(),
-      ]);
-      setTrips(rides);
-      setFoodOrders(orders);
-      setCourierDeliveries(deliveries);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Your activity could not be loaded.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+    })().finally(() => {
+      if (inFlight.current === request) inFlight.current = null;
+    });
+    inFlight.current = request;
+    return request;
+  }, [isGuest, replaceDeliveries, replaceFood, replaceTrips]);
 
   const allItems = useMemo<TimelineItem[]>(() => [
     ...trips.map((trip) => ({ kind: "ride" as const, id: `ride-${trip.id}`, createdAt: trip.created_at || trip.ride_snapshot?.created_at || "", trip })),
@@ -79,11 +103,72 @@ export default function ActivityScreen() {
     .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()), [allItems, filter]);
   const inProgress = timeline.filter(isActive);
   const history = timeline.filter((item) => !isActive(item));
-  const hasActive = allItems.some(isActive);
+  useScreenReconciliation(load, !sessionLoading, false);
 
-  // Guest refresh only rechecks the local session boundary. Private endpoints
-  // are called after authentication, including when this screen regains focus.
-  useLiveRefresh(load, hasActive ? 15000 : 60000);
+  useEffect(() => subscribe((event) => {
+    if (event.resource_type === "ride_request") {
+      const current = tripsRef.current.get(event.resource_id);
+      if (!current) {
+        const created = rideRequestFromEvent(event);
+        if (!created) void load();
+        else {
+          tripsRef.current.set(created.id, created);
+          setTrips([...tripsRef.current.values()]);
+        }
+        return;
+      }
+      const result = applyRideRequestEvent(current, event);
+      if (result.needsReconciliation) void load();
+      else if (result.applied) {
+        tripsRef.current.set(result.value.id, authoritativeRideRequest(current, result.value));
+        setTrips([...tripsRef.current.values()]);
+      }
+      return;
+    }
+    if (event.resource_type === "ride") {
+      let changed = false;
+      let gap = false;
+      for (const trip of tripsRef.current.values()) {
+        if (trip.ride_id !== event.resource_id || !trip.ride_snapshot) continue;
+        const result = applyRideEvent(trip.ride_snapshot, event);
+        gap ||= result.needsReconciliation;
+        if (result.applied) {
+          tripsRef.current.set(trip.id, { ...trip, ride_snapshot: result.value });
+          changed = true;
+        }
+      }
+      if (gap) void load();
+      else if (changed) setTrips([...tripsRef.current.values()]);
+      return;
+    }
+    if (event.resource_type === "food_order") {
+      const current = foodRef.current.get(event.resource_id);
+      if (!current) { void load(); return; }
+      const result = applyFoodOrderEvent(current, event);
+      if (result.needsReconciliation) void load();
+      else if (result.applied) {
+        foodRef.current.set(result.order.id, authoritativeFoodOrder(current, result.order));
+        setFoodOrders([...foodRef.current.values()]);
+      }
+      return;
+    }
+    if (event.resource_type === "courier_delivery") {
+      const current = deliveriesRef.current.get(event.resource_id);
+      if (!current) { void load(); return; }
+      const result = applyCourierDeliveryEvent(current, event);
+      if (result.needsReconciliation) void load();
+      else if (result.applied) {
+        deliveriesRef.current.set(result.delivery.id, authoritativeDelivery(current, result.delivery));
+        setCourierDeliveries([...deliveriesRef.current.values()]);
+      }
+    }
+  }), [load, subscribe]);
+
+  useEffect(() => {
+    if (seenRevision.current === reconciliationRevision) return;
+    seenRevision.current = reconciliationRevision;
+    if (!sessionLoading && !isGuest) void load();
+  }, [isGuest, load, reconciliationRevision, sessionLoading]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

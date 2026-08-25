@@ -9,7 +9,7 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
 import { createReport, myReports, SafetyReport } from "../../services/reportsService";
 import { formatStatus } from "../../utils/formatStatus";
 
@@ -32,16 +32,16 @@ export default function ReportIssueScreen() {
     }
   }, []);
 
-  useLiveRefresh(loadReports);
+  useScreenReconciliation(loadReports);
 
   async function submit() {
     try {
       setSaving(true);
       setError("");
-      await createReport({ report_type: reportType, message, ride_id: rideId || undefined });
+      const created = await createReport({ report_type: reportType, message, ride_id: rideId || undefined });
       setSubmitted(true);
       setMessage("");
-      await loadReports();
+      setReports((current) => [created, ...current.filter((item) => item.id !== created.id)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to submit report.");
     } finally {
@@ -50,7 +50,7 @@ export default function ReportIssueScreen() {
   }
 
   return (
-    <Screen title="Report" showBack fallbackRoute="/(shared)/safety" navRole="customer">
+    <Screen title="Report" showBack fallbackRoute="/(shared)/safety" navRole="customer" refreshing={false} onRefresh={loadReports}>
       <Text style={styles.title}>Report issue</Text>
       <View style={styles.chips}>
         {reportTypes.map((type) => (

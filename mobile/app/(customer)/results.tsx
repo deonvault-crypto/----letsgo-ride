@@ -16,7 +16,7 @@ export default function ResultsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ origin?: string; destination?: string; date?: string; seats?: string }>();
   const searchParams = useMemo(() => ({ origin: params.origin || "", destination: params.destination || "", date: params.date || "", seats: Number(params.seats || 1) }), [params.origin, params.destination, params.date, params.seats]);
-  const { rides, loading, error, reload } = useRides(searchParams);
+  const { rides, loading, refreshing, error, reload } = useRides(searchParams);
   const availableRides = rides.filter((ride) => isRideBookable(ride) && Number(ride.available_seats || 0) >= searchParams.seats);
 
   function openDriverProfile(driverId: string | undefined, rideId: string) {
@@ -25,7 +25,7 @@ export default function ResultsScreen() {
   }
 
   return (
-    <Screen title="Results" showBack fallbackRoute="/(customer)/search" navRole="customer">
+    <Screen title="Results" showBack fallbackRoute="/(customer)/search" navRole="customer" refreshing={refreshing} onRefresh={reload}>
       <Text style={styles.title}>{searchParams.origin || "Any origin"} to {searchParams.destination || "any destination"}</Text>
       <Text style={styles.body}>Showing rides with at least {searchParams.seats} seat available.</Text>
       {loading ? <LoadingState label="Searching rides..." /> : null}

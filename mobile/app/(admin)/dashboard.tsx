@@ -13,7 +13,7 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { useLiveRefresh } from "../../hooks/useLiveRefresh";
+import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
 import {
   AdminActivity,
   AdminAuditLog,
@@ -146,7 +146,7 @@ export default function AdminDashboardScreen() {
     }
   }, []);
 
-  useLiveRefresh(load, 45000);
+  useScreenReconciliation(load);
 
   function switchSection(nextSection: AdminSection) {
     setActive(nextSection);
@@ -166,7 +166,6 @@ export default function AdminDashboardScreen() {
       await reasonAction.onConfirm(reason.trim());
       setReasonAction(null);
       setReason("");
-      await load();
     } catch (err) {
       Alert.alert("Admin action failed", err instanceof Error ? err.message : "Could not complete the admin action.");
     } finally {
@@ -227,7 +226,7 @@ export default function AdminDashboardScreen() {
   const canRenderSection = !loading && !blockingError;
 
   return (
-    <Screen title="Admin" showNotifications={false}>
+    <Screen title="Admin" showNotifications={false} refreshing={refreshing} onRefresh={load}>
       <ReasonModal
         action={reasonAction}
         reason={reason}
@@ -298,10 +297,14 @@ export default function AdminDashboardScreen() {
                   message: `Suspend ${user.name || "this user"}? This should only be used for safety or support reasons.`,
                   reasonLabel: "Reason for suspension",
                   confirmLabel: "Suspend user",
-                  onConfirm: (actionReason) => updateAdminUserStatus(user.id, "suspended", actionReason).then(() => undefined),
+                  onConfirm: (actionReason) => updateAdminUserStatus(user.id, "suspended", actionReason).then((updated) => {
+                    setUsers((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+                  }),
                 })
               }
-              onReactivate={() => updateAdminUserStatus(user.id, "active").then(load)}
+              onReactivate={() => updateAdminUserStatus(user.id, "active").then((updated) => {
+                setUsers((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+              })}
             />
           ))}
         </AdminList>
@@ -316,15 +319,21 @@ export default function AdminDashboardScreen() {
               ride={ride}
               expanded={expandedId === ride.id}
               onToggle={() => setExpandedId(expandedId === ride.id ? "" : ride.id)}
-              onClose={() => updateAdminRideStatus(ride.id, "closed").then(load)}
-              onReopen={() => updateAdminRideStatus(ride.id, "open").then(load)}
+              onClose={() => updateAdminRideStatus(ride.id, "closed").then((updated) => {
+                setRides((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+              })}
+              onReopen={() => updateAdminRideStatus(ride.id, "open").then((updated) => {
+                setRides((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+              })}
               onCancel={() =>
                 setReasonAction({
                   title: "Cancel ride",
                   message: `Cancel ${ride.origin} to ${ride.destination} for safety or support reasons?`,
                   reasonLabel: "Reason for cancellation",
                   confirmLabel: "Cancel ride",
-                  onConfirm: (actionReason) => updateAdminRideStatus(ride.id, "cancelled", actionReason).then(() => undefined),
+                  onConfirm: (actionReason) => updateAdminRideStatus(ride.id, "cancelled", actionReason).then((updated) => {
+                    setRides((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+                  }),
                 })
               }
             />
@@ -347,7 +356,9 @@ export default function AdminDashboardScreen() {
                   message: "Admin cancellation is an override for support or safety cases only.",
                   reasonLabel: "Reason for admin cancellation",
                   confirmLabel: "Cancel booking",
-                  onConfirm: (actionReason) => updateAdminRequestStatus(request.id, "cancelled_by_admin", actionReason).then(() => undefined),
+                  onConfirm: (actionReason) => updateAdminRequestStatus(request.id, "cancelled_by_admin", actionReason).then((updated) => {
+                    setRequests((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+                  }),
                 })
               }
             />
@@ -373,7 +384,9 @@ export default function AdminDashboardScreen() {
               message={message}
               expanded={expandedId === message.id}
               onToggle={() => setExpandedId(expandedId === message.id ? "" : message.id)}
-              onStatus={(status) => updateAdminSupportStatus(message.id, status).then(load)}
+              onStatus={(status) => updateAdminSupportStatus(message.id, status).then((updated) => {
+                setSupport((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+              })}
             />
           ))}
         </AdminList>
@@ -388,7 +401,9 @@ export default function AdminDashboardScreen() {
               report={report}
               expanded={expandedId === report.id}
               onToggle={() => setExpandedId(expandedId === report.id ? "" : report.id)}
-              onStatus={(status) => updateAdminReportStatus(report.id, status).then(load)}
+              onStatus={(status) => updateAdminReportStatus(report.id, status).then((updated) => {
+                setReports((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+              })}
             />
           ))}
         </AdminList>

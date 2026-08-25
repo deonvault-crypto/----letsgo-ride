@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist
+from app.routers import activity, admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
@@ -134,6 +134,7 @@ async def on_shutdown():
 app.include_router(health.router)
 app.include_router(media.router)
 app.include_router(auth.router)
+app.include_router(activity.router)
 app.include_router(rides.router)
 app.include_router(requests.router)
 app.include_router(reviews.router)
