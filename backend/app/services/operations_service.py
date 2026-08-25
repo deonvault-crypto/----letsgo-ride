@@ -186,6 +186,11 @@ async def courier_delivery_history(user: Dict[str, Any]) -> List[Dict[str, Any]]
     return sorted(deliveries, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
 
 
+async def admin_courier_deliveries() -> List[Dict[str, Any]]:
+    deliveries = await database.find_many("courier_deliveries")
+    return sorted(deliveries, key=lambda item: str(item.get("created_at") or ""), reverse=True)
+
+
 async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     profile = await get_courier_profile(user)
     if not profile or profile.get("status") != "APPROVED":

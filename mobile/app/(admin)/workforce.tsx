@@ -6,9 +6,10 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
-import { cancelCourierDelivery, listMyCourierDeliveries } from "../../services/courierService";
+import { cancelCourierDelivery } from "../../services/courierService";
 import {
   createAdminCourierShift,
+  listAdminCourierDeliveries,
   listAdminCourierShifts,
   listAdminWorkerApplications,
   reviewWorkerApplication,
@@ -43,7 +44,7 @@ export default function WorkforceAdminScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const [nextApplications, nextShifts, nextDeliveries] = await Promise.all([listAdminWorkerApplications(), listAdminCourierShifts(), listMyCourierDeliveries()]);
+      const [nextApplications, nextShifts, nextDeliveries] = await Promise.all([listAdminWorkerApplications(), listAdminCourierShifts(), listAdminCourierDeliveries()]);
       setApplications(nextApplications);
       setShifts(nextShifts);
       setDeliveries(nextDeliveries);

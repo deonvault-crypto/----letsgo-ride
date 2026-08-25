@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
 from app.database import database
-from app.services.notification_service import DEFAULT_PREFERENCES, create_app_notification, get_or_create_preferences
+from app.services.notification_service import DEFAULT_PREFERENCES, get_or_create_preferences
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -98,16 +98,3 @@ async def update_preferences(payload: NotificationPreferencesBody, user=Depends(
     updates["updated_at"] = now_iso()
     updated = await database.update_one("notification_preferences", prefs["id"], updates)
     return api_success({key: (updated or prefs).get(key, value) for key, value in DEFAULT_PREFERENCES.items()})
-
-
-@router.post("/test")
-async def create_test_notification(user=Depends(get_current_user)):
-    return api_success(
-        await create_app_notification(
-            user["id"],
-            "test",
-            "LetsGoRide notification test",
-            "In-app notifications are working on this account.",
-            {"screen": "notifications"},
-        )
-    )

@@ -8,66 +8,38 @@ import { FoodBasketProvider } from "../contexts/FoodBasketContext";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
 import { NotificationProvider } from "../contexts/NotificationContext";
 import { RealtimeProvider } from "../contexts/RealtimeContext";
-import { SessionProvider } from "../contexts/SessionContext";
+import { SessionProvider, useSession } from "../contexts/SessionContext";
+import { resolveNotificationRoute } from "../services/notificationRouting";
 import { configureNotificationHandler } from "../services/pushNotificationService";
 
-export default function RootLayout() {
+function NotificationResponseRouter() {
   const router = useRouter();
+  const { user } = useSession();
 
   useEffect(() => {
     configureNotificationHandler();
+  }, []);
+
+  useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data || {};
-      const target = typeof data.notification_target === "string" ? data.notification_target : "";
-
-      if (target === "merchant_order" && typeof data.restaurant_id === "string") {
-        router.push(`/(merchant)/restaurant/${data.restaurant_id}` as never);
-        return;
-      }
-      if (target === "courier_delivery" && typeof data.delivery_id === "string") {
-        router.push(`/(courier)/delivery/${data.delivery_id}` as never);
-        return;
-      }
-      if (typeof data.conversation_id === "string") {
-        router.push(`/(shared)/conversation/${data.conversation_id}` as never);
-        return;
-      }
-      if (typeof data.verification_status === "string") {
-        router.push("/(shared)/verification" as never);
-        return;
-      }
-      if (typeof data.driver_id === "string") {
-        router.push(`/(admin)/verification/${data.driver_id}` as never);
-        return;
-      }
-      if (typeof data.ride_id === "string") {
-        router.push(`/(customer)/ride/${data.ride_id}` as never);
-        return;
-      }
-      if (typeof data.delivery_id === "string") {
-        router.push(`/(shared)/courier/${data.delivery_id}` as never);
-        return;
-      }
-      if (typeof data.food_order_id === "string") {
-        router.push(`/(shared)/food/order/${data.food_order_id}` as never);
-        return;
-      }
-      if (typeof data.support_message_id === "string") {
-        router.push("/(shared)/support" as never);
-        return;
-      }
-      if (typeof data.report_id === "string") {
-        router.push("/(shared)/safety" as never);
-      }
+      const route = resolveNotificationRoute({ data, role: user?.role });
+      if (route) router.push(route as never);
     });
     return () => subscription.remove();
-  }, [router]);
+  }, [router, user?.role]);
+
+  return null;
+}
+
+export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
       <SessionProvider>
         <RealtimeProvider>
           <NotificationProvider>
+            <NotificationResponseRouter />
             <LocationDraftProvider>
               <FoodBasketProvider>
               <StatusBar style="dark" />

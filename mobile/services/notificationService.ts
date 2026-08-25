@@ -28,7 +28,3 @@ export async function registerPushToken(data: PushTokenRegistration) {
 export async function unregisterPushToken(data: PushTokenRegistration) {
   return requestData<{ active: boolean }>({ method: "DELETE", url: "/notifications/unregister-token", data });
 }
-
-export async function createTestNotification() {
-  return requestData<AppNotification>({ method: "POST", url: "/notifications/test" });
-}

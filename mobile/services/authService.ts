@@ -1,7 +1,7 @@
 import axios from "axios";
 
 import { api, requestData, saveToken, getToken, toFriendlyApiError } from "./api";
-import { User, UserRole } from "../types/user.types";
+import { User } from "../types/user.types";
 import { clearPrivateSessionState, publishSessionUser } from "./sessionLifecycle";
 import { disablePhoneNotifications } from "./pushNotificationService";
 
@@ -13,14 +13,6 @@ type EmailVerificationPayload = {
   token?: string;
   user?: User;
 };
-
-export async function requestOtp(phone: string) {
-  return requestData<{ phone: string; message: string }>({
-    method: "POST",
-    url: "/auth/request-otp",
-    data: { phone },
-  });
-}
 
 export async function emailLogin(email: string, password: string) {
   const result = await requestData<AuthPayload>({
@@ -80,17 +72,6 @@ export async function resetPassword(email: string, code: string, password: strin
     url: "/auth/reset-password",
     data: { email, code, password, confirm_password: confirmPassword },
   });
-}
-
-export async function verifyOtp(phone: string, otp: string, role: UserRole) {
-  const result = await requestData<AuthPayload>({
-    method: "POST",
-    url: "/auth/verify-otp",
-    data: { phone, otp, role },
-  });
-  await saveToken(result.token);
-  publishSessionUser(result.user);
-  return result;
 }
 
 export async function getCurrentUser() {

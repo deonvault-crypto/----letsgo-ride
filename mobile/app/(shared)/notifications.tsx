@@ -14,6 +14,7 @@ import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useNotifications } from "../../contexts/NotificationContext";
 import { markAllNotificationsRead, markNotificationRead } from "../../services/notificationService";
+import { resolveNotificationRoute } from "../../services/notificationRouting";
 import { AppNotification } from "../../types/notification.types";
 
 export default function NotificationsScreen() {
@@ -36,52 +37,8 @@ export default function NotificationsScreen() {
       await markNotificationRead(notification.id);
       markReadLocally(notification.id);
     }
-    const data = notification.data || {};
-    const target = typeof data.notification_target === "string" ? data.notification_target : "";
-
-    if (target === "merchant_order" && typeof data.restaurant_id === "string") {
-      router.push(`/(merchant)/restaurant/${data.restaurant_id}` as never);
-      return;
-    }
-    if (target === "courier_delivery" && typeof data.delivery_id === "string") {
-      router.push(`/(courier)/delivery/${data.delivery_id}` as never);
-      return;
-    }
-    if (target === "customer_food_order" && typeof data.food_order_id === "string") {
-      router.push(`/(shared)/food/order/${data.food_order_id}` as never);
-      return;
-    }
-    if (target === "customer_delivery" && typeof data.delivery_id === "string") {
-      router.push(`/(shared)/courier/${data.delivery_id}` as never);
-      return;
-    }
-    if (typeof data.conversation_id === "string") {
-      router.push(`/(shared)/conversation/${data.conversation_id}` as never);
-      return;
-    }
-    if ((notification.type === "driver_verification" || typeof data.verification_status === "string") && user?.role === "driver") {
-      router.push("/(shared)/verification" as never);
-      return;
-    }
-    if (typeof data.food_order_id === "string") {
-      router.push(`/(shared)/food/order/${data.food_order_id}` as never);
-      return;
-    }
-    if (typeof data.delivery_id === "string") {
-      router.push(user?.role === "courier" ? `/(courier)/delivery/${data.delivery_id}` as never : `/(shared)/courier/${data.delivery_id}` as never);
-      return;
-    }
-    if (typeof data.support_message_id === "string") {
-      router.push("/(shared)/support" as never);
-      return;
-    }
-    if (typeof data.report_id === "string") {
-      router.push("/(shared)/safety" as never);
-      return;
-    }
-    if (typeof data.ride_id === "string") {
-      router.push(user?.role === "driver" ? `/(driver)/trip/${data.ride_id}` as never : `/(customer)/ride/${data.ride_id}` as never);
-    }
+    const route = resolveNotificationRoute({ data: notification.data, notificationType: notification.type, role: user?.role });
+    if (route) router.push(route as never);
   }
 
   async function readAll() {

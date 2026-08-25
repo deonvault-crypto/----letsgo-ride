@@ -147,6 +147,10 @@ export function listAdminCourierShifts() {
   return requestData<CourierShift[]>({ method: "GET", url: "/operations/admin/courier/shifts" });
 }
 
+export function listAdminCourierDeliveries() {
+  return requestData<CourierDelivery[]>({ method: "GET", url: "/operations/admin/courier/deliveries" });
+}
+
 export function createAdminCourierShift(payload: {
   zone: string;
   starts_at: string;

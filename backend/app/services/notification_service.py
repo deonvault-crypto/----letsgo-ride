@@ -37,7 +37,6 @@ PREFERENCE_FOR_TYPE = {
     "trip_updates": "trip_updates",
     "ride_departure": "trip_updates",
     "trip_review": "trip_updates",
-    "test": "trip_updates",
 }
 
 

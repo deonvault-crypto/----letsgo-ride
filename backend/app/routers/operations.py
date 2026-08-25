@@ -15,6 +15,7 @@ from app.models.operations import (
 from app.services.courier_earnings_service import courier_earnings_summary
 from app.services.operations_service import (
     active_courier_delivery,
+    admin_courier_deliveries,
     approve_courier_profile,
     assigned_courier_deliveries,
     claim_courier_offer,
@@ -138,6 +139,12 @@ async def admin_review_worker_application(
 async def admin_courier_shifts(user=Depends(get_current_user)):
     _require_admin(user)
     return api_success(await list_courier_shifts(include_inactive=True))
+
+
+@router.get("/admin/courier/deliveries")
+async def admin_courier_delivery_list(user=Depends(get_current_user)):
+    _require_admin(user)
+    return api_success(await admin_courier_deliveries())
 
 
 @router.post("/admin/courier/shifts")

@@ -27,13 +27,6 @@ export function createCourierDelivery(payload: CourierCreatePayload) {
   });
 }
 
-export function listMyCourierDeliveries() {
-  return requestData<CourierDelivery[]>({
-    method: "GET",
-    url: "/courier/deliveries/my",
-  });
-}
-
 export function getCourierDelivery(deliveryId: string) {
   return requestData<CourierDelivery>({
     method: "GET",
