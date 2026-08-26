@@ -14,7 +14,10 @@ class Settings:
         self.app_env = os.getenv("APP_ENV", "development")
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
-        self.mock_otp = os.getenv("MOCK_OTP", "123456")
+        # No universal fallback code is shipped in source. Mock verification is only
+        # available when an explicit environment value is provided and the environment
+        # gate below allows it.
+        self.mock_otp = os.getenv("MOCK_OTP", "").strip()
         self.allow_staging_mock_otp = self._parse_bool(
             os.getenv("ALLOW_STAGING_MOCK_OTP", "false")
         )
@@ -25,6 +28,8 @@ class Settings:
         self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
+        if self.is_production and self.admin_auto_create:
+            raise RuntimeError("ADMIN_AUTO_CREATE is forbidden in production.")
         self.public_api_base_url = self._get_env_first("PUBLIC_API_BASE_URL", "API_PUBLIC_BASE_URL") or "https://letsgoride-backend.onrender.com"
         self.realtime_redis_url = self._get_env_first("REALTIME_REDIS_URL", "REDIS_URL")
         self.rate_limit_redis_url = self._get_env_first("RATE_LIMIT_REDIS_URL", "REALTIME_REDIS_URL", "REDIS_URL")
@@ -185,8 +190,11 @@ class Settings:
 
     @property
     def mock_otp_allowed(self) -> bool:
-        return self.app_env in {"development", "test"} or (
-            self.app_env == "staging" and self.allow_staging_mock_otp
+        app_env = self.app_env.strip().lower()
+        return bool(self.mock_otp) and (
+            app_env in {"development", "test"} or (
+                app_env == "staging" and self.allow_staging_mock_otp
+            )
         )
 
     @property
