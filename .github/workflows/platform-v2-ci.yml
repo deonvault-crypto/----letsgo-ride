@@ -83,7 +83,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Compile Python package
-        run: python -m compileall -q app tests
+        run: python -m compileall -q app scripts tests
 
       - name: Import API application
         env:

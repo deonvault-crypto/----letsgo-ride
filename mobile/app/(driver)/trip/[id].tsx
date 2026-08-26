@@ -9,7 +9,6 @@ import { LoadingState } from "../../../components/states/LoadingState";
 import { AppButton } from "../../../components/ui/AppButton";
 import { Avatar } from "../../../components/ui/Avatar";
 import { LiveTripPanel } from "../../../components/trips/LiveTripPanel";
-import { ProfileCompletionModal } from "../../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../../components/ui/Screen";
 import { StatusBadge } from "../../../components/ui/StatusBadge";
 import { VerifiedBadge } from "../../../components/ui/VerifiedBadge";
@@ -17,7 +16,6 @@ import { colors } from "../../../constants/colors";
 import { spacing } from "../../../constants/spacing";
 import { useDriverWorkspace } from "../../../contexts/DriverWorkspaceContext";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
-import { updateCurrentUser } from "../../../services/authService";
 import { listConversations } from "../../../services/conversationService";
 import { listPendingReviews } from "../../../services/reviewService";
 import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, endTrip, getRide, startTrip } from "../../../services/ridesService";
@@ -38,10 +36,8 @@ export default function DriverTripDetailScreen() {
   const requests = useMemo(() => workspaceRequests.filter((request) => request.ride_id === id), [id, workspaceRequests]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
-  const [phone, setPhone] = useState("");
   const [busyRequestId, setBusyRequestId] = useState("");
   const [busyTripAction, setBusyTripAction] = useState<"start" | "end" | "">("");
-  const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -97,8 +93,7 @@ export default function DriverTripDetailScreen() {
 
   async function setStatus(requestId: string, status: "confirmed" | "declined" | "cancelled_by_driver") {
     if (status === "confirmed" && !user?.phone) {
-      setError("Add your phone number before accepting a passenger request.");
-      setShowPhoneModal(true);
+      setError("Contact support to add or correct the phone number on your verified Driver account.");
       return;
     }
     try {
@@ -142,11 +137,6 @@ export default function DriverTripDetailScreen() {
     }
   }
 
-  async function savePhone() {
-    await updateCurrentUser({ phone });
-    setShowPhoneModal(false);
-  }
-
   if (loading || workspaceLoading) {
     return (
       <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
@@ -170,13 +160,6 @@ export default function DriverTripDetailScreen() {
 
   return (
     <Screen title="Trip" showBack fallbackRoute="/(driver)/trips" navRole="driver">
-      <ProfileCompletionModal
-        visible={showPhoneModal}
-        phone={phone}
-        onChangePhone={setPhone}
-        onSave={savePhone}
-        onClose={() => setShowPhoneModal(false)}
-      />
       {error ? <ErrorState message={error} /> : null}
       <View style={styles.card}>
         <StatusBadge label={tripStatusLabel(tripStatus)} tone={tripStatusTone(tripStatus)} />
@@ -211,10 +194,10 @@ export default function DriverTripDetailScreen() {
         <View style={styles.card}>
           <StatusBadge label="Phone required" tone="warning" />
           <Text style={styles.body}>
-            Add your phone number to continue. Passengers and drivers need a
+            Contact support to add or correct the phone number on your verified Driver account. Passengers and drivers need a
             reachable number for pickup coordination and trip safety.
           </Text>
-          <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
+          <AppButton title="Request a contact update" variant="secondary" onPress={() => router.push({ pathname: "/(shared)/support", params: { product: "driver", subject: "Account details change" } } as never)} />
         </View>
       ) : null}
       {isTripActive(ride) ? <LiveTripPanel ride={ride} role="driver" onRideMutation={upsertRide} /> : null}

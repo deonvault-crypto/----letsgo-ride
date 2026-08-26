@@ -94,6 +94,19 @@ describe("location picker interaction stability", () => {
     expect(reverseGeocodeLocation).toHaveBeenCalledWith({ latitude: -17.7622, longitude: 31.0902 });
   });
 
+  it("renders the shared precision marker without changing the selected coordinate", async () => {
+    const screen = openPicker();
+    expect(screen.getByLabelText("Selected pickup coordinate")).toBeOnTheScreen();
+
+    act(() => {
+      mockMapCallbacks.onMovementStart?.();
+      mockMapCallbacks.onRegionChangeComplete({ latitude: -17.8316, longitude: 31.0488, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+    });
+
+    await waitFor(() => expect(reverseGeocodeLocation).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(reverseGeocodeLocation).toHaveBeenCalledWith({ latitude: -17.8316, longitude: 31.0488 });
+  });
+
   it("ignores stale autocomplete responses and never assumes current location", async () => {
     let resolveFirst: (value: unknown[]) => void = () => undefined;
     let resolveSecond: (value: unknown[]) => void = () => undefined;

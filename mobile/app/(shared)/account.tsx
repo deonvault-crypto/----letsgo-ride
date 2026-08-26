@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
 
+import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
@@ -88,6 +89,18 @@ export default function AccountScreen() {
           <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
         </View>
       </View>
+
+      <AccountDetailsSummary
+        rows={[
+          { label: "Full legal name", value: user?.name || "Not added" },
+          { label: "Email", value: user?.email || "Not added" },
+          { label: "Phone", value: user?.phone || "Not added" },
+          { label: "City", value: user?.city || "Not added" },
+        ]}
+        note={user?.role === "passenger" ? "Contact LetsGoRide Support to change your legal name." : "Contact LetsGoRide Support to request an account correction."}
+        onEdit={user?.role === "passenger" ? () => router.push({ pathname: "/(shared)/edit-profile", params: { mode: "edit" } } as never) : undefined}
+        onRequestChange={() => router.push({ pathname: "/(shared)/support", params: { subject: "Account details change" } } as never)}
+      />
 
       {user?.role === "driver" ? (
         <View style={styles.section}>

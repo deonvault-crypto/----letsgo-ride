@@ -60,6 +60,7 @@ class EmailVerificationStagingFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "ALLOW_STAGING_EMAIL_MOCK": "true",
                 "MOCK_OTP": "123456",
                 "CORS_ORIGINS": "https://letsgoride.site",
+                "PUBLIC_API_BASE_URL": "https://letsgoride-v2-production.onrender.com",
             },
             clear=False,
         ):

@@ -15,7 +15,8 @@ import { destinationAfterAuth, intentCopy, parseApplicationIntent } from "../../
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string; returnTo?: string; intent?: string }>();
+  const params = useLocalSearchParams<{ email?: string; returnTo?: string; intent?: string; context?: string }>();
+  const isAccountChange = params.context === "account-change";
   const intent = parseApplicationIntent(params.intent);
   const copy = intentCopy(intent);
   const [email, setEmail] = useState(params.email || "");
@@ -36,6 +37,10 @@ export default function EmailVerificationScreen() {
   }
 
   async function continueAfterVerification(role?: string | null) {
+    if (isAccountChange) {
+      routeForRole(role);
+      return;
+    }
     try {
       if (!(await hasSeenNotificationExplanation())) {
         setPendingRole(role || null);
@@ -93,7 +98,7 @@ export default function EmailVerificationScreen() {
   return (
     <Screen title="Verify email" showBack fallbackRoute={{ pathname: "/(auth)/email-login", params: { email: normalizeEmail(email), returnTo: params.returnTo, intent } } as never} showNotifications={false}>
       <View style={styles.logoWrap}><BrandLogo size="regular" /></View>
-      <View style={styles.copy}><Text style={styles.title}>Verify your email</Text><Text style={styles.body}>We sent a 6-digit code to your email. Enter it to activate your LetsGoRide account.</Text></View>
+      <View style={styles.copy}><Text style={styles.title}>{isAccountChange ? "Confirm new email" : "Verify your email"}</Text><Text style={styles.body}>{isAccountChange ? "Enter the 6-digit code sent to the new address. Your current verified email remains active until this succeeds." : "We sent a 6-digit code to your email. Enter it to activate your LetsGoRide account."}</Text></View>
       <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} leftIcon="email-outline" />
       <AppInput label="6-digit code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} leftIcon="numeric" />
       {message ? <Text style={styles.message}>{message}</Text> : null}

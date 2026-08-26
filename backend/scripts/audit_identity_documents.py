@@ -1,37 +1,54 @@
-"""Dry-run inventory for legacy identity documents.
+"""Read-only, aggregate-only audit of stored identity documents."""
 
-This script never changes Cloudinary or MongoDB. Run it against staging before the
-separate, explicitly approved migration that converts every legacy asset to
-authenticated delivery. It prints counts only and never prints URLs or public IDs.
-"""
+from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
-from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.config import get_settings
 from app.database import database
+from scripts.identity_document_inventory import (
+    configure_cloudinary,
+    inspect_identity_documents,
+    safe_count_lines,
+)
 
 
-async def main() -> None:
+def validate_runtime(environment: str, database_name: str) -> None:
+    settings = get_settings()
+    configured_environment = settings.app_env.strip().lower()
+    if configured_environment != environment:
+        raise RuntimeError("Runtime environment does not match the explicit audit target.")
+    if settings.mongodb_db_name.strip() != database_name:
+        raise RuntimeError("Runtime database does not match the explicit audit target.")
+    if environment == "staging" and database_name != "letsgoride_staging":
+        raise RuntimeError("Staging identity-document audit requires letsgoride_staging.")
+    if environment == "production" and database_name == "letsgoride_staging":
+        raise RuntimeError("Production identity-document audit cannot target staging.")
+
+
+async def main(environment: str, database_name: str, expected_count: int | None) -> None:
+    validate_runtime(environment, database_name)
+    configure_cloudinary()
     await database.connect(ensure_indexes=False)
-    counts: Counter[str] = Counter()
     try:
-        for collection in ("drivers", "worker_applications"):
-            for owner in await database.find_many(collection):
-                for document in owner.get("documents", []):
-                    counts[f"{collection}.total"] += 1
-                    delivery = str(document.get("delivery_type") or "legacy_public")
-                    counts[f"{collection}.{delivery}"] += 1
-                    if document.get("file_url"):
-                        counts[f"{collection}.stored_url"] += 1
-        for key in sorted(counts):
-            print(f"{key}={counts[key]}")
+        _, counts = await inspect_identity_documents()
+        if expected_count is not None and counts["scanned"] != expected_count:
+            raise RuntimeError("Identity-document count differs from the approved inventory.")
+        for line in safe_count_lines(counts, mode="audit-dry-run"):
+            print(line)
     finally:
         await database.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--environment", choices=("staging", "production"), required=True)
+    parser.add_argument("--database-name", required=True)
+    parser.add_argument("--expected-count", type=int)
+    args = parser.parse_args()
+    asyncio.run(main(args.environment, args.database_name, args.expected_count))

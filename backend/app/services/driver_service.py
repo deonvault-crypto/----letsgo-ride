@@ -10,15 +10,9 @@ async def create_driver_application(payload: Dict[str, Any], user: Dict[str, Any
     timestamp = now_iso()
     existing = await database.find_one("drivers", {"user_id": user["id"]})
     if existing:
-        updates = {
-            "name": payload["name"],
-            "phone": payload["phone"],
-            "city": payload["city"],
-            "vehicle": payload.get("vehicle"),
-            "updated_at": timestamp,
-        }
-        updated = await database.update_one("drivers", existing["id"], updates)
-        return updated or existing
+        raise PermissionError(
+            "Contact LetsGoRide Support to change saved Driver identity details."
+        )
 
     application = {
         "id": new_id(),

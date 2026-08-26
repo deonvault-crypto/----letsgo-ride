@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 
 import { EmptyState } from "../../components/states/EmptyState";
 import { ErrorState } from "../../components/states/ErrorState";
@@ -15,7 +16,10 @@ import { mySupportMessages, sendSupportMessage, SupportMessage } from "../../ser
 import { formatStatus } from "../../utils/formatStatus";
 
 export default function SupportScreen() {
-  const [subject, setSubject] = useState("LetsGoRide support");
+  const params = useLocalSearchParams<{ subject?: string; product?: string }>();
+  const initialSubject = params.subject === "Account details change" ? params.subject : "LetsGoRide support";
+  const navRole = params.product === "driver" || params.product === "courier" || params.product === "merchant" ? params.product : "customer";
+  const [subject, setSubject] = useState(initialSubject);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [saving, setSaving] = useState(false);
@@ -46,7 +50,7 @@ export default function SupportScreen() {
   }
 
   return (
-    <Screen title="Support" showBack fallbackRoute="/(shared)/account" navRole="customer" refreshing={false} onRefresh={loadMessages}>
+    <Screen title="Support" showBack fallbackRoute="/(shared)/account" navRole={navRole} refreshing={false} onRefresh={loadMessages}>
       <Text style={styles.title}>Support</Text>
       <Text style={styles.body}>
         Send a message to LetsGoRide support for Ride, Food, Courier, account, payment, safety, or delivery help. You can also reach us at {supportEmail}.

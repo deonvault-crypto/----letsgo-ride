@@ -116,6 +116,15 @@ describe("worker application saved and review states", () => {
     expect(screen.queryByLabelText("Business name")).toBeNull();
   });
 
+  it("keeps an approved application as a locked saved summary", async () => {
+    mockList.mockResolvedValue([application("APPROVED", true)]);
+    const screen = render(<WorkerApplicationScreen />);
+    expect(await screen.findByText("Application approved")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Saved application summary")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Edit details" })).toBeNull();
+    expect(screen.queryByLabelText("Business name")).toBeNull();
+  });
+
   it("reopens editing when an admin has requested changes", async () => {
     mockList.mockResolvedValue([{ ...application("REJECTED"), review_note: "Upload a clearer registration document." }]);
     const screen = render(<WorkerApplicationScreen />);

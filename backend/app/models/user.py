@@ -138,7 +138,6 @@ class ResetPasswordBody(BaseModel):
 class UserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     phone: Optional[str] = Field(default=None, min_length=6, max_length=32)
     email: Optional[str] = Field(default=None, min_length=5, max_length=254)
     city: Optional[str] = Field(default=None, max_length=120)

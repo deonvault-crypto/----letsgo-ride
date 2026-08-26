@@ -56,6 +56,21 @@ class SecretConfigurationHardeningTests(unittest.TestCase):
             ):
                 Settings()
 
+    def test_production_requires_explicit_public_api_identity(self):
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "production",
+                "CORS_ORIGINS": "https://letsgoride.site",
+                "ADMIN_AUTO_CREATE": "false",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError, "PUBLIC_API_BASE_URL must be explicitly configured"
+            ):
+                Settings()
+
     def test_qa_provisioner_refuses_non_staging_environment(self):
         with self.assertRaisesRegex(RuntimeError, "forbidden outside"):
             _require_staging_environment("production", "letsgoride_staging")

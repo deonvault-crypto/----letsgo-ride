@@ -78,10 +78,11 @@ export async function getCurrentUser() {
   return requestData<User>({ method: "GET", url: "/auth/me" });
 }
 
-export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
-  const user = await requestData<User>({ method: "PATCH", url: "/auth/me", data });
-  publishSessionUser(user);
-  return user;
+export async function updateCurrentUser(data: Partial<Pick<User, "phone" | "email" | "city" | "bio" | "travel_preferences" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
+  await requestData<User>({ method: "PATCH", url: "/auth/me", data });
+  const confirmed = await getCurrentUser();
+  publishSessionUser(confirmed);
+  return confirmed;
 }
 
 export async function uploadProfilePhoto(asset: { uri: string; fileName?: string | null; mimeType?: string | null; type?: string | null }) {

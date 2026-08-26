@@ -71,7 +71,10 @@ async def public_driver_profile(driver):
 @router.post("/apply")
 async def apply(payload: DriverApplicationBody, user=Depends(get_current_user)):
     _require_driver_account(user)
-    return api_success(await create_driver_application(payload.model_dump(), user))
+    try:
+        return api_success(await create_driver_application(payload.model_dump(), user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
 
 
 @router.get("/me")
@@ -113,6 +116,11 @@ async def add_vehicle(payload: VehicleBody, user=Depends(get_current_user)):
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
         api_error("Create a driver profile before adding a vehicle.")
+    if driver.get("verified") or str(driver.get("status") or "").lower() in {"approved", "verified", "active"}:
+        api_error(
+            "Contact LetsGoRide Support to request a reviewed vehicle change.",
+            403,
+        )
     timestamp = now_iso()
     vehicle = {
         "id": new_id(),

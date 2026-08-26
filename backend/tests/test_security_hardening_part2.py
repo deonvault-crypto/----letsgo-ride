@@ -139,7 +139,7 @@ class SecurityHardeningPart2Tests(unittest.IsolatedAsyncioTestCase):
         for status in ("IN_PROGRESS", "COMPLETED", "UNKNOWN"):
             with self.subTest(status=status), self.assertRaises(ValidationError):
                 RideUpdateBody.model_validate({"status": status})
-        for field in ("profile_photo_url", "profile_photo_name", "role", "token", "verification_status"):
+        for field in ("name", "profile_photo_url", "profile_photo_name", "role", "token", "verification_status"):
             with self.subTest(field=field), self.assertRaises(ValidationError):
                 UserUpdate.model_validate({field: "attacker-controlled"})
 

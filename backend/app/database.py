@@ -322,6 +322,22 @@ class Database:
         self.memory[collection] = [item for item in self.memory[collection] if item.get("id") != item_id]
         return len(self.memory[collection]) < before
 
+    async def delete_many(self, collection: str, filters: Dict[str, Any]) -> int:
+        """Delete every matching row and return the number removed."""
+        if self.db is not None:
+            result = await self.db[collection].delete_many(filters)
+            return int(result.deleted_count)
+
+        kept: List[Dict[str, Any]] = []
+        deleted = 0
+        for item in self.memory[collection]:
+            if self._matches(item, filters):
+                deleted += 1
+            else:
+                kept.append(item)
+        self.memory[collection] = kept
+        return deleted
+
     async def replace_collection(self, collection: str, items: Iterable[Dict[str, Any]]) -> None:
         clean_items = [deepcopy(item) for item in items]
         if self.db is not None:

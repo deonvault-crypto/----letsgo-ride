@@ -56,6 +56,10 @@ async def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     return await database.find_one("users", {"normalized_email": normalized}) or await database.find_one("users", {"email": normalized})
 
 
+async def find_user_by_pending_email(email: str) -> Optional[Dict[str, Any]]:
+    return await database.find_one("users", {"pending_email": normalize_email(email)})
+
+
 async def find_user_by_token(token: str) -> Optional[Dict[str, Any]]:
     user = await database.find_one("users", {"token": token})
     if not user or user.get("status") in {"deleted", "suspended"}:
@@ -200,7 +204,8 @@ async def start_email_verification(user: Dict[str, Any], force: bool = False) ->
         "updated_at": now.isoformat(),
     }
     updated = await database.update_one("users", user["id"], updates) or {**user, **updates}
-    sent = await send_verification_email(updated["email"], code)
+    delivery_email = updated.get("pending_email") or updated["email"]
+    sent = await send_verification_email(delivery_email, code)
     if not sent:
         settings = get_settings()
         if settings.staging_email_mock_allowed:
@@ -225,8 +230,6 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
             **session,
             "updated_at": timestamp,
         }
-        if name:
-            updates["name"] = name
         updated = await database.update_one("users", existing["id"], updates)
         return updated or existing
 
@@ -315,10 +318,12 @@ async def verify_email_user(email: str, password: str) -> Optional[Dict[str, Any
 
 
 async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
-    user = await find_user_by_email(email)
+    normalized = normalize_email(email)
+    user = await find_user_by_email(normalized) or await find_user_by_pending_email(normalized)
     if not user:
         return None
-    if user.get("email_verified"):
+    changing_email = user.get("pending_email") == normalized
+    if user.get("email_verified") and not changing_email:
         # Verification is not a login endpoint. Never disclose an existing session.
         return {**user, "token": ""}
     attempts = int(user.get("email_verification_attempts", 0))
@@ -334,27 +339,34 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
         )
         return None
 
-    updated = await database.update_one(
-        "users",
-        user["id"],
-        {
-            "email_verified": True,
-            "email_verified_at": now_iso(),
-            "email_verification_code_hash": "",
-            "email_verification_salt": "",
-            "email_verification_attempts": 0,
-            **create_session_record(),
-            "updated_at": now_iso(),
-        },
-    )
+    updates = {
+        "email_verified": True,
+        "email_verified_at": now_iso(),
+        "email_verification_code_hash": "",
+        "email_verification_salt": "",
+        "email_verification_attempts": 0,
+        **create_session_record(),
+        "updated_at": now_iso(),
+    }
+    if changing_email:
+        updates.update({
+            "email": normalized,
+            "normalized_email": normalized,
+            "pending_email": None,
+        })
+    try:
+        updated = await database.update_one("users", user["id"], updates)
+    except DuplicateKeyError:
+        return None
     return updated or user
 
 
 async def resend_email_verification(email: str) -> Optional[Dict[str, Any]]:
-    user = await find_user_by_email(email)
+    normalized = normalize_email(email)
+    user = await find_user_by_email(normalized) or await find_user_by_pending_email(normalized)
     if not user:
         return None
-    if user.get("email_verified"):
+    if user.get("email_verified") and user.get("pending_email") != normalized:
         return user
     return await start_email_verification(user, force=False)
 

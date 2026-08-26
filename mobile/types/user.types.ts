@@ -4,6 +4,7 @@ export type User = {
   id: string;
   phone?: string;
   email?: string;
+  pending_email?: string | null;
   name: string;
   city?: string;
   bio?: string;

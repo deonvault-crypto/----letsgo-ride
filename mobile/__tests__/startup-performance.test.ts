@@ -13,6 +13,17 @@ describe("startup performance architecture", () => {
     expect(source).not.toContain("loadingTrack");
   });
 
+  it("uses the canonical lightweight native rider scene without template cards or raster media", () => {
+    const source = read("app/index.tsx");
+    expect(source).toContain("ScooterIllustration");
+    expect(source).toContain("deliveryBox");
+    expect(source).toContain("pathSegment");
+    expect(source).toContain("pinRipple");
+    expect(source).not.toContain("routeCard");
+    expect(source).not.toContain('name="moped"');
+    expect(source).not.toContain("require(");
+  });
+
   it("defers realtime, notification snapshots, and permission inspection until after the index route", () => {
     expect(read("contexts/RealtimeContext.tsx")).toContain('pathname === "/"');
     expect(read("contexts/NotificationContext.tsx")).toContain('pathname === "/"');

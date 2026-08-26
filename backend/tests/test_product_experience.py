@@ -74,7 +74,11 @@ class FinalProductExperienceTests(unittest.IsolatedAsyncioTestCase):
 
         approved = await review_worker_application(application["id"], "APPROVED", "Documents checked", admin)
         self.assertEqual(approved["status"], "APPROVED")
-        self.assertEqual((await database.find_one("users", {"id": customer["id"]}))["role"], "courier")
+        approved_user = await database.find_one("users", {"id": customer["id"]})
+        self.assertEqual(approved_user["role"], "courier")
+        self.assertEqual(approved_user["name"], "Applicant Courier")
+        self.assertEqual(approved_user["phone"], "+263770000001")
+        self.assertEqual(approved_user["city"], "Harare")
         profile = await database.find_one("courier_profiles", {"user_id": customer["id"]})
         self.assertEqual(profile["status"], "APPROVED")
         self.assertFalse(profile["online"])

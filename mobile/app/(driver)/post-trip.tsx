@@ -5,7 +5,6 @@ import { useRouter } from "expo-router";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
 import { LocationPicker } from "../../components/ui/LocationPicker";
-import { ProfileCompletionModal } from "../../components/ui/ProfileCompletionModal";
 import { Screen } from "../../components/ui/Screen";
 import { SeatCounterPicker } from "../../components/ui/SeatCounterPicker";
 import { StatusBadge } from "../../components/ui/StatusBadge";
@@ -13,7 +12,6 @@ import { TravelDatePicker } from "../../components/ui/TravelDatePicker";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { updateCurrentUser } from "../../services/authService";
 import { createRide } from "../../services/ridesService";
 import { getMyVerification } from "../../services/verificationService";
 import { VerificationProfile } from "../../types/verification.types";
@@ -40,8 +38,6 @@ export default function PostTripScreen() {
   const [dropoff, setDropoff] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [phone, setPhone] = useState("");
-  const [showPhoneModal, setShowPhoneModal] = useState(false);
 
   useEffect(() => {
     async function loadVerification() {
@@ -54,23 +50,9 @@ export default function PostTripScreen() {
     loadVerification();
   }, []);
 
-  async function savePhone() {
-    try {
-      setSaving(true);
-      setError("");
-      await updateCurrentUser({ phone });
-      setShowPhoneModal(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save phone number.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function submit() {
     if (!user?.phone) {
-      setError("Add your phone number before posting a trip.");
-      setShowPhoneModal(true);
+      setError("Contact support to add or correct the phone number on your verified Driver account.");
       return;
     }
     if (!user?.profile_photo_url) {
@@ -125,14 +107,6 @@ export default function PostTripScreen() {
     <Screen navRole="driver">
       <Text style={styles.title}>Post a trip</Text>
       <Text style={styles.body}>Add clear route, seat, price, and vehicle details before accepting passengers.</Text>
-      <ProfileCompletionModal
-        visible={showPhoneModal}
-        phone={phone}
-        saving={saving}
-        onChangePhone={setPhone}
-        onSave={savePhone}
-        onClose={() => setShowPhoneModal(false)}
-      />
       {userError ? (
         <View style={styles.notice}>
           <Text style={styles.body}>Sign in before posting rides as a driver.</Text>
@@ -143,10 +117,10 @@ export default function PostTripScreen() {
         <View style={styles.notice}>
           <StatusBadge label="Phone required" tone="warning" />
           <Text style={styles.body}>
-            Add your phone number to continue. Passengers and drivers need a
+            Contact support to add or correct the phone number on your verified Driver account. Passengers and drivers need a
             reachable number for pickup coordination and trip safety.
           </Text>
-          <AppButton title="Add phone number" variant="secondary" onPress={() => setShowPhoneModal(true)} />
+          <AppButton title="Request a contact update" variant="secondary" onPress={() => router.push({ pathname: "/(shared)/support", params: { product: "driver", subject: "Account details change" } } as never)} />
         </View>
       ) : null}
       {user?.phone && !user.profile_photo_url ? (

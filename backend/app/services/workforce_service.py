@@ -305,6 +305,9 @@ async def review_worker_application(application_id: str, status: str, note: str 
             applicant["id"],
             {
                 "role": product,
+                "name": application.get("full_name") or applicant.get("name"),
+                "phone": application.get("phone") or applicant.get("phone"),
+                "city": application.get("service_area") or applicant.get("city"),
                 "verification_status": "approved" if product == "driver" else applicant.get("verification_status", "not_started"),
                 "updated_at": now,
             },

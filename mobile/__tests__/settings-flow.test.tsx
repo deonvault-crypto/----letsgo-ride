@@ -98,7 +98,7 @@ describe("settings account controls", () => {
       expect(screen.getByText("Phone notifications: Off")).toBeOnTheScreen();
       expect(screen.getByText("Enable notifications in device settings")).toBeOnTheScreen();
     });
-    expect(screen.getByRole("button", { name: "Edit profile" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Account details" })).toBeOnTheScreen();
     expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
     expect(screen.getByText("Notifications")).toBeOnTheScreen();
     expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
@@ -172,7 +172,7 @@ describe("settings account controls", () => {
     fireEvent.press(screen.getAllByRole("button", { name: "Delete account" })[0]);
 
     expect(screen.getByText("Delete account?")).toBeOnTheScreen();
-    expect(screen.getByText("This permanently deletes your LetsGoRide account, activity, messages, verification records, and saved preferences.")).toBeOnTheScreen();
+    expect(screen.getByText(/Limited completed service, safety, support, verification, fraud-prevention and legal records may be retained/)).toBeOnTheScreen();
     expect(screen.getByText("Type DELETE to confirm.")).toBeOnTheScreen();
 
     const disabledConfirmationButton = screen

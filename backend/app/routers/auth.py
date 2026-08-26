@@ -31,6 +31,10 @@ from app.services.auth_service import (
     verify_email_user,
 )
 from app.services.profile_photo_service import save_profile_photo
+from app.services.account_deletion_service import (
+    AccountDeletionBlockedError,
+    delete_account,
+)
 from app.utils import api_error, api_success
 from app.database import database
 from app.utils import now_iso
@@ -81,10 +85,14 @@ async def verify_otp(payload: VerifyOtpBody, request: Request):
 @router.post("/register")
 async def register(payload: RegisterBody, request: Request):
     await rate_limit_service.enforce(request, "auth-register", RateLimit(5, 3600), identity=payload.phone)
+    if not get_settings().mock_otp_allowed:
+        api_error("Phone registration is not available. Use secure email sign-up.", 503)
     _require_public_customer_signup(payload.role)
+    if await find_user_by_phone(payload.phone):
+        api_error("An account already uses this phone number. Sign in through a supported method.", 409)
     user = await create_or_update_user(payload.phone, "passenger", payload.name)
-    if payload.city:
-        user["city"] = payload.city
+    if payload.city and payload.city != user.get("city"):
+        user = await database.update_one("users", user["id"], {"city": payload.city, "updated_at": now_iso()}) or user
     return api_success({"token": user["token"], "user": public_user(user)})
 
 
@@ -193,6 +201,10 @@ async def me(user=Depends(get_current_user)):
 
 @router.patch("/me")
 async def update_me(payload: UserUpdate, request: Request, user=Depends(get_current_user)):
+    workforce_identity_fields = {"email", "phone", "city", "bio", "travel_preferences"}
+    forbidden = payload.model_fields_set & workforce_identity_fields if user.get("role") in {"driver", "courier", "merchant", "admin"} else set()
+    if forbidden:
+        api_error("Contact LetsGoRide Support to change verified account details.", 403)
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
 
     # Product identity is immutable. Customer, Driver, Courier and Merchant are
@@ -201,21 +213,23 @@ async def update_me(payload: UserUpdate, request: Request, user=Depends(get_curr
     updates.pop("email_verified", None)
     updates.pop("profile_photo_verified", None)
 
-    if updates.get("email") and updates["email"].lower().strip() != (user.get("email") or "").lower().strip():
+    requested_email = updates.pop("email", None)
+    if requested_email and requested_email.lower().strip() != (user.get("email") or "").lower().strip():
         await rate_limit_service.enforce(request, "auth-profile-email-change", RateLimit(5, 3600), identity=str(user.get("id") or ""))
-        updates["email"] = updates["email"].lower().strip()
-        existing_email_user = await find_user_by_email(updates["email"])
+        requested_email = requested_email.lower().strip()
+        existing_email_user = await find_user_by_email(requested_email)
         if existing_email_user and existing_email_user.get("id") != user.get("id"):
             api_error("This email already belongs to another account.", 409)
-        updates["normalized_email"] = updates["email"]
-        updates["email_verified"] = False
-        updates["email_verified_at"] = None
+        pending_owner = await database.find_one("users", {"pending_email": requested_email})
+        if pending_owner and pending_owner.get("id") != user.get("id"):
+            api_error("This email already belongs to another account.", 409)
+        updates["pending_email"] = requested_email
     updates["updated_at"] = now_iso()
     try:
         updated = await database.update_one("users", user["id"], updates)
     except DuplicateKeyError:
         api_error("This email already belongs to another account.", 409)
-    if updated and updates.get("email_verified") is False:
+    if updated and updates.get("pending_email"):
         await start_email_verification(updated, force=True)
     return api_success(public_user(updated or user))
 
@@ -241,20 +255,8 @@ async def logout(user=Depends(get_current_user)):
 
 @router.delete("/me")
 async def delete_me(user=Depends(get_current_user)):
-    timestamp = now_iso()
-    await database.update_one(
-        "users",
-        user["id"],
-        {
-            "name": "Deleted account",
-            "phone": "",
-            "email": "",
-            "normalized_email": None,
-            "token": "",
-            "token_expires_at": None,
-            "status": "deleted",
-            "deleted_at": timestamp,
-            "updated_at": timestamp,
-        },
-    )
-    return api_success({"deleted": True})
+    try:
+        result = await delete_account(user)
+    except AccountDeletionBlockedError as error:
+        api_error(str(error), 409)
+    return api_success(result)

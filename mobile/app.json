@@ -2,7 +2,7 @@
   "expo": {
     "name": "LetsGoRide",
     "slug": "letsgoride-mobile",
-    "version": "1.0.1",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
@@ -10,6 +10,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false
+        },
         "NSCameraUsageDescription": "LetsGoRide may use the camera to capture profile photos and driver verification documents.",
         "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos from your photo library.",
         "NSLocationWhenInUseUsageDescription": "LetsGoRide uses your location during an active ride or delivery to provide live journey progress.",
@@ -31,6 +34,12 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ],
       "package": "com.letsgo.ride"
     },
@@ -56,13 +65,19 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "LetsGoRide lets you choose profile photos from your photo library."
+          "photosPermission": "LetsGoRide lets you choose profile photos from your photo library.",
+          "microphonePermission": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "LetsGoRide uses your location during an active ride or delivery to provide live journey progress."
+          "locationWhenInUsePermission": "LetsGoRide uses your location during an active ride or delivery to provide live journey progress.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
       "expo-font"

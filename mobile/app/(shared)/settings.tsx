@@ -172,7 +172,7 @@ export default function SettingsScreen() {
       await deleteAccount();
       await disableBiometricLogin();
       setDeleteModalOpen(false);
-      Alert.alert("Account deleted", "Your LetsGoRide account has been deleted.");
+      Alert.alert("Account deleted", "Your account access and non-retained profile data have been removed.");
       router.replace("/(customer)/home" as never);
     } catch {
       Alert.alert("Delete account", "Could not delete your account. Please try again or contact support.");
@@ -220,7 +220,7 @@ export default function SettingsScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Delete account?</Text>
-            <Text style={styles.body}>This permanently deletes your LetsGoRide account, activity, messages, verification records, and saved preferences.</Text>
+            <Text style={styles.body}>Deleting your account signs you out and removes or de-identifies your profile, contact details, saved preferences, device registrations and messages you sent. Limited completed service, safety, support, verification, fraud-prevention and legal records may be retained as described in the Privacy Policy.</Text>
             <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
             <TextInput value={deleteText} onChangeText={setDeleteText} autoCapitalize="characters" placeholder="DELETE" placeholderTextColor={colors.mutedText} style={styles.confirmInput} />
             <View style={styles.modalActions}>
@@ -263,7 +263,12 @@ export default function SettingsScreen() {
       </View>
 
       <Section title="Account">
-        <ListTile icon="account-edit-outline" title="Edit profile" subtitle="Name, photo, phone, city, and preferences" onPress={() => router.push("/(shared)/edit-profile" as never)} />
+        <ListTile
+          icon="account-edit-outline"
+          title="Account details"
+          subtitle={user?.role === "passenger" ? "Photo, contact details, city, and preferences" : "Saved identity details and profile photo"}
+          onPress={() => router.push("/(shared)/edit-profile" as never)}
+        />
         {user?.role === "driver" ? (
           <ListTile icon="shield-check-outline" title="Driver verification status" subtitle={formatStatus(verificationStatus)} onPress={() => router.push("/(shared)/verification" as never)} />
         ) : null}
@@ -333,7 +338,7 @@ export default function SettingsScreen() {
         <ListTile
           icon="delete-outline"
           title="Delete account"
-          subtitle="Permanently delete this LetsGoRide account"
+          subtitle="Delete access and remove or de-identify personal data"
           onPress={() => {
             setDeleteText("");
             setDeleteModalOpen(true);

@@ -18,6 +18,16 @@ MERCHANT_ORDER_TRANSITIONS = {
     "PREPARING": {"READY_FOR_PICKUP"},
 }
 
+RESTAURANT_IDENTITY_FIELDS = {
+    "name",
+    "phone",
+    "address",
+    "location",
+    "contact_person_name",
+    "contact_email",
+    "business_registration_number",
+}
+
 
 def _user_id(user: Dict[str, Any]) -> str:
     return str(user.get("id") or "")
@@ -71,10 +81,14 @@ async def update_restaurant(
     updates: Dict[str, Any],
     user: Dict[str, Any],
 ) -> Dict[str, Any]:
-    await require_restaurant_access(restaurant_id, user)
-    current = await database.find_one("restaurants", {"id": restaurant_id})
+    current = await require_restaurant_access(restaurant_id, user)
     clean = {key: value for key, value in updates.items() if value is not None}
-    if clean.get("is_accepting_orders") is True and current and current.get("status") != "ACTIVE":
+    locked_identity_fields = RESTAURANT_IDENTITY_FIELDS.intersection(clean)
+    if not _is_admin(user) and current.get("status") not in {"DRAFT", "REJECTED"} and locked_identity_fields:
+        raise PermissionError(
+            "Contact LetsGoRide Support to change reviewed business identity details."
+        )
+    if clean.get("is_accepting_orders") is True and current.get("status") != "ACTIVE":
         raise ValueError("Restaurant approval and activation are required before accepting orders.")
     clean["updated_at"] = now_iso()
     updated = await database.update_one("restaurants", restaurant_id, clean)

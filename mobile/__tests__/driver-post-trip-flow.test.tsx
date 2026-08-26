@@ -28,10 +28,6 @@ jest.mock("../hooks/useCurrentUser", () => ({
   }),
 }));
 
-jest.mock("../services/authService", () => ({
-  updateCurrentUser: jest.fn(),
-}));
-
 jest.mock("../services/ridesService", () => ({
   createRide: jest.fn(),
 }));
@@ -86,7 +82,12 @@ describe("driver post-trip flow", () => {
     fireEvent.changeText(screen.getByLabelText("Drop-off note"), "Bulawayo City Hall");
     fireEvent.press(screen.getByRole("button", { name: "Publish trip" }));
 
-    expect(screen.getByText("Add your phone number to continue")).toBeOnTheScreen();
+    expect(screen.getAllByText(/Contact support to add or correct the phone number/).length).toBeGreaterThan(0);
+    fireEvent.press(screen.getByRole("button", { name: "Request a contact update" }));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: "/(shared)/support",
+      params: { product: "driver", subject: "Account details change" },
+    });
     expect(createRide).not.toHaveBeenCalled();
   });
 

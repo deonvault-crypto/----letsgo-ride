@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { LocationPickerMap, LocationPickerMapHandle, MapRegion as Region } from "../../components/maps/LocationPickerMap";
+import { LocationSelectionMarker } from "../../components/maps/LocationSelectionMarker";
 import { Screen } from "../../components/ui/Screen";
 import { AppNotice } from "../../components/ui/AppNotice";
 import { v2Theme } from "../../constants/v2Theme";
@@ -272,6 +273,7 @@ export default function LocationPickerScreen() {
   const showShortcuts = suggestions.length === 0 && query.trim().length < 2;
   const screenTitle = kind === "pickup" ? "Choose pickup" : kind === "dropoff" ? "Choose drop-off" : "Choose delivery location";
   const eyebrow = kind === "pickup" ? "PICKUP" : kind === "dropoff" ? "DROP-OFF" : "DELIVERY";
+  const markerLabel = kind === "pickup" ? "Selected pickup coordinate" : kind === "dropoff" ? "Selected destination coordinate" : "Selected delivery coordinate";
   const fallbackRoute = kind === "food" ? "/(shared)/food/checkout" : "/(shared)/courier";
 
   return (
@@ -359,10 +361,7 @@ export default function LocationPickerScreen() {
 
       <View style={styles.mapCard}>
         <LocationPickerMap ref={mapRef} style={styles.map} initialRegion={initialRegion.current} onMovementStart={mapMovementStarted} onRegionChangeComplete={mapSettled} />
-        {Platform.OS !== "web" ? <View pointerEvents="none" style={styles.centerPin}>
-          <View style={styles.pinBubble}><MaterialCommunityIcons name="map-marker" size={30} color="#FFFFFF" /></View>
-          <View style={styles.pinShadow} />
-        </View> : null}
+        {Platform.OS !== "web" ? <LocationSelectionMarker accessibilityLabel={markerLabel} /> : null}
         {Platform.OS !== "web" ? <View pointerEvents="none" style={styles.mapHint}>
           {pinLookingUp ? <ActivityIndicator size="small" color={v2Theme.colors.brandStrong} /> : <MaterialCommunityIcons name="gesture-swipe" size={18} color={v2Theme.colors.inkSecondary} />}
           <Text style={styles.mapHintText}>{pinLookingUp ? "Finding the nearest address…" : "Move the map to place the pin at the exact handoff"}</Text>
@@ -441,7 +440,6 @@ const styles = StyleSheet.create({
   resultsCard: { position: "absolute", left: 0, right: 0, top: 136, zIndex: 20, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
   resultRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line }, resultIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, resultCopy: { flex: 1, gap: 2 }, resultTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, resultBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14 },
   mapCard: { flex: 1, minHeight: 300, borderRadius: v2Theme.radius.xxl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surfaceMuted }, map: { flex: 1 },
-  centerPin: { position: "absolute", left: "50%", top: "50%", marginLeft: -22, marginTop: -46, width: 44, height: 52, alignItems: "center" }, pinBubble: { width: 44, height: 44, borderRadius: 17, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 7 }, pinShadow: { width: 13, height: 5, borderRadius: 7, backgroundColor: "rgba(16,18,16,0.2)", marginTop: 3 },
   mapHint: { position: "absolute", left: 12, right: 12, bottom: 12, minHeight: 42, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.94)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 }, mapHintText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
   confirmArea: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 12 }, selectedCopy: { gap: 3 }, selectedEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1 }, selectedTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, selectedBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
   saveRow: { flexDirection: "row", gap: 8 }, saveChip: { flex: 1, minHeight: 42, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 }, saveChipText: { color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },

@@ -1,24 +1,46 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 
+import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useDriver } from "../../hooks/useDriver";
 import { logoutToGuest } from "../../services/authService";
+import { listMyWorkerApplications } from "../../services/operationsService";
+import { WorkerApplication } from "../../types/operations.types";
 
 export default function DriverAccountScreen() {
   const router = useRouter();
   const { user } = useCurrentUser();
   const { driver } = useDriver();
+  const [application, setApplication] = useState<WorkerApplication | null>(null);
   const verified = Boolean(driver?.verified || driver?.verification_status === "approved");
   const productParam = { product: "driver" };
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void listMyWorkerApplications().then((items) => {
+      if (active) setApplication(items.find((item) => item.product === "driver") || null);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []));
   async function signOut() { await logoutToGuest(router); }
   return (
     <Screen title="Account" navRole="driver">
-      <View style={styles.profile}><Avatar name={user?.name || "Driver"} imageUri={user?.profile_photo_url} size={72} /><View style={styles.flex}><Text numberOfLines={1} style={styles.name}>{user?.name || "Driver"}</Text><Text style={styles.meta}>{user?.phone || "Phone not added"}</Text><Text style={styles.meta}>{user?.email || "Email not added"}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: productParam } as never)} style={styles.edit}><MaterialCommunityIcons name="pencil-outline" size={20} color={v2Theme.colors.ink} /></Pressable></View>
+      <View style={styles.profile}><Avatar name={application?.full_name || user?.name || "Driver"} imageUri={user?.profile_photo_url} size={72} /><View style={styles.flex}><Text numberOfLines={1} style={styles.name}>{application?.full_name || user?.name || "Driver"}</Text><Text style={styles.meta}>Driver account</Text></View></View>
+      <AccountDetailsSummary
+        rows={[
+          { label: "Full legal name", value: application?.full_name || user?.name || "Not added" },
+          { label: "Email", value: user?.email || "Not added" },
+          { label: "Phone", value: application?.phone || user?.phone || "Not added" },
+          { label: "Service city", value: application?.service_area || String(driver?.city || user?.city || "Not added") },
+        ]}
+        note="These details were used to verify your Driver account. Contact support to request a correction."
+        onRequestChange={() => router.push({ pathname: "/(shared)/support", params: { ...productParam, subject: "Account details change" } } as never)}
+      />
       <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/verification", params: productParam } as never)} style={[styles.verification, verified && styles.verificationGood]}><View style={styles.verificationIcon}><MaterialCommunityIcons name={verified ? "shield-check" : "shield-account-outline"} size={26} color={verified ? v2Theme.colors.brandStrong : v2Theme.colors.warning} /></View><View style={styles.flex}><Text style={styles.verificationTitle}>{verified ? "Driver verified" : "Driver verification required"}</Text><Text style={styles.verificationBody}>{verified ? "Posting and passenger operations are enabled." : "Complete identity, licence, vehicle and selfie review before posting trips."}</Text></View><MaterialCommunityIcons name="chevron-right" size={21} color={v2Theme.colors.inkTertiary} /></Pressable>
       <Section title="Driver profile">
         <Row icon="car-info" title="Vehicle" value={String(driver?.vehicle || "Not added")} />

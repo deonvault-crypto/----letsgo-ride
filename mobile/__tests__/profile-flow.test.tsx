@@ -4,6 +4,7 @@ import EditProfileScreen from "../app/(shared)/edit-profile";
 import ProfileScreen from "../app/(shared)/profile";
 import { updateCurrentUser, uploadProfilePhoto } from "../services/authService";
 import { getMyVerification } from "../services/verificationService";
+import { listMyWorkerApplications } from "../services/operationsService";
 import { User } from "../types/user.types";
 import { driverUser, notStartedProfile, passengerUser, pendingProfile, verifiedProfile } from "./fixtures";
 
@@ -14,6 +15,7 @@ let mockCurrentUser: User | null = passengerUser;
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useLocalSearchParams: () => ({ mode: "edit" }),
   usePathname: () => "/profile",
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = require("react");
@@ -47,6 +49,10 @@ jest.mock("../services/verificationService", () => ({
   getMyVerification: jest.fn(),
 }));
 
+jest.mock("../services/operationsService", () => ({
+  listMyWorkerApplications: jest.fn(async () => []),
+}));
+
 describe("profile update flow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -57,7 +63,8 @@ describe("profile update flow", () => {
   it("shows the customer account summary, saves edits, and keeps updated fields visible", async () => {
     const updatedUser: User = {
       ...passengerUser,
-      name: "Tendai Chipo",
+      name: "Tendai Moyo",
+      pending_email: "new-email@example.com",
       phone: "+263779999999",
       city: "Mutare",
       bio: "Travels between Harare and Mutare",
@@ -66,8 +73,8 @@ describe("profile update flow", () => {
     (updateCurrentUser as jest.Mock).mockResolvedValueOnce(updatedUser);
 
     const summary = render(<ProfileScreen />);
-    expect(summary.getByText("Tendai Moyo")).toBeOnTheScreen();
-    expect(summary.getByText("Harare")).toBeOnTheScreen();
+    expect(summary.getAllByText("Tendai Moyo").length).toBeGreaterThan(0);
+    expect(summary.getAllByText("Harare").length).toBeGreaterThan(0);
     expect(summary.getByText("Customer")).toBeOnTheScreen();
     expect(summary.queryByText("Driver verification")).toBeNull();
     expect(summary.queryByText(/stays customer/i)).toBeNull();
@@ -76,44 +83,78 @@ describe("profile update flow", () => {
     summary.unmount();
 
     const screen = render(<EditProfileScreen />);
-    expect(screen.getByDisplayValue("Tendai Moyo")).toBeOnTheScreen();
+    expect(screen.getAllByText("Tendai Moyo").length).toBeGreaterThan(0);
+    expect(screen.getByText("Contact LetsGoRide Support to change your legal name.")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("Full name")).toBeNull();
     expect(screen.getByDisplayValue("+263771234567")).toBeOnTheScreen();
     expect(screen.getByText("Harare")).toBeOnTheScreen();
 
-    fireEvent.changeText(screen.getByLabelText("Full name"), "Tendai Chipo");
+    fireEvent.changeText(screen.getByLabelText("Email"), "new-email@example.com");
     fireEvent.changeText(screen.getByLabelText("Phone number"), "+263779999999");
     fireEvent.press(screen.getByRole("button", { name: "City" }));
     fireEvent.changeText(screen.getByPlaceholderText("Search or type a location"), "Mutare");
     fireEvent.press(screen.getByText("Mutare"));
     fireEvent.changeText(screen.getByLabelText("About"), "Travels between Harare and Mutare");
     fireEvent.changeText(screen.getByLabelText("Preferences"), "Quiet morning trips");
-    fireEvent.press(screen.getByRole("button", { name: "Save profile" }));
+    fireEvent.press(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updateCurrentUser).toHaveBeenCalledWith(expect.objectContaining({
-        name: "Tendai Chipo",
+        email: "new-email@example.com",
         phone: "+263779999999",
         city: "Mutare",
         bio: "Travels between Harare and Mutare",
         travel_preferences: "Quiet morning trips",
       }));
-      expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
-      expect(screen.getByText("Mutare")).toBeOnTheScreen();
-      expect(screen.getByText("Profile saved. Returning to account...")).toBeOnTheScreen();
-      expect(screen.getByText("Phone number saved. Verification may be required for some account actions.")).toBeOnTheScreen();
+      expect(updateCurrentUser).not.toHaveBeenCalledWith(expect.objectContaining({ name: expect.anything() }));
+      expect(screen.getByTestId("saved-account-summary")).toBeOnTheScreen();
+      expect(screen.getByText("Changes saved")).toBeOnTheScreen();
+      expect(screen.getByText(passengerUser.email!)).toBeOnTheScreen();
+      expect(screen.getByText("Your current verified email stays active until you verify the new address.")).toBeOnTheScreen();
+      expect(screen.getByRole("button", { name: "Verify new email" })).toBeOnTheScreen();
     });
 
-    await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith("/(shared)/account");
-    }, { timeout: 2000 });
+    expect(mockReplace).not.toHaveBeenCalled();
 
     mockCurrentUser = updatedUser;
     screen.rerender(<EditProfileScreen />);
 
-    expect(screen.getByDisplayValue("Tendai Chipo")).toBeOnTheScreen();
+    expect(screen.getAllByText("Tendai Moyo").length).toBeGreaterThan(0);
     expect(screen.getByText("Mutare")).toBeOnTheScreen();
-    expect(screen.queryByDisplayValue("")).not.toBeOnTheScreen();
   }, 15000);
+
+  it("keeps approved workforce profiles in support-only summaries after reopen", async () => {
+    for (const product of ["driver", "courier", "merchant"] as const) {
+      mockCurrentUser = { ...driverUser, id: `${product}-user`, role: product, verification_status: "approved" };
+      (listMyWorkerApplications as jest.Mock).mockResolvedValueOnce([{
+        id: `application-${product}`,
+        user_id: `${product}-user`,
+        product,
+        full_name: `Saved ${product}`,
+        phone: "+263771111111",
+        service_area: "Harare",
+        service_area_id: "harare",
+        accepted_terms: true,
+        status: "APPROVED",
+        documents: [],
+        required_document_types: [],
+        missing_document_types: [],
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-02T00:00:00Z",
+      }]);
+
+      const screen = render(<EditProfileScreen />);
+      expect(await screen.findByTestId("saved-account-summary")).toBeOnTheScreen();
+      expect(screen.queryByLabelText("Email")).toBeNull();
+      expect(screen.queryByLabelText("Phone number")).toBeNull();
+      fireEvent.press(screen.getByRole("button", { name: "Request a change" }));
+      expect(mockPush).toHaveBeenLastCalledWith({
+        pathname: "/(shared)/support",
+        params: { subject: "Account details change", product },
+      });
+      screen.unmount();
+    }
+  });
 
   it("shows driver verification under review only for a Driver account", async () => {
     mockCurrentUser = { ...driverUser, verification_status: pendingProfile.verification_status };
@@ -149,7 +190,7 @@ describe("profile update flow", () => {
     const screen = render(<EditProfileScreen />);
 
     expect(screen.getAllByText("TM").length).toBeGreaterThan(0);
-    fireEvent.press(screen.getByRole("button", { name: "Update photo" }));
+    fireEvent.press(screen.getByRole("button", { name: "Update profile photo" }));
 
     await waitFor(() => {
       expect(uploadProfilePhoto).toHaveBeenCalledWith({
@@ -157,7 +198,7 @@ describe("profile update flow", () => {
         fileName: "profile.jpg",
         mimeType: "image/jpeg",
       });
-      expect(screen.getByText("Profile photo saved.")).toBeOnTheScreen();
+      expect(screen.getByText("Profile photo saved")).toBeOnTheScreen();
     });
   });
 });

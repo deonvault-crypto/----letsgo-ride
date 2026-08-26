@@ -1,88 +1,108 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 
+import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
 import { Avatar } from "../../components/ui/Avatar";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
 import { LocationPicker } from "../../components/ui/LocationPicker";
 import { Screen } from "../../components/ui/Screen";
-import { StatusBadge } from "../../components/ui/StatusBadge";
 import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { updateCurrentUser, uploadProfilePhoto } from "../../services/authService";
-import { displayNameOrFallback, isGenericAccountName } from "../../utils/displayName";
+import { listMyWorkerApplications } from "../../services/operationsService";
+import { WorkerApplication } from "../../types/operations.types";
+import { User } from "../../types/user.types";
+import { displayNameOrFallback } from "../../utils/displayName";
 import { isValidPhone } from "../../utils/validation";
+
+type ViewMode = "summary" | "edit";
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string; product?: string }>();
   const { user } = useCurrentUser();
-  const navRole: "customer" | "driver" | undefined = user?.role === "driver"
-    ? "driver"
-    : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
-      ? undefined
-      : "customer";
-  const displayName = displayNameOrFallback(user?.name);
-  const verified = isIdentityVerified(user);
-  const [name, setName] = useState("");
+  const [record, setRecord] = useState<User | null>(user);
+  const [application, setApplication] = useState<WorkerApplication | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(params.mode === "edit" ? "edit" : "summary");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [profileCity, setProfileCity] = useState("");
   const [bio, setBio] = useState("");
   const [travelPreferences, setTravelPreferences] = useState("");
   const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
-  const [profilePhotoName, setProfilePhotoName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [savedAndLeaving, setSavedAndLeaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [phoneMessage, setPhoneMessage] = useState("");
+  const [contactNotice, setContactNotice] = useState("");
   const [isError, setIsError] = useState(false);
+  const role = record?.role || user?.role;
+  const isCustomer = role === "passenger";
+  const navRole: "customer" | "driver" | undefined = role === "driver"
+    ? "driver"
+    : role === "courier" || role === "merchant" || role === "admin"
+      ? undefined
+      : "customer";
+  const product = role === "driver" || role === "courier" || role === "merchant" ? role : undefined;
 
-  function fillFormFromUser(nextUser: typeof user) {
+  function fillFormFromUser(nextUser: User | null | undefined) {
     if (!nextUser) return;
-    setName(isGenericAccountName(nextUser.name) ? "" : nextUser.name || "");
+    setRecord(nextUser);
     setEmail(nextUser.email || "");
     setPhone(nextUser.phone || "");
     setProfileCity(nextUser.city || "");
     setBio(nextUser.bio || "");
     setTravelPreferences(nextUser.travel_preferences || "");
     setProfilePhotoUrl(nextUser.profile_photo_url || "");
-    setProfilePhotoName(nextUser.profile_photo_name || "");
   }
 
   useEffect(() => {
     fillFormFromUser(user);
   }, [user]);
 
+  useEffect(() => {
+    if (!product) {
+      setApplication(null);
+      return;
+    }
+    let active = true;
+    void listMyWorkerApplications()
+      .then((items) => {
+        if (active) setApplication(items.find((item) => item.product === product) || null);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [product]);
+
   async function saveProfile() {
+    if (!isCustomer) return;
     try {
       setSaving(true);
       setIsError(false);
       setMessage("");
-      setPhoneMessage("");
+      setContactNotice("");
       if (phone.trim() && !isValidPhone(phone)) {
         setIsError(true);
         setMessage("Enter your phone number with country code, for example +263700000000.");
         return;
       }
-      const phoneChanged = phone.trim() !== (user?.phone || "");
+      const emailChanged = email.trim().toLowerCase() !== (record?.email || "").trim().toLowerCase();
       const updated = await updateCurrentUser({
-        name: name.trim() || undefined,
+        email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         city: profileCity.trim() || undefined,
         bio: bio.trim() || undefined,
         travel_preferences: travelPreferences.trim() || undefined,
       });
       fillFormFromUser(updated);
-      setSavedAndLeaving(true);
-      setMessage("Profile saved. Returning to account...");
-      if (phoneChanged) {
-        setPhoneMessage("Phone number saved. Verification may be required for some account actions.");
+      setViewMode("summary");
+      setMessage("Changes saved");
+      if (emailChanged && updated.pending_email) {
+        setContactNotice("Your current verified email stays active until you verify the new address.");
       }
-      setTimeout(() => router.replace("/(shared)/account" as never), 900);
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : "Unable to update profile.");
@@ -96,7 +116,7 @@ export default function EditProfileScreen() {
       setSaving(true);
       setIsError(false);
       setMessage("");
-      setPhoneMessage("");
+      setContactNotice("");
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [1, 1],
@@ -111,7 +131,7 @@ export default function EditProfileScreen() {
         mimeType: asset.mimeType || "image/jpeg",
       });
       fillFormFromUser(updated);
-      setMessage("Profile photo saved.");
+      setMessage("Profile photo saved");
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : "Unable to update profile photo.");
@@ -120,118 +140,98 @@ export default function EditProfileScreen() {
     }
   }
 
+  function requestChange() {
+    router.push({
+      pathname: "/(shared)/support",
+      params: { subject: "Account details change", ...(product ? { product } : {}) },
+    } as never);
+  }
+
+  const displayName = displayNameOrFallback(application?.full_name || record?.name);
+  const verified = isIdentityVerified(record);
+  const summaryRows = [
+    { label: "Full legal name", value: application?.full_name || record?.name || "Not added" },
+    { label: "Email", value: record?.email || "Not added" },
+    { label: "Phone", value: application?.phone || record?.phone || "Not added" },
+    { label: product === "merchant" ? "Business city" : product ? "Service city" : "City", value: application?.service_area || record?.city || "Not added" },
+  ];
+  const identityNote = isCustomer
+    ? "Contact LetsGoRide Support to change your legal name. Contact details and ordinary preferences can be updated here."
+    : `These details were used to verify your ${product === "merchant" ? "Merchant" : product === "driver" ? "Driver" : "Courier"} account. Contact support to request a correction.`;
+
   return (
-    <Screen title="Edit profile" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
-      <View style={styles.card}>
+    <Screen title="Account details" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
+      <View style={styles.photoCard}>
         <View style={styles.photoRow}>
-          <Avatar name={displayName} imageUri={profilePhotoUrl} size={76} />
+          <Avatar name={displayName} imageUri={profilePhotoUrl} size={72} />
           <View style={styles.photoCopy}>
             <View style={styles.nameRow}>
               <Text style={styles.title}>{displayName}</Text>
               <VerifiedBadge verified={verified} />
             </View>
-            <Text style={styles.body}>{email || "Email not set"}</Text>
-            {verified ? <StatusBadge label="Identity verified" tone="success" /> : null}
+            <Text style={styles.body}>{isCustomer ? "Customer profile" : `${product === "merchant" ? "Merchant" : product === "driver" ? "Driver" : "Courier"} profile`}</Text>
           </View>
         </View>
-        <AppButton title="Update photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} disabled={savedAndLeaving} />
+        <AppButton title="Update profile photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} />
       </View>
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Account</Text>
-        <AppInput label="Full name" value={name} onChangeText={setName} editable={!savedAndLeaving} />
-        <View style={styles.readOnlyField}>
-          <Text style={styles.readOnlyLabel}>Email</Text>
-          <Text style={styles.readOnlyValue}>{email || "Email not set"}</Text>
-          <Text style={styles.helperText}>Changing a verified email requires a separate re-verification flow.</Text>
+
+      {message ? <Text accessibilityRole="alert" style={[styles.message, isError && styles.error]}>{message}</Text> : null}
+      {contactNotice ? <Text style={styles.contactNotice}>{contactNotice}</Text> : null}
+      {record?.pending_email ? (
+        <AppButton
+          title="Verify new email"
+          variant="secondary"
+          onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: record.pending_email, returnTo: "/(shared)/edit-profile", context: "account-change" } } as never)}
+        />
+      ) : null}
+
+      {viewMode === "summary" || !isCustomer ? (
+        <AccountDetailsSummary
+          rows={summaryRows}
+          note={identityNote}
+          onEdit={isCustomer ? () => { setMessage(""); setContactNotice(""); setViewMode("edit"); } : undefined}
+          onRequestChange={requestChange}
+        />
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Contact & preferences</Text>
+          <View style={styles.readOnlyField}>
+            <Text style={styles.readOnlyLabel}>Full legal name</Text>
+            <Text style={styles.readOnlyValue}>{record?.name || "Not added"}</Text>
+            <Text style={styles.helperText}>Contact LetsGoRide Support to change your legal name.</Text>
+            <AppButton title="Request a change" variant="ghost" onPress={requestChange} />
+          </View>
+          <AppInput label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+          <Text style={styles.helperText}>A changed email must be verified before it can be trusted for account recovery.</Text>
+          <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263700000000" />
+          <LocationPicker label="City" value={profileCity} onChangeText={setProfileCity} />
+          <AppInput label="About" value={bio} onChangeText={setBio} multiline />
+          <AppInput label="Preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline />
+          <View style={styles.actions}>
+            <AppButton title="Cancel" variant="secondary" onPress={() => { fillFormFromUser(record); setMessage(""); setContactNotice(""); setViewMode("summary"); }} />
+            <AppButton title="Save changes" loading={saving} onPress={saveProfile} />
+          </View>
         </View>
-        <AppInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+263700000000" editable={!savedAndLeaving} />
-        <Text style={styles.helperText}>Use country code, for example +263700000000.</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Profile details</Text>
-        <LocationPicker label="City" value={profileCity} onChangeText={setProfileCity} disabled={savedAndLeaving} />
-        <AppInput label="About" value={bio} onChangeText={setBio} multiline editable={!savedAndLeaving} />
-        <AppInput label="Preferences" value={travelPreferences} onChangeText={setTravelPreferences} multiline editable={!savedAndLeaving} />
-        {message ? <Text style={[styles.message, isError && styles.error]}>{message}</Text> : null}
-        {phoneMessage ? <Text style={styles.phoneNotice}>{phoneMessage}</Text> : null}
-        <AppButton title="Save profile" loading={saving} disabled={savedAndLeaving} onPress={saveProfile} />
-      </View>
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  photoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  photoCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  title: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 20,
-  },
-  sectionTitle: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    fontSize: 17,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    flexWrap: "wrap",
-  },
-  body: {
-    color: colors.mutedText,
-    lineHeight: 21,
-  },
-  helperText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "700",
-  },
-  readOnlyField: {
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.elevated,
-    padding: spacing.md,
-    gap: 4,
-  },
-  readOnlyLabel: {
-    color: colors.mutedText,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  readOnlyValue: {
-    color: colors.whiteText,
-    fontWeight: "900",
-  },
-  message: {
-    color: colors.primaryGreen,
-    fontWeight: "900",
-  },
-  phoneNotice: {
-    color: colors.primaryGreen,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "800",
-  },
-  error: {
-    color: colors.danger,
-  },
+  photoCard: { backgroundColor: colors.card, borderRadius: 26, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.md },
+  photoRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  photoCopy: { flex: 1, gap: 4 },
+  title: { color: colors.whiteText, fontWeight: "900", fontSize: 20 },
+  sectionTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 17 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
+  body: { color: colors.mutedText, lineHeight: 21 },
+  card: { backgroundColor: colors.card, borderRadius: 26, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.md },
+  helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 18, fontWeight: "700" },
+  readOnlyField: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated, padding: spacing.md, gap: 5 },
+  readOnlyLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "900" },
+  readOnlyValue: { color: colors.whiteText, fontWeight: "900" },
+  actions: { gap: spacing.sm },
+  message: { borderRadius: 16, backgroundColor: "#EAF6EE", padding: 11, color: colors.primaryGreen, fontWeight: "900" },
+  contactNotice: { borderRadius: 16, backgroundColor: "#FFF6E5", padding: 11, color: "#8B5B08", fontSize: 11, lineHeight: 17, fontWeight: "800" },
+  error: { backgroundColor: "#FFF0F0", color: colors.danger },
 });

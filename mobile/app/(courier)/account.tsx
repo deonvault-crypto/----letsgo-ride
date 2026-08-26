@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 
+import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
@@ -32,7 +33,17 @@ export default function CourierAccountScreen() {
 
   return (
     <Screen title="Account" navRole="courier" onRefresh={load} refreshing={false}>
-      <View style={styles.profile}><Avatar name={user?.name || "Courier"} imageUri={user?.profile_photo_url} size={72} /><View style={styles.profileCopy}><Text numberOfLines={1} style={styles.name}>{user?.name || "Courier"}</Text><Text style={styles.contact}>{user?.phone || "Phone not added"}</Text><Text style={styles.contact}>{user?.email || "Email not added"}</Text></View><Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: productParam } as never)} style={styles.edit}><MaterialCommunityIcons name="pencil-outline" size={20} color={v2Theme.colors.ink} /></Pressable></View>
+      <View style={styles.profile}><Avatar name={application?.full_name || user?.name || "Courier"} imageUri={user?.profile_photo_url} size={72} /><View style={styles.profileCopy}><Text numberOfLines={1} style={styles.name}>{application?.full_name || user?.name || "Courier"}</Text><Text style={styles.contact}>Courier account</Text></View></View>
+      <AccountDetailsSummary
+        rows={[
+          { label: "Full legal name", value: application?.full_name || user?.name || "Not added" },
+          { label: "Email", value: user?.email || "Not added" },
+          { label: "Phone", value: application?.phone || user?.phone || "Not added" },
+          { label: "Service city", value: application?.service_area || profile?.service_area || user?.city || "Not added" },
+        ]}
+        note="These details were used to verify your Courier account. Contact support to request a correction."
+        onRequestChange={() => router.push({ pathname: "/(shared)/support", params: { ...productParam, subject: "Account details change" } } as never)}
+      />
       {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
       <View style={[styles.approval, profile?.status === "APPROVED" && styles.approvalGood]}><View style={styles.approvalIcon}><MaterialCommunityIcons name={profile?.status === "APPROVED" ? "shield-check" : "shield-outline"} size={25} color={profile?.status === "APPROVED" ? v2Theme.colors.brandStrong : v2Theme.colors.warning} /></View><View style={styles.flex}><Text style={styles.approvalTitle}>{profile?.status === "APPROVED" ? "Courier approved" : "Courier review in progress"}</Text><Text style={styles.approvalBody}>{profile?.status === "APPROVED" ? "Online work and shift booking are enabled." : "Work access stays locked until admin approval."}</Text></View></View>
       <Section title="Work profile">
@@ -45,7 +56,7 @@ export default function CourierAccountScreen() {
         <View style={styles.preferenceRow}><Preference label="System" value="system" active={navigationApp === "system"} onPress={chooseNavigation} /><Preference label="Google" value="google" active={navigationApp === "google"} onPress={chooseNavigation} /><Preference label="Apple" value="apple" active={navigationApp === "apple"} onPress={chooseNavigation} /></View>
       </Section>
       <Section title="Preferences & payout">
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/settings", params: productParam } as never)}><AccountRow icon="bell-outline" title="Notifications" value="Delivery, shift and support settings" chevron /></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/settings", params: productParam } as never)}><AccountRow icon="account-cog-outline" title="Account & notifications" value="Account control, delivery, shift and support settings" chevron /></Pressable>
         <AccountRow icon="translate" title="Language" value="English" />
         <AccountRow icon="bank-outline" title="Payout method" value="Settlement integration not connected" />
       </Section>
