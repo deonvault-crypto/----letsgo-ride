@@ -141,6 +141,11 @@ export default function DriverVerificationScreen() {
       const updated = await submitManualVerification({
         consent,
         verification_notes: notes,
+        documents: requiredCaptureDocuments.map((documentType) => {
+          const document = findLatestDocument(uploadedDocuments, documentType);
+          if (!document?.id) throw new Error("Upload every required document before submitting.");
+          return { document_id: document.id, document_type: document.document_type };
+        }),
       });
       setProfile(updated);
     } catch (err) {

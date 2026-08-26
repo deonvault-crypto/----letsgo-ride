@@ -78,7 +78,7 @@ export async function getCurrentUser() {
   return requestData<User>({ method: "GET", url: "/auth/me" });
 }
 
-export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "profile_photo_url" | "profile_photo_name" | "role" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
+export async function updateCurrentUser(data: Partial<Pick<User, "name" | "phone" | "email" | "city" | "bio" | "travel_preferences" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {
   const user = await requestData<User>({ method: "PATCH", url: "/auth/me", data });
   publishSessionUser(user);
   return user;
@@ -117,6 +117,7 @@ export async function deleteAccount() {
 
 export async function logout() {
   await disablePhoneNotifications().catch(() => undefined);
+  await requestData<{ logged_out: boolean }>({ method: "POST", url: "/auth/logout" }).catch(() => undefined);
   await clearPrivateSessionState();
 }
 

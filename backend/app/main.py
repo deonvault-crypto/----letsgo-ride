@@ -19,7 +19,13 @@ from app.utils import api_success
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
-app = FastAPI(title="LetsGoRide API", version="0.1.0")
+app = FastAPI(
+    title="LetsGoRide API",
+    version="0.1.0",
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 ride_lifecycle_stop_event: asyncio.Event | None = None
 ride_lifecycle_task: asyncio.Task | None = None
 staging_routing_smoke_task: asyncio.Task | None = None
@@ -27,10 +33,10 @@ staging_courier_dispatch_smoke_task: asyncio.Task | None = None
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins if settings.cors_origins != ["*"] else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,
+    allow_credentials="*" not in settings.cors_origins,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 
@@ -55,7 +61,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         logger.error(
             "verification_upload stage=form_parse_failed path=%s errors=%s",
             request.url.path,
-            exc.errors(),
+            "redacted" if settings.is_production else exc.errors(),
         )
         return JSONResponse(
             status_code=422,
@@ -63,7 +69,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 "success": False,
                 "stage": "form_parse",
                 "error": "Verification upload form validation failed.",
-                "details": exc.errors(),
+                **({} if settings.is_production else {"details": exc.errors()}),
             },
         )
     if request.url.path.startswith("/courier/deliveries/") and request.url.path.endswith("/location"):
@@ -81,7 +87,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         )
     return JSONResponse(
         status_code=422,
-        content={"success": False, "error": "Validation failed.", "details": exc.errors()},
+        content={"success": False, "error": "Validation failed.", **({} if settings.is_production else {"details": exc.errors()})},
     )
 
 

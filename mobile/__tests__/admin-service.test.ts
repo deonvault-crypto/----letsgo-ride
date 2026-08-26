@@ -5,6 +5,7 @@ import {
   listAdminUsers,
   updateAdminRequestStatus,
   updateAdminUserStatus,
+  getAdminDocumentUrl,
 } from "../services/adminService";
 
 const mockRequestData = jest.fn();
@@ -79,5 +80,18 @@ describe("admin operations service", () => {
       url: "/admin/users/user-1/status",
       params: { status: "suspended", reason: "Safety review" },
     });
+  });
+
+  it("uses a one-time document ticket instead of putting the bearer token in a URL", async () => {
+    mockRequestData.mockResolvedValueOnce({ url: "/admin/verifications/driver-1/documents/document-1/view?document_token=one-time" });
+
+    const url = await getAdminDocumentUrl("driver-1", "document-1");
+
+    expect(mockRequestData).toHaveBeenCalledWith({
+      method: "POST",
+      url: "/admin/verifications/driver-1/documents/document-1/access",
+    });
+    expect(url).toContain("document_token=one-time");
+    expect(url).not.toContain("access_token=");
   });
 });

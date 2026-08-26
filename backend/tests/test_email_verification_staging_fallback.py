@@ -30,6 +30,7 @@ class EmailVerificationStagingFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "ALLOW_STAGING_EMAIL_MOCK": "true",
                 "ALLOW_STAGING_MOCK_OTP": "true",
                 "MOCK_OTP": "123456",
+                "CORS_ORIGINS": "https://letsgoride.site",
             },
             clear=False,
         ):
@@ -58,6 +59,7 @@ class EmailVerificationStagingFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "APP_ENV": "production",
                 "ALLOW_STAGING_EMAIL_MOCK": "true",
                 "MOCK_OTP": "123456",
+                "CORS_ORIGINS": "https://letsgoride.site",
             },
             clear=False,
         ):

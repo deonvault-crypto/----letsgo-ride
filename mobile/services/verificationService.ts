@@ -65,7 +65,7 @@ export async function submitManualVerification(data: {
   verification_notes?: string;
   city?: string;
   vehicle?: string;
-  documents?: VerificationDocument[];
+  documents: Array<{ document_id: string; document_type: VerificationDocumentType }>;
 }) {
   const response = await requestData<Partial<VerificationProfile> | null>({
     method: "POST",
@@ -202,8 +202,6 @@ function normalizeVerificationDocument(document: unknown): VerificationDocument 
     id: typeof raw.id === "string" ? raw.id : undefined,
     document_type: documentType,
     file_name: String(raw.file_name || raw.filename || raw.name || `${documentType}.jpg`),
-    file_url: typeof raw.file_url === "string" ? raw.file_url : undefined,
-    cloudinary_public_id: typeof raw.cloudinary_public_id === "string" ? raw.cloudinary_public_id : null,
     uploaded_at: typeof raw.uploaded_at === "string" ? raw.uploaded_at : undefined,
     status: raw.status === "accepted" || raw.status === "rejected" ? raw.status : "pending",
     rejection_reason: typeof raw.rejection_reason === "string" ? raw.rejection_reason : undefined,

@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 VerificationStatus = Literal[
@@ -29,25 +29,28 @@ DocumentType = Literal[
 DocumentStatus = Literal["pending", "accepted", "rejected"]
 
 
-class VerificationDocumentMetadata(BaseModel):
+class VerificationDocumentReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_id: str = Field(min_length=8, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
     document_type: DocumentType
-    file_name: str = Field(min_length=1)
-    file_url: Optional[str] = None
-    storage_path: Optional[str] = None
-    content_type: Optional[str] = None
 
 
 class VerificationSubmitBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     consent: bool
-    verification_notes: Optional[str] = None
-    city: Optional[str] = None
-    vehicle: Optional[str] = None
-    documents: list[VerificationDocumentMetadata] = Field(default_factory=list)
+    verification_notes: Optional[str] = Field(default=None, max_length=1000)
+    city: Optional[str] = Field(default=None, max_length=120)
+    vehicle: Optional[str] = Field(default=None, max_length=180)
+    documents: list[VerificationDocumentReference] = Field(min_length=1, max_length=8)
 
 
 class VerificationStatusUpdateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     status: Literal["needs_review", "approved", "rejected", "needs_resubmission"]
-    admin_verification_notes: Optional[str] = None
-    rejection_reason: Optional[str] = None
-    document_id: Optional[str] = None
+    admin_verification_notes: Optional[str] = Field(default=None, max_length=1000)
+    rejection_reason: Optional[str] = Field(default=None, max_length=600)
+    document_id: Optional[str] = Field(default=None, max_length=80)
     document_status: Optional[DocumentStatus] = None

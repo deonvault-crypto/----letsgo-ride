@@ -5,14 +5,14 @@ from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user, get_optional_current_user
 from app.database import database
-from app.models.ride import LiveLocationBody, RideCreateBody, RideUpdateBody
+from app.models.ride import LiveLocationBody, RideCancellationBody, RideCreateBody, RideUpdateBody
 from app.services.ride_service import (
     create_ride,
     disable_live_location,
     end_trip,
     enrich_ride,
     apply_ride_lifecycle,
-    canonical_trip_status,
+    cancel_trip,
     is_final_trip_status,
     is_public_ride,
     live_trip_state,
@@ -22,7 +22,7 @@ from app.services.ride_service import (
     start_trip,
     update_live_location,
 )
-from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
+from app.services.ride_realtime_service import publish_ride_realtime, update_versioned_ride
 from app.services.ride_request_realtime_service import list_driver_ride_requests
 from app.utils import api_error, api_success, now_iso
 
@@ -112,12 +112,6 @@ async def update_ride(ride_id: str, payload: RideUpdateBody, user=Depends(get_cu
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
     if not updates:
         api_error("No ride updates provided.", 400)
-    if updates.get("status"):
-        updates["status"] = canonical_trip_status(updates["status"])
-        if updates["status"] in {"COMPLETED", "CANCELLED", "EXPIRED"}:
-            updates["live_tracking_enabled"] = False
-        if updates["status"] == "CANCELLED":
-            updates["cancelled_at"] = now_iso()
     updates["updated_at"] = now_iso()
     ride = await update_versioned_ride(
         {"id": ride_id, "status": existing.get("status")},
@@ -127,7 +121,7 @@ async def update_ride(ride_id: str, payload: RideUpdateBody, user=Depends(get_cu
         api_error("Ride changed while it was being updated. Refresh and try again.", 409)
     await publish_ride_realtime(
         ride,
-        ride_event_type(ride) if updates.get("status") else "ride.updated",
+        "ride.updated",
     )
     return api_success(ride)
 
@@ -146,6 +140,16 @@ async def start_trip_route(ride_id: str, user=Depends(get_current_user)):
 async def end_trip_route(ride_id: str, user=Depends(get_current_user)):
     try:
         return api_success(await end_trip(ride_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+
+
+@router.post("/{ride_id}/cancel")
+async def cancel_trip_route(ride_id: str, payload: RideCancellationBody, user=Depends(get_current_user)):
+    try:
+        return api_success(await cancel_trip(ride_id, user, payload.reason))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
@@ -184,12 +188,10 @@ async def disable_live_trip_location(ride_id: str, user=Depends(get_current_user
 
 @router.delete("/{ride_id}")
 async def delete_ride(ride_id: str, user=Depends(get_current_user)):
-    existing = await database.find_one("rides", {"id": ride_id})
-    if not existing or not is_public_ride(existing):
-        api_error("Ride not found.", 404)
-    if user.get("role") != "admin" and existing.get("user_id") != user.get("id"):
-        api_error("You can only delete trips connected to your account.", 403)
-    deleted = await database.delete_one("rides", ride_id)
-    if not deleted:
-        api_error("Ride not found.", 404)
-    return api_success({"deleted": True})
+    try:
+        ride = await cancel_trip(ride_id, user, "Cancelled by the driver.")
+        return api_success({"deleted": False, "cancelled": True, "ride": ride})
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)

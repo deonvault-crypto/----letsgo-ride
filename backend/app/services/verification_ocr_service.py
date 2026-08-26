@@ -53,9 +53,8 @@ async def extract_verification_fields(
         return _empty_result(provider="disabled", status="disabled")
 
     logger.warning(
-        "verification_intelligence stage=ocr_provider_unavailable provider=%s document_id=%s document_type=%s bytes=%s",
+        "verification_intelligence stage=ocr_provider_unavailable provider=%s document_type=%s bytes=%s",
         settings.verification_ocr_provider,
-        document.get("id"),
         document_type,
         len(file_bytes),
     )

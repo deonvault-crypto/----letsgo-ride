@@ -6,6 +6,8 @@ import { RealtimeProvider, useRealtime } from "../contexts/RealtimeContext";
 import { realtimeService } from "../services/realtimeService";
 import { passengerUser } from "./fixtures";
 
+jest.mock("expo-router", () => ({ usePathname: () => "/home" }));
+
 
 let mockSessionState: { user: typeof passengerUser | null; loading: boolean; isGuest: boolean; invalidateSession: jest.Mock };
 let mockAuthenticationFailure: (() => void) | null = null;

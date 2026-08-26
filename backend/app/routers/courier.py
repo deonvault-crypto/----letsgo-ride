@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.auth import get_current_user
 from app.models.courier import (
@@ -33,6 +33,7 @@ from app.services.delivery_quote_service import (
     customer_quote_preview,
 )
 from app.services.pricing_service import PricingNotConfiguredError
+from app.services.rate_limit_service import RateLimit, rate_limit_service
 from app.services.routing_service import (
     RoutingError,
     RoutingNoResultError,
@@ -53,7 +54,8 @@ def _pricing_unavailable_error() -> None:
 
 
 @router.post("/quote-preview")
-async def preview_courier_quote(payload: CourierQuotePreviewBody):
+async def preview_courier_quote(payload: CourierQuotePreviewBody, request: Request):
+    await rate_limit_service.enforce(request, "courier_quote_preview", RateLimit(requests=12, window_seconds=60))
     try:
         return api_success(
             await customer_quote_preview(

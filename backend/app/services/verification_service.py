@@ -19,6 +19,7 @@ from app.services.verification_ocr_service import EXTRACTABLE_FIELDS, extract_ve
 from app.services.notification_service import create_app_notification, notify_admins
 from app.services.audit_service import write_audit_log
 from app.utils import new_id, now_iso
+from app.services.upload_security_service import validate_upload
 
 
 settings = get_settings()
@@ -81,12 +82,12 @@ class VerificationUploadError(RuntimeError):
         stage: str,
         message: str,
         status_code: int = 502,
-        log_message: Optional[str] = None,
+        error_type: Optional[str] = None,
     ) -> None:
         super().__init__(message)
         self.stage = stage
         self.message = message
-        self.log_message = log_message or message
+        self.error_type = error_type or self.__class__.__name__
         self.status_code = status_code
 
 
@@ -264,7 +265,7 @@ def _cloudinary_configured() -> bool:
     return cloudinary_configuration_status()["configured"]
 
 
-def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[str], document_type: str) -> Dict[str, Any]:
+def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[str], document_type: str, resource_type: str) -> Dict[str, Any]:
     config_status = cloudinary_configuration_status()
     logger.info(
         "verification_upload stage=cloudinary_config_detected configured=%s cloud_name_present=%s api_key_present=%s api_secret_present=%s",
@@ -283,16 +284,16 @@ def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[
     file_obj = io.BytesIO(file_bytes)
     file_obj.name = filename
     logger.info(
-        "verification_upload stage=cloudinary_upload_start folder=%s filename=%s content_type=%s bytes=%s",
-        folder,
-        filename,
+        "verification_upload stage=cloudinary_upload_start document_type=%s content_type=%s bytes=%s",
+        document_type,
         content_type or "unknown",
         len(file_bytes),
     )
     try:
         result = cloudinary.uploader.upload(
             file_obj,
-            resource_type="auto",
+            resource_type=resource_type,
+            type="authenticated",
             folder=folder,
             use_filename=True,
             unique_filename=True,
@@ -301,11 +302,10 @@ def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[
         raise VerificationUploadError(
             "cloudinary_upload",
             "Cloudinary upload failed.",
-            log_message=f"{type(exc).__name__}: {str(exc)}",
+            error_type=type(exc).__name__,
         ) from exc
     logger.info(
-        "verification_upload stage=cloudinary_upload_done public_id=%s resource_type=%s secure_url_present=%s",
-        result.get("public_id"),
+        "verification_upload stage=cloudinary_upload_done resource_type=%s secure_reference_present=%s",
         result.get("resource_type"),
         bool(result.get("secure_url")),
     )
@@ -314,16 +314,14 @@ def _cloudinary_upload(file_bytes: bytes, filename: str, content_type: Optional[
 
 async def _read_upload_bytes(upload: UploadFile, document_type: str) -> bytes:
     logger.info(
-        "verification_upload stage=image_read_start document_type=%s filename=%s content_type=%s",
+        "verification_upload stage=image_read_start document_type=%s content_type=%s",
         document_type,
-        upload.filename or "missing",
         upload.content_type or "missing",
     )
     file_bytes = await upload.read()
     logger.info(
-        "verification_upload stage=image_read_done document_type=%s filename=%s bytes=%s",
+        "verification_upload stage=image_read_done document_type=%s bytes=%s",
         document_type,
-        upload.filename or "missing",
         len(file_bytes),
     )
     if not file_bytes:
@@ -618,11 +616,9 @@ async def _build_verification_intelligence(
             identity_document=_latest_document(documents, "identity_document"),
         )
     except Exception as exc:
-        logger.exception(
-            "verification_intelligence stage=face_match_failed user_id=%s driver_id=%s error=%s",
-            user.get("id"),
-            driver.get("id"),
-            str(exc),
+        logger.warning(
+            "verification_intelligence stage=face_match_failed error_type=%s",
+            type(exc).__name__,
         )
         face_result = {
             "face_match_score": None,
@@ -638,11 +634,9 @@ async def _build_verification_intelligence(
             extracted_fields=extracted_fields,
         )
     except Exception as exc:
-        logger.exception(
-            "verification_intelligence stage=duplicate_detection_failed user_id=%s driver_id=%s error=%s",
-            user.get("id"),
-            driver.get("id"),
-            str(exc),
+        logger.warning(
+            "verification_intelligence stage=duplicate_detection_failed error_type=%s",
+            type(exc).__name__,
         )
         duplicate_flags = ["duplicate_detection_unavailable"]
     risk = _calculate_risk(
@@ -736,8 +730,10 @@ def public_verification(driver: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             "id": document.get("id"),
             "document_type": document.get("document_type"),
             "file_name": document.get("file_name"),
-            "file_url": document.get("file_url"),
-            "cloudinary_public_id": document.get("cloudinary_public_id"),
+            "has_file": bool(
+                document.get("cloudinary_public_id")
+                or (document.get("legacy_local_document") is True and document.get("storage_path"))
+            ),
             "uploaded_at": document.get("uploaded_at"),
             "status": document.get("status", "pending"),
             "rejection_reason": document.get("rejection_reason"),
@@ -832,24 +828,32 @@ async def get_or_create_liveness_challenge(user: Dict[str, Any]) -> Dict[str, An
     return challenge
 
 
-def merge_documents(existing: List[Dict[str, Any]], incoming: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    documents = manual_verification_documents(existing)
-    timestamp = now_iso()
-    for document in manual_verification_documents(incoming):
-        documents.append(
-            {
-                "id": new_id(),
-                "document_type": document["document_type"],
-                "file_name": document["file_name"],
-                "file_url": document.get("file_url"),
-                "storage_path": document.get("storage_path"),
-                "content_type": document.get("content_type"),
-                "uploaded_at": timestamp,
-                "status": "pending",
-                "rejection_reason": None,
-            }
-        )
-    return documents
+def resolve_submission_documents(driver: Dict[str, Any], references: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    persisted = {str(item.get("id") or ""): item for item in manual_verification_documents(driver.get("documents", [])) if item.get("id")}
+    seen_ids: set[str] = set()
+    seen_types: set[str] = set()
+    selected: List[Dict[str, Any]] = []
+    for reference in references:
+        document_id = str(reference.get("document_id") or "")
+        document_type = str(reference.get("document_type") or "")
+        if document_id in seen_ids or document_type in seen_types:
+            raise ValueError("Submit each verification document once.")
+        document = persisted.get(document_id)
+        if not document:
+            raise ValueError("One or more verification documents were not uploaded by this account.")
+        if document.get("document_type") != document_type:
+            raise ValueError("A verification document does not match its selected document type.")
+        if str(document.get("status") or "").lower() in {"deleted", "revoked"}:
+            raise ValueError("A removed verification document cannot be submitted.")
+        if not document.get("cloudinary_public_id") or document.get("delivery_type") != "authenticated":
+            raise ValueError("Re-upload this document using the secure verification upload before submitting.")
+        seen_ids.add(document_id)
+        seen_types.add(document_type)
+        selected.append(document)
+    missing = REQUIRED_DOCUMENT_TYPES - seen_types
+    if missing:
+        raise ValueError("Upload every required verification document before submitting.")
+    return selected
 
 
 def _next_status_after_upload(driver: Dict[str, Any], documents: List[Dict[str, Any]]) -> str:
@@ -880,7 +884,7 @@ def _status_from_intelligence(documents: List[Dict[str, Any]], intelligence: Dic
 async def submit_manual_verification(user: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
     driver = await ensure_driver_for_user(user, payload)
     timestamp = now_iso()
-    documents = merge_documents(driver.get("documents", []), payload.get("documents", []))
+    documents = resolve_submission_documents(driver, payload.get("documents", []))
     intelligence = await _build_verification_intelligence(user=user, driver=driver, documents=documents)
     verification_status = _status_from_intelligence(documents, intelligence)
     verified = verification_status == "approved"
@@ -932,17 +936,20 @@ async def save_uploaded_document(
     upload: UploadFile,
 ) -> Dict[str, Any]:
     logger.info(
-        "verification_upload stage=save_start user_id=%s document_type=%s filename=%s content_type=%s",
+        "verification_upload stage=save_start user_id=%s document_type=%s content_type=%s",
         user.get("id"),
         document_type,
-        upload.filename or "missing",
         upload.content_type or "missing",
     )
     driver = await ensure_driver_for_user(user)
     document_id = new_id()
     timestamp = now_iso()
-    safe_name = _safe_file_name(upload.filename or "document")
-    file_bytes = await _read_upload_bytes(upload, document_type)
+    try:
+        validated = await validate_upload(upload, max_bytes=8 * 1024 * 1024, allow_pdf=True, stem=upload.filename or "document")
+    except ValueError as exc:
+        raise VerificationUploadError("image_read", str(exc), 400) from exc
+    safe_name = validated.file_name
+    file_bytes = validated.data
 
     document: Dict[str, Any] = {
         "id": document_id,
@@ -951,15 +958,22 @@ async def save_uploaded_document(
         "uploaded_at": timestamp,
         "status": "pending",
         "rejection_reason": None,
-        "content_type": upload.content_type,
+        "content_type": validated.content_type,
     }
 
-    cloudinary_result = await asyncio.to_thread(_cloudinary_upload, file_bytes, safe_name, upload.content_type, document_type)
+    cloudinary_result = await asyncio.to_thread(
+        _cloudinary_upload,
+        file_bytes,
+        safe_name,
+        validated.content_type,
+        document_type,
+        validated.resource_type,
+    )
     if not cloudinary_result.get("secure_url") or not cloudinary_result.get("public_id"):
         raise VerificationUploadError("cloudinary_upload", "Cloudinary upload did not return secure_url and public_id.")
-    document["file_url"] = cloudinary_result.get("secure_url")
     document["cloudinary_public_id"] = cloudinary_result.get("public_id")
     document["resource_type"] = cloudinary_result.get("resource_type")
+    document["delivery_type"] = "authenticated"
     try:
         document["ocr"] = await extract_verification_fields(
             document_type=document_type,
@@ -967,12 +981,11 @@ async def save_uploaded_document(
             file_bytes=file_bytes,
         )
     except Exception as exc:
-        logger.exception(
-            "verification_intelligence stage=ocr_failed user_id=%s document_id=%s document_type=%s error=%s",
+        logger.warning(
+            "verification_intelligence stage=ocr_failed user_id=%s document_type=%s error_type=%s",
             user.get("id"),
-            document_id,
             document_type,
-            str(exc),
+            type(exc).__name__,
         )
         document["ocr"] = {
             "provider": "disabled",
@@ -993,10 +1006,8 @@ async def save_uploaded_document(
         }
 
     logger.info(
-        "verification_upload stage=mongodb_save_start user_id=%s driver_id=%s document_id=%s document_type=%s verification_status=%s",
+        "verification_upload stage=mongodb_save_start user_id=%s document_type=%s verification_status=%s",
         user.get("id"),
-        driver.get("id"),
-        document_id,
         document_type,
         verification_status,
     )
@@ -1031,15 +1042,12 @@ async def save_uploaded_document(
         raise VerificationUploadError(
             "mongodb_save",
             "MongoDB save failed.",
-            log_message=f"{type(exc).__name__}: {str(exc)}",
+            error_type=type(exc).__name__,
         ) from exc
     logger.info(
-        "verification_upload stage=mongodb_save_done user_id=%s driver_id=%s document_id=%s file_url_present=%s cloudinary_public_id=%s",
-        user.get("id"),
-        driver.get("id"),
-        document_id,
-        bool(document.get("file_url")),
-        document.get("cloudinary_public_id") or "missing",
+        "verification_upload stage=mongodb_save_done document_type=%s secure_reference_present=%s",
+        document_type,
+        bool(document.get("cloudinary_public_id")),
     )
     try:
         await write_audit_log(
@@ -1051,11 +1059,9 @@ async def save_uploaded_document(
             metadata={"document_id": document_id, "document_type": document_type},
         )
     except Exception:
-        logger.exception(
-            "verification_upload stage=audit_log_failed user_id=%s driver_id=%s document_id=%s",
-            user.get("id"),
-            driver.get("id"),
-            document_id,
+        logger.warning(
+            "verification_upload stage=audit_log_failed document_type=%s",
+            document_type,
         )
     uploaded_documents = public_verification(updated)["documents"]
     if not uploaded_documents:

@@ -24,8 +24,7 @@ import {
 type PromptKind = "notifications" | "biometric" | null;
 
 function isSafePromptPath(pathname: string) {
-  return pathname === "/"
-    || pathname.endsWith("/home")
+  return pathname.endsWith("/home")
     || pathname.endsWith("/account")
     || pathname.endsWith("/dashboard");
 }
@@ -48,7 +47,7 @@ export function PermissionReminder() {
     if (Platform.OS === "web") return undefined;
     let active = true;
 
-    if (loading || !user?.id) {
+    if (loading || !user?.id || pathname === "/") {
       setPushState(null);
       setPrompt(null);
       setMessage("");
@@ -79,7 +78,7 @@ export function PermissionReminder() {
     return () => {
       active = false;
     };
-  }, [loading, user?.id]);
+  }, [loading, pathname, user?.id]);
 
   useEffect(() => {
     if (Platform.OS === "web") return undefined;

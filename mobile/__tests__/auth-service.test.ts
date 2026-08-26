@@ -16,6 +16,7 @@ jest.mock("../services/api", () => ({
 describe("auth service", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRequestData.mockResolvedValue(undefined);
   });
 
   it("stores the returned session token after email login", async () => {
@@ -37,6 +38,7 @@ describe("auth service", () => {
 
     await logoutToGuest(router);
 
+    expect(mockRequestData).toHaveBeenCalledWith({ method: "POST", url: "/auth/logout" });
     expect(router.replace).toHaveBeenCalledWith("/(customer)/home");
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.auth.token");
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.biometric.token");

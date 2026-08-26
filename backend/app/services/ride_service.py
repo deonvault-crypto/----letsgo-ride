@@ -539,6 +539,48 @@ async def end_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     return await enrich_ride(updated, user)
 
 
+async def cancel_trip(ride_id: str, user: Dict[str, Any], reason: str) -> Dict[str, Any]:
+    ride = await database.find_one("rides", {"id": ride_id})
+    if not ride or not is_public_ride(ride):
+        raise ValueError("Ride not found.")
+    if not user_owns_ride(user, ride):
+        raise PermissionError("Only the driver can cancel this trip.")
+    ride = await apply_ride_lifecycle(ride)
+    status = canonical_trip_status(ride.get("status"))
+    if status not in {TRIP_STATUS_SCHEDULED, TRIP_STATUS_BOARDING}:
+        raise ValueError("This trip can no longer be cancelled.")
+    timestamp = now_iso()
+    updated = await update_versioned_ride(
+        {"id": ride_id, "status": ride.get("status")},
+        {
+            "status": TRIP_STATUS_CANCELLED,
+            "cancellation_reason": reason,
+            "cancelled_at": timestamp,
+            "cancelled_by_user_id": user["id"],
+            "live_tracking_enabled": False,
+            "updated_at": timestamp,
+        },
+    )
+    if not updated:
+        raise ValueError("This trip changed while it was being cancelled. Refresh and try again.")
+    await publish_ride_realtime(updated, "ride.terminal")
+    await _notify_confirmed_passengers(
+        updated,
+        "trip_updates",
+        "Ride cancelled",
+        f"The ride from {updated.get('origin')} to {updated.get('destination')} has been cancelled.",
+    )
+    await write_audit_log(
+        actor_user_id=user["id"],
+        actor_role=user.get("role"),
+        action="trip_cancelled",
+        target_type="ride",
+        target_id=ride_id,
+        metadata={"trip_status": TRIP_STATUS_CANCELLED},
+    )
+    return await enrich_ride(updated, user)
+
+
 async def update_live_location(ride_id: str, user: Dict[str, Any], location: Dict[str, Any]) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
     if not ride or not is_public_ride(ride):

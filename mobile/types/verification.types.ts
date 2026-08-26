@@ -32,8 +32,6 @@ export type VerificationDocument = {
   id?: string;
   document_type: VerificationDocumentType;
   file_name: string;
-  file_url?: string;
-  cloudinary_public_id?: string | null;
   uploaded_at?: string;
   status?: VerificationDocumentStatus;
   rejection_reason?: string;

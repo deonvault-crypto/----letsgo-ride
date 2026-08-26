@@ -27,6 +27,8 @@ class Settings:
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
         self.public_api_base_url = self._get_env_first("PUBLIC_API_BASE_URL", "API_PUBLIC_BASE_URL") or "https://letsgoride-backend.onrender.com"
         self.realtime_redis_url = self._get_env_first("REALTIME_REDIS_URL", "REDIS_URL")
+        self.rate_limit_redis_url = self._get_env_first("RATE_LIMIT_REDIS_URL", "REALTIME_REDIS_URL", "REDIS_URL")
+        self.session_lifetime_days = max(1, int(os.getenv("SESSION_LIFETIME_DAYS", "30")))
         self.realtime_channel = os.getenv("REALTIME_CHANNEL", "letsgoride:realtime:v1").strip() or "letsgoride:realtime:v1"
 
         # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
@@ -88,17 +90,18 @@ class Settings:
         self.verification_auto_approval_enabled = self._parse_bool(os.getenv("VERIFICATION_AUTO_APPROVAL_ENABLED", "false"))
         self.verification_duplicate_detection_enabled = self._parse_bool(os.getenv("VERIFICATION_DUPLICATE_DETECTION_ENABLED", "true"))
         self.verification_risk_scoring_enabled = self._parse_bool(os.getenv("VERIFICATION_RISK_SCORING_ENABLED", "true"))
+        raw_cors_origins = os.getenv("CORS_ORIGINS", "")
+        self.cors_origins_configured = bool(raw_cors_origins.strip())
         self.cors_origins = self._parse_origins(
-            os.getenv(
-                "CORS_ORIGINS",
-                "http://localhost:8082,http://localhost:19006",
-            )
+            raw_cors_origins or "http://localhost:8082,http://localhost:19006"
         )
+        if self.is_production and (not self.cors_origins_configured or not self.cors_origins or "*" in self.cors_origins):
+            raise RuntimeError("Production CORS_ORIGINS must contain explicit trusted origins.")
 
     @staticmethod
     def _parse_origins(value: str) -> List[str]:
         origins = [origin.strip() for origin in value.split(",") if origin.strip()]
-        return origins or ["*"]
+        return origins
 
     @staticmethod
     def _parse_bool(value: str) -> bool:
@@ -185,6 +188,10 @@ class Settings:
         return self.app_env in {"development", "test"} or (
             self.app_env == "staging" and self.allow_staging_mock_otp
         )
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() == "production"
 
 
 @lru_cache

@@ -1,16 +1,16 @@
+import asyncio
 import mimetypes
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header, Query
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse, Response
 
 from app.auth import get_admin_user
 from app.database import database
 from app.models.verification import VerificationStatusUpdateBody
 from app.models.request import RideRequestUpdateBody
-from app.models.ride import RideUpdateBody
+from app.models.ride import AdminRideStatusBody
 from app.models.user import AdminRoleUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
@@ -23,6 +23,7 @@ from app.services.verification_service import (
     manual_verification_documents,
     public_verification_status,
 )
+from app.services.private_document_service import contained_legacy_document_path, private_document_service, private_provider_document_bytes
 from app.utils import api_error, api_success, now_iso
 
 
@@ -34,26 +35,12 @@ def _without_private_fields(rows):
     return [public_user(row) for row in rows]
 
 
-async def _get_admin_from_header_or_query(
-    authorization: str = Header(default=""),
-    access_token: Optional[str] = Query(default=None),
-):
-    token = access_token or authorization.replace("Bearer", "").strip()
-    if not token:
-        api_error("Admin access is required.", 403)
-    user = await database.find_one("users", {"token": token})
-    if not user or user.get("role") != "admin":
-        api_error("Admin access is required.", 403)
-    return user
-
-
 def _public_document(document):
     return {
         "id": document.get("id"),
         "document_type": document.get("document_type"),
         "file_name": document.get("file_name"),
-        "file_url": document.get("file_url"),
-        "cloudinary_public_id": document.get("cloudinary_public_id"),
+        "has_file": bool(document.get("cloudinary_public_id") or (document.get("legacy_local_document") is True and document.get("storage_path"))),
         "uploaded_at": document.get("uploaded_at"),
         "status": document.get("status", "pending"),
         "rejection_reason": document.get("rejection_reason"),
@@ -450,34 +437,41 @@ async def admin_ride_detail(ride_id: str, admin=Depends(get_admin_user)):
 @router.patch("/rides/{ride_id}/status")
 async def update_ride_status(
     ride_id: str,
-    payload: RideUpdateBody,
+    payload: AdminRideStatusBody,
     reason: Optional[str] = Query(default=None),
     admin=Depends(get_admin_user),
 ):
-    updates = {key: value for key, value in payload.model_dump().items() if value is not None}
-    if not updates:
-        api_error("No ride updates provided.", 400)
+    target_status = canonical_trip_status(payload.status)
     existing = await database.find_one("rides", {"id": ride_id})
     if not existing:
         api_error("Ride not found.", 404)
-    if updates.get("status"):
-        updates["status"] = canonical_trip_status(updates["status"])
-        if is_final_trip_status(existing.get("status")) and not is_final_trip_status(updates["status"]):
-            api_error("Terminal trips cannot be reopened.", 400)
-        if is_final_trip_status(updates["status"]):
-            updates["live_tracking_enabled"] = False
-    if updates.get("status") == "CANCELLED" and not reason:
+    current_status = canonical_trip_status(existing.get("status"))
+    allowed_transitions = {
+        "SCHEDULED": {"BOARDING", "IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED"},
+        "BOARDING": {"IN_PROGRESS", "COMPLETED", "CANCELLED", "EXPIRED"},
+        "IN_PROGRESS": {"COMPLETED", "CANCELLED"},
+        "COMPLETED": set(),
+        "CANCELLED": set(),
+        "EXPIRED": set(),
+    }
+    if target_status != current_status and target_status not in allowed_transitions.get(current_status, set()):
+        api_error("This ride status transition is not allowed.", 400)
+    if target_status == current_status:
+        return api_success(existing)
+    if target_status == "CANCELLED" and not reason:
         api_error("Admin cancellation reason is required.", 400)
-    if updates.get("status") == "CANCELLED":
+    updates = {"status": target_status, "updated_at": now_iso()}
+    if is_final_trip_status(target_status):
+        updates["live_tracking_enabled"] = False
+    if target_status == "CANCELLED":
         updates["cancelled_at"] = now_iso()
-    updates["updated_at"] = now_iso()
     ride = await update_versioned_ride(
         {"id": ride_id, "status": existing.get("status")},
         updates,
     )
     if not ride:
         api_error("Ride changed while it was being updated. Refresh and try again.", 409)
-    await publish_ride_realtime(ride, ride_event_type(ride) if updates.get("status") else "ride.updated")
+    await publish_ride_realtime(ride, ride_event_type(ride))
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),
@@ -852,29 +846,43 @@ async def update_verification_status(
     return api_success(updated)
 
 
+@router.post("/verifications/{driver_id}/documents/{document_id}/access")
+async def verification_document_access(driver_id: str, document_id: str, admin=Depends(get_admin_user)):
+    driver = await database.find_one("drivers", {"id": driver_id})
+    document = next((item for item in manual_verification_documents((driver or {}).get("documents", [])) if item.get("id") == document_id), None)
+    if not document:
+        api_error("Document not found.", 404)
+    token = await private_document_service.issue(actor_id=str(admin["id"]), collection="drivers", owner_id=driver_id, document_id=document_id)
+    return api_success({"url": f"/admin/verifications/{driver_id}/documents/{document_id}/view?document_token={token}"})
+
+
 @router.get("/verifications/{driver_id}/documents/{document_id}")
-async def verification_document(driver_id: str, document_id: str, admin=Depends(_get_admin_from_header_or_query)):
+async def verification_document(driver_id: str, document_id: str, admin=Depends(get_admin_user)):
     driver = await database.find_one("drivers", {"id": driver_id})
     if not driver:
-        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
+        logger.warning("action=admin_document_view status_code=404 file_found=false error_category=owner_missing")
         api_error("Verification submission not found.", 404)
     document = next((item for item in manual_verification_documents(driver.get("documents", [])) if item.get("id") == document_id), None)
     if not document:
-        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
+        logger.warning("action=admin_document_view status_code=404 file_found=false error_category=document_missing")
         api_error("Document not found.", 404)
-    if document.get("file_url"):
-        logger.info("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=302 file_found=true content_type=%s", driver_id, document_id, admin.get("id"), document.get("content_type") or "remote")
-        return RedirectResponse(str(document["file_url"]))
-    storage_path = document.get("storage_path")
-    if not storage_path:
-        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
+    if document.get("cloudinary_public_id"):
+        try:
+            content, media_type = await asyncio.to_thread(private_provider_document_bytes, document)
+        except Exception:
+            api_error("Document file is unavailable. The user may need to re-upload.", 404)
+        download_name = "".join(character for character in str(document.get("file_name") or "verification-document") if character.isalnum() or character in ".-_") or "verification-document"
+        return Response(content=content, media_type=media_type, headers={"Content-Disposition": f'inline; filename="{download_name}"', "Cache-Control": "no-store"})
+    if document.get("legacy_local_document") is not True:
+        logger.warning("action=admin_document_view status_code=404 file_found=false error_category=secure_reference_missing")
         api_error("Document file is unavailable on the server. The user may need to re-upload.", 404)
-    path = Path(storage_path)
-    if not path.exists() or not path.is_file():
-        logger.warning("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=404 file_found=false content_type=none", driver_id, document_id, admin.get("id"))
+    try:
+        path = contained_legacy_document_path(document)
+    except (FileNotFoundError, OSError):
+        logger.warning("action=admin_document_view status_code=404 file_found=false error_category=legacy_file_unavailable")
         api_error("Document file is unavailable on the server. The user may need to re-upload.", 404)
     media_type = mimetypes.guess_type(document.get("file_name") or str(path))[0] or "application/octet-stream"
-    logger.info("action=admin_document_view verification_id=%s document_id=%s admin_user_id=%s status_code=200 file_found=true content_type=%s", driver_id, document_id, admin.get("id"), media_type)
+    logger.info("action=admin_document_view status_code=200 file_found=true content_type=%s", media_type)
     return FileResponse(
         path,
         media_type=media_type,
@@ -883,7 +891,13 @@ async def verification_document(driver_id: str, document_id: str, admin=Depends(
 
 
 @router.get("/verifications/{driver_id}/documents/{document_id}/view")
-async def verification_document_view(driver_id: str, document_id: str, admin=Depends(_get_admin_from_header_or_query)):
+async def verification_document_view(driver_id: str, document_id: str, document_token: str = Query(default="")):
+    ticket = await private_document_service.consume(document_token)
+    if not ticket or ticket.get("collection") != "drivers" or ticket.get("owner_id") != driver_id or ticket.get("document_id") != document_id:
+        api_error("This document link is invalid or expired.", 401)
+    admin = await database.find_one("users", {"id": ticket["actor_id"]})
+    if not admin or admin.get("role") != "admin":
+        api_error("Admin access is required.", 403)
     return await verification_document(driver_id, document_id, admin)
 
 

@@ -6,6 +6,7 @@ from fastapi import UploadFile
 from app.config import get_settings
 from app.database import database
 from app.utils import new_id, now_iso
+from app.services.upload_security_service import validate_upload
 
 
 STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "profile_photos"
@@ -25,27 +26,14 @@ def absolute_profile_photo_url(relative_url: str) -> str:
 
 
 async def save_profile_photo(user: Dict[str, Any], upload: UploadFile) -> Dict[str, Any]:
-    content_type = upload.content_type or ""
-    if content_type not in ALLOWED_CONTENT_TYPES:
-        raise ValueError("Upload a JPG, PNG, or WebP profile photo.")
-
-    extension = {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-    }[content_type]
+    validated = await validate_upload(upload, max_bytes=4 * 1024 * 1024, allow_pdf=False, stem="profile-photo")
     user_dir = STORAGE_ROOT / user["id"]
     user_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = _safe_file_name(upload.filename or f"profile-photo{extension}")
-    if "." not in safe_name:
-        safe_name = f"{safe_name}{extension}"
+    safe_name = "profile-photo.jpg"
     file_name = f"{new_id()}_{safe_name}"
     target_path = user_dir / file_name
 
-    content = await upload.read()
-    if len(content) > 4 * 1024 * 1024:
-        raise ValueError("Profile photo must be smaller than 4 MB.")
-    target_path.write_bytes(content)
+    target_path.write_bytes(validated.data)
 
     relative_url = f"/media/profile-photos/{user['id']}/{file_name}"
     updates = {

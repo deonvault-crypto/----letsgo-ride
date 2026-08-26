@@ -1,5 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
+import { usePathname } from "expo-router";
 
 import { listNotifications } from "../services/notificationService";
 import { AppNotification } from "../types/notification.types";
@@ -28,6 +29,7 @@ const defaultNotifications: NotificationState = {
 const NotificationContext = createContext<NotificationState>(defaultNotifications);
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const { user, loading: sessionLoading } = useSession();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,7 +75,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (sessionLoading) return;
+    if (sessionLoading || pathname === "/") return;
     if (snapshotUserId.current !== (user?.id || null)) {
       snapshotUserId.current = user?.id || null;
       setNotifications([]);
@@ -86,7 +88,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return;
     }
     void refreshNotifications();
-  }, [sessionLoading, user?.id, refreshNotifications]);
+  }, [pathname, sessionLoading, user?.id, refreshNotifications]);
 
   useEffect(() => {
     let appActive = AppState.currentState === "active";

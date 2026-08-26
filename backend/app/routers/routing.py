@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.auth import get_current_user
 from app.models.routing import GeocodeRequestBody, PlaceAutocompleteBody, ResolveRouteRequestBody, ReverseGeocodeRequestBody, RouteRequestBody
@@ -15,6 +15,7 @@ from app.services.routing_service import (
     routing_status,
 )
 from app.utils import api_error, api_success
+from app.services.rate_limit_service import RateLimit, rate_limit_service
 
 
 router = APIRouter(prefix="/routing", tags=["routing"])
@@ -27,7 +28,8 @@ async def route_provider_status(user=Depends(get_current_user)):
 
 
 @router.post("/places/autocomplete")
-async def place_autocomplete(payload: PlaceAutocompleteBody):
+async def place_autocomplete(payload: PlaceAutocompleteBody, request: Request):
+    await rate_limit_service.enforce(request, "routing-autocomplete", RateLimit(60, 60))
     # Place discovery is intentionally public so a new customer can explore the
     # service before authentication. The provider key remains server-side.
     try:
@@ -39,7 +41,8 @@ async def place_autocomplete(payload: PlaceAutocompleteBody):
 
 
 @router.get("/places/{place_id}")
-async def place_detail(place_id: str):
+async def place_detail(place_id: str, request: Request):
+    await rate_limit_service.enforce(request, "routing-place-detail", RateLimit(60, 60))
     try:
         return api_success(await resolve_place(place_id))
     except RoutingNotConfiguredError as exc:
@@ -51,7 +54,8 @@ async def place_detail(place_id: str):
 
 
 @router.post("/geocode")
-async def geocode(payload: GeocodeRequestBody, user=Depends(get_current_user)):
+async def geocode(payload: GeocodeRequestBody, request: Request, user=Depends(get_current_user)):
+    await rate_limit_service.enforce(request, "routing-geocode", RateLimit(30, 60), identity=str(user.get("id") or ""))
     _ = user
     try:
         return api_success(await geocode_address(payload.address))
@@ -64,7 +68,8 @@ async def geocode(payload: GeocodeRequestBody, user=Depends(get_current_user)):
 
 
 @router.post("/reverse-geocode")
-async def reverse_geocode(payload: ReverseGeocodeRequestBody):
+async def reverse_geocode(payload: ReverseGeocodeRequestBody, request: Request):
+    await rate_limit_service.enforce(request, "routing-reverse-geocode", RateLimit(30, 60))
     # Map pin selection is available during guest browsing; credentials remain server-side.
     try:
         return api_success(await reverse_geocode_location(payload.location.model_dump()))
@@ -77,7 +82,8 @@ async def reverse_geocode(payload: ReverseGeocodeRequestBody):
 
 
 @router.post("/route")
-async def route(payload: RouteRequestBody, user=Depends(get_current_user)):
+async def route(payload: RouteRequestBody, request: Request, user=Depends(get_current_user)):
+    await rate_limit_service.enforce(request, "routing-route", RateLimit(30, 60), identity=str(user.get("id") or ""))
     _ = user
     try:
         return api_success(
@@ -98,8 +104,10 @@ async def route(payload: RouteRequestBody, user=Depends(get_current_user)):
 @router.post("/resolve-route")
 async def resolve_route_from_addresses(
     payload: ResolveRouteRequestBody,
+    request: Request,
     user=Depends(get_current_user),
 ):
+    await rate_limit_service.enforce(request, "routing-resolve-route", RateLimit(30, 60), identity=str(user.get("id") or ""))
     _ = user
     try:
         return api_success(

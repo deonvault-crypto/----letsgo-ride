@@ -7,3 +7,4 @@ python-multipart==0.0.20
 requests==2.31.0
 redis==5.2.1
 cloudinary==1.41.0
+Pillow==12.3.0

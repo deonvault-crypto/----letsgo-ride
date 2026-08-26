@@ -6,8 +6,7 @@ import { RideCard } from "../../components/cards/RideCard";
 import { ServiceSwitcher, CustomerService } from "../../components/platform/ServiceSwitcher";
 import { ServiceStoryCard } from "../../components/platform/ServiceStoryCard";
 import { EmptyState } from "../../components/states/EmptyState";
-import { ErrorState } from "../../components/states/ErrorState";
-import { LoadingState } from "../../components/states/LoadingState";
+import { AppNotice } from "../../components/ui/AppNotice";
 import { PopularRouteChips } from "../../components/ui/PopularRouteChips";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
@@ -65,10 +64,10 @@ export default function CustomerHomeScreen() {
           <View style={styles.headingCopy}><Text style={styles.sectionTitle}>Upcoming rides</Text><Text style={styles.sectionCaption}>Verified trips available to reserve</Text></View>
           <Pressable onPress={() => router.push("/(customer)/search" as never)} hitSlop={8}><Text style={styles.textAction}>Search</Text></Pressable>
         </View>
-        {loading ? <LoadingState label="Finding rides..." /> : null}
-        {error ? <ErrorState message={error} onRetry={reload} /> : null}
-        {!loading && !error && upcomingRides.length === 0 ? <EmptyState title="No rides nearby yet" body="Try another route or date. New trips appear as drivers publish them." icon="car-clock" /> : null}
-        {!loading && !error && upcomingRides.slice(0, 3).map((ride) => (
+        {loading ? <View testID="upcoming-rides-skeleton" style={styles.rideSkeleton}><View style={styles.skeletonLineWide} /><View style={styles.skeletonLine} /></View> : null}
+        {error ? <AppNotice message={error} actionLabel="Retry" onAction={reload} /> : null}
+        {!loading && !error && upcomingRides.length === 0 ? <EmptyState title="No rides nearby yet" body="New trips will appear here when drivers post them." icon="car-clock" /> : null}
+        {!loading && upcomingRides.slice(0, 3).map((ride) => (
           <RideCard key={ride.id} ride={ride} onPress={() => router.push(`/(customer)/ride/${ride.id}` as never)} onDriverPress={() => openDriverProfile(ride.driver_id, ride.id)} />
         ))}
       </View>
@@ -93,5 +92,8 @@ const styles = StyleSheet.create({
   sectionCaption: { color: v2Theme.colors.inkSecondary, fontSize: 12 },
   textAction: { color: v2Theme.colors.brandStrong, fontSize: 13, fontWeight: "900" },
   storyRail: { gap: 10, paddingRight: 4 },
+  rideSkeleton: { minHeight: 92, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surfaceMuted, padding: v2Theme.spacing.lg, gap: 12, justifyContent: "center" },
+  skeletonLineWide: { height: 14, width: "68%", borderRadius: 7, backgroundColor: v2Theme.colors.lineStrong },
+  skeletonLine: { height: 11, width: "42%", borderRadius: 6, backgroundColor: v2Theme.colors.line },
   pressed: { opacity: 0.7, transform: [{ scale: 0.992 }] },
 });

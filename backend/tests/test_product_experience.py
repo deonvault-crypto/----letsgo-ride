@@ -1,4 +1,5 @@
 import unittest
+import base64
 import io
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -135,7 +136,8 @@ class FinalProductExperienceTests(unittest.IsolatedAsyncioTestCase):
             {"product": "courier", "full_name": "Document Applicant", "phone": "+263770000010", "service_area": "Harare", "service_area_id": "harare", "vehicle_type": "motorbike", "vehicle_details": "Honda CB125", "accepted_terms": True},
             customer,
         )
-        upload = UploadFile(file=io.BytesIO(b"real-image-bytes"), filename="identity.jpg", headers=Headers({"content-type": "image/jpeg"}))
+        valid_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+        upload = UploadFile(file=io.BytesIO(valid_png), filename="identity.png", headers=Headers({"content-type": "image/png"}))
         cloudinary_result = {"secure_url": "https://res.cloudinary.com/example/authenticated/image/upload/v1/identity.jpg", "public_id": "letsgoride/applications/courier/identity", "resource_type": "image", "format": "jpg", "version": 1}
         with patch("app.services.workforce_service.cloudinary.config", return_value=SimpleNamespace(cloud_name="cloud", api_key="key", api_secret="secret")), patch("app.services.workforce_service.cloudinary.uploader.upload", return_value=cloudinary_result):
             persisted = await upload_worker_document(application["id"], "identity_document", upload, customer)

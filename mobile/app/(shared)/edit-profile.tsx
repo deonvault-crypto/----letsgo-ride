@@ -75,8 +75,6 @@ export default function EditProfileScreen() {
         city: profileCity.trim() || undefined,
         bio: bio.trim() || undefined,
         travel_preferences: travelPreferences.trim() || undefined,
-        profile_photo_url: profilePhotoUrl || undefined,
-        profile_photo_name: profilePhotoName || undefined,
       });
       fillFormFromUser(updated);
       setSavedAndLeaving(true);

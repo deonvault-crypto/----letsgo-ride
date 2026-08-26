@@ -83,21 +83,20 @@ async def _upload_document(document_type: DocumentType, file: UploadFile, user):
         user.get("role"),
     )
     logger.info(
-        "verification_upload stage=multipart_file_received user_id=%s document_type=%s filename=%s content_type=%s",
+        "verification_upload stage=multipart_file_received user_id=%s document_type=%s content_type=%s",
         user.get("id"),
         document_type,
-        file.filename or "missing",
         file.content_type or "missing",
     )
     try:
         uploaded = await save_uploaded_document(user, document_type, file)
     except VerificationUploadError as error:
-        logger.exception(
-            "verification_upload stage=%s user_id=%s document_type=%s error=%s",
+        logger.warning(
+            "verification_upload stage=%s user_id=%s document_type=%s error_type=%s",
             error.stage,
             user.get("id"),
             document_type,
-            error.log_message,
+            error.error_type,
         )
         api_error(
             error.message,
@@ -106,11 +105,11 @@ async def _upload_document(document_type: DocumentType, file: UploadFile, user):
             document_type=document_type,
         )
     except Exception as error:
-        logger.exception(
-            "verification_upload stage=unexpected user_id=%s document_type=%s error=%s",
+        logger.error(
+            "verification_upload stage=unexpected user_id=%s document_type=%s error_type=%s",
             user.get("id"),
             document_type,
-            str(error),
+            type(error).__name__,
         )
         api_error(
             "Unexpected verification upload failure.",

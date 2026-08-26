@@ -60,7 +60,7 @@ class Database:
             name: [] for name in COLLECTION_NAMES
         }
 
-    async def connect(self) -> None:
+    async def connect(self, *, ensure_indexes: bool = True) -> None:
         settings = get_settings()
         app_env = str(settings.app_env or "development").strip().lower()
         requires_persistent_database = app_env in PERSISTENT_DATABASE_ENVS
@@ -77,7 +77,8 @@ class Database:
             self.client = AsyncIOMotorClient(settings.mongodb_uri)
             self.db = self.client[settings.mongodb_db_name]
             await self.client.admin.command("ping")
-            await self.ensure_indexes()
+            if ensure_indexes:
+                await self.ensure_indexes()
             self.status = "connected"
         except Exception as exc:
             self.client = None
@@ -92,6 +93,7 @@ class Database:
         """Create the small set of operational indexes required by live product queries."""
         if self.db is None:
             return
+        await self._prepare_unique_user_email_index()
         await self.db["courier_deliveries"].create_index(
             [("courier_user_id", 1), ("status", 1), ("updated_at", -1)],
             name="courier_active_by_user",
@@ -154,6 +156,27 @@ class Database:
         await self.db["ride_requests"].create_index(
             [("user_id", 1), ("updated_at", -1)],
             name="ride_requests_by_passenger",
+        )
+
+    async def _prepare_unique_user_email_index(self) -> None:
+        """Backfill normalized emails only after proving the existing set is unique."""
+        users = [self._clean(item) async for item in self.db["users"].find({"email": {"$type": "string"}})]
+        groups: Dict[str, List[str]] = {}
+        for user in users:
+            normalized = str(user.get("email") or "").strip().lower()
+            if normalized:
+                groups.setdefault(normalized, []).append(str(user.get("id") or ""))
+        duplicates = {email: ids for email, ids in groups.items() if len(ids) > 1}
+        if duplicates:
+            fingerprints = [__import__("hashlib").sha256(email.encode()).hexdigest()[:12] for email in duplicates]
+            raise RuntimeError(f"Duplicate normalized user emails must be resolved before startup: {fingerprints}")
+        for normalized, user_ids in groups.items():
+            await self.db["users"].update_one({"id": user_ids[0]}, {"$set": {"normalized_email": normalized}})
+        await self.db["users"].create_index(
+            [("normalized_email", 1)],
+            name="unique_normalized_user_email",
+            unique=True,
+            partialFilterExpression={"normalized_email": {"$type": "string"}},
         )
 
     async def close(self) -> None:

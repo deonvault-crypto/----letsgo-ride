@@ -6,6 +6,8 @@ import { NotificationProvider, useNotifications } from "../contexts/Notification
 import { listNotifications } from "../services/notificationService";
 import { passengerUser } from "./fixtures";
 
+jest.mock("expo-router", () => ({ usePathname: () => "/home" }));
+
 jest.mock("../contexts/SessionContext", () => {
   const { passengerUser: mockPassengerUser } = require("./fixtures");
   return { useSession: () => ({ user: mockPassengerUser, loading: false }) };

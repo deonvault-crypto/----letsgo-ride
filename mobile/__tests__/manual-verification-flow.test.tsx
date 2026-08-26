@@ -38,8 +38,6 @@ describe("manual driver verification flow", () => {
       id: `doc-${documentType}`,
       document_type: documentType,
       file_name: name,
-      file_url: `https://res.cloudinary.com/demo/${name}`,
-      cloudinary_public_id: `letsgoride/verification/${documentType}/${name}`,
       status: "pending",
     }));
     (submitManualVerification as jest.Mock).mockResolvedValue(verifiedProfile);
@@ -94,6 +92,12 @@ describe("manual driver verification flow", () => {
       expect(submitManualVerification).toHaveBeenCalledWith({
         consent: true,
         verification_notes: "Vehicle logbook is in my name.",
+        documents: [
+          { document_id: "doc-identity_document", document_type: "identity_document" },
+          { document_id: "doc-driver_license", document_type: "driver_license" },
+          { document_id: "doc-selfie", document_type: "selfie" },
+          { document_id: "doc-vehicle_registration_or_logbook", document_type: "vehicle_registration_or_logbook" },
+        ],
       });
       expect(screen.getByText("Your driver verification is approved.")).toBeOnTheScreen();
     });

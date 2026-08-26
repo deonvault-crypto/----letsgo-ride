@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 CourierStatus = Literal[
@@ -18,11 +18,13 @@ CourierStatus = Literal[
 
 
 class GeoPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class CourierQuotePreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     pickup_address: str = Field(min_length=3, max_length=240)
     dropoff_address: str = Field(min_length=3, max_length=240)
     pickup_location: Optional[GeoPoint] = None
@@ -30,6 +32,7 @@ class CourierQuotePreviewBody(BaseModel):
 
 
 class CourierCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     pickup_address: str = Field(min_length=3, max_length=240)
     dropoff_address: str = Field(min_length=3, max_length=240)
     pickup_location: Optional[GeoPoint] = None
@@ -45,14 +48,17 @@ class CourierCreateBody(BaseModel):
 
 
 class CourierCancelBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     reason: Optional[str] = Field(default=None, max_length=300)
 
 
 class CourierAssignBody(BaseModel):
-    courier_user_id: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    courier_user_id: str = Field(min_length=4, max_length=80)
 
 
 class CourierQuoteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     price_usd: float = Field(gt=0, le=10000)
     courier_payout_usd: float = Field(gt=0, le=10000)
     distance_km: Optional[float] = Field(default=None, ge=0, le=5000)
@@ -66,24 +72,28 @@ class CourierQuoteBody(BaseModel):
 
 
 class CourierStatusBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     status: CourierStatus
     note: Optional[str] = Field(default=None, max_length=300)
 
 
 class CourierDelayBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     note: Optional[str] = Field(default=None, max_length=300)
 
 
 class CourierHandoffBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     pin: str = Field(min_length=4, max_length=4, pattern=r"^\d{4}$")
 
 
 class CourierLocationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     accuracy: Optional[float] = Field(default=None, ge=0)
     heading: Optional[float] = Field(default=None, ge=0, le=360)
-    speed: Optional[float] = Field(default=None, ge=0)
+    speed: Optional[float] = Field(default=None, ge=0, le=120)
     recorded_at: Optional[str] = Field(default=None, max_length=80)
 
     @field_validator("accuracy", "heading", "speed", mode="before")

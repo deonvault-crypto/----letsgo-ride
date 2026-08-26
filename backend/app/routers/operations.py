@@ -1,6 +1,9 @@
 from typing import Optional
 
+import asyncio
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import FileResponse, Response
 
 from app.auth import get_current_user
 from app.models.operations import (
@@ -45,6 +48,8 @@ from app.services.workforce_service import (
     upload_worker_document,
 )
 from app.utils import api_error, api_success
+from app.database import database
+from app.services.private_document_service import contained_legacy_document_path, private_document_service, private_provider_document_bytes
 
 
 router = APIRouter(prefix="/operations", tags=["operations"])
@@ -133,6 +138,42 @@ async def admin_review_worker_application(
         api_error(str(exc), 403)
     except ValueError as exc:
         api_error(str(exc), 400)
+
+
+@router.post("/admin/applications/{application_id}/documents/{document_id}/access")
+async def admin_worker_document_access(application_id: str, document_id: str, user=Depends(get_current_user)):
+    _require_admin(user)
+    application = await database.find_one("worker_applications", {"id": application_id})
+    document = next((item for item in (application or {}).get("documents", []) if item.get("id") == document_id), None)
+    if not document:
+        api_error("Document not found.", 404)
+    token = await private_document_service.issue(actor_id=str(user["id"]), collection="worker_applications", owner_id=application_id, document_id=document_id)
+    return api_success({"url": f"/operations/admin/applications/{application_id}/documents/{document_id}/view?document_token={token}"})
+
+
+@router.get("/admin/applications/{application_id}/documents/{document_id}/view")
+async def admin_worker_document_view(application_id: str, document_id: str, document_token: str = Query(default="")):
+    ticket = await private_document_service.consume(document_token)
+    if not ticket or ticket.get("collection") != "worker_applications" or ticket.get("owner_id") != application_id or ticket.get("document_id") != document_id:
+        api_error("This document link is invalid or expired.", 401)
+    admin = await database.find_one("users", {"id": ticket["actor_id"]})
+    if not admin or admin.get("role") != "admin":
+        api_error("Administrator access is required.", 403)
+    application = await database.find_one("worker_applications", {"id": application_id})
+    document = next((item for item in (application or {}).get("documents", []) if item.get("id") == document_id), None)
+    if not document:
+        api_error("Document not found.", 404)
+    if document.get("cloudinary_public_id"):
+        try:
+            content, media_type = await asyncio.to_thread(private_provider_document_bytes, document)
+        except Exception:
+            api_error("Document file is unavailable. The applicant may need to re-upload.", 404)
+        return Response(content=content, media_type=media_type, headers={"Cache-Control": "no-store"})
+    try:
+        path = contained_legacy_document_path(document)
+    except (FileNotFoundError, OSError):
+        api_error("Document file is unavailable. The applicant may need to re-upload.", 404)
+    return FileResponse(path, media_type=document.get("content_type") or "application/octet-stream", filename=document.get("file_name") or "application-document")
 
 
 @router.get("/admin/courier/shifts")

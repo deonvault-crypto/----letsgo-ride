@@ -4,7 +4,7 @@ import { AppState, AppStateStatus } from "react-native";
 
 import { SessionProvider, useSession } from "../contexts/SessionContext";
 import { getCurrentUser, hasSession } from "../services/authService";
-import { publishSessionUser } from "../services/sessionLifecycle";
+import { publishSessionUser, readSessionUserSnapshot, writeSessionUserSnapshot } from "../services/sessionLifecycle";
 import { passengerUser } from "./fixtures";
 
 jest.mock("../services/authService", () => ({
@@ -12,6 +12,10 @@ jest.mock("../services/authService", () => ({
   hasSession: jest.fn(),
   logout: jest.fn(),
 }));
+jest.mock("../services/sessionLifecycle", () => {
+  const actual = jest.requireActual("../services/sessionLifecycle");
+  return { ...actual, readSessionUserSnapshot: jest.fn(), writeSessionUserSnapshot: jest.fn() };
+});
 
 describe("SessionProvider", () => {
   let currentState: AppStateStatus;
@@ -19,6 +23,8 @@ describe("SessionProvider", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (readSessionUserSnapshot as jest.Mock).mockResolvedValue(null);
+    (writeSessionUserSnapshot as jest.Mock).mockResolvedValue(undefined);
     currentState = "active";
     Object.defineProperty(AppState, "currentState", { configurable: true, get: () => currentState });
     jest.spyOn(AppState, "addEventListener").mockImplementation((_, listener) => {
@@ -64,6 +70,20 @@ describe("SessionProvider", () => {
     act(() => publishSessionUser(updated));
     expect(result.current.user).toEqual(updated);
     expect(getCurrentUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("publishes a cached authenticated shell before auth/me reconciliation completes", async () => {
+    let resolveUser: (user: typeof passengerUser) => void = () => undefined;
+    const reconciliation = new Promise<typeof passengerUser>((resolve) => { resolveUser = resolve; });
+    (hasSession as jest.Mock).mockResolvedValue(true);
+    (readSessionUserSnapshot as jest.Mock).mockResolvedValue(passengerUser);
+    (getCurrentUser as jest.Mock).mockReturnValue(reconciliation);
+    const { result } = renderHook(() => useSession(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.user).toEqual(passengerUser);
+    expect(getCurrentUser).toHaveBeenCalledTimes(1);
+    await act(async () => { resolveUser(passengerUser); await reconciliation; });
   });
 
   it("does not let an older session response overwrite a newer login", async () => {

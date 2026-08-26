@@ -3,7 +3,7 @@ import { AppState } from "react-native";
 
 import { getCurrentUser, hasSession, logout as logoutService } from "../services/authService";
 import { ApiRequestError } from "../services/api";
-import { clearPrivateSessionState, onSessionCleared, onSessionUserUpdated } from "../services/sessionLifecycle";
+import { clearPrivateSessionState, onSessionCleared, onSessionUserUpdated, readSessionUserSnapshot, writeSessionUserSnapshot } from "../services/sessionLifecycle";
 import { User } from "../types/user.types";
 
 type SessionState = {
@@ -50,6 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setIsGuest(false);
     setError(null);
     setLoading(false);
+    void writeSessionUserSnapshot(nextUser);
   }, []);
 
   const updateUser = useCallback((nextUser: User) => {
@@ -112,7 +113,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
     const removeUpdated = onSessionUserUpdated(updateUser);
-    void refreshSession();
+    void (async () => {
+      const [signedIn, cachedUser] = await Promise.all([hasSession(), readSessionUserSnapshot()]);
+      if (!mounted.current) return;
+      if (!signedIn) {
+        setUser(null);
+        setIsGuest(true);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      if (cachedUser) applyUser(cachedUser);
+      else setLoading(false);
+      void refreshSession();
+    })();
     return () => {
       mounted.current = false;
       removeCleared();

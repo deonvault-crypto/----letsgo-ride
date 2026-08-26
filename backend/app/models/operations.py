@@ -1,9 +1,10 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AvailabilityCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     mode: Literal["ride", "courier"]
     date: str = Field(min_length=8, max_length=16)
     start_time: str = Field(min_length=3, max_length=8)
@@ -12,11 +13,13 @@ class AvailabilityCreateBody(BaseModel):
 
 
 class CourierProfileCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     transport_mode: Literal["bicycle", "motorbike", "car", "van"]
     vehicle_description: Optional[str] = Field(default=None, max_length=180)
 
 
 class CourierOnlineBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     online: bool
 
 
@@ -24,6 +27,7 @@ WorkerProduct = Literal["courier", "driver", "merchant"]
 
 
 class WorkerApplicationBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     product: WorkerProduct
     full_name: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=6, max_length=32)
@@ -40,11 +44,13 @@ class WorkerApplicationBody(BaseModel):
 
 
 class WorkerApplicationReviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     status: Literal["UNDER_REVIEW", "APPROVED", "REJECTED"]
     note: Optional[str] = Field(default=None, max_length=600)
 
 
 class CourierShiftCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     zone: str = Field(min_length=2, max_length=120)
     starts_at: str = Field(min_length=16, max_length=40)
     ends_at: str = Field(min_length=16, max_length=40)
@@ -55,6 +61,7 @@ class CourierShiftCreateBody(BaseModel):
 
 
 class CourierShiftUpdateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     zone: Optional[str] = Field(default=None, min_length=2, max_length=120)
     starts_at: Optional[str] = Field(default=None, min_length=16, max_length=40)
     ends_at: Optional[str] = Field(default=None, min_length=16, max_length=40)

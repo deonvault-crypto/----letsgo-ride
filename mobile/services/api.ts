@@ -2,7 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig } from "axios";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
-import { API_BASE_URL } from "../constants/config";
+import { API_BASE_URL, AUTHENTICATED_WEB_ENABLED } from "../constants/config";
 import { ApiResponse } from "../types/api.types";
 
 export const TOKEN_KEY = "letsgoride.auth.token";
@@ -26,13 +26,14 @@ function getWebStorage() {
 
 async function readStoredToken() {
   if (Platform.OS === "web") {
-    return getWebStorage()?.getItem(TOKEN_KEY) ?? null;
+    return AUTHENTICATED_WEB_ENABLED ? getWebStorage()?.getItem(TOKEN_KEY) ?? null : null;
   }
   return SecureStore.getItemAsync(TOKEN_KEY);
 }
 
 async function writeStoredToken(token: string) {
   if (Platform.OS === "web") {
+    if (!AUTHENTICATED_WEB_ENABLED) throw new Error("Authenticated web access is not enabled.");
     getWebStorage()?.setItem(TOKEN_KEY, token);
     return;
   }

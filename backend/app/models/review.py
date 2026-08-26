@@ -1,16 +1,17 @@
 from typing import Dict, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 ReviewRole = Literal["driver", "passenger"]
 
 
 class ReviewCreateBody(BaseModel):
-    trip_id: str = Field(min_length=1)
-    reviewee_id: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    trip_id: str = Field(min_length=1, max_length=80)
+    reviewee_id: str = Field(min_length=1, max_length=80)
     rating: int = Field(ge=1, le=5)
-    category_ratings: Dict[str, int] = Field(default_factory=dict)
+    category_ratings: Dict[str, int] = Field(default_factory=dict, max_length=6)
     comment: Optional[str] = Field(default=None, max_length=1200)
     safety_report_requested: bool = False
 

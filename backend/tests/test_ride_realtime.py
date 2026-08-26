@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 
 from app.database import COLLECTION_NAMES, database
-from app.models.ride import RideUpdateBody
+from app.models.ride import AdminRideStatusBody, RideCancellationBody
 from app.routers.admin import update_ride_status as admin_update_ride_status
 from app.routers.requests import _accept_request, _cancel_by_driver, _cancel_by_passenger, _decline_request
-from app.routers.rides import update_ride as update_ride_route
+from app.routers.rides import cancel_trip_route
 from app.services.event_service import realtime_event_service
 from app.services.realtime_connection_manager import RealtimePrincipal, principal_can_receive
 from app.services.ride_realtime_service import (
@@ -158,7 +158,7 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancellation_is_terminal_versioned_and_cannot_be_reopened(self):
         ride = await self.insert_ride(live_tracking_enabled=True)
-        response = await update_ride_route(ride["id"], RideUpdateBody(status="cancelled"), self.driver)
+        response = await cancel_trip_route(ride["id"], RideCancellationBody(reason="Plans changed"), self.driver)
         cancelled = response["data"]
         self.assertEqual(cancelled["status"], "CANCELLED")
         self.assertEqual(cancelled["realtime_version"], 2)
@@ -167,7 +167,7 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.publications("ride")[-1].envelope.type, "ride.terminal")
         with self.assertRaises(HTTPException):
             await admin_update_ride_status(
-                ride["id"], RideUpdateBody(status="SCHEDULED"), reason=None,
+                ride["id"], AdminRideStatusBody(status="SCHEDULED"), reason=None,
                 admin={"id": "admin-rt", "role": "admin"},
             )
 

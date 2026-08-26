@@ -1,5 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
+import { usePathname } from "expo-router";
 
 import { realtimeService } from "../services/realtimeService";
 import { onSessionCleared } from "../services/sessionLifecycle";
@@ -22,6 +23,7 @@ const RealtimeContext = createContext<RealtimeContextValue>({
 });
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const { user, loading, isGuest, invalidateSession } = useSession();
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>(realtimeService.connectionState);
   const [reconciliationRevision, setReconciliationRevision] = useState(0);
@@ -39,7 +41,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => onSessionCleared(() => realtimeService.stop(true)), []);
 
   useEffect(() => {
-    if (loading) return undefined;
+    if (loading || pathname === "/") return undefined;
     setReconciliationRevision(0);
     if (!sessionKey) {
       realtimeService.stop(true);
@@ -48,7 +50,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     void realtimeService.start(sessionKey);
     if (AppState.currentState !== "active") realtimeService.suspend();
     return () => realtimeService.stop(true);
-  }, [loading, sessionKey]);
+  }, [loading, pathname, sessionKey]);
 
   useEffect(() => {
     let active = AppState.currentState === "active";

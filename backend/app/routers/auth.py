@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Header, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 
 from app.config import get_settings
 from app.auth import get_current_user
@@ -34,6 +34,8 @@ from app.services.profile_photo_service import save_profile_photo
 from app.utils import api_error, api_success
 from app.database import database
 from app.utils import now_iso
+from app.services.rate_limit_service import RateLimit, rate_limit_service
+from pymongo.errors import DuplicateKeyError
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -48,7 +50,8 @@ def _require_public_customer_signup(role: str) -> None:
 
 
 @router.post("/request-otp")
-async def request_otp(payload: RequestOtpBody):
+async def request_otp(payload: RequestOtpBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-otp-send", RateLimit(5, 3600), identity=payload.phone)
     if not get_settings().mock_otp_allowed:
         api_error("Phone verification is not available. Use secure email sign-in.", 503)
     return api_success(
@@ -60,7 +63,8 @@ async def request_otp(payload: RequestOtpBody):
 
 
 @router.post("/verify-otp")
-async def verify_otp(payload: VerifyOtpBody):
+async def verify_otp(payload: VerifyOtpBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-otp-verify", RateLimit(10, 900), identity=payload.phone)
     settings = get_settings()
     if not settings.mock_otp_allowed:
         api_error("Phone verification is not available. Use secure email sign-in.", 503)
@@ -75,7 +79,8 @@ async def verify_otp(payload: VerifyOtpBody):
 
 
 @router.post("/register")
-async def register(payload: RegisterBody):
+async def register(payload: RegisterBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-register", RateLimit(5, 3600), identity=payload.phone)
     _require_public_customer_signup(payload.role)
     user = await create_or_update_user(payload.phone, "passenger", payload.name)
     if payload.city:
@@ -84,7 +89,8 @@ async def register(payload: RegisterBody):
 
 
 @router.post("/email-register")
-async def email_register(payload: EmailRegisterBody):
+async def email_register(payload: EmailRegisterBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-email-register", RateLimit(5, 3600), identity=payload.email)
     _require_public_customer_signup(payload.role)
     if payload.password != payload.confirm_password:
         api_error("Passwords do not match.", 400)
@@ -112,7 +118,9 @@ async def email_register(payload: EmailRegisterBody):
 
 
 @router.post("/email-login")
-async def email_login(payload: EmailLoginBody):
+async def email_login(payload: EmailLoginBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-email-login-short", RateLimit(5, 60), identity=payload.email)
+    await rate_limit_service.enforce(request, "auth-email-login-long", RateLimit(20, 3600), identity=payload.email)
     try:
         user = await verify_email_user(payload.email, payload.password)
     except PermissionError as error:
@@ -123,7 +131,8 @@ async def email_login(payload: EmailLoginBody):
 
 
 @router.post("/verify-email")
-async def verify_email(payload: VerifyEmailBody):
+async def verify_email(payload: VerifyEmailBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-email-verify", RateLimit(10, 900), identity=payload.email)
     user = await verify_email_code(payload.email, payload.code)
     if not user:
         api_error("Invalid or expired verification code.", 400)
@@ -139,7 +148,8 @@ async def verify_email(payload: VerifyEmailBody):
 
 
 @router.post("/resend-email-verification")
-async def resend_verification(payload: ResendEmailVerificationBody):
+async def resend_verification(payload: ResendEmailVerificationBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-email-resend", RateLimit(3, 3600), identity=payload.email)
     try:
         user = await resend_email_verification(payload.email)
     except RuntimeError as error:
@@ -156,7 +166,8 @@ async def resend_verification(payload: ResendEmailVerificationBody):
 
 
 @router.post("/forgot-password")
-async def forgot_password(payload: ForgotPasswordBody):
+async def forgot_password(payload: ForgotPasswordBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-password-forgot", RateLimit(3, 3600), identity=payload.email)
     try:
         await start_password_reset(payload.email)
     except RuntimeError as error:
@@ -165,7 +176,8 @@ async def forgot_password(payload: ForgotPasswordBody):
 
 
 @router.post("/reset-password")
-async def reset_password(payload: ResetPasswordBody):
+async def reset_password(payload: ResetPasswordBody, request: Request):
+    await rate_limit_service.enforce(request, "auth-password-reset", RateLimit(10, 3600), identity=payload.email)
     if payload.confirm_password and payload.password != payload.confirm_password:
         api_error("Passwords do not match.", 400)
     ok = await reset_email_password(payload.email, payload.code, payload.password)
@@ -175,24 +187,12 @@ async def reset_password(payload: ResetPasswordBody):
 
 
 @router.get("/me")
-async def me(authorization: str = Header(default="")):
-    token = authorization.replace("Bearer", "").strip()
-    if not token:
-        api_error("Missing bearer token.", 401)
-    user = await find_user_by_token(token)
-    if not user:
-        api_error("User not found.", 404)
+async def me(user=Depends(get_current_user)):
     return api_success(public_user(user))
 
 
 @router.patch("/me")
-async def update_me(payload: UserUpdate, authorization: str = Header(default="")):
-    token = authorization.replace("Bearer", "").strip()
-    if not token:
-        api_error("Missing bearer token.", 401)
-    user = await find_user_by_token(token)
-    if not user:
-        api_error("User not found.", 404)
+async def update_me(payload: UserUpdate, request: Request, user=Depends(get_current_user)):
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
 
     # Product identity is immutable. Customer, Driver, Courier and Merchant are
@@ -202,11 +202,19 @@ async def update_me(payload: UserUpdate, authorization: str = Header(default="")
     updates.pop("profile_photo_verified", None)
 
     if updates.get("email") and updates["email"].lower().strip() != (user.get("email") or "").lower().strip():
+        await rate_limit_service.enforce(request, "auth-profile-email-change", RateLimit(5, 3600), identity=str(user.get("id") or ""))
         updates["email"] = updates["email"].lower().strip()
+        existing_email_user = await find_user_by_email(updates["email"])
+        if existing_email_user and existing_email_user.get("id") != user.get("id"):
+            api_error("This email already belongs to another account.", 409)
+        updates["normalized_email"] = updates["email"]
         updates["email_verified"] = False
         updates["email_verified_at"] = None
     updates["updated_at"] = now_iso()
-    updated = await database.update_one("users", user["id"], updates)
+    try:
+        updated = await database.update_one("users", user["id"], updates)
+    except DuplicateKeyError:
+        api_error("This email already belongs to another account.", 409)
     if updated and updates.get("email_verified") is False:
         await start_email_verification(updated, force=True)
     return api_success(public_user(updated or user))
@@ -221,14 +229,18 @@ async def upload_profile_photo(file: UploadFile = File(...), user=Depends(get_cu
     return api_success(public_user(updated))
 
 
+@router.post("/logout")
+async def logout(user=Depends(get_current_user)):
+    await database.update_one(
+        "users",
+        user["id"],
+        {"token": "", "token_issued_at": None, "token_expires_at": None, "sessions_revoked_at": now_iso(), "updated_at": now_iso()},
+    )
+    return api_success({"logged_out": True})
+
+
 @router.delete("/me")
-async def delete_me(authorization: str = Header(default="")):
-    token = authorization.replace("Bearer", "").strip()
-    if not token:
-        api_error("Missing bearer token.", 401)
-    user = await find_user_by_token(token)
-    if not user:
-        api_error("User not found.", 404)
+async def delete_me(user=Depends(get_current_user)):
     timestamp = now_iso()
     await database.update_one(
         "users",
@@ -237,7 +249,9 @@ async def delete_me(authorization: str = Header(default="")):
             "name": "Deleted account",
             "phone": "",
             "email": "",
+            "normalized_email": None,
             "token": "",
+            "token_expires_at": None,
             "status": "deleted",
             "deleted_at": timestamp,
             "updated_at": timestamp,

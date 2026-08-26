@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "../constants/config";
 import { Ride, RideRequest } from "../types/ride.types";
 import { User } from "../types/user.types";
-import { getToken, requestData } from "./api";
+import { requestData } from "./api";
 import {
   AdminVerificationDetail,
   AdminVerificationListItem,
@@ -226,7 +226,9 @@ export async function updateAdminVerificationStatus(data: {
 }
 
 export async function getAdminDocumentUrl(driverId: string, documentId: string) {
-  const token = await getToken();
-  const query = token ? `?access_token=${encodeURIComponent(token)}` : "";
-  return `${API_BASE_URL}/admin/verifications/${encodeURIComponent(driverId)}/documents/${encodeURIComponent(documentId)}/view${query}`;
+  const result = await requestData<{ url: string }>({
+    method: "POST",
+    url: `/admin/verifications/${encodeURIComponent(driverId)}/documents/${encodeURIComponent(documentId)}/access`,
+  });
+  return `${API_BASE_URL}${result.url}`;
 }

@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 
-import { useRides } from "../hooks/useRides";
+import { clearRideDiscoveryCache, useRides } from "../hooks/useRides";
 import { listRides, searchRides } from "../services/ridesService";
 import { Ride } from "../types/ride.types";
 import { ride } from "./fixtures";
@@ -20,6 +20,7 @@ jest.mock("../services/ridesService", () => ({
 describe("live refresh behavior", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearRideDiscoveryCache();
     jest.useFakeTimers();
     (searchRides as jest.Mock).mockResolvedValue([]);
   });
@@ -60,5 +61,38 @@ describe("live refresh behavior", () => {
     });
 
     expect(result.current.rides[0].destination).toBe("Mutare");
+  });
+
+  it("deduplicates simultaneous opening requests for the same discovery key", async () => {
+    let resolveRequest: (value: Ride[]) => void = () => undefined;
+    const pending = new Promise<Ride[]>((resolve) => { resolveRequest = resolve; });
+    (listRides as jest.Mock).mockReturnValue(pending);
+
+    const { result } = renderHook(() => ({ first: useRides(), second: useRides() }));
+    await waitFor(() => expect(listRides).toHaveBeenCalledTimes(1));
+    await act(async () => { resolveRequest([ride]); await pending; });
+    expect(result.current.first.rides).toEqual([ride]);
+    expect(result.current.second.rides).toEqual([ride]);
+  });
+
+  it("preserves the successful snapshot when a background refresh fails", async () => {
+    (listRides as jest.Mock).mockResolvedValueOnce([ride]).mockRejectedValueOnce(new Error("Temporary network issue"));
+    const { result } = renderHook(() => useRides());
+    await waitFor(() => expect(result.current.rides).toEqual([ride]));
+
+    await act(async () => { await result.current.reload(); });
+    expect(result.current.rides).toEqual([ride]);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe("Temporary network issue");
+  });
+
+  it("settles an empty first result without scheduling another request", async () => {
+    (listRides as jest.Mock).mockResolvedValue([]);
+    const { result } = renderHook(() => useRides());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { jest.advanceTimersByTime(90000); });
+    expect(result.current.rides).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(listRides).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,4 +1,4 @@
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -33,6 +33,28 @@ function NotificationResponseRouter() {
   return null;
 }
 
+function SessionShellRouter() {
+  const router = useRouter();
+  const segments = useSegments();
+  const { user, loading, isGuest } = useSession();
+
+  useEffect(() => {
+    const routeGroup = segments[0];
+    if (loading || !routeGroup || routeGroup === "(auth)") return;
+    const roleHome = user?.role === "admin" ? "/(admin)/dashboard"
+      : user?.role === "driver" ? "/(driver)/home"
+        : user?.role === "courier" ? "/(courier)/home"
+          : user?.role === "merchant" ? "/(merchant)/home"
+            : "/(customer)/home";
+    const roleGroups = ["(customer)", "(driver)", "(courier)", "(merchant)", "(admin)"];
+    if (!roleGroups.includes(String(routeGroup))) return;
+    const expectedGroup = roleHome.slice(1, roleHome.indexOf(")") + 1);
+    if ((isGuest || user) && routeGroup !== expectedGroup) router.replace(roleHome as never);
+  }, [isGuest, loading, router, segments, user]);
+
+  return null;
+}
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
@@ -40,6 +62,7 @@ export default function RootLayout() {
         <RealtimeProvider>
           <NotificationProvider>
             <NotificationResponseRouter />
+            <SessionShellRouter />
             <PermissionReminder />
             <LocationDraftProvider>
               <FoodBasketProvider>

@@ -17,6 +17,7 @@ from app.domain.zimbabwe_operations import SERVICE_AREAS, canonical_service_area
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification
 from app.utils import new_id, now_iso
+from app.services.upload_security_service import validate_upload
 
 
 APPLICATION_STATUSES = {"DRAFT", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "REJECTED"}
@@ -57,30 +58,14 @@ def _safe_file_name(value: str) -> str:
 
 
 def _public_document(document: Dict[str, Any]) -> Dict[str, Any]:
-    file_url = document.get("file_url")
-    if document.get("cloudinary_public_id") and document.get("delivery_type") == "authenticated":
-        settings = get_settings()
-        if settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret:
-            cloudinary.config(
-                cloud_name=settings.cloudinary_cloud_name,
-                api_key=settings.cloudinary_api_key,
-                api_secret=settings.cloudinary_api_secret,
-                secure=True,
-            )
-            file_url = cloudinary.utils.cloudinary_url(
-                document["cloudinary_public_id"],
-                secure=True,
-                sign_url=True,
-                type="authenticated",
-                resource_type=document.get("resource_type") or "image",
-                format=document.get("format") or None,
-                version=document.get("version") or None,
-            )[0]
     return {
         "id": document.get("id"),
         "document_type": document.get("document_type"),
         "file_name": document.get("file_name"),
-        "file_url": file_url,
+        "has_file": bool(
+            document.get("cloudinary_public_id")
+            or (document.get("legacy_local_document") is True and document.get("storage_path"))
+        ),
         "uploaded_at": document.get("uploaded_at"),
         "status": document.get("status", "PENDING"),
         "rejection_reason": document.get("rejection_reason"),
@@ -186,14 +171,8 @@ async def upload_worker_document(
         raise ValueError("Documents cannot be changed while an application is in review.")
     if document_type not in REQUIRED_DOCUMENTS.get(str(application.get("product") or ""), set()):
         raise ValueError("That document is not used for this application.")
-    content_type = str(upload.content_type or "").lower()
-    if content_type not in ALLOWED_DOCUMENT_TYPES:
-        raise ValueError("Upload a JPEG, PNG, WebP or PDF document.")
-    file_bytes = await upload.read()
-    if not file_bytes:
-        raise ValueError("The uploaded document is empty.")
-    if len(file_bytes) > MAX_DOCUMENT_BYTES:
-        raise ValueError("Documents must be 8 MB or smaller.")
+    validated = await validate_upload(upload, max_bytes=MAX_DOCUMENT_BYTES, allow_pdf=True, stem=upload.filename or "document")
+    file_bytes = validated.data
 
     settings = get_settings()
     config = cloudinary.config(
@@ -204,34 +183,36 @@ async def upload_worker_document(
     )
     if not (config.cloud_name and config.api_key and config.api_secret):
         raise RuntimeError("Secure document storage is not configured.")
-    safe_name = _safe_file_name(upload.filename or "document")
+    safe_name = validated.file_name
 
     def upload_to_cloudinary() -> Dict[str, Any]:
         file_obj = io.BytesIO(file_bytes)
         file_obj.name = safe_name
         return cloudinary.uploader.upload(
             file_obj,
-            resource_type="auto",
+            resource_type=validated.resource_type,
             type="authenticated",
             folder=f"letsgoride/applications/{application.get('product')}",
             use_filename=True,
             unique_filename=True,
         )
 
-    result = await asyncio.to_thread(upload_to_cloudinary)
+    try:
+        result = await asyncio.to_thread(upload_to_cloudinary)
+    except Exception:
+        raise RuntimeError("Secure document upload is temporarily unavailable.") from None
     if not result.get("secure_url") or not result.get("public_id"):
         raise RuntimeError("Secure document storage did not return a usable file reference.")
     document = {
         "id": new_id(),
         "document_type": document_type,
         "file_name": safe_name,
-        "file_url": result["secure_url"],
         "cloudinary_public_id": result["public_id"],
         "delivery_type": "authenticated",
         "resource_type": result.get("resource_type") or "image",
         "format": result.get("format"),
         "version": result.get("version"),
-        "content_type": content_type,
+        "content_type": validated.content_type,
         "status": "PENDING",
         "rejection_reason": None,
         "uploaded_at": now_iso(),

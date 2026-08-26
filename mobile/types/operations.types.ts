@@ -77,7 +77,7 @@ export type WorkerApplicationDocument = {
   id: string;
   document_type: WorkerApplicationDocumentType;
   file_name: string;
-  file_url?: string | null;
+  has_file?: boolean;
   uploaded_at?: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | string;
   rejection_reason?: string | null;

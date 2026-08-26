@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.courier import GeoPoint
 
@@ -21,12 +21,14 @@ FoodPaymentMethod = Literal["CASH_ON_DELIVERY"]
 
 
 class FoodOrderItemBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     menu_item_id: str = Field(min_length=1)
     quantity: int = Field(ge=1, le=20)
     note: Optional[str] = Field(default=None, max_length=240)
 
 
 class FoodOrderCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     restaurant_id: str = Field(min_length=1)
     delivery_address: str = Field(min_length=3, max_length=240)
     delivery_location: GeoPoint
@@ -38,4 +40,5 @@ class FoodOrderCreateBody(BaseModel):
 
 
 class FoodOrderCancelBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     reason: Optional[str] = Field(default=None, max_length=300)

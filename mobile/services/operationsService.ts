@@ -1,6 +1,7 @@
 import { ApiResponse } from "../types/api.types";
 import { api, requestData, toFriendlyApiError } from "./api";
 import axios from "axios";
+import { API_BASE_URL } from "../constants/config";
 import { CourierDelivery, CourierOffer } from "../types/courier.types";
 import {
   CourierEarningsSummary,
@@ -141,6 +142,11 @@ export function listAdminWorkerApplications() {
 
 export function reviewWorkerApplication(applicationId: string, status: "UNDER_REVIEW" | "APPROVED" | "REJECTED", note?: string | null) {
   return requestData<WorkerApplication>({ method: "POST", url: `/operations/admin/applications/${applicationId}/review`, data: { status, note: note || null } });
+}
+
+export async function getAdminWorkerDocumentUrl(applicationId: string, documentId: string) {
+  const result = await requestData<{ url: string }>({ method: "POST", url: `/operations/admin/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(documentId)}/access` });
+  return `${API_BASE_URL}${result.url}`;
 }
 
 export function listAdminCourierShifts() {

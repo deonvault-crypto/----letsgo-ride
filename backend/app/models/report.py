@@ -1,14 +1,16 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.user import validate_international_phone
 
 
 class ReportCreateBody(BaseModel):
-    report_type: str = Field(min_length=2)
-    message: str = Field(min_length=5)
-    ride_id: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    report_type: str = Field(min_length=2, max_length=120)
+    message: str = Field(min_length=5, max_length=4000)
+    ride_id: Optional[str] = Field(default=None, max_length=80)
     user_phone: Optional[str] = None
 
     @field_validator("user_phone")
@@ -18,8 +20,10 @@ class ReportCreateBody(BaseModel):
 
 
 class SupportMessageBody(BaseModel):
-    subject: str = Field(min_length=2)
-    message: str = Field(min_length=5)
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str = Field(min_length=2, max_length=160)
+    message: str = Field(min_length=5, max_length=4000)
     phone: Optional[str] = None
 
     @field_validator("phone")
@@ -29,7 +33,9 @@ class SupportMessageBody(BaseModel):
 
 
 class WaitlistBody(BaseModel):
-    name: str = Field(min_length=2)
-    phone: str = Field(min_length=6)
-    city: Optional[str] = None
-    interest: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=6, max_length=32)
+    city: Optional[str] = Field(default=None, max_length=120)
+    interest: Optional[str] = Field(default=None, max_length=600)

@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 UserRole = Literal["passenger", "driver", "courier", "merchant", "admin"]
@@ -42,7 +42,8 @@ def validate_strong_password(value: str) -> str:
 
 
 class RequestOtpBody(BaseModel):
-    phone: str = Field(min_length=6)
+    model_config = ConfigDict(extra="forbid")
+    phone: str = Field(min_length=6, max_length=32)
 
     @field_validator("phone")
     @classmethod
@@ -51,7 +52,8 @@ class RequestOtpBody(BaseModel):
 
 
 class VerifyOtpBody(BaseModel):
-    phone: str = Field(min_length=6)
+    model_config = ConfigDict(extra="forbid")
+    phone: str = Field(min_length=6, max_length=32)
     otp: str = Field(min_length=4, max_length=8)
     role: UserRole = "passenger"
 
@@ -62,9 +64,10 @@ class VerifyOtpBody(BaseModel):
 
 
 class RegisterBody(BaseModel):
-    phone: str = Field(min_length=6)
-    name: str = Field(min_length=2)
-    city: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+    phone: str = Field(min_length=6, max_length=32)
+    name: str = Field(min_length=2, max_length=120)
+    city: Optional[str] = Field(default=None, max_length=120)
     role: UserRole = "passenger"
 
     @field_validator("phone")
@@ -74,8 +77,9 @@ class RegisterBody(BaseModel):
 
 
 class EmailLoginBody(BaseModel):
-    email: str = Field(min_length=5)
-    password: str = Field(min_length=8)
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
 
     @field_validator("email")
     @classmethod
@@ -84,11 +88,12 @@ class EmailLoginBody(BaseModel):
 
 
 class EmailRegisterBody(BaseModel):
-    name: str = Field(min_length=2)
-    email: str = Field(min_length=5)
-    password: str = Field(min_length=8)
-    confirm_password: str = Field(min_length=8)
-    city: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=2, max_length=120)
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
+    city: Optional[str] = Field(default=None, max_length=120)
     role: UserRole = "passenger"
 
     @field_validator("email")
@@ -103,7 +108,8 @@ class EmailRegisterBody(BaseModel):
 
 
 class ForgotPasswordBody(BaseModel):
-    email: str = Field(min_length=5)
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=5, max_length=254)
 
     @field_validator("email")
     @classmethod
@@ -112,10 +118,11 @@ class ForgotPasswordBody(BaseModel):
 
 
 class ResetPasswordBody(BaseModel):
-    email: str = Field(min_length=5)
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=5, max_length=254)
     code: str = Field(min_length=6, max_length=6)
-    password: str = Field(min_length=8)
-    confirm_password: Optional[str] = None
+    password: str = Field(min_length=8, max_length=128)
+    confirm_password: Optional[str] = Field(default=None, min_length=8, max_length=128)
 
     @field_validator("email")
     @classmethod
@@ -129,23 +136,19 @@ class ResetPasswordBody(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = Field(default=None, min_length=6)
-    email: Optional[str] = Field(default=None, min_length=5)
-    city: Optional[str] = None
-    bio: Optional[str] = None
-    travel_preferences: Optional[str] = None
-    profile_photo_url: Optional[str] = None
-    profile_photo_name: Optional[str] = None
-    profile_photo_verified: Optional[bool] = None
-    email_verified: Optional[bool] = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    phone: Optional[str] = Field(default=None, min_length=6, max_length=32)
+    email: Optional[str] = Field(default=None, min_length=5, max_length=254)
+    city: Optional[str] = Field(default=None, max_length=120)
+    bio: Optional[str] = Field(default=None, max_length=1000)
+    travel_preferences: Optional[str] = Field(default=None, max_length=1000)
     notification_trip_updates: Optional[bool] = None
     notification_booking_requests: Optional[bool] = None
     notification_support_replies: Optional[bool] = None
     notification_safety_alerts: Optional[bool] = None
     notification_marketing: Optional[bool] = None
-    # Account type is created during onboarding and intentionally cannot be changed via /auth/me.
-    role: Optional[UserRole] = None
 
     @field_validator("phone")
     @classmethod
@@ -161,12 +164,14 @@ class UserUpdate(BaseModel):
 
 
 class AdminRoleUpdateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     role: Literal["driver", "courier", "merchant", "admin"]
     reason: str = Field(min_length=3, max_length=300)
 
 
 class VerifyEmailBody(BaseModel):
-    email: str = Field(min_length=5)
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=5, max_length=254)
     code: str = Field(min_length=6, max_length=6)
 
     @field_validator("email")
@@ -176,7 +181,8 @@ class VerifyEmailBody(BaseModel):
 
 
 class ResendEmailVerificationBody(BaseModel):
-    email: str = Field(min_length=5)
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=5, max_length=254)
 
     @field_validator("email")
     @classmethod

@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -9,9 +10,16 @@ from app.database import database
 from app.models.user import normalize_email, validate_strong_password
 from app.services.email_service import send_password_reset_email, send_verification_email
 from app.utils import new_id, now_iso
+from pymongo.errors import DuplicateKeyError
 
 
 logger = logging.getLogger(__name__)
+
+LEGACY_PBKDF2_ITERATIONS = 120_000
+# Local release-gate benchmark: ~485 ms at 310k versus ~1.16 s at 600k.
+# This raises legacy cost materially without making the async API an easy CPU bottleneck.
+CURRENT_PBKDF2_ITERATIONS = 310_000
+CURRENT_PASSWORD_SCHEME = "pbkdf2_sha256"
 
 
 class DuplicateVerifiedEmailError(Exception):
@@ -44,23 +52,41 @@ async def find_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
 
 
 async def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    return await database.find_one("users", {"email": normalize_email(email)})
+    normalized = normalize_email(email)
+    return await database.find_one("users", {"normalized_email": normalized}) or await database.find_one("users", {"email": normalized})
 
 
 async def find_user_by_token(token: str) -> Optional[Dict[str, Any]]:
-    return await database.find_one("users", {"token": token})
+    user = await database.find_one("users", {"token": token})
+    if not user or user.get("status") in {"deleted", "suspended"}:
+        return None
+    expires_at = user.get("token_expires_at")
+    if not expires_at:
+        return None
+    try:
+        if datetime.fromisoformat(str(expires_at)) <= datetime.now(timezone.utc):
+            return None
+    except ValueError:
+        return None
+    return user
 
 
 def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
     hidden = {
         "password_hash",
         "password_salt",
+        "password_scheme",
+        "password_iterations",
         "email_verification_code_hash",
         "email_verification_salt",
         "reset_code_hash",
         "reset_code_salt",
         "reset_salt",
         "token",
+        "token_issued_at",
+        "token_expires_at",
+        "sessions_revoked_at",
+        "normalized_email",
     }
     public = {key: value for key, value in user.items() if key not in hidden}
     if public.get("verification_provider"):
@@ -72,18 +98,48 @@ def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
     return public
 
 
-def hash_password(password: str, salt: str) -> str:
+def hash_password(password: str, salt: str, iterations: int = LEGACY_PBKDF2_ITERATIONS) -> str:
     return hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
         salt.encode("utf-8"),
-        120000,
+        iterations,
     ).hex()
 
 
-def create_password_record(password: str) -> Dict[str, str]:
+def create_password_record(password: str) -> Dict[str, Any]:
     salt = secrets.token_hex(16)
-    return {"password_salt": salt, "password_hash": hash_password(password, salt)}
+    return {
+        "password_salt": salt,
+        "password_hash": hash_password(password, salt, CURRENT_PBKDF2_ITERATIONS),
+        "password_scheme": CURRENT_PASSWORD_SCHEME,
+        "password_iterations": CURRENT_PBKDF2_ITERATIONS,
+    }
+
+
+def password_matches(user: Dict[str, Any], password: str) -> bool:
+    salt = str(user.get("password_salt") or "")
+    expected = str(user.get("password_hash") or "")
+    if not salt or not expected:
+        return False
+    scheme = str(user.get("password_scheme") or CURRENT_PASSWORD_SCHEME)
+    if scheme != CURRENT_PASSWORD_SCHEME:
+        return False
+    try:
+        iterations = int(user.get("password_iterations") or LEGACY_PBKDF2_ITERATIONS)
+    except (TypeError, ValueError):
+        return False
+    if iterations < LEGACY_PBKDF2_ITERATIONS or iterations > 2_000_000:
+        return False
+    actual = hash_password(password, salt, iterations)
+    return hmac.compare_digest(expected, actual)
+
+
+def password_needs_upgrade(user: Dict[str, Any]) -> bool:
+    return (
+        user.get("password_scheme") != CURRENT_PASSWORD_SCHEME
+        or int(user.get("password_iterations") or LEGACY_PBKDF2_ITERATIONS) < CURRENT_PBKDF2_ITERATIONS
+    )
 
 
 def create_code_record(code: str, prefix: str = "email_verification") -> Dict[str, str]:
@@ -104,6 +160,15 @@ def code_matches(user: Dict[str, Any], code: str, prefix: str = "email_verificat
 
 def generate_email_code() -> str:
     return f"{secrets.randbelow(1000000):06d}"
+
+
+def create_session_record(prefix: str = "acct") -> Dict[str, str]:
+    now = datetime.now(timezone.utc)
+    return {
+        "token": f"{prefix}_{new_id()}",
+        "token_issued_at": now.isoformat(),
+        "token_expires_at": (now + timedelta(days=get_settings().session_lifetime_days)).isoformat(),
+    }
 
 
 def code_not_expired(user: Dict[str, Any], prefix: str = "email_verification") -> bool:
@@ -149,7 +214,7 @@ async def start_email_verification(user: Dict[str, Any], force: bool = False) ->
 
 async def create_or_update_user(phone: str, role: str, name: Optional[str] = None) -> Dict[str, Any]:
     existing = await find_user_by_phone(phone)
-    token = f"auth_{new_id()}"
+    session = create_session_record("auth")
     timestamp = now_iso()
 
     if existing:
@@ -157,7 +222,7 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
             # Authentication refreshes a session; it never changes product
             # privileges supplied by an existing account record.
             "role": existing.get("role", "passenger"),
-            "token": token,
+            **session,
             "updated_at": timestamp,
         }
         if name:
@@ -173,7 +238,7 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
         "role": "passenger",
         "email_verified": False,
         "rating": 0,
-        "token": token,
+        **session,
         "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -192,7 +257,6 @@ async def create_email_user(
     validate_strong_password(password)
     existing = await find_user_by_email(normalized_email)
     timestamp = now_iso()
-    token = f"acct_{new_id()}"
     password_record = create_password_record(password)
 
     if existing:
@@ -204,6 +268,7 @@ async def create_email_user(
         "id": new_id(),
         "phone": "",
         "email": normalized_email,
+        "normalized_email": normalized_email,
         "name": name,
         "city": city or "Harare",
         # This service backs public registration only. Work product access is
@@ -212,7 +277,7 @@ async def create_email_user(
         "email_verified": False,
         "email_verified_at": None,
         "rating": 0,
-        "token": token,
+        **create_session_record(),
         **password_record,
         "status": "active",
         "is_demo": False,
@@ -224,7 +289,10 @@ async def create_email_user(
         "notification_safety_alerts": True,
         "notification_marketing": False,
     }
-    created = await database.insert_one("users", user)
+    try:
+        created = await database.insert_one("users", user)
+    except DuplicateKeyError as exc:
+        raise DuplicateVerifiedEmailError("This email already has an account. Please log in or reset your password.") from exc
     return await start_email_verification(created, force=True)
 
 
@@ -232,19 +300,16 @@ async def verify_email_user(email: str, password: str) -> Optional[Dict[str, Any
     user = await find_user_by_email(email)
     if not user:
         return None
-    password_salt = user.get("password_salt")
-    password_hash = user.get("password_hash")
-    if not password_salt or not password_hash:
-        return None
-    if password_hash != hash_password(password, password_salt):
+    if not password_matches(user, password):
         return None
     if not user.get("email_verified", False):
         raise PermissionError("Please verify your email before logging in.")
 
+    credential_upgrade = create_password_record(password) if password_needs_upgrade(user) else {}
     updated = await database.update_one(
         "users",
         user["id"],
-        {"token": f"acct_{new_id()}", "updated_at": now_iso()},
+        {**credential_upgrade, **create_session_record(), "updated_at": now_iso()},
     )
     return updated or user
 
@@ -254,7 +319,8 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
     if not user:
         return None
     if user.get("email_verified"):
-        return user
+        # Verification is not a login endpoint. Never disclose an existing session.
+        return {**user, "token": ""}
     attempts = int(user.get("email_verification_attempts", 0))
     if attempts >= 5:
         return None
@@ -277,7 +343,7 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
             "email_verification_code_hash": "",
             "email_verification_salt": "",
             "email_verification_attempts": 0,
-            "token": f"acct_{new_id()}",
+            **create_session_record(),
             "updated_at": now_iso(),
         },
     )
@@ -290,7 +356,7 @@ async def resend_email_verification(email: str) -> Optional[Dict[str, Any]]:
         return None
     if user.get("email_verified"):
         return user
-    return await start_email_verification(user, force=True)
+    return await start_email_verification(user, force=False)
 
 
 async def start_password_reset(email: str) -> None:
@@ -298,6 +364,13 @@ async def start_password_reset(email: str) -> None:
     if not user:
         return
     now = datetime.now(timezone.utc)
+    last_sent = user.get("reset_sent_at")
+    if last_sent:
+        try:
+            if datetime.fromisoformat(str(last_sent)) + timedelta(seconds=60) > now:
+                return
+        except ValueError:
+            pass
     code = generate_email_code()
     updates = {
         **create_code_record(code, "reset"),
@@ -340,6 +413,10 @@ async def reset_email_password(email: str, code: str, password: str) -> bool:
             "reset_salt": "",
             "reset_attempts": 0,
             "reset_expires_at": None,
+            "token": "",
+            "token_issued_at": None,
+            "token_expires_at": None,
+            "sessions_revoked_at": now_iso(),
             "updated_at": now_iso(),
         },
     )
@@ -353,10 +430,21 @@ async def ensure_admin_seed_user() -> None:
 
     email = settings.admin_seed_email.lower().strip()
     timestamp = now_iso()
-    password_record = create_password_record(settings.admin_seed_password)
     existing = await find_user_by_email(email)
 
     if existing:
+        existing_password_matches = password_matches(existing, settings.admin_seed_password)
+        credential_updates: Dict[str, Any] = {}
+        if not existing_password_matches:
+            credential_updates = {
+                **create_password_record(settings.admin_seed_password),
+                "token": "",
+                "token_issued_at": None,
+                "token_expires_at": None,
+                "sessions_revoked_at": timestamp,
+            }
+        elif password_needs_upgrade(existing):
+            credential_updates = create_password_record(settings.admin_seed_password)
         await database.update_one(
             "users",
             existing["id"],
@@ -364,10 +452,11 @@ async def ensure_admin_seed_user() -> None:
                 "role": "admin",
                 "name": existing.get("name") or "LetsGoRide Admin",
                 "email": email,
+                "normalized_email": email,
                 "email_verified": True,
                 "email_verified_at": existing.get("email_verified_at") or timestamp,
                 "status": "active",
-                **password_record,
+                **credential_updates,
                 "updated_at": timestamp,
             },
         )
@@ -377,15 +466,18 @@ async def ensure_admin_seed_user() -> None:
         "id": new_id(),
         "phone": "",
         "email": email,
+        "normalized_email": email,
         "name": "LetsGoRide Admin",
         "city": "Harare",
         "role": "admin",
         "rating": 5,
         "token": "",
+        "token_issued_at": None,
+        "token_expires_at": None,
         "status": "active",
         "email_verified": True,
         "email_verified_at": timestamp,
-        **password_record,
+        **create_password_record(settings.admin_seed_password),
         "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
