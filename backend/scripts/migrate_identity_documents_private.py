@@ -2,7 +2,12 @@
 
 Dry-run is the default. Apply mode requires an explicit environment/database,
 approved inventory count, backup reference, and confirmation phrase. Output is
-aggregate-only and never contains provider IDs, filenames, paths, or URLs.
+aggregate-only and never contains provider IDs, filenames, paths, URLs, or
+account identifiers.
+
+A deliberately explicit partial mode may defer only historical local-path
+records that require re-upload while still migrating provider-backed assets.
+All integrity/provider failures continue to fail closed.
 """
 
 from __future__ import annotations
@@ -12,7 +17,7 @@ import asyncio
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -30,14 +35,25 @@ from scripts.identity_document_inventory import (
 
 
 APPLY_CONFIRMATION = "APPLY_IDENTITY_DOCUMENT_MIGRATION"
-BLOCKING_ACTIONS = {
+PARTIAL_APPLY_CONFIRMATION = "APPLY_ELIGIBLE_IDENTITY_DOCUMENT_MIGRATION"
+
+# These conditions can never be bypassed by partial mode. They indicate that
+# ownership/integrity or trusted-provider state is not safe enough for writes.
+HARD_BLOCKING_ACTIONS = {
     "missing_provider_asset",
-    "requires_reupload",
     "ownership_error",
     "malformed",
-    "unsafe_path",
     "provider_lookup_error",
 }
+
+# These conditions represent historical local-only records. Partial mode may
+# leave those exact records untouched for a later re-upload workflow.
+REUPLOAD_BLOCKING_ACTIONS = {
+    "requires_reupload",
+    "unsafe_path",
+}
+
+BLOCKING_ACTIONS = HARD_BLOCKING_ACTIONS | REUPLOAD_BLOCKING_ACTIONS
 
 
 def validate_apply_authorization(
@@ -45,13 +61,27 @@ def validate_apply_authorization(
     apply: bool,
     confirmation: str | None,
     backup_reference: str | None,
+    allow_reupload_blockers: bool = False,
 ) -> None:
     if not apply:
         return
-    if confirmation != APPLY_CONFIRMATION:
+    expected_confirmation = (
+        PARTIAL_APPLY_CONFIRMATION if allow_reupload_blockers else APPLY_CONFIRMATION
+    )
+    if confirmation != expected_confirmation:
         raise RuntimeError("Apply mode requires the exact migration confirmation phrase.")
     if not backup_reference or len(backup_reference.strip()) < 8:
         raise RuntimeError("Apply mode requires an approved backup reference.")
+
+
+def active_blocking_actions(
+    counts: Mapping[str, int],
+    *,
+    allow_reupload_blockers: bool,
+) -> tuple[str, ...]:
+    """Return aggregate blocker categories that must stop this migration run."""
+    actions = HARD_BLOCKING_ACTIONS if allow_reupload_blockers else BLOCKING_ACTIONS
+    return tuple(sorted(action for action in actions if int(counts.get(action, 0)) > 0))
 
 
 def _canonical_document(document: dict[str, Any]) -> dict[str, Any]:
@@ -68,6 +98,8 @@ def _canonical_document(document: dict[str, Any]) -> dict[str, Any]:
 async def _apply_plan(plans: list[DocumentPlan]) -> int:
     plans_by_owner: dict[tuple[str, str], list[DocumentPlan]] = defaultdict(list)
     for plan in plans:
+        # Re-upload/local-path and all other blocked plans are intentionally not
+        # included here. Partial mode therefore cannot mutate those records.
         if plan.action in {"cleanup_only", "authenticated_migration"}:
             plans_by_owner[(plan.collection, plan.owner_id)].append(plan)
 
@@ -108,12 +140,14 @@ async def main(
     apply: bool,
     confirmation: str | None,
     backup_reference: str | None,
+    allow_reupload_blockers: bool = False,
 ) -> None:
     validate_runtime(environment, database_name)
     validate_apply_authorization(
         apply=apply,
         confirmation=confirmation,
         backup_reference=backup_reference,
+        allow_reupload_blockers=allow_reupload_blockers,
     )
     configure_cloudinary()
     await database.connect(ensure_indexes=False)
@@ -121,18 +155,25 @@ async def main(
         plans, counts = await inspect_identity_documents()
         if counts["scanned"] != expected_count:
             raise RuntimeError("Identity-document count differs from the approved inventory.")
-        if any(counts[action] for action in BLOCKING_ACTIONS):
+
+        blockers = active_blocking_actions(
+            counts,
+            allow_reupload_blockers=allow_reupload_blockers,
+        )
+        if blockers:
             for line in safe_count_lines(counts, mode="blocked-preflight"):
                 print(line)
-            raise RuntimeError("Identity-document migration is blocked by the aggregate preflight.")
+            raise RuntimeError(
+                "Identity-document migration is blocked by the aggregate preflight."
+            )
 
         if apply:
             updated = await _apply_plan(plans)
             if updated != counts["eligible"]:
                 raise RuntimeError("Applied identity-document count differs from the approved plan.")
-            mode = "apply"
+            mode = "apply-partial" if allow_reupload_blockers else "apply"
         else:
-            mode = "dry-run"
+            mode = "dry-run-partial" if allow_reupload_blockers else "dry-run"
         for line in safe_count_lines(aggregate_counts(plans), mode=mode):
             print(line)
     finally:
@@ -147,6 +188,14 @@ if __name__ == "__main__":
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirmation")
     parser.add_argument("--backup-reference")
+    parser.add_argument(
+        "--allow-reupload-blockers",
+        action="store_true",
+        help=(
+            "Defer only local-path/re-upload-required records while migrating eligible "
+            "provider-backed documents. Hard integrity/provider blockers still fail closed."
+        ),
+    )
     args = parser.parse_args()
     asyncio.run(
         main(
@@ -156,5 +205,6 @@ if __name__ == "__main__":
             apply=args.apply,
             confirmation=args.confirmation,
             backup_reference=args.backup_reference,
+            allow_reupload_blockers=args.allow_reupload_blockers,
         )
     )
