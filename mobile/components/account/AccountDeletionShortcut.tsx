@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { v2Theme } from "../../constants/v2Theme";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 
 type Props = {
   product?: "driver" | "courier" | "merchant";
@@ -10,6 +11,9 @@ type Props = {
 
 export function AccountDeletionShortcut({ product }: Props) {
   const router = useRouter();
+  const { loading, isGuest } = useCurrentUser();
+
+  if (loading || isGuest) return null;
 
   return (
     <Pressable
