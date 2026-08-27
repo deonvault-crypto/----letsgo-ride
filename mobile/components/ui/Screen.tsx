@@ -14,7 +14,6 @@ import { Href, useLocalSearchParams, useSegments } from "expo-router";
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { AccountDeletionShortcut } from "../account/AccountDeletionShortcut";
 import { BottomNav } from "../layout/BottomNav";
 import { Header } from "../layout/Header";
 import { NavRole } from "../layout/BottomNav";
@@ -89,15 +88,6 @@ export function Screen({
   const contentPadding = navRole
     ? spacing.bottomNavHeight + Math.max(insets.bottom, spacing.md) + spacing.xxl
     : spacing.xxl;
-  const accountProduct = group === "(driver)"
-    ? "driver"
-    : group === "(courier)"
-      ? "courier"
-      : group === "(merchant)"
-        ? "merchant"
-        : undefined;
-  const showAccountDeletionShortcut = routeName === "account" && ["(shared)", "(driver)", "(courier)", "(merchant)"].includes(group);
-  const accountDeletionControl = showAccountDeletionShortcut ? <AccountDeletionShortcut product={accountProduct} /> : null;
   const body = scroll ? (
     <ScrollView
       showsVerticalScrollIndicator={false}
@@ -106,13 +96,9 @@ export function Screen({
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primaryGreen} /> : undefined}
     >
       {children}
-      {accountDeletionControl}
     </ScrollView>
   ) : (
-    <View style={[styles.staticContent, { paddingBottom: contentPadding }]}>
-      {children}
-      {accountDeletionControl}
-    </View>
+    <View style={[styles.staticContent, { paddingBottom: contentPadding }]}>{children}</View>
   );
 
   return (

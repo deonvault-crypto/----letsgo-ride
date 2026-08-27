@@ -4,12 +4,12 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
+import { AccountComplianceSections } from "../../components/account/AccountComplianceSections";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { useMerchantRestaurant } from "../../contexts/MerchantRestaurantContext";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { logoutToGuest } from "../../services/authService";
 import { listMyWorkerApplications } from "../../services/operationsService";
 import { WorkerApplication } from "../../types/operations.types";
 
@@ -29,7 +29,6 @@ export default function MerchantAccountScreen() {
     return () => { active = false; };
   }, []));
 
-  async function signOut() { await logoutToGuest(router); }
   function requestChange() {
     router.push({ pathname: "/(shared)/support", params: { ...productParam, subject: "Account details change" } } as never);
   }
@@ -77,12 +76,10 @@ export default function MerchantAccountScreen() {
         <Pressable accessibilityRole="button" onPress={() => router.push("/(merchant)/menu" as never)}><Row icon="silverware-fork-knife" title="Menu" value="Items, prices and availability" chevron /></Pressable>
       </Section>
 
-      <Section title="Settings & support">
+      <Section title="Settings">
         <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/settings", params: productParam } as never)}><Row icon="cog-outline" title="Account & notifications" value="Privacy, account and alerts" chevron /></Pressable>
-        <Pressable accessibilityRole="button" onPress={requestChange}><Row icon="lifebuoy" title="Merchant support" value="Orders, menu and account help" chevron /></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/(shared)/safety", params: productParam } as never)}><Row icon="alert-decagram-outline" title="Report an issue" value="Safety and operational reports" chevron /></Pressable>
       </Section>
-      <Pressable accessibilityRole="button" onPress={signOut} style={({ pressed }) => [styles.logout, pressed && styles.pressed]}><MaterialCommunityIcons name="logout" size={21} color="#FFFFFF" /><Text style={styles.logoutText}>Logout</Text></Pressable>
+      <AccountComplianceSections product="merchant" />
     </Screen>
   );
 }
@@ -111,7 +108,4 @@ const styles = StyleSheet.create({
   rowIcon: { width: 41, height: 41, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   rowTitle: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
   rowValue: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14, marginTop: 2 },
-  logout: { minHeight: 56, borderRadius: 18, backgroundColor: v2Theme.colors.danger, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
-  logoutText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
-  pressed: { opacity: 0.72 },
 });

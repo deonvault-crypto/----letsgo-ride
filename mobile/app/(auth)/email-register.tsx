@@ -9,10 +9,12 @@ import { LocationPicker } from "../../components/ui/LocationPicker";
 import { PasswordRules } from "../../components/ui/PasswordRules";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
+import { legalUrls } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { emailRegister, resendEmailVerification } from "../../services/authService";
 import { isStrongPassword, normalizeEmail } from "../../utils/passwordRules";
 import { intentCopy, parseApplicationIntent } from "../../utils/authIntent";
+import { openExternalUrl } from "../../utils/openExternalUrl";
 
 export default function EmailRegisterScreen() {
   const router = useRouter();
@@ -142,6 +144,17 @@ export default function EmailRegisterScreen() {
             />
           </View>
         ) : null}
+        <Text style={styles.legalNotice}>
+          By creating an account, you agree to the{" "}
+          <Text accessibilityRole="link" style={styles.legalLink} onPress={() => openExternalUrl(legalUrls.terms)}>
+            Terms of Service
+          </Text>{" "}
+          and acknowledge the{" "}
+          <Text accessibilityRole="link" style={styles.legalLink} onPress={() => openExternalUrl(legalUrls.privacy)}>
+            Privacy Policy
+          </Text>
+          .
+        </Text>
         <AppButton title={copy.registerButton} loading={loading} onPress={submit} disabled={!valid} />
       </View>
     </Screen>
@@ -180,5 +193,15 @@ const styles = StyleSheet.create({
   },
   inlineActions: {
     gap: spacing.sm,
+  },
+  legalNotice: {
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  legalLink: {
+    color: colors.primaryGreen,
+    fontWeight: "900",
   },
 });

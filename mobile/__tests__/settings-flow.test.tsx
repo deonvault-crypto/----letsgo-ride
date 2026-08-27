@@ -36,6 +36,7 @@ jest.mock("../hooks/useCurrentUser", () => ({
 jest.mock("../services/authService", () => ({
   deleteAccount: jest.fn(async () => ({ deleted: true })),
   logout: jest.fn(),
+  logoutToGuest: jest.fn(),
 }));
 
 jest.mock("../services/biometricService", () => ({
@@ -101,9 +102,8 @@ describe("settings account controls", () => {
     expect(screen.getByRole("button", { name: "Account details" })).toBeOnTheScreen();
     expect(screen.getAllByText("Account").length).toBeGreaterThan(0);
     expect(screen.getByText("Notifications")).toBeOnTheScreen();
-    expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
-    expect(screen.getByText("Support & Safety")).toBeOnTheScreen();
-    expect(screen.getByText("Account Control")).toBeOnTheScreen();
+    expect(screen.getByText("Security")).toBeOnTheScreen();
+    expect(screen.getByText("Legal & support")).toBeOnTheScreen();
     expect(screen.queryByText("Phone and document privacy")).toBeNull();
     expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
     expect(screen.queryByRole("button", { name: "Change phone number" })).toBeNull();
@@ -118,12 +118,12 @@ describe("settings account controls", () => {
     const screen = render(<SettingsScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText("Security & Privacy")).toBeOnTheScreen();
+      expect(screen.getByText("Security")).toBeOnTheScreen();
     });
 
     expect(screen.getByRole("button", { name: "Privacy Policy" })).toBeOnTheScreen();
-    expect(screen.getByRole("button", { name: "Terms of Use" })).toBeOnTheScreen();
-    expect(screen.getByRole("button", { name: "Safety Policy" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Terms of Service" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Safety" })).toBeOnTheScreen();
     expect(screen.queryByText("Phone and document privacy")).toBeNull();
     expect(screen.queryByText("How LetsGoRide uses account data")).toBeNull();
 
@@ -169,31 +169,24 @@ describe("settings account controls", () => {
       expect(screen.getByText("Phone notifications: Off")).toBeOnTheScreen();
     });
 
-    fireEvent.press(screen.getAllByRole("button", { name: "Delete account" })[0]);
+    fireEvent.press(screen.getByRole("button", { name: "Delete Account" }));
 
     expect(screen.getByText("Delete account?")).toBeOnTheScreen();
     expect(screen.getByText(/Limited completed service, safety, support, verification, fraud-prevention and legal records may be retained/)).toBeOnTheScreen();
     expect(screen.getByText("Type DELETE to confirm.")).toBeOnTheScreen();
 
-    const disabledConfirmationButton = screen
-      .getAllByRole("button", { name: "Delete account" })
-      .find((button) => button.props.accessibilityState?.disabled === true);
+    const disabledConfirmationButton = screen.getByRole("button", { name: "Delete account" });
     expect(disabledConfirmationButton).toBeDefined();
     expect(deleteAccount).not.toHaveBeenCalled();
 
     fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE");
 
     await waitFor(() => {
-      const confirmationButton = screen
-        .getAllByRole("button", { name: "Delete account" })
-        .find((button) => button.props.accessibilityState?.disabled === false);
+      const confirmationButton = screen.getByRole("button", { name: "Delete account" });
       expect(confirmationButton).toBeDefined();
     });
 
-    const enabledConfirmationButton = screen
-      .getAllByRole("button", { name: "Delete account" })
-      .find((button) => button.props.accessibilityState?.disabled === false);
-    fireEvent.press(enabledConfirmationButton!);
+    fireEvent.press(screen.getByRole("button", { name: "Delete account" }));
 
     await waitFor(() => {
       expect(deleteAccount).toHaveBeenCalled();

@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useEffect } from "react";
 
 import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
+import { AccountComplianceSections } from "../../components/account/AccountComplianceSections";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
 import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
@@ -116,13 +117,12 @@ export default function AccountScreen() {
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
+        <Text style={styles.sectionTitle}>More</Text>
         {user?.role === "passenger" ? <AccountRow icon="briefcase-outline" title="Work with LetsGoRide" subtitle="Courier, Driver and Merchant applications" onPress={() => router.push("/(shared)/work-with-us" as never)} /> : null}
         <AccountRow icon="cog-outline" title="Settings" subtitle="Account, privacy and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
-        <AccountRow icon="shield-lock-outline" title="Privacy" subtitle="Control your information and account" onPress={() => router.push("/(shared)/settings" as never)} />
-        <AccountRow icon="lifebuoy" title="Support" subtitle="Get help from LetsGoRide" onPress={() => router.push("/(shared)/support" as never)} />
       </View>
 
+      <AccountComplianceSections product="customer" />
     </Screen>
   );
 }

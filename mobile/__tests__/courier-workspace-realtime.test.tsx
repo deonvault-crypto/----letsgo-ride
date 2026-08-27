@@ -16,6 +16,11 @@ import { selectedCourierOfferId } from "../utils/courierOfferRealtime";
 
 let mockListener: ((event: RealtimeEventEnvelope) => void) | null = null;
 let mockRevision = 0;
+let mockSessionUser: { id: string; role: string; name: string } | null = {
+  id: "courier-1",
+  role: "courier",
+  name: "Courier",
+};
 
 jest.mock("../contexts/RealtimeContext", () => ({
   useRealtime: () => ({
@@ -28,7 +33,7 @@ jest.mock("../contexts/RealtimeContext", () => ({
 }));
 
 jest.mock("../contexts/SessionContext", () => ({
-  useSession: () => ({ user: { id: "courier-1", role: "courier", name: "Courier" } }),
+  useSession: () => ({ user: mockSessionUser }),
 }));
 
 jest.mock("../services/operationsService", () => ({
@@ -127,6 +132,7 @@ describe("Courier Home and Offers realtime workspace", () => {
     jest.clearAllMocks();
     mockListener = null;
     mockRevision = 0;
+    mockSessionUser = { id: "courier-1", role: "courier", name: "Courier" };
     (getCourierWorkspace as jest.Mock).mockResolvedValue(snapshot());
     (getActiveCourierDelivery as jest.Mock).mockResolvedValue(delivery());
     (getCourierEarnings as jest.Mock).mockResolvedValue(earnings(5));
@@ -222,5 +228,38 @@ describe("Courier Home and Offers realtime workspace", () => {
     expect(view.result.current.active?.id).toBe("claimed");
     expect(view.result.current.offers).toEqual([]);
     expect(getCourierWorkspace).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears courier workspace truth when the authenticated session is removed", async () => {
+    const view = renderHook(() => useCourierWorkspace(), { wrapper });
+    await waitFor(() => expect(view.result.current.profile?.id).toBe("profile-1"));
+    expect(view.result.current.offers).toHaveLength(1);
+
+    mockSessionUser = null;
+    view.rerender(undefined);
+
+    await waitFor(() => {
+      expect(view.result.current.profile).toBeNull();
+      expect(view.result.current.active).toBeNull();
+      expect(view.result.current.earnings).toBeNull();
+      expect(view.result.current.offers).toEqual([]);
+      expect(view.result.current.nextShift).toBeNull();
+    });
+  });
+
+  it("does not restore a stale courier snapshot after logout", async () => {
+    let resolveSnapshot!: (value: ReturnType<typeof snapshot>) => void;
+    (getCourierWorkspace as jest.Mock).mockReturnValueOnce(new Promise((resolve) => {
+      resolveSnapshot = resolve;
+    }));
+    const view = renderHook(() => useCourierWorkspace(), { wrapper });
+    await waitFor(() => expect(getCourierWorkspace).toHaveBeenCalledTimes(1));
+
+    mockSessionUser = null;
+    view.rerender(undefined);
+    await act(async () => resolveSnapshot(snapshot()));
+
+    expect(view.result.current.profile).toBeNull();
+    expect(view.result.current.offers).toEqual([]);
   });
 });

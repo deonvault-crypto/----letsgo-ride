@@ -1,10 +1,15 @@
 import unittest
 
+from fastapi import HTTPException
+
+from app.auth import get_current_user
 from app.database import COLLECTION_NAMES, database
+from app.routers.auth import delete_me
 from app.services.account_deletion_service import (
     AccountDeletionBlockedError,
     delete_account,
 )
+from app.services.auth_service import find_user_by_token
 
 
 class AccountDeletionTests(unittest.IsolatedAsyncioTestCase):
@@ -154,6 +159,63 @@ class AccountDeletionTests(unittest.IsolatedAsyncioTestCase):
         second = await delete_account(user)
         self.assertEqual(first, second)
         self.assertTrue(second["deleted"])
+
+    async def test_deleted_session_is_immediately_rejected(self):
+        user = await database.insert_one(
+            "users",
+            {
+                "id": "session-delete",
+                "role": "passenger",
+                "status": "active",
+                "email": "session-delete@example.com",
+                "token": "old-session-token",
+                "token_expires_at": "2099-01-01T00:00:00+00:00",
+            },
+        )
+
+        self.assertEqual((await find_user_by_token("old-session-token"))["id"], user["id"])
+        await delete_account(user)
+        self.assertIsNone(await find_user_by_token("old-session-token"))
+
+    async def test_account_deletion_requires_authentication(self):
+        with self.assertRaises(HTTPException) as raised:
+            await get_current_user(authorization="")
+        self.assertEqual(raised.exception.status_code, 401)
+
+    async def test_each_public_role_deletes_only_its_authenticated_account(self):
+        other = await database.insert_one(
+            "users",
+            {
+                "id": "unrelated-account",
+                "role": "passenger",
+                "status": "active",
+                "email": "unrelated@example.com",
+                "token": "unrelated-token",
+            },
+        )
+
+        for role in ("passenger", "driver", "courier", "merchant"):
+            with self.subTest(role=role):
+                actor = await database.insert_one(
+                    "users",
+                    {
+                        "id": f"delete-{role}",
+                        "role": role,
+                        "status": "active",
+                        "email": f"{role}@example.com",
+                        "token": f"token-{role}",
+                    },
+                )
+                response = await delete_me(user=actor)
+                self.assertTrue(response["success"])
+                self.assertEqual(
+                    (await database.find_one("users", {"id": actor["id"]}))["status"],
+                    "deleted",
+                )
+
+        untouched = await database.find_one("users", {"id": other["id"]})
+        self.assertEqual(untouched["status"], "active")
+        self.assertEqual(untouched["email"], "unrelated@example.com")
 
 
 if __name__ == "__main__":

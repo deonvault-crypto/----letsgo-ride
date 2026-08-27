@@ -1,15 +1,14 @@
-import { Alert, Modal, StyleSheet, Switch, Text, TextInput, View } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { ReactNode, useCallback, useEffect, useState } from "react";
+import { Alert, Modal, StyleSheet, Switch, Text, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { ReactNode, useCallback, useState } from "react";
 
+import { AccountComplianceSections, PublicAccountProduct } from "../../components/account/AccountComplianceSections";
 import { AppButton } from "../../components/ui/AppButton";
 import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
-import { legalUrls } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { deleteAccount, logoutToGuest } from "../../services/authService";
 import {
   biometricAvailable,
   biometricLabel,
@@ -26,7 +25,6 @@ import {
 } from "../../services/pushNotificationService";
 import { NotificationPreferences } from "../../types/notification.types";
 import { formatStatus } from "../../utils/formatStatus";
-import { openExternalUrl } from "../../utils/openExternalUrl";
 
 type PreferenceKey =
   | "trip_updates"
@@ -47,13 +45,8 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
   { key: "marketing_messages", title: "Product news", subtitle: "Occasional LetsGoRide product updates.", defaultValue: false },
 ];
 
-const useSafeLocalSearchParams: typeof useLocalSearchParams = typeof useLocalSearchParams === "function"
-  ? useLocalSearchParams
-  : (() => ({} as never));
-
 export default function SettingsScreen() {
   const router = useRouter();
-  const { deleteAccount: deleteAccountParam } = useSafeLocalSearchParams<{ deleteAccount?: string }>();
   const { user } = useCurrentUser();
   const navRole: "customer" | "driver" | undefined = user?.role === "driver"
     ? "driver"
@@ -61,6 +54,13 @@ export default function SettingsScreen() {
       ? undefined
       : "customer";
   const verificationStatus = user?.verification_status || "not_started";
+  const accountProduct: PublicAccountProduct = user?.role === "driver"
+    ? "driver"
+    : user?.role === "courier"
+      ? "courier"
+      : user?.role === "merchant"
+        ? "merchant"
+        : "customer";
 
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -73,15 +73,6 @@ export default function SettingsScreen() {
   const [notificationExplanationOpen, setNotificationExplanationOpen] = useState(false);
   const [pushSaving, setPushSaving] = useState(false);
   const [biometricExplanationOpen, setBiometricExplanationOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteText, setDeleteText] = useState("");
-  const [deleteSaving, setDeleteSaving] = useState(false);
-
-  useEffect(() => {
-    if (deleteAccountParam !== "1") return;
-    setDeleteText("");
-    setDeleteModalOpen(true);
-  }, [deleteAccountParam]);
 
   useFocusEffect(
     useCallback(() => {
@@ -163,35 +154,6 @@ export default function SettingsScreen() {
     setPhoneNotificationMessage("You can enable phone notifications later from Settings.");
   }
 
-  function confirmLogout() {
-    Alert.alert("Logout", "You will be signed out of this LetsGoRide account.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          await logoutToGuest(router);
-        },
-      },
-    ]);
-  }
-
-  async function confirmDeleteAccount() {
-    if (deleteText.trim().toUpperCase() !== "DELETE") return;
-    try {
-      setDeleteSaving(true);
-      await deleteAccount();
-      await disableBiometricLogin();
-      setDeleteModalOpen(false);
-      Alert.alert("Account deleted", "Your account access and non-retained profile data have been removed.");
-      router.replace("/(customer)/home" as never);
-    } catch (err) {
-      Alert.alert("Delete account", err instanceof Error ? err.message : "Could not delete your account. Please try again or contact support.");
-    } finally {
-      setDeleteSaving(false);
-    }
-  }
-
   async function setBiometricLoginEnabled(nextValue: boolean) {
     try {
       setBiometricSaving(true);
@@ -227,21 +189,6 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Settings" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
-      <Modal visible={deleteModalOpen} transparent animationType="fade" onRequestClose={() => setDeleteModalOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Delete account?</Text>
-            <Text style={styles.body}>Deleting your account signs you out and removes or de-identifies your profile, contact details, saved preferences, device registrations and messages you sent. Limited completed service, safety, support, verification, fraud-prevention and legal records may be retained as described in the Privacy Policy.</Text>
-            <Text style={styles.modalHelper}>Type DELETE to confirm.</Text>
-            <TextInput value={deleteText} onChangeText={setDeleteText} autoCapitalize="characters" placeholder="DELETE" placeholderTextColor={colors.mutedText} style={styles.confirmInput} />
-            <View style={styles.modalActions}>
-              <AppButton title="Cancel" variant="secondary" onPress={() => setDeleteModalOpen(false)} />
-              <AppButton title="Delete account" variant="danger" loading={deleteSaving} disabled={deleteText.trim().toUpperCase() !== "DELETE"} onPress={confirmDeleteAccount} />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       <Modal visible={notificationExplanationOpen} transparent animationType="fade" onRequestClose={skipNotificationExplanation}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -318,7 +265,7 @@ export default function SettingsScreen() {
         }) : <View style={styles.categoriesLocked}><Text style={styles.categoriesLockedTitle}>Notification categories</Text><Text style={styles.toggleSubtitle}>Enable phone notifications first, then choose exactly which updates you want.</Text></View>}
       </Section>
 
-      <Section title="Security & Privacy">
+      <Section title="Security">
         <View style={styles.toggleRow}>
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Biometric login</Text>
@@ -334,29 +281,9 @@ export default function SettingsScreen() {
             thumbColor={biometricEnabled ? colors.primaryGreen : "#FFFDF8"}
           />
         </View>
-        <ListTile icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
-        <ListTile icon="file-document-outline" title="Terms of Use" onPress={() => openExternalUrl(legalUrls.terms)} />
-        <ListTile icon="shield-outline" title="Safety Policy" onPress={() => openExternalUrl(legalUrls.safety)} />
       </Section>
 
-      <Section title="Support & Safety">
-        <ListTile icon="lifebuoy" title="Support" subtitle="Contact LetsGoRide support" onPress={() => router.push("/(shared)/support" as never)} />
-        <ListTile icon="shield-alert-outline" title="Safety Center" subtitle="Report issues and review platform safety" onPress={() => router.push("/(shared)/safety" as never)} />
-      </Section>
-
-      <Section title="Account Control">
-        <ListTile icon="logout" title="Logout" subtitle="Sign out on this device" onPress={confirmLogout} danger />
-        <ListTile
-          icon="delete-outline"
-          title="Delete account"
-          subtitle="Delete access and remove or de-identify personal data"
-          onPress={() => {
-            setDeleteText("");
-            setDeleteModalOpen(true);
-          }}
-          danger
-        />
-      </Section>
+      <AccountComplianceSections product={accountProduct} />
     </Screen>
   );
 }
@@ -394,7 +321,5 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, justifyContent: "center", padding: spacing.xl, backgroundColor: "rgba(17,20,23,0.26)" },
   modalCard: { gap: spacing.md, borderRadius: 28, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, padding: spacing.xl },
   modalTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 24 },
-  modalHelper: { color: colors.whiteText, fontWeight: "800" },
-  confirmInput: { minHeight: 54, borderWidth: 1, borderColor: colors.border, borderRadius: 18, backgroundColor: colors.elevated, paddingHorizontal: spacing.lg, color: colors.whiteText, fontSize: 16, fontWeight: "900" },
   modalActions: { gap: spacing.sm },
 });

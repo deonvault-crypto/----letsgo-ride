@@ -56,6 +56,7 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
   const terminalRefreshInFlight = useRef<Promise<void> | null>(null);
   const refreshAfterTerminalRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const seenReconciliationRevision = useRef(reconciliationRevision);
+  const sessionGeneration = useRef(0);
 
   const replaceOffers = useCallback((next: CourierOffer[]) => {
     const sorted = sortCourierOffers(next);
@@ -74,19 +75,38 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
     replaceOffers(snapshot.active_delivery ? [] : snapshot.offers);
   }, [replaceOffers]);
 
+  const resetWorkspace = useCallback(() => {
+    workspaceInFlight.current = null;
+    offersInFlight.current = null;
+    activeInFlight.current = null;
+    terminalRefreshInFlight.current = null;
+    profileRef.current = null;
+    activeRef.current = null;
+    offerVersionsRef.current = new Map();
+    setProfile(null);
+    setActive(null);
+    setEarnings(null);
+    setNextShift(null);
+    replaceOffers([]);
+    setError(null);
+  }, [replaceOffers]);
+
   const reconcile = useCallback(() => {
     if (workspaceInFlight.current) return workspaceInFlight.current;
+    const generation = sessionGeneration.current;
     let request!: Promise<void>;
     request = (async () => {
       try {
         const snapshot = await getCourierWorkspace();
-        if (!mounted.current) return;
+        if (!mounted.current || generation !== sessionGeneration.current) return;
         acceptSnapshot(snapshot);
         setError(null);
       } catch (err) {
-        if (mounted.current) setError(err instanceof Error ? err.message : "Unable to load your courier workspace.");
+        if (mounted.current && generation === sessionGeneration.current) {
+          setError(err instanceof Error ? err.message : "Unable to load your courier workspace.");
+        }
       } finally {
-        if (mounted.current) setLoading(false);
+        if (mounted.current && generation === sessionGeneration.current) setLoading(false);
         if (workspaceInFlight.current === request) workspaceInFlight.current = null;
       }
     })();
@@ -100,10 +120,17 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
       replaceOffers([]);
       return Promise.resolve();
     }
+    const generation = sessionGeneration.current;
     let request!: Promise<void>;
     request = listCourierOffers()
-      .then((next) => { if (mounted.current && !activeRef.current) replaceOffers(next); })
-      .catch((err) => { if (mounted.current) setError(err instanceof Error ? err.message : "Unable to refresh offers."); })
+      .then((next) => {
+        if (mounted.current && generation === sessionGeneration.current && !activeRef.current) replaceOffers(next);
+      })
+      .catch((err) => {
+        if (mounted.current && generation === sessionGeneration.current) {
+          setError(err instanceof Error ? err.message : "Unable to refresh offers.");
+        }
+      })
       .finally(() => { if (offersInFlight.current === request) offersInFlight.current = null; });
     offersInFlight.current = request;
     return request;
@@ -111,10 +138,11 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
 
   const reconcileActive = useCallback(() => {
     if (activeInFlight.current) return activeInFlight.current;
+    const generation = sessionGeneration.current;
     let request!: Promise<void>;
     request = getActiveCourierDelivery()
       .then((next) => {
-        if (!mounted.current) return;
+        if (!mounted.current || generation !== sessionGeneration.current) return;
         const previous = activeRef.current;
         activeRef.current = next;
         setActive(next);
@@ -129,6 +157,7 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
 
   const refreshAfterTerminal = useCallback(() => {
     if (terminalRefreshInFlight.current) return terminalRefreshInFlight.current;
+    const generation = sessionGeneration.current;
     let request!: Promise<void>;
     request = (async () => {
       const shouldLoadOffers = Boolean(profileRef.current?.online && profileRef.current.status === "APPROVED");
@@ -136,7 +165,7 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
         getCourierEarnings(),
         shouldLoadOffers ? listCourierOffers() : Promise.resolve([]),
       ]);
-      if (!mounted.current || activeRef.current) return;
+      if (!mounted.current || generation !== sessionGeneration.current || activeRef.current) return;
       setEarnings(nextEarnings);
       replaceOffers(nextOffers);
     })()
@@ -149,10 +178,17 @@ export function CourierWorkspaceProvider({ children }: { children: ReactNode }) 
 
   useEffect(() => {
     mounted.current = true;
-    if (user?.role === "courier") void reconcile();
-    else setLoading(false);
-    return () => { mounted.current = false; };
-  }, [reconcile, user?.id, user?.role]);
+    sessionGeneration.current += 1;
+    resetWorkspace();
+    if (user?.role === "courier") {
+      setLoading(true);
+      void reconcile();
+    } else setLoading(false);
+    return () => {
+      mounted.current = false;
+      sessionGeneration.current += 1;
+    };
+  }, [reconcile, resetWorkspace, user?.id, user?.role]);
 
   useEffect(() => subscribe((event) => {
     if (event.resource_type === "courier_offer") {
