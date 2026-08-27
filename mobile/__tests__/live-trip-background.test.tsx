@@ -25,6 +25,9 @@ jest.mock("../services/ridesService", () => ({
 }));
 
 describe("driver live-location lifecycle", () => {
+  beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
+
   it("stops the foreground watcher in background and re-establishes it on resume", async () => {
     let currentState: AppStateStatus = "active";
     let appStateListener: (state: AppStateStatus) => void = () => undefined;
@@ -51,5 +54,25 @@ describe("driver live-location lifecycle", () => {
     currentState = "active";
     act(() => appStateListener("active"));
     await waitFor(() => expect(Location.watchPositionAsync).toHaveBeenCalledTimes(2));
+  });
+
+  it("removes a watcher that resolves after the panel unmounts", async () => {
+    let resolveWatcher: (subscription: { remove: jest.Mock }) => void = () => undefined;
+    const remove = jest.fn();
+    const pendingWatcher = new Promise<{ remove: jest.Mock }>((resolve) => { resolveWatcher = resolve; });
+    (Location.watchPositionAsync as jest.Mock).mockReturnValueOnce(pendingWatcher);
+    (updateLiveTripLocation as jest.Mock).mockResolvedValue({ live_tracking_enabled: true });
+
+    const screen = render(<LiveTripPanel ride={{ ...ride, status: "IN_PROGRESS" }} role="driver" />);
+    fireEvent.press(screen.getByText("Share live location"));
+    await waitFor(() => expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1));
+
+    screen.unmount();
+    await act(async () => {
+      resolveWatcher({ remove });
+      await pendingWatcher;
+    });
+
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 });

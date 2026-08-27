@@ -134,4 +134,22 @@ describe("RealtimeService", () => {
     expect(service.connectionState).toBe("reconnecting");
     service.stop();
   });
+
+  it("bounds per-resource version memory within a long authenticated session", async () => {
+    const { service, sockets } = setup();
+    await service.start("user-1:passenger");
+    sockets[0].open();
+
+    for (let index = 0; index < 2_050; index += 1) {
+      sockets[0].message({
+        ...event,
+        event_id: `event-${index}`,
+        resource_id: `resource-${index}`,
+      });
+    }
+
+    const versions = (service as unknown as { resourceVersions: Map<string, number> }).resourceVersions;
+    expect(versions.size).toBe(2_000);
+    service.stop();
+  });
 });

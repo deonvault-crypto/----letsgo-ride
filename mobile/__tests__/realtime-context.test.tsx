@@ -6,7 +6,8 @@ import { RealtimeProvider, useRealtime } from "../contexts/RealtimeContext";
 import { realtimeService } from "../services/realtimeService";
 import { passengerUser } from "./fixtures";
 
-jest.mock("expo-router", () => ({ usePathname: () => "/home" }));
+let mockPathname = "/home";
+jest.mock("expo-router", () => ({ usePathname: () => mockPathname }));
 
 
 let mockSessionState: { user: typeof passengerUser | null; loading: boolean; isGuest: boolean; invalidateSession: jest.Mock };
@@ -43,6 +44,7 @@ describe("RealtimeProvider lifecycle", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAuthenticationFailure = null;
+    mockPathname = "/home";
     mockSessionState = { user: passengerUser, loading: false, isGuest: false, invalidateSession: jest.fn(async () => undefined) };
     currentState = "active";
     Object.defineProperty(AppState, "currentState", { configurable: true, get: () => currentState });
@@ -62,6 +64,17 @@ describe("RealtimeProvider lifecycle", () => {
     view.rerender(undefined);
     await waitFor(() => expect(realtimeService.start).toHaveBeenLastCalledWith(`${passengerUser.id}:driver`));
     expect(realtimeService.stop).toHaveBeenCalled();
+  });
+
+  it("keeps the authenticated socket alive across ordinary navigation", async () => {
+    const view = renderHook(() => useRealtime(), { wrapper });
+    await waitFor(() => expect(realtimeService.start).toHaveBeenCalledTimes(1));
+
+    mockPathname = "/account";
+    view.rerender(undefined);
+
+    expect(realtimeService.start).toHaveBeenCalledTimes(1);
+    expect(realtimeService.stop).not.toHaveBeenCalled();
   });
 
   it("does not connect for a guest and disconnects after logout", async () => {

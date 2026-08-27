@@ -57,6 +57,7 @@ export function FoodImage({ uri, source, role, photographicFallback = false, lab
           testID={resolvedRole === "logo" ? "food-image-remote-logo" : "food-image-remote-photo"}
           source={{ uri: uri as string, cache: "force-cache" }}
           resizeMode={resizeMode}
+          resizeMethod="resize"
           style={[styles.image, resolvedRole === "logo" && styles.logoImage]}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
@@ -67,6 +68,7 @@ export function FoodImage({ uri, source, role, photographicFallback = false, lab
           testID={resolvedRole === "landing" ? "food-image-landing-owned" : resolvedRole === "logo" ? "food-image-official-logo" : "food-image-kitchen-owned"}
           source={localSource}
           resizeMode={resizeMode}
+          resizeMethod="resize"
           style={[styles.image, resolvedRole === "logo" && styles.logoImage]}
         />
       ) : (

@@ -26,7 +26,13 @@ def absolute_profile_photo_url(relative_url: str) -> str:
 
 
 async def save_profile_photo(user: Dict[str, Any], upload: UploadFile) -> Dict[str, Any]:
-    validated = await validate_upload(upload, max_bytes=4 * 1024 * 1024, allow_pdf=False, stem="profile-photo")
+    validated = await validate_upload(
+        upload,
+        max_bytes=4 * 1024 * 1024,
+        allow_pdf=False,
+        stem="profile-photo",
+        max_image_edge=1280,
+    )
     user_dir = STORAGE_ROOT / user["id"]
     user_dir.mkdir(parents=True, exist_ok=True)
     safe_name = "profile-photo.jpg"

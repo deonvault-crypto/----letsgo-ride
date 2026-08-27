@@ -32,6 +32,7 @@ function isSafePromptPath(pathname: string) {
 export function PermissionReminder() {
   const pathname = usePathname();
   const { user, loading } = useSession();
+  const isBootstrapPath = pathname === "/";
   const [pushState, setPushState] = useState<PushRegistrationState | null>(null);
   const [prompt, setPrompt] = useState<PromptKind>(null);
   const [message, setMessage] = useState("");
@@ -47,7 +48,7 @@ export function PermissionReminder() {
     if (Platform.OS === "web") return undefined;
     let active = true;
 
-    if (loading || !user?.id || pathname === "/") {
+    if (loading || !user?.id || isBootstrapPath) {
       setPushState(null);
       setPrompt(null);
       setMessage("");
@@ -78,7 +79,7 @@ export function PermissionReminder() {
     return () => {
       active = false;
     };
-  }, [loading, pathname, user?.id]);
+  }, [isBootstrapPath, loading, user?.id]);
 
   useEffect(() => {
     if (Platform.OS === "web") return undefined;

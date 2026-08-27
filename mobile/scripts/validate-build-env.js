@@ -1,5 +1,8 @@
 const profile = String(process.env.EAS_BUILD_PROFILE || "").trim();
+const platform = String(process.env.EAS_BUILD_PLATFORM || "").trim().toLowerCase();
 const apiBaseUrl = String(process.env.EXPO_PUBLIC_API_BASE_URL || "").trim();
+const googleMapsAndroidApiKey = String(process.env.GOOGLE_MAPS_ANDROID_API_KEY || "").trim();
+const googleServicesJson = String(process.env.GOOGLE_SERVICES_JSON || "").trim();
 const STAGING_API_ORIGIN = "https://letsgoride-v2-staging.onrender.com";
 const PRODUCTION_API_ORIGIN = "https://letsgoride-v2-production.onrender.com";
 
@@ -28,4 +31,13 @@ if (profile === "preview" && parsedApiUrl?.origin !== STAGING_API_ORIGIN) {
 
 if (profile === "production" && parsedApiUrl?.origin !== PRODUCTION_API_ORIGIN) {
   throw new Error(`Production builds must explicitly target ${PRODUCTION_API_ORIGIN}.`);
+}
+
+if ((profile === "preview" || profile === "production") && platform === "android") {
+  if (!googleMapsAndroidApiKey) {
+    throw new Error("GOOGLE_MAPS_ANDROID_API_KEY is required for Android release builds.");
+  }
+  if (!googleServicesJson) {
+    throw new Error("GOOGLE_SERVICES_JSON is required for Android release builds.");
+  }
 }

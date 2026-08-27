@@ -8,6 +8,7 @@ from fastapi import UploadFile
 from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.datastructures import Headers
+from PIL import Image
 
 from app.database import database
 from app.services.auth_service import create_session_record, find_user_by_token, reset_email_password, create_code_record, verify_email_code
@@ -63,6 +64,22 @@ class SecurityHardeningTests(unittest.IsolatedAsyncioTestCase):
         validated = await validate_upload(image, max_bytes=1024 * 1024, allow_pdf=False, stem="id.png")
         self.assertEqual(validated.content_type, "image/jpeg")
         self.assertTrue(validated.data.startswith(b"\xff\xd8\xff"))
+
+    async def test_profile_photo_sanitization_can_bound_decoded_dimensions(self):
+        oversized = io.BytesIO()
+        Image.new("RGB", (2000, 1500), color=(20, 130, 70)).save(oversized, format="PNG")
+        upload = UploadFile(file=io.BytesIO(oversized.getvalue()), filename="profile.png", headers=Headers({"content-type": "image/png"}))
+
+        validated = await validate_upload(
+            upload,
+            max_bytes=4 * 1024 * 1024,
+            allow_pdf=False,
+            stem="profile",
+            max_image_edge=1280,
+        )
+
+        with Image.open(io.BytesIO(validated.data)) as decoded:
+            self.assertEqual(max(decoded.size), 1280)
 
     def test_worker_application_never_exposes_storage_reference(self):
         public = public_application({"product": "courier", "documents": [{"id": "d", "document_type": "selfie", "cloudinary_public_id": "secret", "delivery_type": "authenticated"}]})

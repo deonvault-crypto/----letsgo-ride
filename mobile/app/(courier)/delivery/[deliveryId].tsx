@@ -46,32 +46,31 @@ export default function CourierDeliveryScreen() {
   const [delayNote, setDelayNote] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const locationWatcher = useRef<{ remove: () => void } | null>(null);
-  const locationStarting = useRef(false);
+  const locationStarting = useRef<number | null>(null);
   const locationWriteInFlight = useRef(false);
   const gpsGeneration = useRef(0);
   const lastAcceptedLocation = useRef<DeviceLocation | null>(null);
 
-  useFocusEffect(useCallback(() => {
-    return () => {
-      locationWatcher.current?.remove();
-      locationWatcher.current = null;
-      locationStarting.current = false;
-      locationWriteInFlight.current = false;
-    };
-  }, []));
-
-  const stopGps = useCallback(() => {
+  const stopGps = useCallback((updateState = true) => {
     gpsGeneration.current += 1;
+    locationStarting.current = null;
     locationWatcher.current?.remove();
     locationWatcher.current = null;
     lastAcceptedLocation.current = null;
-    setGpsLive(false);
+    if (updateState) setGpsLive(false);
   }, []);
 
+  useFocusEffect(useCallback(() => {
+    return () => {
+      stopGps(false);
+      locationWriteInFlight.current = false;
+    };
+  }, [stopGps]));
+
   const startGps = useCallback(async (job: CourierDelivery) => {
-    if (locationWatcher.current || locationStarting.current || !ACTIVE.has(job.status)) return;
-    locationStarting.current = true;
-    const generation = gpsGeneration.current;
+    if (locationWatcher.current || locationStarting.current !== null || !ACTIVE.has(job.status)) return;
+    const generation = ++gpsGeneration.current;
+    locationStarting.current = generation;
     try {
       const watcher = await watchForegroundLocation(
         (location) => {
@@ -113,7 +112,7 @@ export default function CourierDeliveryScreen() {
       setGpsLive(false);
       setError(err instanceof Error ? err.message : "Live location could not start.");
     } finally {
-      locationStarting.current = false;
+      if (locationStarting.current === generation) locationStarting.current = null;
     }
   }, [acceptDelivery, stopGps, updateDeliveryLocally]);
 

@@ -31,6 +31,7 @@ const NotificationContext = createContext<NotificationState>(defaultNotification
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { user, loading: sessionLoading } = useSession();
+  const isBootstrapPath = pathname === "/";
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +76,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (sessionLoading || pathname === "/") return;
+    if (sessionLoading || isBootstrapPath) return;
     if (snapshotUserId.current !== (user?.id || null)) {
       snapshotUserId.current = user?.id || null;
       setNotifications([]);
@@ -88,7 +89,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       return;
     }
     void refreshNotifications();
-  }, [pathname, sessionLoading, user?.id, refreshNotifications]);
+  }, [isBootstrapPath, sessionLoading, user?.id, refreshNotifications]);
 
   useEffect(() => {
     let appActive = AppState.currentState === "active";

@@ -9,6 +9,7 @@ describe("FoodImage", () => {
     const screen = render(<FoodImage role="landing" label="Food landing" />);
     const image = screen.getByTestId("food-image-landing-owned");
     expect(image).toBeOnTheScreen();
+    expect(image).toHaveProp("resizeMethod", "resize");
     expect(StyleSheet.flatten(image.props.style)).toMatchObject({ position: "absolute", width: "100%", height: "100%" });
     expect(screen.queryByTestId("food-image-kitchen-owned")).toBeNull();
   });
@@ -37,6 +38,7 @@ describe("FoodImage", () => {
     const screen = render(<FoodImage uri="https://official.example/logo.png" role="logo" label="Restaurant logo" />);
     const logo = screen.getByTestId("food-image-remote-logo");
     expect(logo).toHaveProp("resizeMode", "contain");
+    expect(logo).toHaveProp("resizeMethod", "resize");
     expect(StyleSheet.flatten(logo.props.style)).toMatchObject({ top: 12, right: 10, bottom: 12, left: 10 });
   });
 

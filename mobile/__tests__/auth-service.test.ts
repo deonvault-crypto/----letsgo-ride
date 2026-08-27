@@ -48,6 +48,7 @@ describe("auth service", () => {
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.auth.token");
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.biometric.token");
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgoride.merchant.selected_restaurant");
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("letsgo_ride_location_memory_v1");
   });
 
   it("deletes server truth before clearing private device state", async () => {

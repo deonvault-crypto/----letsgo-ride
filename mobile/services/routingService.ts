@@ -7,12 +7,30 @@ import {
   RoutingPoint,
   RoutingStatus,
 } from "../types/routing.types";
+import { onSessionCleared } from "./sessionLifecycle";
 
 export function getRoutingStatus() {
   return requestData<RoutingStatus>({ method: "GET", url: "/routing/status" });
 }
 
+const MAX_SUGGESTION_CACHE_ENTRIES = 20;
 const suggestionCache = new Map<string, PlaceSuggestion[]>();
+
+function rememberSuggestions(key: string, suggestions: PlaceSuggestion[]) {
+  suggestionCache.delete(key);
+  suggestionCache.set(key, suggestions);
+  while (suggestionCache.size > MAX_SUGGESTION_CACHE_ENTRIES) {
+    const oldestKey = suggestionCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    suggestionCache.delete(oldestKey);
+  }
+}
+
+export function clearPlaceSuggestionCache() {
+  suggestionCache.clear();
+}
+
+onSessionCleared(clearPlaceSuggestionCache);
 
 export async function autocompletePlaces(query: string) {
   const clean = query.trim().toLowerCase();
@@ -22,7 +40,7 @@ export async function autocompletePlaces(query: string) {
       url: "/routing/places/autocomplete",
       data: { query },
     });
-    if (suggestions.length) suggestionCache.set(clean, suggestions);
+    if (suggestions.length) rememberSuggestions(clean, suggestions);
     return suggestions;
   } catch (error) {
     const exact = suggestionCache.get(clean);

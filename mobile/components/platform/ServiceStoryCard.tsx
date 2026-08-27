@@ -21,7 +21,7 @@ export function ServiceStoryCard({ title, subtitle, eyebrow, image, icon, onPres
       onPress={onPress}
       style={({ pressed }) => [styles.shell, compact && styles.compactShell, pressed && styles.pressed]}
     >
-      <ImageBackground source={image} resizeMode="cover" style={styles.image} imageStyle={styles.imageCorners}>
+      <ImageBackground source={image} resizeMode="cover" resizeMethod="resize" style={styles.image} imageStyle={styles.imageCorners}>
         <View style={styles.scrim} />
         <View style={styles.topRow}>
           <Text style={styles.eyebrow}>{eyebrow}</Text>

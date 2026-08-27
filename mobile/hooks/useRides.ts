@@ -3,9 +3,21 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Ride, RideSearchParams } from "../types/ride.types";
 import { listRides, searchRides } from "../services/ridesService";
 import { useScreenReconciliation } from "./useScreenReconciliation";
+import { onSessionCleared } from "../services/sessionLifecycle";
 
+const MAX_DISCOVERY_SNAPSHOTS = 8;
 const snapshots = new Map<string, Ride[]>();
 const requests = new Map<string, Promise<Ride[]>>();
+
+function rememberSnapshot(key: string, rides: Ride[]) {
+  snapshots.delete(key);
+  snapshots.set(key, rides);
+  while (snapshots.size > MAX_DISCOVERY_SNAPSHOTS) {
+    const oldestKey = snapshots.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    snapshots.delete(oldestKey);
+  }
+}
 
 function discoveryKey(params?: RideSearchParams) {
   if (!params) return "public:all";
@@ -27,6 +39,8 @@ export function clearRideDiscoveryCache() {
   requests.clear();
 }
 
+onSessionCleared(clearRideDiscoveryCache);
+
 export function useRides(params?: RideSearchParams) {
   const key = useMemo(() => discoveryKey(params), [params?.date, params?.destination, params?.origin, params?.seats]);
   const cached = snapshots.get(key);
@@ -44,7 +58,7 @@ export function useRides(params?: RideSearchParams) {
     try {
       const data = await fetchSnapshot(key, params);
       if (generation.current !== requestGeneration) return;
-      snapshots.set(key, data);
+      rememberSnapshot(key, data);
       setRides(data);
       setError(null);
     } catch (nextError) {

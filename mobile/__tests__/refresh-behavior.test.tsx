@@ -95,4 +95,18 @@ describe("live refresh behavior", () => {
     expect(result.current.error).toBeNull();
     expect(listRides).toHaveBeenCalledTimes(1);
   });
+
+  it("bounds discovery snapshots instead of retaining every searched route", async () => {
+    (searchRides as jest.Mock).mockResolvedValue([ride]);
+
+    for (let index = 0; index < 9; index += 1) {
+      const view = renderHook(() => useRides({ origin: `Origin ${index}`, destination: `Destination ${index}`, seats: 1 }));
+      await waitFor(() => expect(view.result.current.loading).toBe(false));
+      view.unmount();
+    }
+
+    const firstAgain = renderHook(() => useRides({ origin: "Origin 0", destination: "Destination 0", seats: 1 }));
+    await waitFor(() => expect(firstAgain.result.current.loading).toBe(false));
+    expect(searchRides).toHaveBeenCalledTimes(10);
+  });
 });

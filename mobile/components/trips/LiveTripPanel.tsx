@@ -39,6 +39,9 @@ export function LiveTripPanel({ ride, role, onRideMutation }: LiveTripPanelProps
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const watchGeneration = useRef(0);
+  const watchStartingGeneration = useRef<number | null>(null);
+  const mountedRef = useRef(true);
   const resumeDriverWatcher = useRef(false);
   const effectiveStatus = role === "passenger" && passengerRealtime.state ? passengerRealtime.state.status : ride.status;
   const active = canonicalRideStatus(effectiveStatus) === "IN_PROGRESS" || (role === "driver" && ride.legacy_status === "departed");
@@ -66,12 +69,26 @@ export function LiveTripPanel({ ride, role, onRideMutation }: LiveTripPanelProps
   }, [mapPoints]);
 
   const stopWatching = useCallback(() => {
+    watchGeneration.current += 1;
+    watchStartingGeneration.current = null;
     watchRef.current?.remove();
     watchRef.current = null;
-    setWatching(false);
+    if (mountedRef.current) {
+      setWatching(false);
+      setBusy(false);
+    }
   }, []);
 
-  useEffect(() => () => stopWatching(), [stopWatching]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      watchGeneration.current += 1;
+      watchStartingGeneration.current = null;
+      watchRef.current?.remove();
+      watchRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!active) {
@@ -88,7 +105,9 @@ export function LiveTripPanel({ ride, role, onRideMutation }: LiveTripPanelProps
     setError(passengerRealtime.error);
   }, [passengerRealtime.error, passengerRealtime.state, role]);
 
-  const sendLocation = useCallback(async (position: Location.LocationObject) => {
+  const sendLocation = useCallback(async (position: Location.LocationObject, generation?: number) => {
+    const isCurrent = () => mountedRef.current && (generation === undefined || generation === watchGeneration.current);
+    if (!isCurrent()) return;
     const nextLocation = {
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
@@ -99,6 +118,7 @@ export function LiveTripPanel({ ride, role, onRideMutation }: LiveTripPanelProps
     setLiveLocation(nextLocation);
     try {
       const response = await updateLiveTripLocation(ride.id, nextLocation);
+      if (!isCurrent()) return;
       setLiveSharingEnabled(response.live_tracking_enabled);
       onRideMutation?.({
         ...ride,
@@ -109,38 +129,49 @@ export function LiveTripPanel({ ride, role, onRideMutation }: LiveTripPanelProps
       });
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not share live location.");
+      if (isCurrent()) setError(err instanceof Error ? err.message : "Could not share live location.");
     }
   }, [onRideMutation, ride]);
 
   const enableLiveSharing = useCallback(async () => {
+    if (watchRef.current || watchStartingGeneration.current !== null) return;
+    const generation = ++watchGeneration.current;
+    watchStartingGeneration.current = generation;
+    const isCurrent = () => mountedRef.current && generation === watchGeneration.current;
     try {
       setBusy(true);
       setError("");
       const currentPermission = await Location.getForegroundPermissionsAsync();
+      if (!isCurrent()) return;
       const permission = currentPermission.granted ? currentPermission : await Location.requestForegroundPermissionsAsync();
+      if (!isCurrent()) return;
       if (!permission.granted) {
         setError("Location permission is off. Enable it to share live trip progress during this ride.");
         return;
       }
       const currentPosition = await Location.getCurrentPositionAsync(LOCATION_OPTIONS);
-      await sendLocation(currentPosition);
-      stopWatching();
-      watchRef.current = await Location.watchPositionAsync(LOCATION_OPTIONS, (position) => {
-        void sendLocation(position);
+      if (!isCurrent()) return;
+      await sendLocation(currentPosition, generation);
+      if (!isCurrent()) return;
+      const watcher = await Location.watchPositionAsync(LOCATION_OPTIONS, (position) => {
+        void sendLocation(position, generation);
       });
-      if (AppState.currentState !== "active") {
+      if (!isCurrent() || AppState.currentState !== "active") {
+        watcher.remove();
         resumeDriverWatcher.current = true;
-        stopWatching();
         return;
       }
+      watchRef.current = watcher;
       setWatching(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start live sharing.");
+      if (isCurrent()) setError(err instanceof Error ? err.message : "Could not start live sharing.");
     } finally {
-      setBusy(false);
+      if (watchStartingGeneration.current === generation) {
+        watchStartingGeneration.current = null;
+        if (mountedRef.current) setBusy(false);
+      }
     }
-  }, [sendLocation, stopWatching]);
+  }, [sendLocation]);
 
   useEffect(() => {
     if (role !== "driver") return undefined;

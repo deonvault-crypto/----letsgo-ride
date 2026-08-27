@@ -30,6 +30,7 @@ type AuthenticationFailureListener = () => void;
 const REALTIME_PROTOCOL = "letsgoride.realtime.v1";
 const AUTH_PROTOCOL_PREFIX = "letsgoride.auth.";
 const MAX_SEEN_EVENTS = 500;
+const MAX_RESOURCE_VERSIONS = 2_000;
 const SOCKET_OPEN = 1;
 
 export function realtimeUrl(apiBaseUrl = API_BASE_URL) {
@@ -228,7 +229,7 @@ export class RealtimeService {
     const resourceKey = `${event.resource_type}:${event.resource_id}`;
     const latestVersion = this.resourceVersions.get(resourceKey) || 0;
     if (event.version <= latestVersion) return;
-    this.resourceVersions.set(resourceKey, event.version);
+    this.rememberResourceVersion(resourceKey, event.version);
     this.rememberEvent(event.event_id);
     this.eventListeners.forEach((listener) => listener(event));
     if (socket.readyState === SOCKET_OPEN) {
@@ -242,6 +243,16 @@ export class RealtimeService {
     while (this.seenEventQueue.length > MAX_SEEN_EVENTS) {
       const oldest = this.seenEventQueue.shift();
       if (oldest) this.seenEventIds.delete(oldest);
+    }
+  }
+
+  private rememberResourceVersion(resourceKey: string, version: number) {
+    this.resourceVersions.delete(resourceKey);
+    this.resourceVersions.set(resourceKey, version);
+    while (this.resourceVersions.size > MAX_RESOURCE_VERSIONS) {
+      const oldestKey = this.resourceVersions.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.resourceVersions.delete(oldestKey);
     }
   }
 

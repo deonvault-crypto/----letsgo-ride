@@ -28,6 +28,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<RealtimeConnectionState>(realtimeService.connectionState);
   const [reconciliationRevision, setReconciliationRevision] = useState(0);
   const sessionKey = user && !isGuest ? `${user.id}:${user.role}` : null;
+  const isBootstrapPath = pathname === "/";
   const sessionKeyRef = useRef<string | null>(sessionKey);
   sessionKeyRef.current = sessionKey;
 
@@ -41,7 +42,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => onSessionCleared(() => realtimeService.stop(true)), []);
 
   useEffect(() => {
-    if (loading || pathname === "/") return undefined;
+    if (loading || isBootstrapPath) return undefined;
     setReconciliationRevision(0);
     if (!sessionKey) {
       realtimeService.stop(true);
@@ -50,7 +51,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     void realtimeService.start(sessionKey);
     if (AppState.currentState !== "active") realtimeService.suspend();
     return () => realtimeService.stop(true);
-  }, [loading, pathname, sessionKey]);
+  }, [isBootstrapPath, loading, sessionKey]);
 
   useEffect(() => {
     let active = AppState.currentState === "active";

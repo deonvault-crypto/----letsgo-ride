@@ -5,12 +5,15 @@ const appConfig = require("../app.json").expo;
 const easConfig = require("../eas.json");
 const validator = resolve(__dirname, "../scripts/validate-build-env.js");
 
-function validate(profile: string, apiBaseUrl: string) {
+function validate(profile: string, apiBaseUrl: string, platform = "ios", androidCredentials = true) {
   return () => execFileSync(process.execPath, [validator], {
     env: {
       ...process.env,
       EAS_BUILD_PROFILE: profile,
+      EAS_BUILD_PLATFORM: platform,
       EXPO_PUBLIC_API_BASE_URL: apiBaseUrl,
+      GOOGLE_MAPS_ANDROID_API_KEY: androidCredentials ? "test-maps-key" : "",
+      GOOGLE_SERVICES_JSON: androidCredentials ? "test-google-services.json" : "",
     },
     stdio: "pipe",
   });
@@ -44,7 +47,27 @@ describe("production release configuration", () => {
       "android.permission.RECORD_AUDIO",
       "android.permission.READ_EXTERNAL_STORAGE",
       "android.permission.WRITE_EXTERNAL_STORAGE",
+      "android.permission.RECEIVE_BOOT_COMPLETED",
     ]));
     expect(appConfig.ios.infoPlist.NSAppTransportSecurity.NSAllowsArbitraryLoads).toBe(false);
+  });
+
+  it("pins API 36 through the installed Expo toolchain and explicitly protects Android restore", () => {
+    expect(() => execFileSync(process.execPath, [resolve(__dirname, "../scripts/verify-android-config.js")], { stdio: "pipe" })).not.toThrow();
+    expect(appConfig.android.allowBackup).toBe(true);
+    const secureStore = appConfig.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-secure-store");
+    expect(secureStore[1].configureAndroidBackup).toBe(true);
+    const buildProperties = appConfig.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-build-properties");
+    expect(buildProperties[1].android).toMatchObject({
+      compileSdkVersion: 36,
+      targetSdkVersion: 36,
+      enableMinifyInReleaseBuilds: true,
+      enableShrinkResourcesInReleaseBuilds: true,
+    });
+  });
+
+  it("fails closed when protected Android Maps or Firebase build configuration is absent", () => {
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com", "android", false)).toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com", "android", true)).not.toThrow();
   });
 });

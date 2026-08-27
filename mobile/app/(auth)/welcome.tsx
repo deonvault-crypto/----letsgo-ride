@@ -87,6 +87,7 @@ export default function WelcomeScreen() {
               source={require("../../assets/images/ride-sharing-welcome.jpg")}
               style={styles.heroImage}
               resizeMode="cover"
+              resizeMethod="resize"
             />
             <View style={styles.imageOverlay}>
               <Text style={styles.imageLabel}>Verified rides. Clear trips. Safer journeys.</Text>

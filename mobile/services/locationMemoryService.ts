@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 
 import type { LocationChoice } from "../contexts/LocationDraftContext";
 
-const STORAGE_KEY = "letsgo_ride_location_memory_v1";
+export const LOCATION_MEMORY_STORAGE_KEY = "letsgo_ride_location_memory_v1";
 const MAX_RECENT = 5;
 
 export type LocationMemory = {
@@ -21,7 +21,7 @@ function isChoice(value: unknown): value is LocationChoice {
 
 export async function getLocationMemory(): Promise<LocationMemory> {
   try {
-    const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+    const raw = await SecureStore.getItemAsync(LOCATION_MEMORY_STORAGE_KEY);
     if (!raw) return emptyMemory;
     const parsed = JSON.parse(raw) as Partial<LocationMemory>;
     return {
@@ -35,7 +35,7 @@ export async function getLocationMemory(): Promise<LocationMemory> {
 }
 
 async function write(memory: LocationMemory) {
-  await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(memory));
+  await SecureStore.setItemAsync(LOCATION_MEMORY_STORAGE_KEY, JSON.stringify(memory));
   return memory;
 }
 

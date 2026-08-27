@@ -50,7 +50,12 @@ def _actual_type(data: bytes) -> str:
     return "application/octet-stream"
 
 
-def sanitize_image(data: bytes, *, max_pixels: int = 25_000_000) -> ValidatedUpload:
+def sanitize_image(
+    data: bytes,
+    *,
+    max_pixels: int = 25_000_000,
+    max_edge: int | None = None,
+) -> ValidatedUpload:
     try:
         with Image.open(io.BytesIO(data)) as source:
             source.verify()
@@ -58,6 +63,8 @@ def sanitize_image(data: bytes, *, max_pixels: int = 25_000_000) -> ValidatedUpl
             if source.width * source.height > max_pixels:
                 raise ValueError("The image dimensions are too large.")
             image = ImageOps.exif_transpose(source).convert("RGB")
+            if max_edge and max(image.size) > max_edge:
+                image.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
             output = io.BytesIO()
             image.save(output, format="JPEG", quality=90, optimize=True)
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
@@ -65,7 +72,14 @@ def sanitize_image(data: bytes, *, max_pixels: int = 25_000_000) -> ValidatedUpl
     return ValidatedUpload(output.getvalue(), "image/jpeg", "upload.jpg", "image", "jpg")
 
 
-async def validate_upload(upload: UploadFile, *, max_bytes: int, allow_pdf: bool, stem: str) -> ValidatedUpload:
+async def validate_upload(
+    upload: UploadFile,
+    *,
+    max_bytes: int,
+    allow_pdf: bool,
+    stem: str,
+    max_image_edge: int | None = None,
+) -> ValidatedUpload:
     data = await read_bounded(upload, max_bytes)
     actual = _actual_type(data)
     allowed = DOCUMENT_TYPES if allow_pdf else IMAGE_TYPES
@@ -79,5 +93,5 @@ async def validate_upload(upload: UploadFile, *, max_bytes: int, allow_pdf: bool
         if b"%%EOF" not in data[-2048:]:
             raise ValueError("The uploaded PDF is incomplete or invalid.")
         return ValidatedUpload(data, actual, f"{safe_stem}.pdf", "raw", "pdf")
-    image = sanitize_image(data)
+    image = sanitize_image(data, max_edge=max_image_edge)
     return ValidatedUpload(image.data, image.content_type, f"{safe_stem}.jpg", image.resource_type, image.format)

@@ -71,6 +71,8 @@ describe("Courier delivery realtime migration", () => {
     expect(customerSource).not.toContain("useLiveRefresh");
     expect(courierSource).not.toContain("useLiveRefresh");
     expect(courierSource).toContain("watchForegroundLocation");
+    expect(courierSource).toContain("stopGps(false)");
+    expect(courierSource).toContain("locationStarting.current === generation");
   });
 
   it("applies matching location/status events and ignores other or stale deliveries", async () => {

@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 import { User } from "../types/user.types";
+import { LOCATION_MEMORY_STORAGE_KEY } from "./locationMemoryService";
 
 const PRIVATE_STORAGE_KEYS = [
   "letsgoride.auth.token",
@@ -10,6 +11,7 @@ const PRIVATE_STORAGE_KEYS = [
   "letsgoride.biometric.token",
   "letsgoride.push.token",
   "letsgoride.merchant.selected_restaurant",
+  LOCATION_MEMORY_STORAGE_KEY,
 ];
 const SESSION_USER_SNAPSHOT_KEY = "letsgoride.auth.user-snapshot";
 
