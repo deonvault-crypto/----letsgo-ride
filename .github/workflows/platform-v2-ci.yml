@@ -100,7 +100,7 @@ jobs:
 
   production-smoke:
     name: Production API and legal surface smoke
-    if: github.ref == 'refs/heads/platform-v2-m1-m6'
+    if: github.ref == 'refs/heads/platform-v2-m1-m6' || github.head_ref == 'platform-v2-m1-m6'
     needs:
       - mobile
       - backend
@@ -128,6 +128,39 @@ jobs:
           assert ready.get('data', {}).get('status') == 'ready', ready
           assert ready.get('data', {}).get('database_status') == 'connected', ready
           PY
+
+      - name: Verify production Resend and Google routing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$API_ORIGIN/health/email-config" -o /tmp/email.json
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"query":"Harare"}' \
+            "$API_ORIGIN/routing/places/autocomplete" \
+            -o /tmp/routing.json
+          python - <<'PY'
+          import json
+          with open('/tmp/email.json', encoding='utf-8') as handle:
+              email = json.load(handle)
+          with open('/tmp/routing.json', encoding='utf-8') as handle:
+              routing = json.load(handle)
+          assert email.get('provider') == 'resend', email
+          assert email.get('configured') is True, email
+          assert routing.get('success') is True, routing
+          results = routing.get('data')
+          assert isinstance(results, list) and results, routing
+          PY
+
+      - name: Verify production docs are disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in docs openapi.json redoc; do
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' "$API_ORIGIN/$path")"
+            test "$code" = "404"
+          done
 
       - name: Verify trusted production CORS
         shell: bash
