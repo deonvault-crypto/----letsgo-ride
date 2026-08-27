@@ -95,6 +95,41 @@ def _canonical_document(document: dict[str, Any]) -> dict[str, Any]:
     return canonical
 
 
+async def _rename_provider_document(
+    document: Mapping[str, Any],
+    *,
+    source_type: str,
+    target_type: str,
+) -> None:
+    public_id = str(document.get("cloudinary_public_id") or "").strip()
+    if not public_id:
+        raise RuntimeError("Provider-backed identity document changed after preflight.")
+    await asyncio.to_thread(
+        cloudinary.uploader.rename,
+        public_id,
+        public_id,
+        type=source_type,
+        to_type=target_type,
+        resource_type=str(document.get("resource_type") or "image"),
+        overwrite=True,
+        invalidate=True,
+    )
+
+
+async def _rollback_provider_document(document: Mapping[str, Any]) -> None:
+    try:
+        await _rename_provider_document(
+            document,
+            source_type="authenticated",
+            target_type="upload",
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Identity-document metadata update failed and provider rollback also failed. "
+            "Stop migration and reconcile the provider asset before retrying."
+        ) from exc
+
+
 async def _apply_plan(plans: list[DocumentPlan]) -> int:
     plans_by_owner: dict[tuple[str, str], list[DocumentPlan]] = defaultdict(list)
     for plan in plans:
@@ -109,26 +144,41 @@ async def _apply_plan(plans: list[DocumentPlan]) -> int:
         if not owner or not isinstance(owner.get("documents"), list):
             raise RuntimeError("Identity-document owner changed after preflight.")
         documents = [dict(item) for item in owner["documents"]]
-        for plan in owner_plans:
+
+        # Commit one document at a time. A later provider failure therefore does
+        # not invalidate earlier documents that were already safely canonicalized.
+        for plan in sorted(owner_plans, key=lambda item: item.document_index):
             if plan.document_index < 0 or plan.document_index >= len(documents):
                 raise RuntimeError("Identity-document inventory changed after preflight.")
-            document = documents[plan.document_index]
+            document = dict(documents[plan.document_index])
+            provider_moved = False
             if plan.action == "authenticated_migration":
-                await asyncio.to_thread(
-                    cloudinary.uploader.rename,
-                    str(document["cloudinary_public_id"]),
-                    str(document["cloudinary_public_id"]),
-                    type="upload",
-                    to_type="authenticated",
-                    resource_type=str(document.get("resource_type") or "image"),
-                    overwrite=True,
-                    invalidate=True,
+                if document.get("storage_path"):
+                    raise RuntimeError("Local-path identity document changed after preflight.")
+                await _rename_provider_document(
+                    document,
+                    source_type="upload",
+                    target_type="authenticated",
                 )
+                provider_moved = True
+
             documents[plan.document_index] = _canonical_document(document)
+            try:
+                updated = await database.update_one(
+                    collection,
+                    owner_id,
+                    {"documents": documents},
+                )
+            except Exception:
+                if provider_moved:
+                    await _rollback_provider_document(document)
+                raise
+            if not updated:
+                if provider_moved:
+                    await _rollback_provider_document(document)
+                raise RuntimeError("Identity-document metadata update failed after provider migration.")
             updated_documents += 1
-        updated = await database.update_one(collection, owner_id, {"documents": documents})
-        if not updated:
-            raise RuntimeError("Identity-document metadata update failed after provider migration.")
+
     return updated_documents
 
 
