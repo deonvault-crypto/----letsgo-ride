@@ -44,6 +44,13 @@ async def readiness_check():
 @router.get("/email-config")
 async def email_config_check():
     settings = get_settings()
+    # Production health endpoints should prove readiness without exposing
+    # sender addresses, key shape, or other configuration metadata.
+    if settings.is_production:
+        return {
+            "provider": "resend",
+            "configured": settings.resend_configured,
+        }
     return {
         "provider": "resend",
         "configured": settings.resend_configured,
