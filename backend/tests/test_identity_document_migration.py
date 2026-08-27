@@ -12,8 +12,10 @@ from scripts.identity_document_inventory import (
 )
 from scripts.migrate_identity_documents_private import (
     APPLY_CONFIRMATION,
+    PARTIAL_APPLY_CONFIRMATION,
     DocumentPlan,
     _apply_plan,
+    active_blocking_actions,
     validate_apply_authorization,
 )
 
@@ -136,6 +138,77 @@ class IdentityDocumentMigrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved["documents"][0]["delivery_type"], "authenticated")
         self.assertNotIn("file_url", saved["documents"][0])
 
+    async def test_partial_apply_migrates_eligible_and_preserves_local_document_exactly(self):
+        local_document = {
+            "id": "local-document",
+            "document_type": "identity_document",
+            "storage_path": "legacy/identity.pdf",
+            "status": "accepted",
+        }
+        provider_document = {
+            "id": "provider-document",
+            "document_type": "driver_license",
+            "cloudinary_public_id": "legacy-provider-id",
+            "delivery_type": "upload",
+            "resource_type": "image",
+            "file_url": "https://historical.invalid/provider",
+            "status": "accepted",
+        }
+        await database.insert_one(
+            "drivers",
+            {
+                "id": "driver",
+                "user_id": "driver-user",
+                "verification_status": "approved",
+                "documents": [local_document, provider_document],
+            },
+        )
+        plans = [
+            DocumentPlan("drivers", "driver", 0, "unsafe_path"),
+            DocumentPlan("drivers", "driver", 1, "authenticated_migration", "upload"),
+        ]
+        with patch("scripts.migrate_identity_documents_private.cloudinary.uploader.rename") as rename:
+            updated = await _apply_plan(plans)
+
+        self.assertEqual(updated, 1)
+        rename.assert_called_once()
+        saved = await database.find_one("drivers", {"id": "driver"})
+        self.assertEqual(saved["verification_status"], "approved")
+        self.assertEqual(saved["documents"][0], local_document)
+        self.assertEqual(saved["documents"][1]["delivery_type"], "authenticated")
+        self.assertNotIn("file_url", saved["documents"][1])
+        self.assertEqual(saved["documents"][1]["status"], "accepted")
+
+    def test_partial_mode_defers_only_reupload_blockers(self):
+        reupload_only = {
+            "requires_reupload": 3,
+            "unsafe_path": 3,
+            "missing_provider_asset": 0,
+            "ownership_error": 0,
+            "malformed": 0,
+            "provider_lookup_error": 0,
+        }
+        self.assertTrue(
+            active_blocking_actions(reupload_only, allow_reupload_blockers=False)
+        )
+        self.assertEqual(
+            active_blocking_actions(reupload_only, allow_reupload_blockers=True),
+            (),
+        )
+
+        for hard_blocker in (
+            "missing_provider_asset",
+            "ownership_error",
+            "malformed",
+            "provider_lookup_error",
+        ):
+            counts = dict(reupload_only)
+            counts[hard_blocker] = 1
+            self.assertIn(
+                hard_blocker,
+                active_blocking_actions(counts, allow_reupload_blockers=True),
+            )
+
     def test_runtime_identity_and_apply_gates_fail_closed(self):
         staging = SimpleNamespace(app_env="staging", mongodb_db_name="letsgoride_staging")
         with patch("scripts.audit_identity_documents.get_settings", return_value=staging):
@@ -147,13 +220,37 @@ class IdentityDocumentMigrationTests(unittest.IsolatedAsyncioTestCase):
 
         validate_apply_authorization(apply=False, confirmation=None, backup_reference=None)
         with self.assertRaises(RuntimeError):
-            validate_apply_authorization(apply=True, confirmation="wrong", backup_reference="backup-123")
+            validate_apply_authorization(
+                apply=True,
+                confirmation="wrong",
+                backup_reference="backup-123",
+            )
         with self.assertRaises(RuntimeError):
-            validate_apply_authorization(apply=True, confirmation=APPLY_CONFIRMATION, backup_reference=None)
+            validate_apply_authorization(
+                apply=True,
+                confirmation=APPLY_CONFIRMATION,
+                backup_reference=None,
+            )
         validate_apply_authorization(
             apply=True,
             confirmation=APPLY_CONFIRMATION,
             backup_reference="backup-20260826",
+        )
+
+        # Partial apply requires a distinct phrase so the normal confirmation
+        # cannot accidentally bypass local/re-upload blockers.
+        with self.assertRaises(RuntimeError):
+            validate_apply_authorization(
+                apply=True,
+                confirmation=APPLY_CONFIRMATION,
+                backup_reference="backup-20260826",
+                allow_reupload_blockers=True,
+            )
+        validate_apply_authorization(
+            apply=True,
+            confirmation=PARTIAL_APPLY_CONFIRMATION,
+            backup_reference="backup-20260826",
+            allow_reupload_blockers=True,
         )
 
 
