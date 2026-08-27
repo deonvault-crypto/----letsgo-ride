@@ -1,6 +1,6 @@
 import { Alert, Modal, StyleSheet, Switch, Text, TextInput, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import { ReactNode, useCallback, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { ReactNode, useCallback, useEffect, useState } from "react";
 
 import { AppButton } from "../../components/ui/AppButton";
 import { ListTile } from "../../components/ui/ListTile";
@@ -49,6 +49,7 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { deleteAccount: deleteAccountParam } = useLocalSearchParams<{ deleteAccount?: string }>();
   const { user } = useCurrentUser();
   const navRole: "customer" | "driver" | undefined = user?.role === "driver"
     ? "driver"
@@ -71,6 +72,12 @@ export default function SettingsScreen() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [deleteSaving, setDeleteSaving] = useState(false);
+
+  useEffect(() => {
+    if (deleteAccountParam !== "1") return;
+    setDeleteText("");
+    setDeleteModalOpen(true);
+  }, [deleteAccountParam]);
 
   useFocusEffect(
     useCallback(() => {
@@ -172,10 +179,13 @@ export default function SettingsScreen() {
       await deleteAccount();
       await disableBiometricLogin();
       setDeleteModalOpen(false);
-      Alert.alert("Account deleted", "Your account access and non-retained profile data have been removed.");
-      router.replace("/(customer)/home" as never);
-    } catch {
-      Alert.alert("Delete account", "Could not delete your account. Please try again or contact support.");
+      Alert.alert(
+        "Account deleted",
+        "Your account access and non-retained profile data have been removed.",
+        [{ text: "Done", onPress: () => router.replace("/(customer)/home" as never) }],
+      );
+    } catch (err) {
+      Alert.alert("Delete account", err instanceof Error ? err.message : "Could not delete your account. Please try again or contact support.");
     } finally {
       setDeleteSaving(false);
     }
