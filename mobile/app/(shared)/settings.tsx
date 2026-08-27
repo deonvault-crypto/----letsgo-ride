@@ -47,9 +47,13 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
   { key: "marketing_messages", title: "Product news", subtitle: "Occasional LetsGoRide product updates.", defaultValue: false },
 ];
 
+const useSafeLocalSearchParams: typeof useLocalSearchParams = typeof useLocalSearchParams === "function"
+  ? useLocalSearchParams
+  : (() => ({} as never));
+
 export default function SettingsScreen() {
   const router = useRouter();
-  const { deleteAccount: deleteAccountParam } = useLocalSearchParams<{ deleteAccount?: string }>();
+  const { deleteAccount: deleteAccountParam } = useSafeLocalSearchParams<{ deleteAccount?: string }>();
   const { user } = useCurrentUser();
   const navRole: "customer" | "driver" | undefined = user?.role === "driver"
     ? "driver"
