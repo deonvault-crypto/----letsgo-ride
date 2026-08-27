@@ -1,8 +1,10 @@
 import json
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.database import database
-from app.routers.health import liveness_check, readiness_check
+from app.routers.health import email_config_check, liveness_check, readiness_check
 
 
 class HealthProbeTests(unittest.IsolatedAsyncioTestCase):
@@ -35,6 +37,36 @@ class HealthProbeTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(payload["success"])
         self.assertEqual(payload["data"]["status"], "degraded")
         self.assertEqual(payload["data"]["database_status"], "not_configured")
+
+    async def test_production_email_health_exposes_only_provider_and_readiness(self):
+        settings = SimpleNamespace(
+            is_production=True,
+            resend_configured=True,
+            resend_api_key_present=True,
+            resend_api_key_prefix_ok=True,
+            resend_api_key_length=40,
+            resend_from_email="private@example.invalid",
+            resend_reply_to="private@example.invalid",
+        )
+        with patch("app.routers.health.get_settings", return_value=settings):
+            response = await email_config_check()
+        self.assertEqual(response, {"provider": "resend", "configured": True})
+
+    async def test_nonproduction_email_health_keeps_diagnostics(self):
+        settings = SimpleNamespace(
+            is_production=False,
+            resend_configured=True,
+            resend_api_key_present=True,
+            resend_api_key_prefix_ok=True,
+            resend_api_key_length=40,
+            resend_from_email="staging@example.invalid",
+            resend_reply_to="reply@example.invalid",
+        )
+        with patch("app.routers.health.get_settings", return_value=settings):
+            response = await email_config_check()
+        self.assertTrue(response["api_key_present"])
+        self.assertEqual(response["api_key_length"], 40)
+        self.assertEqual(response["from_email"], "staging@example.invalid")
 
 
 if __name__ == "__main__":
