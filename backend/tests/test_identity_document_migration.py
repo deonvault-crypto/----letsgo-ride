@@ -179,6 +179,41 @@ class IdentityDocumentMigrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("file_url", saved["documents"][1])
         self.assertEqual(saved["documents"][1]["status"], "accepted")
 
+    async def test_provider_move_rolls_back_if_metadata_write_fails(self):
+        provider_document = {
+            "id": "provider-document",
+            "document_type": "driver_license",
+            "cloudinary_public_id": "legacy-provider-id",
+            "delivery_type": "upload",
+            "resource_type": "image",
+            "file_url": "https://historical.invalid/provider",
+        }
+        await database.insert_one(
+            "drivers",
+            {
+                "id": "driver",
+                "user_id": "driver-user",
+                "documents": [provider_document],
+            },
+        )
+        plans = [
+            DocumentPlan("drivers", "driver", 0, "authenticated_migration", "upload")
+        ]
+        with (
+            patch("scripts.migrate_identity_documents_private.cloudinary.uploader.rename") as rename,
+            patch.object(database, "update_one", new=AsyncMock(return_value=False)),
+        ):
+            with self.assertRaises(RuntimeError):
+                await _apply_plan(plans)
+
+        self.assertEqual(rename.call_count, 2)
+        first = rename.call_args_list[0].kwargs
+        rollback = rename.call_args_list[1].kwargs
+        self.assertEqual(first["type"], "upload")
+        self.assertEqual(first["to_type"], "authenticated")
+        self.assertEqual(rollback["type"], "authenticated")
+        self.assertEqual(rollback["to_type"], "upload")
+
     def test_partial_mode_defers_only_reupload_blockers(self):
         reupload_only = {
             "requires_reupload": 3,
