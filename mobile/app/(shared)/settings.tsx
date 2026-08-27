@@ -183,11 +183,8 @@ export default function SettingsScreen() {
       await deleteAccount();
       await disableBiometricLogin();
       setDeleteModalOpen(false);
-      Alert.alert(
-        "Account deleted",
-        "Your account access and non-retained profile data have been removed.",
-        [{ text: "Done", onPress: () => router.replace("/(customer)/home" as never) }],
-      );
+      Alert.alert("Account deleted", "Your account access and non-retained profile data have been removed.");
+      router.replace("/(customer)/home" as never);
     } catch (err) {
       Alert.alert("Delete account", err instanceof Error ? err.message : "Could not delete your account. Please try again or contact support.");
     } finally {
