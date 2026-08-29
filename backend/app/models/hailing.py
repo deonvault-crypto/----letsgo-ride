@@ -172,6 +172,9 @@ class HailingCityUpsertBody(BaseModel):
     driver_stale_seconds: int = Field(default=75, ge=20, le=300)
     dispatch_sweeper_interval_seconds: int = Field(default=3, ge=2, le=30)
     boarding_start_radius_meters: int = Field(default=250, ge=20, le=1500)
+    candidate_limit: int = Field(default=16, ge=4, le=40)
+    eta_rank_limit: int = Field(default=8, ge=1, le=40)
+    road_eta_ranking_enabled: bool = True
 
     @field_validator("radius_steps_km")
     @classmethod
@@ -182,6 +185,14 @@ class HailingCityUpsertBody(BaseModel):
         if any(item > 80 for item in normalized):
             raise ValueError("Dispatch radius steps cannot exceed 80 km.")
         return normalized
+
+    @field_validator("eta_rank_limit")
+    @classmethod
+    def validate_eta_rank_limit(cls, value: int, info) -> int:
+        candidate_limit = info.data.get("candidate_limit")
+        if candidate_limit is not None and value > candidate_limit:
+            raise ValueError("ETA ranking limit cannot exceed candidate limit.")
+        return value
 
 
 class HailingDriverEligibilityBody(BaseModel):
