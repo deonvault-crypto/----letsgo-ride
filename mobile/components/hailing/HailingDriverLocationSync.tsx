@@ -1,0 +1,151 @@
+import { useCallback, useEffect, useRef } from "react";
+import { AppState, AppStateStatus } from "react-native";
+
+import {
+  getHailingDriverStatus,
+  updateHailingDriverPresence,
+  updateHailingTripLocation,
+} from "../../services/hailingService";
+import { DeviceLocation, watchForegroundLocation } from "../../services/locationService";
+import type { HailingTripStatus } from "../../types/hailing.types";
+
+const STATUS_REFRESH_MS = 8000;
+const ACTIVE_TRIP_STATUSES = new Set<HailingTripStatus>([
+  "DRIVER_ASSIGNED",
+  "DRIVER_EN_ROUTE",
+  "DRIVER_ARRIVED",
+  "PASSENGER_CONFIRMED_BOARDING",
+  "IN_PROGRESS",
+]);
+
+type TrackingTarget = {
+  kind: "presence" | "trip";
+  tripId?: string;
+};
+
+type LocationSubscription = { remove: () => void };
+
+function targetKey(target: TrackingTarget | null) {
+  return target ? `${target.kind}:${target.tripId || "online"}` : "offline";
+}
+
+function locationPayload(location: DeviceLocation) {
+  return {
+    location: { latitude: location.latitude, longitude: location.longitude },
+    heading: location.heading ?? null,
+    speed: location.speed ?? null,
+    accuracy: location.accuracy ?? null,
+  };
+}
+
+export function HailingDriverLocationSync() {
+  const subscription = useRef<LocationSubscription | null>(null);
+  const activeTarget = useRef<TrackingTarget | null>(null);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const generation = useRef(0);
+  const sendInFlight = useRef(false);
+  const reconciliationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
+
+  const stopLocationWatch = useCallback(() => {
+    generation.current += 1;
+    subscription.current?.remove();
+    subscription.current = null;
+    activeTarget.current = null;
+  }, []);
+
+  const startLocationWatch = useCallback(async (target: TrackingTarget) => {
+    const nextKey = targetKey(target);
+    if (targetKey(activeTarget.current) === nextKey && subscription.current) return;
+
+    stopLocationWatch();
+    activeTarget.current = target;
+    const watchGeneration = generation.current;
+    const activeTrip = target.kind === "trip";
+
+    try {
+      const nextSubscription = await watchForegroundLocation(
+        (location) => {
+          if (!mounted.current || watchGeneration !== generation.current || sendInFlight.current) return;
+          sendInFlight.current = true;
+          const payload = locationPayload(location);
+          const request = target.kind === "trip" && target.tripId
+            ? updateHailingTripLocation(target.tripId, payload)
+            : updateHailingDriverPresence(payload);
+          void request
+            .catch(() => undefined)
+            .finally(() => {
+              sendInFlight.current = false;
+            });
+        },
+        () => undefined,
+        activeTrip
+          ? { timeInterval: 5000, distanceInterval: 10 }
+          : { timeInterval: 12000, distanceInterval: 35 },
+      );
+      if (!mounted.current || watchGeneration !== generation.current || appState.current !== "active") {
+        nextSubscription.remove();
+        return;
+      }
+      subscription.current = nextSubscription;
+    } catch {
+      if (watchGeneration === generation.current) {
+        subscription.current = null;
+      }
+    }
+  }, [stopLocationWatch]);
+
+  const reconcile = useCallback(async () => {
+    if (!mounted.current || appState.current !== "active") return;
+    try {
+      const status = await getHailingDriverStatus();
+      if (!mounted.current || appState.current !== "active") return;
+      if (!status.online) {
+        stopLocationWatch();
+        return;
+      }
+      const activeTrip = status.active_trip;
+      if (activeTrip && ACTIVE_TRIP_STATUSES.has(activeTrip.status)) {
+        await startLocationWatch({ kind: "trip", tripId: activeTrip.id });
+      } else {
+        await startLocationWatch({ kind: "presence" });
+      }
+    } catch {
+      // A transient status failure must not tear down a healthy foreground watch.
+    }
+  }, [startLocationWatch, stopLocationWatch]);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    const schedule = () => {
+      if (reconciliationTimer.current) clearTimeout(reconciliationTimer.current);
+      reconciliationTimer.current = setTimeout(async () => {
+        await reconcile();
+        if (mounted.current) schedule();
+      }, STATUS_REFRESH_MS);
+    };
+
+    void reconcile();
+    schedule();
+
+    const stateSubscription = AppState.addEventListener("change", (nextState) => {
+      appState.current = nextState;
+      if (nextState === "active") {
+        void reconcile();
+      } else {
+        stopLocationWatch();
+      }
+    });
+
+    return () => {
+      mounted.current = false;
+      stateSubscription.remove();
+      if (reconciliationTimer.current) clearTimeout(reconciliationTimer.current);
+      reconciliationTimer.current = null;
+      stopLocationWatch();
+    };
+  }, [reconcile, stopLocationWatch]);
+
+  return null;
+}
