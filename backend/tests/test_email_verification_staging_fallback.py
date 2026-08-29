@@ -1,5 +1,6 @@
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.config import get_settings
@@ -15,11 +16,17 @@ from app.services.auth_service import (
 class EmailVerificationStagingFallbackTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         database.db = None
+        self.database_settings_patch = patch(
+            "app.database.get_settings",
+            return_value=SimpleNamespace(app_env="development"),
+        )
+        self.database_settings_patch.start()
         for collection in COLLECTION_NAMES:
             await database.replace_collection(collection, [])
         get_settings.cache_clear()
 
     async def asyncTearDown(self):
+        self.database_settings_patch.stop()
         get_settings.cache_clear()
 
     async def test_explicit_staging_mock_allows_signup_when_email_provider_is_unavailable(self):

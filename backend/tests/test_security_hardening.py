@@ -1,7 +1,8 @@
 import base64
 import io
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, timedelta, timezone
 
 from fastapi import UploadFile
@@ -11,12 +12,22 @@ from starlette.datastructures import Headers
 from PIL import Image
 
 from app.database import database
-from app.services.auth_service import create_session_record, find_user_by_token, reset_email_password, create_code_record, verify_email_code
+from app.services.auth_service import (
+    create_password_record,
+    create_session_record,
+    ensure_admin_seed_user,
+    find_user_by_token,
+    password_matches,
+    reset_email_password,
+    create_code_record,
+    verify_email_code,
+    verify_email_user,
+)
 from app.services.upload_security_service import validate_upload
 from app.services.workforce_service import public_application
 from app.services.rate_limit_service import RateLimit, RateLimitService
 from app.config import Settings
-from app.routers.auth import logout
+from app.routers.auth import email_login, logout
 
 
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
@@ -25,6 +36,8 @@ PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4
 class SecurityHardeningTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         database.db = None
+        database.client = None
+        database.status = "not_configured"
         database.memory = {name: [] for name in database.memory}
 
     async def test_session_requires_unexpired_server_lifetime(self):
@@ -99,3 +112,129 @@ class SecurityHardeningTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict("os.environ", {"APP_ENV": "production", "CORS_ORIGINS": ""}, clear=False):
             with self.assertRaises(RuntimeError):
                 Settings()
+
+    async def test_existing_admin_seed_preserves_existing_password_credentials(self):
+        settings = SimpleNamespace(
+            admin_auto_create=True,
+            admin_seed_email="admin@example.com",
+            admin_seed_password="SeedPasswordB!2026",
+            session_lifetime_days=30,
+        )
+        original_credentials = create_password_record("OriginalPasswordA!2026")
+        await database.insert_one("users", {
+            "id": "admin-existing",
+            "email": "admin@example.com",
+            "normalized_email": "admin@example.com",
+            "name": "Existing Admin",
+            "role": "admin",
+            "status": "active",
+            "email_verified": True,
+            **original_credentials,
+        })
+
+        with patch("app.services.auth_service.get_settings", return_value=settings):
+            await ensure_admin_seed_user()
+            admin = await database.find_one("users", {"id": "admin-existing"})
+            self.assertEqual(admin["password_hash"], original_credentials["password_hash"])
+            self.assertEqual(admin["password_salt"], original_credentials["password_salt"])
+            self.assertTrue(password_matches(admin, "OriginalPasswordA!2026"))
+            self.assertFalse(password_matches(admin, "SeedPasswordB!2026"))
+            self.assertIsNotNone(await verify_email_user("admin@example.com", "OriginalPasswordA!2026"))
+            self.assertIsNone(await verify_email_user("admin@example.com", "SeedPasswordB!2026"))
+
+    async def test_new_admin_seed_still_creates_configured_admin(self):
+        settings = SimpleNamespace(
+            admin_auto_create=True,
+            admin_seed_email="new-admin@example.com",
+            admin_seed_password="SeedPassword!2026",
+            session_lifetime_days=30,
+        )
+
+        with patch("app.services.auth_service.get_settings", return_value=settings):
+            await ensure_admin_seed_user()
+
+        admin = await database.find_one("users", {"normalized_email": "new-admin@example.com"})
+        self.assertIsNotNone(admin)
+        self.assertEqual(admin["role"], "admin")
+        self.assertEqual(admin["status"], "active")
+        self.assertTrue(admin["email_verified"])
+        self.assertTrue(password_matches(admin, "SeedPassword!2026"))
+
+    async def test_production_without_mongodb_uri_fails_without_memory_fallback(self):
+        settings = SimpleNamespace(app_env="production", mongodb_uri="", mongodb_db_name="letsgoride")
+        with patch("app.database.get_settings", return_value=settings):
+            with self.assertRaises(RuntimeError):
+                await database.connect()
+            with self.assertRaises(RuntimeError):
+                await database.insert_one("users", {"id": "must-not-use-memory"})
+        self.assertEqual(database.memory["users"], [])
+
+    async def test_production_mongodb_connection_failure_fails_without_memory_fallback(self):
+        settings = SimpleNamespace(
+            app_env="production",
+            mongodb_uri="mongodb+srv://example.invalid",
+            mongodb_db_name="letsgoride",
+        )
+
+        class FailingMongoClient:
+            def __init__(self, *_args, **_kwargs):
+                self.admin = SimpleNamespace(command=AsyncMock(side_effect=ConnectionError("unreachable")))
+
+            def __getitem__(self, _name):
+                return SimpleNamespace()
+
+        with patch("app.database.get_settings", return_value=settings), patch(
+            "app.database.AsyncIOMotorClient", FailingMongoClient
+        ):
+            with self.assertRaises(RuntimeError):
+                await database.connect()
+            with self.assertRaises(RuntimeError):
+                await database.find_one("users", {"id": "must-not-use-memory"})
+        self.assertEqual(database.status, "unavailable")
+
+    async def test_development_without_mongodb_keeps_in_memory_storage_available(self):
+        settings = SimpleNamespace(app_env="development", mongodb_uri="", mongodb_db_name="letsgoride")
+        with patch("app.database.get_settings", return_value=settings):
+            await database.connect()
+            await database.insert_one("users", {"id": "local-user", "email": "local@example.com"})
+            self.assertEqual((await database.find_one("users", {"id": "local-user"}))["email"], "local@example.com")
+
+    async def test_login_failures_are_publicly_generic_but_internally_diagnosed(self):
+        request = Request({"type": "http", "method": "POST", "path": "/auth/email-login", "headers": [], "client": ("203.0.113.20", 1234), "scheme": "https", "server": ("test", 443), "query_string": b""})
+        credentials = create_password_record("CorrectPassword!2026")
+        await database.insert_one("users", {
+            "id": "login-user",
+            "email": "known@example.com",
+            "normalized_email": "known@example.com",
+            "status": "active",
+            "email_verified": True,
+            **credentials,
+        })
+        await database.insert_one("users", {
+            "id": "unverified-user",
+            "email": "unverified@example.com",
+            "normalized_email": "unverified@example.com",
+            "status": "active",
+            "email_verified": False,
+            **create_password_record("CorrectPassword!2026"),
+        })
+
+        async def assert_generic_failure(email: str, password: str, expected_log: str) -> None:
+            with self.assertLogs("app.services.auth_service", level="INFO") as logs, patch(
+                "app.routers.auth.rate_limit_service.enforce", new=AsyncMock()
+            ):
+                with self.assertRaises(HTTPException) as raised:
+                    await email_login(SimpleNamespace(email=email, password=password), request)
+            self.assertEqual(raised.exception.status_code, 401)
+            self.assertEqual(raised.exception.detail["error"], "Invalid email or password.")
+            joined_logs = "\n".join(logs.output)
+            self.assertIn(expected_log, joined_logs)
+            self.assertNotIn(password, joined_logs)
+
+        await assert_generic_failure("missing@example.com", "AnyPassword!2026", "outcome=user_not_found")
+        await assert_generic_failure("known@example.com", "WrongPassword!2026", "outcome=password_mismatch")
+        await assert_generic_failure("unverified@example.com", "CorrectPassword!2026", "outcome=email_unverified")
+
+        with self.assertLogs("app.services.auth_service", level="INFO") as logs:
+            self.assertIsNotNone(await verify_email_user("known@example.com", "CorrectPassword!2026"))
+        self.assertIn("outcome=login_success", "\n".join(logs.output))

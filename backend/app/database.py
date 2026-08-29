@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import logging
 from typing import Any, Dict, Iterable, List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -51,6 +52,9 @@ COLLECTION_NAMES = [
 PERSISTENT_DATABASE_ENVS = {"staging", "production"}
 
 
+logger = logging.getLogger(__name__)
+
+
 class Database:
     def __init__(self) -> None:
         self.client: Optional[AsyncIOMotorClient] = None
@@ -68,6 +72,10 @@ class Database:
         if not settings.mongodb_uri:
             self.status = "not_configured"
             if requires_persistent_database:
+                logger.error(
+                    "MongoDB is not configured for %s; refusing to start with in-memory storage.",
+                    app_env,
+                )
                 raise RuntimeError(
                     f"MongoDB is required when APP_ENV={app_env}; MONGODB_URI is not configured."
                 )
@@ -85,9 +93,24 @@ class Database:
             self.db = None
             self.status = "unavailable"
             if requires_persistent_database:
+                logger.error(
+                    "MongoDB connection failed for %s; refusing to start with in-memory storage. error_type=%s",
+                    app_env,
+                    exc.__class__.__name__,
+                )
                 raise RuntimeError(
                     f"MongoDB is required when APP_ENV={app_env}, but the connection is unavailable."
                 ) from exc
+
+    def _requires_persistent_database(self) -> bool:
+        app_env = str(get_settings().app_env or "development").strip().lower()
+        return app_env in PERSISTENT_DATABASE_ENVS
+
+    def _ensure_memory_allowed(self) -> None:
+        if self._requires_persistent_database():
+            raise RuntimeError(
+                "Persistent database is required in this environment; in-memory storage is disabled."
+            )
 
     async def ensure_indexes(self) -> None:
         """Create the small set of operational indexes required by live product queries."""
@@ -196,6 +219,7 @@ class Database:
             cursor = self.db[collection].find(filters)
             return [self._clean(item) async for item in cursor]
 
+        self._ensure_memory_allowed()
         rows = []
         for item in self.memory[collection]:
             if self._matches(item, filters):
@@ -209,6 +233,7 @@ class Database:
             item = await self.db[collection].find_one(filters)
             return self._clean(item) if item else None
 
+        self._ensure_memory_allowed()
         for item in self.memory[collection]:
             if self._matches(item, filters):
                 return deepcopy(item)
@@ -219,6 +244,7 @@ class Database:
             await self.db[collection].insert_one(item)
             return self._clean(item)
 
+        self._ensure_memory_allowed()
         self.memory[collection].append(deepcopy(item))
         return deepcopy(item)
 
@@ -229,6 +255,7 @@ class Database:
             await self.db[collection].update_one({"id": item_id}, {"$set": updates})
             return await self.find_one(collection, {"id": item_id})
 
+        self._ensure_memory_allowed()
         for index, item in enumerate(self.memory[collection]):
             if item.get("id") == item_id:
                 self.memory[collection][index] = {**item, **deepcopy(updates)}
@@ -250,6 +277,7 @@ class Database:
             )
             return self._clean(item) if item else None
 
+        self._ensure_memory_allowed()
         for index, item in enumerate(self.memory[collection]):
             if self._matches(item, filters):
                 self.memory[collection][index] = {**item, **deepcopy(updates)}
@@ -281,6 +309,7 @@ class Database:
             )
             return self._clean(item) if item else None
 
+        self._ensure_memory_allowed()
         for index, item in enumerate(self.memory[collection]):
             if self._matches(item, filters):
                 next_item = {**item, **deepcopy(updates)}
@@ -304,6 +333,7 @@ class Database:
             result = await self.db[collection].update_many(filters, {"$set": updates})
             return int(result.modified_count)
 
+        self._ensure_memory_allowed()
         changed = 0
         for index, item in enumerate(self.memory[collection]):
             if self._matches(item, filters):
@@ -318,6 +348,7 @@ class Database:
             result = await self.db[collection].delete_one({"id": item_id})
             return result.deleted_count > 0
 
+        self._ensure_memory_allowed()
         before = len(self.memory[collection])
         self.memory[collection] = [item for item in self.memory[collection] if item.get("id") != item_id]
         return len(self.memory[collection]) < before
@@ -328,6 +359,7 @@ class Database:
             result = await self.db[collection].delete_many(filters)
             return int(result.deleted_count)
 
+        self._ensure_memory_allowed()
         kept: List[Dict[str, Any]] = []
         deleted = 0
         for item in self.memory[collection]:
@@ -345,12 +377,14 @@ class Database:
             if clean_items:
                 await self.db[collection].insert_many(clean_items)
             return
+        self._ensure_memory_allowed()
         self.memory[collection] = clean_items
 
     async def count(self, collection: str, filters: Optional[Dict[str, Any]] = None) -> int:
         filters = filters or {}
         if self.db is not None:
             return await self.db[collection].count_documents(filters)
+        self._ensure_memory_allowed()
         return sum(1 for item in self.memory[collection] if self._matches(item, filters))
 
     @staticmethod

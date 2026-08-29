@@ -131,8 +131,8 @@ async def email_login(payload: EmailLoginBody, request: Request):
     await rate_limit_service.enforce(request, "auth-email-login-long", RateLimit(20, 3600), identity=payload.email)
     try:
         user = await verify_email_user(payload.email, payload.password)
-    except PermissionError as error:
-        api_error(str(error), 403)
+    except PermissionError:
+        api_error("Invalid email or password.", 401)
     if not user:
         api_error("Invalid email or password.", 401)
     return api_success({"token": user["token"], "user": public_user(user)})

@@ -47,6 +47,24 @@ PUBLIC_VERIFICATION_STATUS_ALIASES = {
 }
 
 
+def mask_email_for_logs(email: str) -> str:
+    normalized = normalize_email(email)
+    if "@" not in normalized:
+        return "<invalid-email>"
+    local, domain = normalized.split("@", 1)
+    if not local:
+        masked_local = "*"
+    elif len(local) == 1:
+        masked_local = f"{local[0]}***"
+    else:
+        masked_local = f"{local[0]}***{local[-1]}"
+    return f"{masked_local}@{domain}"
+
+
+def log_login_diagnostic(email: str, outcome: str) -> None:
+    logger.info("email_login outcome=%s email=%s", outcome, mask_email_for_logs(email))
+
+
 async def find_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
     return await database.find_one("users", {"phone": phone})
 
@@ -302,10 +320,13 @@ async def create_email_user(
 async def verify_email_user(email: str, password: str) -> Optional[Dict[str, Any]]:
     user = await find_user_by_email(email)
     if not user:
+        log_login_diagnostic(email, "user_not_found")
         return None
     if not password_matches(user, password):
+        log_login_diagnostic(email, "password_mismatch")
         return None
     if not user.get("email_verified", False):
+        log_login_diagnostic(email, "email_unverified")
         raise PermissionError("Please verify your email before logging in.")
 
     credential_upgrade = create_password_record(password) if password_needs_upgrade(user) else {}
@@ -314,6 +335,7 @@ async def verify_email_user(email: str, password: str) -> Optional[Dict[str, Any
         user["id"],
         {**credential_upgrade, **create_session_record(), "updated_at": now_iso()},
     )
+    log_login_diagnostic(email, "login_success")
     return updated or user
 
 
@@ -445,18 +467,6 @@ async def ensure_admin_seed_user() -> None:
     existing = await find_user_by_email(email)
 
     if existing:
-        existing_password_matches = password_matches(existing, settings.admin_seed_password)
-        credential_updates: Dict[str, Any] = {}
-        if not existing_password_matches:
-            credential_updates = {
-                **create_password_record(settings.admin_seed_password),
-                "token": "",
-                "token_issued_at": None,
-                "token_expires_at": None,
-                "sessions_revoked_at": timestamp,
-            }
-        elif password_needs_upgrade(existing):
-            credential_updates = create_password_record(settings.admin_seed_password)
         await database.update_one(
             "users",
             existing["id"],
@@ -468,7 +478,6 @@ async def ensure_admin_seed_user() -> None:
                 "email_verified": True,
                 "email_verified_at": existing.get("email_verified_at") or timestamp,
                 "status": "active",
-                **credential_updates,
                 "updated_at": timestamp,
             },
         )
