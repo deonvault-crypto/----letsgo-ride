@@ -1,22 +1,29 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AuthRequiredModal } from "../../../components/auth/AuthRequiredModal";
+import { HailingMapBackdrop } from "../../../components/hailing/HailingMapBackdrop";
+import { RideClassCar } from "../../../components/hailing/RideClassCar";
+import { BottomNav } from "../../../components/layout/BottomNav";
 import { AppNotice } from "../../../components/ui/AppNotice";
-import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
 import { useLocationDraft } from "../../../contexts/LocationDraftContext";
+import { useNotifications } from "../../../contexts/NotificationContext";
 import { useActiveHailingTrip, useHailingConfig } from "../../../hooks/useHailing";
 import { hasSession } from "../../../services/authService";
 import { createHailingQuote, requestHailingTrip } from "../../../services/hailingService";
 import { HailingPlace, HailingQuote, HailingRideClass, HailingRideClassConfig } from "../../../types/hailing.types";
 
-const fallbackRideClasses: HailingRideClassConfig[] = [{ id: "ECONOMY", label: "Economy", enabled: true }];
 const RIDE_BLACK = "#111111";
-const RIDE_BLACK_SOFT = "#F2F2F2";
-const RIDE_BLACK_MID = "#2A2A2A";
+const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
+const fallbackRideClasses: HailingRideClassConfig[] = [
+  { id: "ECONOMY", label: "Economy", enabled: true },
+  { id: "COMFORT", label: "Comfort", enabled: false },
+  { id: "XL", label: "XL", enabled: false },
+];
 
 function toHailingPlace(choice: NonNullable<ReturnType<typeof useLocationDraft>["pickup"]>): HailingPlace {
   return {
@@ -29,6 +36,7 @@ function toHailingPlace(choice: NonNullable<ReturnType<typeof useLocationDraft>[
 
 export default function HailingHomeScreen() {
   const router = useRouter();
+  const { unreadCount } = useNotifications();
   const { pickup, dropoff } = useLocationDraft();
   const { config, loading: configLoading, error: configError, reload: reloadConfig } = useHailingConfig();
   const { trip: activeTrip, reload: reloadActive } = useActiveHailingTrip(false);
@@ -40,8 +48,8 @@ export default function HailingHomeScreen() {
   const [verifyWithPin, setVerifyWithPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const enabledClasses = useMemo(
-    () => (config?.ride_classes || []).filter((option) => option.enabled),
+  const classOptions = useMemo(
+    () => (config?.ride_classes?.length ? config.ride_classes : fallbackRideClasses),
     [config?.ride_classes],
   );
   const routeReady = Boolean(pickup && dropoff);
@@ -56,10 +64,7 @@ export default function HailingHomeScreen() {
   ]);
 
   async function loadQuote(nextClass = selectedClass) {
-    if (!pickup || !dropoff) {
-      setError("Choose pickup and destination first.");
-      return;
-    }
+    if (!pickup || !dropoff) return;
     if (!(await hasSession())) {
       setAuthOpen(true);
       return;
@@ -103,249 +108,246 @@ export default function HailingHomeScreen() {
     }
   }
 
+  function goBack() {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(customer)/home" as never);
+  }
+
+  function chooseClass(option: HailingRideClassConfig) {
+    if (!option.enabled) return;
+    setSelectedClass(option.id);
+    if (quote && routeReady) void loadQuote(option.id);
+    else setQuote(null);
+  }
+
   const disabled = !configLoading && config?.enabled === false;
   const active = activeTrip && !["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"].includes(activeTrip.status);
-  const actionDisabled = disabled || requesting || quoting || !routeReady;
-  const actionLabel = requesting
-    ? "Requesting…"
-    : quoting
-      ? "Calculating fare…"
-      : quote
-        ? `Request ride · $${quote.fare.total_fare.toFixed(2)}`
-        : "See fare";
+  const actionDisabled = disabled || requesting || quoting;
+  const actionLabel = !pickup
+    ? "Choose pickup"
+    : !dropoff
+      ? "Choose destination"
+      : requesting
+        ? "Requesting…"
+        : quoting
+          ? "Calculating fare…"
+          : quote
+            ? `Request ride · $${quote.fare.total_fare.toFixed(2)}`
+            : "See fare";
+
+  function handlePrimaryAction() {
+    if (!pickup) {
+      router.push("/(shared)/location-picker?kind=pickup&flow=hailing" as never);
+      return;
+    }
+    if (!dropoff) {
+      router.push("/(shared)/location-picker?kind=dropoff&flow=hailing" as never);
+      return;
+    }
+    if (quote) void requestRide();
+    else void loadQuote(selectedClass);
+  }
 
   return (
-    <Screen navRole="customer" refreshing={false} onRefresh={() => { reloadConfig(); reloadActive(); }}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>RIDE NOW</Text>
-        <Text style={styles.title}>Where to?</Text>
-        <Text style={styles.body}>Choose pickup, then destination. We’ll show your fare before you request.</Text>
-      </View>
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="dark-content" />
+      <HailingMapBackdrop
+        pickup={pickup ? pickup.location : null}
+        dropoff={dropoff ? dropoff.location : null}
+        route={quote?.route}
+        bottomPadding={routeReady ? 470 : 360}
+      />
 
-      {configError ? <AppNotice message={configError} actionLabel="Retry" onAction={reloadConfig} /> : null}
-      {disabled ? <AppNotice title="Not yet live here" message="Ride Now is currently disabled. Intercity and scheduled rides are still available." /> : null}
-      {error ? <AppNotice message={error} onDismiss={() => setError(null)} /> : null}
-
-      {active ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open active Ride Now trip"
-          onPress={() => router.push(`/(customer)/hail/trip/${activeTrip.id}` as never)}
-          style={({ pressed }) => [styles.activeCard, pressed && styles.pressed]}
-        >
-          <View style={styles.activeIcon}><MaterialCommunityIcons name="car-clock" size={23} color="#FFFFFF" /></View>
-          <View style={styles.flex}>
-            <Text style={styles.activeTitle}>Continue your Ride Now trip</Text>
-            <Text style={styles.activeBody}>{activeTrip.status.replaceAll("_", " ")}</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={22} color="#FFFFFF" />
+      <View pointerEvents="box-none" style={styles.topBar}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={goBack} style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}>
+          <MaterialCommunityIcons name="chevron-left" size={27} color={RIDE_BLACK} />
         </Pressable>
-      ) : null}
-
-      <View style={styles.routeCard}>
-        <LocationRow
-          label="Pickup"
-          value={pickup?.address || "Choose pickup"}
-          tone="pickup"
-          onPress={() => router.push("/(shared)/location-picker?kind=pickup&flow=hailing" as never)}
-        />
-        <View style={styles.routeLineWrap}><View style={styles.routeLine} /></View>
-        <LocationRow
-          label="Destination"
-          value={dropoff?.address || "Where are you going?"}
-          tone="destination"
-          onPress={() => router.push("/(shared)/location-picker?kind=dropoff&flow=hailing" as never)}
-        />
+        <View style={styles.ridePill}>
+          <Text style={styles.ridePillText}>RIDE NOW</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => router.push("/(shared)/notifications" as never)} style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}>
+          <MaterialCommunityIcons name="bell-outline" size={21} color={RIDE_BLACK} />
+          {unreadCount ? <View style={styles.notificationDot} /> : null}
+        </Pressable>
       </View>
 
-      {!routeReady ? (
-        <View style={styles.routeHint}>
-          <MaterialCommunityIcons name="gesture-tap" size={18} color={RIDE_BLACK} />
-          <Text style={styles.routeHintText}>
-            {!pickup ? "Start with your pickup. Destination comes next." : "Pickup set. Now choose your destination."}
-          </Text>
-        </View>
-      ) : null}
-
-      {routeReady ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose your ride</Text>
-          <View style={styles.classGrid}>
-            {(enabledClasses.length ? enabledClasses : fallbackRideClasses).map((option) => {
-              const activeClass = selectedClass === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: activeClass }}
-                  onPress={() => {
-                    setSelectedClass(option.id);
-                    setQuote(null);
-                  }}
-                  style={({ pressed }) => [styles.classPill, activeClass && styles.classPillActive, pressed && styles.pressed]}
-                >
-                  <MaterialCommunityIcons
-                    name={option.id === "XL" ? "van-passenger" : option.id === "COMFORT" ? "car-limousine" : "car"}
-                    size={18}
-                    color={activeClass ? "#FFFFFF" : v2Theme.colors.ink}
-                  />
-                  <Text style={[styles.classText, activeClass && styles.classTextActive]}>{option.label || option.id}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
-
-      {quote ? (
-        <View style={styles.quoteCard}>
-          <View style={styles.quoteTop}>
+      <View style={styles.sheet}>
+        <View style={styles.handle} />
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent}>
+          <View style={styles.sheetHeader}>
             <View>
-              <Text style={styles.quoteLabel}>ESTIMATED CASH FARE</Text>
-              <Text style={styles.quotePrice}>${quote.fare.total_fare.toFixed(2)}</Text>
+              <Text style={styles.eyebrow}>RIDE NOW</Text>
+              <Text style={styles.title}>Where to?</Text>
             </View>
-            <View style={styles.etaPill}>
-              <MaterialCommunityIcons name="map-marker-distance" size={16} color={v2Theme.colors.ink} />
-              <Text style={styles.etaText}>{quote.route.distance_km.toFixed(1)} km</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Refresh Ride Now" onPress={() => { reloadConfig(); reloadActive(); }} style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name="refresh" size={19} color={RIDE_BLACK} />
+            </Pressable>
+          </View>
+
+          {configError ? <AppNotice message={configError} actionLabel="Retry" onAction={reloadConfig} /> : null}
+          {disabled ? <AppNotice title="Not yet live here" message="Ride Now is currently disabled. Intercity and scheduled rides are still available." /> : null}
+          {error ? <AppNotice message={error} onDismiss={() => setError(null)} /> : null}
+
+          {active ? (
+            <Pressable accessibilityRole="button" onPress={() => router.push(`/(customer)/hail/trip/${activeTrip.id}` as never)} style={({ pressed }) => [styles.activeTrip, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name="car-clock" size={20} color="#FFFFFF" />
+              <View style={styles.flex}>
+                <Text style={styles.activeTripTitle}>Continue current ride</Text>
+                <Text style={styles.activeTripBody}>{activeTrip.status.replaceAll("_", " ")}</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
+
+          <View style={styles.routeCard}>
+            <LocationRow label="Pickup" value={pickup?.address || "Choose pickup"} tone="pickup" onPress={() => router.push("/(shared)/location-picker?kind=pickup&flow=hailing" as never)} />
+            <View style={styles.divider} />
+            <LocationRow label="Destination" value={dropoff?.address || "Where are you going?"} tone="destination" onPress={() => router.push("/(shared)/location-picker?kind=dropoff&flow=hailing" as never)} />
+          </View>
+
+          {routeReady ? (
+            <View style={styles.classSection}>
+              <Text style={styles.sectionTitle}>Choose your ride</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classRail}>
+                {classOptions.map((option) => {
+                  const selected = selectedClass === option.id;
+                  const optionDisabled = !option.enabled;
+                  const price = quote?.ride_class === option.id ? `$${quote.fare.total_fare.toFixed(2)}` : optionDisabled ? "Soon" : "Available";
+                  return (
+                    <Pressable
+                      key={option.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected, disabled: optionDisabled }}
+                      disabled={optionDisabled}
+                      onPress={() => chooseClass(option)}
+                      style={({ pressed }) => [styles.classCard, selected && styles.classCardSelected, optionDisabled && styles.classCardDisabled, pressed && styles.pressed]}
+                    >
+                      <RideClassCar rideClass={option.id} disabled={optionDisabled} />
+                      <Text style={[styles.className, selected && styles.classNameSelected]}>{option.label || option.id}</Text>
+                      <Text style={[styles.classPrice, selected && styles.classPriceSelected]}>{price}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
-          </View>
-          <Text style={styles.quoteBody}>About {Math.round(quote.route.duration_minutes)} min · fare calculated from this route</Text>
-          {quote.fare.surge_multiplier > 1 ? <Text style={styles.surge}>High demand fare shown before request</Text> : null}
-        </View>
-      ) : null}
+          ) : null}
 
-      {quote ? (
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityState={{ checked: verifyWithPin }}
-          onPress={() => setVerifyWithPin((current) => !current)}
-          style={({ pressed }) => [styles.pinOption, pressed && styles.pressed]}
-        >
-          <View style={[styles.pinIcon, verifyWithPin && styles.pinIconActive]}>
-            <MaterialCommunityIcons name="shield-key-outline" size={19} color={verifyWithPin ? "#FFFFFF" : RIDE_BLACK} />
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.pinTitle}>Safety PIN</Text>
-            <Text style={styles.pinBody}>Optional. Ask the driver to verify a PIN before starting.</Text>
-          </View>
-          <View style={[styles.pinToggle, verifyWithPin && styles.pinToggleOn]}>
-            <View style={[styles.pinKnob, verifyWithPin && styles.pinKnobOn]} />
-          </View>
-        </Pressable>
-      ) : null}
+          {quote ? (
+            <View style={styles.quoteStrip}>
+              <View style={styles.quoteMetric}>
+                <Text style={styles.quoteMetricLabel}>CASH FARE</Text>
+                <Text style={styles.quoteMetricValue}>${quote.fare.total_fare.toFixed(2)}</Text>
+              </View>
+              <View style={styles.quoteDivider} />
+              <View style={styles.quoteMetric}>
+                <Text style={styles.quoteMetricLabel}>TRIP</Text>
+                <Text style={styles.quoteMeta}>{quote.route.distance_km.toFixed(1)} km · ~{Math.round(quote.route.duration_minutes)} min</Text>
+              </View>
+            </View>
+          ) : null}
 
-      {routeReady ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={quote ? "Request Ride Now" : "Calculate Ride Now fare"}
-          disabled={actionDisabled}
-          onPress={quote ? requestRide : () => loadQuote(selectedClass)}
-          style={({ pressed }) => [styles.primaryAction, actionDisabled && styles.disabled, pressed && !actionDisabled && styles.pressed]}
-        >
-          <Text style={styles.primaryActionText}>{actionLabel}</Text>
-          {!quoting && !requesting ? <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" /> : null}
-        </Pressable>
-      ) : null}
+          {quote ? (
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: verifyWithPin }} onPress={() => setVerifyWithPin((current) => !current)} style={({ pressed }) => [styles.pinOption, pressed && styles.pressed]}>
+              <View style={[styles.pinIcon, verifyWithPin && styles.pinIconActive]}>
+                <MaterialCommunityIcons name="shield-key-outline" size={18} color={verifyWithPin ? "#FFFFFF" : RIDE_BLACK} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.pinTitle}>Safety PIN</Text>
+                <Text style={styles.pinBody}>Optional ride verification before the trip starts.</Text>
+              </View>
+              <View style={[styles.toggle, verifyWithPin && styles.toggleOn]}><View style={[styles.knob, verifyWithPin && styles.knobOn]} /></View>
+            </Pressable>
+          ) : null}
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.push("/(customer)/search" as never)}
-        style={({ pressed }) => [styles.intercityLink, pressed && styles.pressed]}
-      >
-        <View style={styles.intercityIcon}><MaterialCommunityIcons name="road-variant" size={20} color={v2Theme.colors.inkSecondary} /></View>
-        <View style={styles.flex}>
-          <Text style={styles.intercityTitle}>Intercity / scheduled rides</Text>
-          <Text style={styles.intercityBody}>Search posted trips and reserve a seat.</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
-      </Pressable>
+          <Pressable accessibilityRole="button" disabled={actionDisabled} onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, actionDisabled && styles.disabled, pressed && !actionDisabled && styles.pressed]}>
+            <Text style={styles.primaryText}>{actionLabel}</Text>
+            {quoting || requesting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />}
+          </Pressable>
 
+          <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/search" as never)} style={({ pressed }) => [styles.intercityLink, pressed && styles.pressed]}>
+            <MaterialCommunityIcons name="road-variant" size={18} color={v2Theme.colors.inkSecondary} />
+            <Text style={styles.intercityText}>Intercity / scheduled rides</Text>
+            <MaterialCommunityIcons name="chevron-right" size={19} color={v2Theme.colors.inkTertiary} />
+          </Pressable>
+        </ScrollView>
+      </View>
+
+      <BottomNav role="customer" />
       <AuthRequiredModal visible={authOpen} onClose={() => setAuthOpen(false)} returnTo="/(customer)/hail" />
-    </Screen>
+    </SafeAreaView>
   );
 }
 
-function LocationRow({
-  label,
-  value,
-  tone,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  tone: "pickup" | "destination";
-  onPress: () => void;
-}) {
+function LocationRow({ label, value, tone, onPress }: { label: string; value: string; tone: "pickup" | "destination"; onPress: () => void }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Choose ${label.toLowerCase()}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.locationRow, pressed && styles.pressed]}
-    >
+    <Pressable accessibilityRole="button" accessibilityLabel={`Choose ${label.toLowerCase()}`} onPress={onPress} style={({ pressed }) => [styles.locationRow, pressed && styles.pressed]}>
       <View style={[styles.locationMarker, tone === "destination" && styles.locationMarkerDestination]}>
         {tone === "pickup" ? <View style={styles.locationMarkerCore} /> : null}
       </View>
       <View style={styles.flex}>
         <Text style={styles.locationLabel}>{label}</Text>
-        <Text numberOfLines={2} style={styles.locationValue}>{value}</Text>
+        <Text numberOfLines={1} style={styles.locationValue}>{value}</Text>
       </View>
-      <MaterialCommunityIcons name="chevron-right" size={21} color={v2Theme.colors.inkTertiary} />
+      <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { gap: 4, paddingTop: 1 },
-  eyebrow: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
-  title: { color: v2Theme.colors.ink, fontSize: 34, lineHeight: 38, fontWeight: "900", letterSpacing: -1.15 },
-  body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19, maxWidth: 335 },
-  activeCard: { borderRadius: 22, backgroundColor: RIDE_BLACK, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
-  activeIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: RIDE_BLACK_MID, alignItems: "center", justifyContent: "center" },
-  activeTitle: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
-  activeBody: { color: "rgba(255,255,255,0.66)", fontSize: 10, marginTop: 2 },
-  routeCard: { borderRadius: 24, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden" },
-  locationRow: { minHeight: 70, paddingHorizontal: 15, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  root: { flex: 1, backgroundColor: "#ECECE8" },
+  topBar: { position: "absolute", top: 10, left: 16, right: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  topButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.96)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.10)", alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOpacity: 0.10, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 5 },
+  ridePill: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.94)", alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)" },
+  ridePillText: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", letterSpacing: 1.25 },
+  notificationDot: { position: "absolute", top: 7, right: 8, width: 7, height: 7, borderRadius: 4, backgroundColor: "#D84848", borderWidth: 1, borderColor: "#FFFFFF" },
+  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, maxHeight: "57%", minHeight: 248, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12, overflow: "hidden" },
+  handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
+  sheetContent: { paddingHorizontal: 14, paddingTop: 9, paddingBottom: 16, gap: 11 },
+  sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  eyebrow: { color: RIDE_BLACK, fontSize: 9, fontWeight: "900", letterSpacing: 1.3 },
+  title: { color: v2Theme.colors.ink, fontSize: 27, lineHeight: 31, fontWeight: "900", letterSpacing: -0.8 },
+  refreshButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  activeTrip: { minHeight: 48, borderRadius: 17, backgroundColor: RIDE_BLACK, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 9 },
+  activeTripTitle: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+  activeTripBody: { color: "rgba(255,255,255,0.62)", fontSize: 9, marginTop: 1 },
+  routeCard: { borderRadius: 19, backgroundColor: "#F7F7F5", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden" },
+  locationRow: { minHeight: 55, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 10 },
   locationMarker: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: RIDE_BLACK, alignItems: "center", justifyContent: "center" },
-  locationMarkerDestination: { borderRadius: 3, borderColor: RIDE_BLACK, backgroundColor: RIDE_BLACK },
+  locationMarkerDestination: { borderRadius: 3, backgroundColor: RIDE_BLACK },
   locationMarkerCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: RIDE_BLACK },
-  locationLabel: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
-  locationValue: { color: v2Theme.colors.ink, fontSize: 15, lineHeight: 19, fontWeight: "800", marginTop: 2 },
-  routeLineWrap: { height: 1, paddingLeft: 21, backgroundColor: v2Theme.colors.line },
-  routeLine: { position: "absolute", left: 21, top: -16, width: 1, height: 33, backgroundColor: v2Theme.colors.lineStrong },
-  routeHint: { minHeight: 42, borderRadius: 16, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: RIDE_BLACK_SOFT },
-  routeHintText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16, fontWeight: "700" },
-  section: { gap: 9 },
-  sectionTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900", letterSpacing: -0.35 },
-  classGrid: { flexDirection: "row", gap: 7, flexWrap: "wrap" },
-  classPill: { minHeight: 46, borderRadius: 16, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surface, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
-  classPillActive: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
-  classText: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "900" },
-  classTextActive: { color: "#FFFFFF" },
-  quoteCard: { borderRadius: 22, backgroundColor: RIDE_BLACK_SOFT, padding: 16, gap: 5 },
-  quoteTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
-  quoteLabel: { color: RIDE_BLACK, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  quotePrice: { color: v2Theme.colors.ink, fontSize: 32, lineHeight: 36, fontWeight: "900", letterSpacing: -1, marginTop: 2 },
-  quoteBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "700" },
-  etaPill: { minHeight: 34, paddingHorizontal: 10, borderRadius: 17, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.86)" },
-  etaText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
-  surge: { color: v2Theme.colors.warning, fontSize: 10, fontWeight: "900", marginTop: 2 },
-  pinOption: { minHeight: 66, borderRadius: 20, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  pinIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: RIDE_BLACK_SOFT, alignItems: "center", justifyContent: "center" },
+  locationLabel: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 0.7, textTransform: "uppercase" },
+  locationValue: { color: v2Theme.colors.ink, fontSize: 13, lineHeight: 17, fontWeight: "800", marginTop: 2 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 36, backgroundColor: v2Theme.colors.lineStrong },
+  classSection: { gap: 7 },
+  sectionTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
+  classRail: { gap: 8, paddingRight: 4 },
+  classCard: { width: 108, minHeight: 100, borderRadius: 18, backgroundColor: "#F6F6F4", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 8, alignItems: "center", justifyContent: "center" },
+  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
+  classCardDisabled: { opacity: 0.72 },
+  className: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900", marginTop: -1 },
+  classNameSelected: { color: "#FFFFFF" },
+  classPrice: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "800", marginTop: 2 },
+  classPriceSelected: { color: "rgba(255,255,255,0.68)" },
+  quoteStrip: { minHeight: 58, borderRadius: 17, backgroundColor: "#F2F2F0", paddingHorizontal: 12, flexDirection: "row", alignItems: "center" },
+  quoteMetric: { flex: 1, gap: 2 },
+  quoteMetricLabel: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  quoteMetricValue: { color: RIDE_BLACK, fontSize: 21, fontWeight: "900", letterSpacing: -0.5 },
+  quoteMeta: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
+  quoteDivider: { width: 1, height: 34, marginHorizontal: 10, backgroundColor: v2Theme.colors.lineStrong },
+  pinOption: { minHeight: 54, borderRadius: 17, backgroundColor: "#F7F7F5", paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9 },
+  pinIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#ECEDEB", alignItems: "center", justifyContent: "center" },
   pinIconActive: { backgroundColor: RIDE_BLACK },
-  pinToggle: { width: 42, height: 24, borderRadius: 12, backgroundColor: v2Theme.colors.lineStrong, justifyContent: "center", paddingHorizontal: 3 },
-  pinToggleOn: { backgroundColor: RIDE_BLACK },
-  pinKnob: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#FFFFFF" },
-  pinKnobOn: { alignSelf: "flex-end" },
-  pinTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  pinBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14, marginTop: 2 },
-  primaryAction: { minHeight: 56, borderRadius: 18, paddingHorizontal: 18, backgroundColor: RIDE_BLACK, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  primaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
-  intercityLink: { minHeight: 68, borderRadius: 20, backgroundColor: v2Theme.colors.surfaceMuted, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  intercityIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
-  intercityTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
-  intercityBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 },
+  pinTitle: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
+  pinBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 13, marginTop: 1 },
+  toggle: { width: 39, height: 23, borderRadius: 12, backgroundColor: "#D8DAD7", padding: 3 },
+  toggleOn: { backgroundColor: RIDE_BLACK },
+  knob: { width: 17, height: 17, borderRadius: 9, backgroundColor: "#FFFFFF" },
+  knobOn: { alignSelf: "flex-end" },
+  primary: { minHeight: 52, borderRadius: 18, backgroundColor: RIDE_BLACK, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  primaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+  intercityLink: { minHeight: 42, borderRadius: 15, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#F8F8F6" },
+  intercityText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
   flex: { flex: 1 },
-  disabled: { opacity: 0.48 },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.993 }] },
+  disabled: { opacity: 0.45 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
 });
