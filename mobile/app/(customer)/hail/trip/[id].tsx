@@ -1,12 +1,19 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppNotice } from "../../../../components/ui/AppNotice";
+import { Avatar } from "../../../../components/ui/Avatar";
 import { Screen } from "../../../../components/ui/Screen";
 import { v2Theme } from "../../../../constants/v2Theme";
-import { cancelHailingTrip, confirmHailingBoarding, getHailingTrip, openHailingConversation, sendHailingSafetyEvent } from "../../../../services/hailingService";
+import {
+  cancelHailingTrip,
+  confirmHailingBoarding,
+  getHailingTrip,
+  openHailingConversation,
+  regenerateHailingTripPin,
+  sendHailingSafetyEvent,
+} from "../../../../services/hailingService";
 import { HailingTrip } from "../../../../types/hailing.types";
 
 const terminal = new Set(["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"]);
@@ -16,6 +23,7 @@ export default function CustomerHailingTripScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
   const tripId = String(params.id || "");
   const [trip, setTrip] = useState<HailingTrip | null>(null);
+  const [tripPin, setTripPin] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -27,6 +35,9 @@ export default function CustomerHailingTripScreen() {
       setRefreshing(true);
       const next = await getHailingTrip(tripId);
       setTrip(next);
+      if (!next.verify_ride_with_pin || next.trip_pin_verified_at || terminal.has(next.status) || next.status === "IN_PROGRESS") {
+        setTripPin(null);
+      }
       setNotice(null);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to refresh this trip.");
@@ -49,6 +60,7 @@ export default function CustomerHailingTripScreen() {
       setBusy(true);
       const next = await cancelHailingTrip(trip.id, "Passenger cancelled");
       setTrip(next);
+      setTripPin(null);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to cancel this trip.");
     } finally {
@@ -75,9 +87,26 @@ export default function CustomerHailingTripScreen() {
       setBusy(true);
       const next = await confirmHailingBoarding(trip.id);
       setTrip(next);
-      setNotice(next.verify_ride_with_pin ? "Share the PIN with your driver when asked." : "Ready to go. Waiting for your driver to start the trip.");
+      if (next.trip_pin) setTripPin(next.trip_pin);
+      setNotice(next.verify_ride_with_pin ? "Use this one-time PIN to verify the ride with your driver." : "Ready to go. Waiting for your driver to start the trip.");
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to confirm boarding.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function regeneratePin() {
+    if (!trip) return;
+    try {
+      setBusy(true);
+      const next = await regenerateHailingTripPin(trip.id);
+      setTrip(next);
+      if (!next.trip_pin) throw new Error("A new PIN could not be generated. Please try again.");
+      setTripPin(next.trip_pin);
+      setNotice("A new one-time PIN was generated. Your previous PIN no longer works.");
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Unable to generate a new PIN.");
     } finally {
       setBusy(false);
     }
@@ -96,6 +125,20 @@ export default function CustomerHailingTripScreen() {
     }
   }
 
+  const awaitingOptionalPin = Boolean(
+    trip?.status === "PASSENGER_CONFIRMED_BOARDING"
+      && trip.verify_ride_with_pin
+      && !trip.trip_pin_verified_at,
+  );
+  const vehicleName = [trip?.vehicle?.make, trip?.vehicle?.model].filter(Boolean).join(" ");
+  const vehicleMeta = [trip?.vehicle?.color, trip?.vehicle?.plate_number || trip?.vehicle?.plate].filter(Boolean).join(" · ");
+  const vehicleDescription = [vehicleName || trip?.vehicle?.vehicle, vehicleMeta].filter(Boolean).join(" · ") || "Vehicle details appear after matching";
+  const tripDurationMinutes = trip
+    ? trip.route.duration_minutes
+      ?? trip.route.estimated_duration_minutes
+      ?? (trip.route.duration_seconds ? trip.route.duration_seconds / 60 : undefined)
+    : undefined;
+
   return (
     <Screen navRole="customer" refreshing={refreshing} onRefresh={load}>
       <View style={styles.header}>
@@ -109,19 +152,30 @@ export default function CustomerHailingTripScreen() {
       {trip ? (
         <>
           <View style={styles.driverCard}>
-            <View style={styles.driverIcon}><MaterialCommunityIcons name="account-tie-hat" size={28} color={v2Theme.colors.ink} /></View>
+            <Avatar name={trip.driver?.name || "Driver"} imageUri={trip.driver?.profile_photo_url} size={54} />
             <View style={styles.flex}>
               <Text style={styles.cardLabel}>Driver</Text>
               <Text style={styles.cardTitle}>{trip.driver?.name || "Driver being assigned"}</Text>
-              <Text style={styles.cardBody}>{trip.vehicle?.vehicle || trip.vehicle?.plate || "Vehicle details appear after matching"}</Text>
+              <Text style={styles.cardBody}>{vehicleDescription}</Text>
+              {trip.driver?.rating ? <Text style={styles.driverRating}>★ {trip.driver.rating.toFixed(1)}</Text> : null}
             </View>
           </View>
 
-          {trip.trip_pin ? (
+          {awaitingOptionalPin && tripPin ? (
             <View style={styles.pinCard}>
-              <Text style={styles.cardLabel}>Trip PIN</Text>
-              <Text accessibilityLabel={`Trip PIN ${trip.trip_pin}`} style={styles.pin}>{trip.trip_pin}</Text>
-              <Text style={styles.cardBody}>Share this with your assigned driver before the trip starts.</Text>
+              <Text style={styles.pinLabel}>Ride verification PIN</Text>
+              <Text accessibilityLabel={`Trip PIN ${tripPin}`} style={styles.pin}>{tripPin}</Text>
+              <Text style={styles.pinBody}>Tell this PIN only to your assigned driver. It is not stored as readable text on the server.</Text>
+            </View>
+          ) : null}
+
+          {awaitingOptionalPin && !tripPin ? (
+            <View style={styles.readyCard}>
+              <Text style={styles.cardLabel}>Verification PIN needed</Text>
+              <Text style={styles.cardBody}>For security, the PIN is shown only when it is generated. If you reopened the app, generate a new PIN and the old one will stop working.</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Generate new ride verification PIN" disabled={busy} onPress={regeneratePin} style={({ pressed }) => [styles.secondary, busy && styles.disabled, pressed && styles.pressed]}>
+                <Text style={styles.secondaryText}>Generate new PIN</Text>
+              </Pressable>
             </View>
           ) : null}
 
@@ -131,7 +185,7 @@ export default function CustomerHailingTripScreen() {
             </Pressable>
           ) : null}
 
-          {trip.status === "PASSENGER_CONFIRMED_BOARDING" && !trip.trip_pin ? (
+          {trip.status === "PASSENGER_CONFIRMED_BOARDING" && (!trip.verify_ride_with_pin || trip.trip_pin_verified_at) ? (
             <View style={styles.readyCard}>
               <Text style={styles.cardLabel}>Ready to go</Text>
               <Text style={styles.cardBody}>Waiting for your driver to start the trip.</Text>
@@ -141,7 +195,11 @@ export default function CustomerHailingTripScreen() {
           <View style={styles.fareCard}>
             <Text style={styles.cardLabel}>Cash fare</Text>
             <Text style={styles.price}>${trip.fare.total_fare.toFixed(2)}</Text>
-            <Text style={styles.cardBody}>{trip.route.distance_km.toFixed(1)} km · about {Math.round(trip.route.duration_minutes)} min · {trip.ride_class}</Text>
+            <Text style={styles.cardBody}>
+              {trip.route.distance_km.toFixed(1)} km
+              {tripDurationMinutes ? ` · about ${Math.round(tripDurationMinutes)} min` : ""}
+              {` · ${trip.ride_class}`}
+            </Text>
           </View>
 
           <View style={styles.actions}>
@@ -178,10 +236,12 @@ const styles = StyleSheet.create({
   title: { color: v2Theme.colors.ink, fontSize: 31, lineHeight: 36, fontWeight: "900", letterSpacing: -1 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19 },
   driverCard: { minHeight: 100, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 15, flexDirection: "row", alignItems: "center", gap: 13 },
-  driverIcon: { width: 54, height: 54, borderRadius: 18, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  driverRating: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", marginTop: 3 },
   pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 18, gap: 6 },
+  pinLabel: { color: "rgba(255,255,255,0.65)", fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
+  pinBody: { color: "rgba(255,255,255,0.72)", fontSize: 12, lineHeight: 18 },
   fareCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 18, gap: 5 },
-  readyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 16, gap: 4 },
+  readyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 16, gap: 10 },
   cardLabel: { color: v2Theme.colors.inkTertiary, fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
   cardTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" },
   cardBody: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },

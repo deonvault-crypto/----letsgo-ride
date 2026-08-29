@@ -2,6 +2,7 @@ import {
   createHailingQuote,
   getActiveHailingTrip,
   getHailingConfig,
+  regenerateHailingTripPin,
   requestHailingTrip,
 } from "../services/hailingService";
 
@@ -58,5 +59,16 @@ describe("hailing service", () => {
     await getActiveHailingTrip();
 
     expect(mockRequestData).toHaveBeenCalledWith({ method: "GET", url: "/hailing/trips/active" });
+  });
+
+  it("regenerates an optional hailing PIN through the passenger-only endpoint", async () => {
+    mockRequestData.mockResolvedValueOnce({ id: "trip-1", trip_pin: "123456" });
+
+    await regenerateHailingTripPin("trip-1");
+
+    expect(mockRequestData).toHaveBeenCalledWith({
+      method: "POST",
+      url: "/hailing/trips/trip-1/regenerate-pin",
+    });
   });
 });

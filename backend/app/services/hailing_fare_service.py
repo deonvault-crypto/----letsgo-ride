@@ -24,6 +24,23 @@ def quote_expired(quote: Dict[str, Any]) -> bool:
         return True
 
 
+def public_route(route: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize provider-internal routing fields into the stable mobile API contract."""
+    distance_km = route.get("distance_km")
+    if distance_km is None and route.get("distance_meters") is not None:
+        distance_km = float(route["distance_meters"]) / 1000.0
+    duration_minutes = route.get("duration_minutes")
+    if duration_minutes is None:
+        duration_minutes = route.get("estimated_duration_minutes")
+    if duration_minutes is None and route.get("duration_seconds") is not None:
+        duration_minutes = float(route["duration_seconds"]) / 60.0
+    return {
+        "distance_km": round(float(distance_km or 0), 3),
+        "duration_minutes": max(1, int(round(float(duration_minutes or 1)))),
+        "polyline": route.get("polyline") or route.get("encoded_polyline"),
+    }
+
+
 def calculate_fare(
     city: Dict[str, Any],
     ride_class: str,
@@ -89,11 +106,12 @@ async def create_quote(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[st
     except RoutingError as exc:
         raise RuntimeError("Route and fare are temporarily unavailable.") from exc
 
+    normalized_route = public_route(route)
     fare = calculate_fare(
         city,
         ride_class,
-        float(route["distance_km"]),
-        float(route["estimated_duration_minutes"]),
+        float(normalized_route["distance_km"]),
+        float(normalized_route["duration_minutes"]),
     )
     timestamp = now_iso()
     quote = {
@@ -102,6 +120,7 @@ async def create_quote(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[st
         "city_id": city["id"],
         "pickup": {**pickup, "service_area_id": city["id"]},
         "dropoff": {**dropoff, "service_area_id": dropoff_resolved.get("service_area", {}).get("id")},
+        # Keep the original provider snapshot internally for auditability/future route rendering.
         "route": route,
         "fare": fare,
         "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=QUOTE_TTL_SECONDS)).isoformat(),
@@ -113,14 +132,19 @@ async def create_quote(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[st
 
 
 def public_quote(quote: Dict[str, Any]) -> Dict[str, Any]:
-    fare = quote.get("fare") or {}
+    fare = dict(quote.get("fare") or {})
+    normalized_route = public_route(quote.get("route") or {})
+    # Nested fare/route are the canonical V3 mobile contract. Selected top-level fare
+    # fields remain additive for backward compatibility with any early staging client.
     return {
         "quote_id": quote.get("id"),
         "city_id": quote.get("city_id"),
         "pickup": quote.get("pickup"),
         "dropoff": quote.get("dropoff"),
-        "route": quote.get("route"),
+        "route": normalized_route,
+        "fare": fare,
+        "currency": fare.get("currency") or "USD",
+        "ride_class": fare.get("ride_class"),
         "expires_at": quote.get("expires_at"),
         **fare,
     }
-

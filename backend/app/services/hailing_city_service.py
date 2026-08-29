@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.config import get_settings
 from app.database import database
@@ -190,9 +190,6 @@ async def seed_zimbabwe_service_areas() -> None:
 
 async def list_service_areas(include_disabled: bool = False) -> List[Dict[str, Any]]:
     cities = await database.find_many("hailing_cities")
-    if not cities:
-        await seed_zimbabwe_service_areas()
-        cities = await database.find_many("hailing_cities")
     if not include_disabled:
         cities = [city for city in cities if city.get("enabled")]
     return sorted(cities, key=lambda item: item.get("name") or "")
@@ -228,50 +225,115 @@ async def resolve_service_area(latitude: float, longitude: float) -> Dict[str, A
     }
 
 
-async def upsert_city(payload: Dict[str, Any], actor: Dict[str, Any]) -> Dict[str, Any]:
-    pricing = {key: dict(value) for key, value in DEFAULT_CITY_PRICING.items()}
-    pricing["ECONOMY"]["enabled"] = bool(payload.pop("economy_enabled", True))
-    pricing["COMFORT"]["enabled"] = bool(payload.pop("comfort_enabled", False))
-    pricing["XL"]["enabled"] = bool(payload.pop("xl_enabled", False))
-    pricing["ECONOMY"]["surge_multiplier"] = float(payload.pop("economy_surge_multiplier", 1.0))
-    pricing["COMFORT"]["surge_multiplier"] = float(payload.pop("comfort_surge_multiplier", 1.0))
-    pricing["XL"]["surge_multiplier"] = float(payload.pop("xl_surge_multiplier", 1.0))
-    initial_radius = float(payload.pop("initial_radius_km", DEFAULT_DISPATCH_SETTINGS["initial_radius_km"]))
-    maximum_radius = float(payload.pop("maximum_radius_km", DEFAULT_DISPATCH_SETTINGS["maximum_radius_km"]))
-    radius_steps = [radius for radius in DEFAULT_DISPATCH_SETTINGS["radius_steps_km"] if float(radius) <= maximum_radius]
+def _pricing_from_update(data: Dict[str, Any], ride_class: str, existing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    prefix = ride_class.lower()
+    pricing = dict(DEFAULT_CITY_PRICING[ride_class])
+    pricing.update((existing or {}).get("pricing", {}).get(ride_class, {}))
+    fields = (
+        "enabled",
+        "base_fare",
+        "per_km",
+        "per_minute",
+        "minimum_fare",
+        "booking_fee",
+        "cancellation_fee",
+        "platform_commission_percent",
+        "maximum_pickup_radius_km",
+        "surge_multiplier",
+    )
+    for field in fields:
+        key = f"{prefix}_{field}"
+        if key in data:
+            value = data.pop(key)
+            pricing[field] = bool(value) if field == "enabled" else float(value)
+    return pricing
+
+
+def _dispatch_from_update(data: Dict[str, Any], existing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    dispatch = dict(DEFAULT_DISPATCH_SETTINGS)
+    dispatch.update((existing or {}).get("dispatch") or {})
+    numeric_fields = (
+        "initial_radius_km",
+        "maximum_radius_km",
+        "offer_timeout_seconds",
+        "search_timeout_seconds",
+        "driver_stale_seconds",
+        "dispatch_sweeper_interval_seconds",
+        "boarding_start_radius_meters",
+    )
+    for field in numeric_fields:
+        if field in data:
+            dispatch[field] = data.pop(field)
+    if "radius_steps_km" in data:
+        dispatch["radius_steps_km"] = [float(radius) for radius in data.pop("radius_steps_km")]
+
+    initial_radius = float(dispatch["initial_radius_km"])
+    maximum_radius = float(dispatch["maximum_radius_km"])
+    if initial_radius > maximum_radius:
+        raise ValueError("Initial dispatch radius cannot exceed maximum dispatch radius.")
+    requested_steps = [float(radius) for radius in dispatch.get("radius_steps_km") or []]
+    radius_steps = sorted({radius for radius in requested_steps if 0 < radius <= maximum_radius})
     if initial_radius not in radius_steps:
-        radius_steps = sorted({initial_radius, *radius_steps})
-    dispatch = {
-        **DEFAULT_DISPATCH_SETTINGS,
-        "initial_radius_km": initial_radius,
-        "radius_steps_km": radius_steps,
-        "maximum_radius_km": maximum_radius,
-        "offer_timeout_seconds": int(payload.pop("offer_timeout_seconds", DEFAULT_DISPATCH_SETTINGS["offer_timeout_seconds"])),
-        "search_timeout_seconds": int(payload.pop("search_timeout_seconds", DEFAULT_DISPATCH_SETTINGS["search_timeout_seconds"])),
-        "driver_stale_seconds": int(payload.pop("driver_stale_seconds", DEFAULT_DISPATCH_SETTINGS["driver_stale_seconds"])),
-        "dispatch_sweeper_interval_seconds": int(payload.pop("dispatch_sweeper_interval_seconds", DEFAULT_DISPATCH_SETTINGS["dispatch_sweeper_interval_seconds"])),
-        "boarding_start_radius_meters": int(payload.pop("boarding_start_radius_meters", DEFAULT_DISPATCH_SETTINGS["boarding_start_radius_meters"])),
-    }
-    dispatch["expansion_radii_km"] = list(dispatch["radius_steps_km"])
+        radius_steps.append(initial_radius)
+    if maximum_radius not in radius_steps:
+        radius_steps.append(maximum_radius)
+    radius_steps.sort()
+    dispatch["initial_radius_km"] = initial_radius
+    dispatch["maximum_radius_km"] = maximum_radius
+    dispatch["radius_steps_km"] = radius_steps
+    dispatch["offer_timeout_seconds"] = int(dispatch["offer_timeout_seconds"])
+    dispatch["search_timeout_seconds"] = int(dispatch["search_timeout_seconds"])
+    dispatch["driver_stale_seconds"] = int(dispatch["driver_stale_seconds"])
+    dispatch["dispatch_sweeper_interval_seconds"] = int(dispatch["dispatch_sweeper_interval_seconds"])
+    dispatch["boarding_start_radius_meters"] = int(dispatch["boarding_start_radius_meters"])
+    dispatch["expansion_radii_km"] = list(radius_steps)
     dispatch["request_timeout_seconds"] = dispatch["search_timeout_seconds"]
     dispatch["driver_stale_after_seconds"] = dispatch["driver_stale_seconds"]
+    return dispatch
+
+
+async def upsert_city(payload: Dict[str, Any], actor: Dict[str, Any]) -> Dict[str, Any]:
+    _ = actor
+    data = dict(payload)
+    slug = str(data["slug"])
+    existing = await database.find_one("hailing_cities", {"slug": slug})
+
+    pricing = {
+        ride_class: _pricing_from_update(data, ride_class, existing)
+        for ride_class in ("ECONOMY", "COMFORT", "XL")
+    }
+    dispatch = _dispatch_from_update(data, existing)
+
+    latitude = float(data.pop("latitude"))
+    longitude = float(data.pop("longitude"))
     timestamp = now_iso()
+    base = dict(existing or {})
+    if not existing:
+        base.update(
+            {
+                "id": f"zw-{slug}",
+                "enabled": True,
+                "ride_hailing_enabled": True,
+                "pickup_enabled": True,
+                "dropoff_enabled": True,
+                "created_at": timestamp,
+            }
+        )
     city = {
-        "id": f"zw-{payload['slug']}",
+        **base,
+        "id": existing.get("id") if existing else f"zw-{slug}",
         "country": "Zimbabwe",
         "country_code": "ZW",
-        "center": point(payload.pop("latitude"), payload.pop("longitude")),
+        "center": point(latitude, longitude),
+        "location": geojson_point(latitude, longitude),
         "timezone": "Africa/Harare",
         "currency": "USD",
         "pricing": pricing,
         "dispatch": dispatch,
-        **payload,
+        **data,
         "updated_at": timestamp,
     }
-    city["location"] = geojson_point(city["center"]["latitude"], city["center"]["longitude"])
-    existing = await database.find_one("hailing_cities", {"slug": city["slug"]})
     if existing:
         updated = await database.update_one("hailing_cities", existing["id"], city)
-        return updated or {**existing, **city}
-    city["created_at"] = timestamp
+        return updated or city
     return await database.insert_one("hailing_cities", city)

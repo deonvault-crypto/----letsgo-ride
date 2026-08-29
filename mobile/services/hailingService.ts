@@ -62,7 +62,7 @@ export function goHailingDriverOnline(data: { city_id: string; ride_class: Haili
 }
 
 export function goHailingDriverOffline() {
-  return requestData<{ online: boolean }>({ method: "POST", url: "/hailing/driver/offline" });
+  return requestData<{ status: "offline" }>({ method: "POST", url: "/hailing/driver/offline" });
 }
 
 export function updateHailingDriverPresence(data: { location: HailingCoordinate; heading?: number | null; speed?: number | null; accuracy?: number | null }) {
@@ -73,8 +73,15 @@ export function updateHailingDriverPresence(data: { location: HailingCoordinate;
   });
 }
 
-export function getHailingDriverOffer() {
-  return requestData<HailingDispatchOffer | null>({ method: "GET", url: "/hailing/driver/offer" });
+type DriverOfferEnvelope = {
+  offer: Omit<HailingDispatchOffer, "trip">;
+  trip: HailingTrip;
+};
+
+export async function getHailingDriverOffer(): Promise<HailingDispatchOffer | null> {
+  const envelope = await requestData<DriverOfferEnvelope | null>({ method: "GET", url: "/hailing/driver/offer" });
+  if (!envelope) return null;
+  return { ...envelope.offer, trip: envelope.trip };
 }
 
 export function acceptHailingOffer(id: string) {
@@ -103,6 +110,10 @@ export function verifyHailingTripPin(id: string, pin: string) {
 
 export function confirmHailingBoarding(id: string) {
   return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/confirm-boarding` });
+}
+
+export function regenerateHailingTripPin(id: string) {
+  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/regenerate-pin` });
 }
 
 export function startHailingTrip(id: string) {

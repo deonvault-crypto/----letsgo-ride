@@ -45,14 +45,28 @@ export default function AdminHailingScreen() {
 
   useScreenReconciliation(load);
 
+  function replaceDriver(updated: AdminHailingDriver) {
+    setDrivers((current) => current.map((item) => item.id === updated.id ? updated : item));
+  }
+
   async function toggleDriver(driver: AdminHailingDriver) {
+    const enabling = !driver.hailing_enabled;
+    if (enabling && driver.approved_hailing_city_ids.length === 0) {
+      setError("Choose at least one Ride Now city for this driver before enabling hailing.");
+      return;
+    }
+    if (enabling && driver.approved_hailing_classes.length === 0) {
+      setError("Choose at least one Ride Now class for this driver before enabling hailing.");
+      return;
+    }
     try {
       const updated = await updateAdminHailingDriverEligibility(driver.id, {
-        hailing_enabled: !driver.hailing_enabled,
+        hailing_enabled: enabling,
         approved_hailing_city_ids: driver.approved_hailing_city_ids,
-        approved_hailing_classes: driver.approved_hailing_classes.length ? driver.approved_hailing_classes : ["ECONOMY"],
+        approved_hailing_classes: driver.approved_hailing_classes,
       });
-      setDrivers((current) => current.map((item) => item.id === updated.id ? updated : item));
+      replaceDriver(updated);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update driver eligibility.");
     }
@@ -63,15 +77,42 @@ export default function AdminHailingScreen() {
     if (current.has(rideClass)) current.delete(rideClass);
     else current.add(rideClass);
     const classes = Array.from(current) as HailingRideClass[];
+    if (driver.hailing_enabled && classes.length === 0) {
+      setError("Disable Ride Now for this driver before removing their last approved class.");
+      return;
+    }
     try {
       const updated = await updateAdminHailingDriverEligibility(driver.id, {
         hailing_enabled: driver.hailing_enabled,
         approved_hailing_city_ids: driver.approved_hailing_city_ids,
-        approved_hailing_classes: classes.length ? classes : ["ECONOMY"],
+        approved_hailing_classes: classes,
       });
-      setDrivers((rows) => rows.map((item) => item.id === updated.id ? updated : item));
+      replaceDriver(updated);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update ride classes.");
+    }
+  }
+
+  async function toggleCity(driver: AdminHailingDriver, cityId: string) {
+    const current = new Set(driver.approved_hailing_city_ids);
+    if (current.has(cityId)) current.delete(cityId);
+    else current.add(cityId);
+    const approvedCities = Array.from(current);
+    if (driver.hailing_enabled && approvedCities.length === 0) {
+      setError("Disable Ride Now for this driver before removing their last approved city.");
+      return;
+    }
+    try {
+      const updated = await updateAdminHailingDriverEligibility(driver.id, {
+        hailing_enabled: driver.hailing_enabled,
+        approved_hailing_city_ids: approvedCities,
+        approved_hailing_classes: driver.approved_hailing_classes,
+      });
+      replaceDriver(updated);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update approved cities.");
     }
   }
 
@@ -84,17 +125,17 @@ export default function AdminHailingScreen() {
         <Text style={styles.title}>Ride Now control</Text>
         <Text style={styles.body}>Manage hailing cities, dispatch settings, driver eligibility and active trips.</Text>
       </View>
-      {error ? <AppNotice message={error} actionLabel="Retry" onAction={load} /> : null}
+      {error ? <AppNotice message={error} actionLabel="Refresh" onAction={load} /> : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Service areas</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
-          {cities.slice(0, 12).map((city) => (
+          {cities.map((city) => (
             <View key={city.id} style={styles.cityCard}>
               <Text style={styles.cityName}>{city.name}</Text>
               <Text style={styles.meta}>{city.ride_hailing_enabled ? "Ride Now enabled" : "Disabled"}</Text>
               <Text style={styles.meta}>{city.ride_classes.map((item) => typeof item === "string" ? item : item.id).join(" · ") || "No classes"}</Text>
-              <Text style={styles.micro}>Radius {city.service_radius_km} km</Text>
+              <Text style={styles.micro}>Service radius {city.service_radius_km} km</Text>
             </View>
           ))}
         </ScrollView>
@@ -116,23 +157,42 @@ export default function AdminHailingScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Drivers</Text>
-        {drivers.slice(0, 8).map((driver) => (
+        <Text style={styles.body}>City and class approval is explicit. A verified driver cannot go online for Ride Now until you assign both and enable them.</Text>
+        {drivers.slice(0, 12).map((driver) => (
           <View key={driver.id} style={styles.driverCard}>
             <View style={styles.driverTop}>
               <View style={styles.flex}>
                 <Text style={styles.rowTitle}>{driver.name || "Driver"}</Text>
                 <Text style={styles.meta}>{driver.verified ? "Verified" : "Not verified"} · {driver.current_presence?.status || "offline"}</Text>
+                <Text style={styles.micro}>{driver.hailing_enabled ? "Ride Now approved" : "Not approved for Ride Now"}</Text>
               </View>
-              <Pressable accessibilityRole="switch" accessibilityState={{ checked: driver.hailing_enabled }} onPress={() => toggleDriver(driver)} style={[styles.switch, driver.hailing_enabled && styles.switchOn]}>
+              <Pressable accessibilityRole="switch" accessibilityState={{ checked: driver.hailing_enabled }} accessibilityLabel={`Ride Now eligibility for ${driver.name || "driver"}`} onPress={() => toggleDriver(driver)} style={[styles.switch, driver.hailing_enabled && styles.switchOn]}>
                 <View style={[styles.knob, driver.hailing_enabled && styles.knobOn]} />
               </Pressable>
             </View>
+
+            <Text style={styles.fieldLabel}>Approved cities</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRail}>
+              {cities.filter((city) => city.enabled && city.ride_hailing_enabled).map((city) => {
+                const selected = driver.approved_hailing_city_ids.includes(city.id);
+                return (
+                  <Pressable key={`${driver.id}-${city.id}`} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={`${selected ? "Remove" : "Approve"} ${city.name} for ${driver.name || "driver"}`} onPress={() => toggleCity(driver, city.id)} style={[styles.cityChip, selected && styles.classChipActive]}>
+                    <Text style={[styles.classText, selected && styles.classTextActive]}>{city.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.fieldLabel}>Approved classes</Text>
             <View style={styles.classRow}>
-              {(["ECONOMY", "COMFORT", "XL"] as const).map((rideClass) => (
-                <Pressable key={rideClass} accessibilityRole="button" accessibilityState={{ selected: driver.approved_hailing_classes.includes(rideClass) }} onPress={() => toggleClass(driver, rideClass)} style={[styles.classChip, driver.approved_hailing_classes.includes(rideClass) && styles.classChipActive]}>
-                  <Text style={[styles.classText, driver.approved_hailing_classes.includes(rideClass) && styles.classTextActive]}>{rideClass}</Text>
-                </Pressable>
-              ))}
+              {(["ECONOMY", "COMFORT", "XL"] as const).map((rideClass) => {
+                const selected = driver.approved_hailing_classes.includes(rideClass);
+                return (
+                  <Pressable key={rideClass} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => toggleClass(driver, rideClass)} style={[styles.classChip, selected && styles.classChipActive]}>
+                    <Text style={[styles.classText, selected && styles.classTextActive]}>{rideClass}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         ))}
@@ -163,10 +223,12 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   rail: { gap: 10, paddingRight: 4 },
+  chipRail: { gap: 7, paddingRight: 8 },
   cityCard: { width: 210, minHeight: 132, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 14, gap: 5 },
   cityName: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" },
   meta: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
   micro: { color: v2Theme.colors.inkTertiary, fontSize: 10, fontWeight: "800" },
+  fieldLabel: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
   rowCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
   rowTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
   driverCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 10 },
@@ -177,6 +239,7 @@ const styles = StyleSheet.create({
   knobOn: { alignSelf: "flex-end" },
   classRow: { flexDirection: "row", gap: 7, flexWrap: "wrap" },
   classChip: { minHeight: 34, borderRadius: 999, paddingHorizontal: 10, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  cityChip: { minHeight: 34, borderRadius: 999, paddingHorizontal: 11, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   classChipActive: { backgroundColor: v2Theme.colors.ink },
   classText: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "900" },
   classTextActive: { color: "#FFFFFF" },

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
-import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
+from app.config import get_settings
 from app.database import database
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import create_code_record, code_matches
@@ -29,6 +30,15 @@ TRANSITIONS = {
     "PASSENGER_CONFIRMED_BOARDING": {"IN_PROGRESS", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN"},
     "IN_PROGRESS": {"COMPLETED", "CANCELLED_BY_ADMIN"},
 }
+
+
+def _hailing_enabled() -> bool:
+    return bool(get_settings().hailing_enabled)
+
+
+def _require_hailing_enabled() -> None:
+    if not _hailing_enabled():
+        raise PermissionError("Ride Now is not available yet.")
 
 
 def parse_time(value: Any) -> Optional[datetime]:
@@ -68,6 +78,18 @@ def _next_radius(current: float, steps: Iterable[float], maximum: float) -> floa
     return maximum
 
 
+def _new_trip_pin_record() -> tuple[str, Dict[str, Any]]:
+    pin = f"{secrets.randbelow(1_000_000):06d}"
+    return pin, {
+        **create_code_record(pin, "trip_pin"),
+        "trip_pin_attempts": 0,
+        "trip_pin_generated_at": now_iso(),
+        "trip_pin_verified_at": None,
+        # Explicitly erase any legacy plaintext value if one exists.
+        "plain_trip_pin": None,
+    }
+
+
 def public_trip(trip: Dict[str, Any], viewer: Dict[str, Any]) -> Dict[str, Any]:
     is_driver = trip.get("driver_user_id") == viewer.get("id")
     is_passenger = trip.get("passenger_user_id") == viewer.get("id")
@@ -89,7 +111,6 @@ def public_trip(trip: Dict[str, Any], viewer: Dict[str, Any]) -> Dict[str, Any]:
         "driver_location": trip.get("driver_location") if trip.get("status") in ACTIVE_DRIVER_STATUSES and (is_passenger or is_driver or is_admin) else None,
         "verify_ride_with_pin": bool(trip.get("verify_ride_with_pin")),
         "trip_pin_verified_at": trip.get("trip_pin_verified_at") if is_passenger or is_driver or is_admin else None,
-        "trip_pin": trip.get("plain_trip_pin") if is_passenger and trip.get("verify_ride_with_pin") and trip.get("status") == "PASSENGER_CONFIRMED_BOARDING" else None,
         "search_expires_at": trip.get("search_expires_at"),
         "created_at": trip.get("created_at"),
         "updated_at": trip.get("updated_at"),
@@ -167,6 +188,7 @@ async def close_search_no_driver(trip: Dict[str, Any], reason: str) -> Dict[str,
 
 
 async def driver_profile_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     if user.get("role") not in {"driver", "admin"}:
         raise PermissionError("A Driver account is required for Ride Now.")
     driver = await database.find_one("drivers", {"user_id": user["id"]})
@@ -176,7 +198,7 @@ async def driver_profile_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
         raise PermissionError("Approved Driver verification is required for Ride Now.")
     if str(driver.get("status") or "").lower() in {"suspended", "blocked"}:
         raise PermissionError("This Driver account cannot use Ride Now.")
-    if driver.get("hailing_enabled") is False:
+    if driver.get("hailing_enabled") is not True:
         raise PermissionError("Admin approval is required before using Ride Now.")
     return driver
 
@@ -184,14 +206,9 @@ async def driver_profile_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
 async def approved_driver_for_hailing(user: Dict[str, Any], city_id: str, ride_class: str) -> Dict[str, Any]:
     driver = await driver_profile_for_user(user)
     approved_cities = driver.get("approved_hailing_city_ids") or []
-    if not approved_cities:
-        city = await get_city(city_id)
-        home_city = str(driver.get("city") or "").strip().lower()
-        if not city or home_city != str(city.get("name") or "").strip().lower():
-            raise PermissionError("Admin approval is required before driving Ride Now in this city.")
-    elif city_id not in approved_cities:
+    if city_id not in approved_cities:
         raise PermissionError("Admin approval is required before driving Ride Now in this city.")
-    approved_classes = driver.get("approved_hailing_classes") or ["ECONOMY"]
+    approved_classes = driver.get("approved_hailing_classes") or []
     if ride_class not in approved_classes:
         raise PermissionError("This vehicle is not approved for that Ride Now class.")
     return driver
@@ -225,6 +242,7 @@ def vehicle_snapshot(vehicle: Optional[Dict[str, Any]], driver: Dict[str, Any]) 
 
 
 async def create_trip_from_quote(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     existing = await active_trip_for_user(user)
     if existing:
         return public_trip(existing, user)
@@ -279,6 +297,8 @@ async def create_trip_from_quote(payload: Dict[str, Any], user: Dict[str, Any]) 
 
 
 async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not _hailing_enabled():
+        return None
     current = await database.find_one("hailing_trips", {"id": trip["id"]}) or trip
     if current.get("status") != "SEARCHING":
         return None
@@ -330,6 +350,8 @@ async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]
 
 
 async def eligible_drivers(trip: Dict[str, Any], radius_km: float, stale_seconds: int) -> List[Dict[str, Any]]:
+    if not _hailing_enabled():
+        return []
     pickup = trip["pickup"]
     if database.db is not None:
         cursor = database.db["hailing_driver_presence"].find({
@@ -361,13 +383,14 @@ async def eligible_drivers(trip: Dict[str, Any], radius_km: float, stale_seconds
         if len(coords) != 2:
             continue
         distance = haversine_km(point(pickup["latitude"], pickup["longitude"]), point(coords[1], coords[0]))
-        if distance <= radius_km:
-            if await _driver_can_receive_trip_offer(row, trip):
-                fresh_rows.append({**row, "pickup_distance_km": round(distance, 3)})
+        if distance <= radius_km and await _driver_can_receive_trip_offer(row, trip):
+            fresh_rows.append({**row, "pickup_distance_km": round(distance, 3)})
     return sorted(fresh_rows, key=lambda item: item["pickup_distance_km"])
 
 
 async def _driver_can_receive_trip_offer(presence: Dict[str, Any], trip: Dict[str, Any]) -> bool:
+    if not _hailing_enabled():
+        return False
     driver_id = presence.get("driver_id")
     if not driver_id:
         return False
@@ -383,18 +406,19 @@ async def _driver_can_receive_trip_offer(presence: Dict[str, Any], trip: Dict[st
     driver = await database.find_one("drivers", {"id": driver_id})
     if not driver or not driver.get("verified") or driver.get("verification_status") != "approved":
         return False
-    if driver.get("hailing_enabled") is False:
+    if driver.get("hailing_enabled") is not True:
         return False
     if str(driver.get("status") or "").lower() in {"suspended", "blocked"}:
         return False
     approved_cities = driver.get("approved_hailing_city_ids") or []
-    if approved_cities and trip.get("city_id") not in approved_cities:
+    if trip.get("city_id") not in approved_cities:
         return False
-    approved_classes = driver.get("approved_hailing_classes") or ["ECONOMY"]
+    approved_classes = driver.get("approved_hailing_classes") or []
     return trip.get("ride_class") in approved_classes
 
 
 async def driver_go_online(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     driver = await approved_driver_for_hailing(user, payload["city_id"], payload["ride_class"])
     city = await get_city(payload["city_id"])
     if not city or not city.get("enabled") or not city.get("ride_hailing_enabled"):
@@ -469,6 +493,7 @@ async def current_driver_offer(user: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
 
 async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     driver = await driver_profile_for_user(user)
     active = await active_trip_for_user(user)
     if active:
@@ -482,13 +507,8 @@ async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     trip = await database.find_one("hailing_trips", {"id": offer["trip_id"]})
     if not trip or trip.get("status") != "SEARCHING":
         raise ValueError("Ride already accepted.")
+    await approved_driver_for_hailing(user, trip["city_id"], trip["ride_class"])
     vehicle = await latest_vehicle(driver)
-    pin = f"{secrets.randbelow(1_000_000):06d}"
-    pin_fields = (
-        {"plain_trip_pin": pin, **create_code_record(pin, "trip_pin"), "trip_pin_attempts": 0}
-        if trip.get("verify_ride_with_pin")
-        else {"plain_trip_pin": None, "trip_pin_attempts": 0}
-    )
     accepted_offer = await database.update_one_if(
         "hailing_dispatch_offers",
         {"id": offer["id"], "status": "pending"},
@@ -506,7 +526,12 @@ async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
             "vehicle_id": (vehicle or {}).get("id"),
             "driver_snapshot": driver_snapshot(driver, user_doc),
             "vehicle_snapshot": vehicle_snapshot(vehicle, driver),
-            **pin_fields,
+            "plain_trip_pin": None,
+            "trip_pin_salt": None,
+            "trip_pin_code_hash": None,
+            "trip_pin_attempts": 0,
+            "trip_pin_generated_at": None,
+            "trip_pin_verified_at": None,
             "assigned_at": now_iso(),
             "updated_at": now_iso(),
         },
@@ -549,6 +574,7 @@ async def decline_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def mark_arrived(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can mark arrival.")
@@ -559,6 +585,7 @@ async def mark_arrived(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def confirm_passenger_boarding(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("passenger_user_id") != user.get("id"):
         raise PermissionError("Only the passenger can confirm boarding.")
@@ -568,14 +595,15 @@ async def confirm_passenger_boarding(trip_id: str, user: Dict[str, Any]) -> Dict
         raise ValueError("You can confirm boarding after your driver has arrived.")
     if not trip.get("driver_user_id"):
         raise ValueError("A driver must be assigned before boarding can be confirmed.")
-    updated = await transition_trip(
-        trip,
-        "PASSENGER_CONFIRMED_BOARDING",
-        {
-            "passenger_boarding_confirmed_at": now_iso(),
-            "passenger_boarding_confirmed_by_user_id": user["id"],
-        },
-    )
+    pin: Optional[str] = None
+    updates: Dict[str, Any] = {
+        "passenger_boarding_confirmed_at": now_iso(),
+        "passenger_boarding_confirmed_by_user_id": user["id"],
+    }
+    if trip.get("verify_ride_with_pin"):
+        pin, pin_record = _new_trip_pin_record()
+        updates.update(pin_record)
+    updated = await transition_trip(trip, "PASSENGER_CONFIRMED_BOARDING", updates)
     await create_app_notification(
         user_id=trip["driver_user_id"],
         title="Passenger confirmed",
@@ -583,10 +611,37 @@ async def confirm_passenger_boarding(trip_id: str, user: Dict[str, Any]) -> Dict
         notification_type="trip_updates",
         data={"notification_target": "hailing_trip", "hailing_trip_id": trip_id},
     )
-    return public_trip(updated, user)
+    response = public_trip(updated, user)
+    if pin:
+        response["trip_pin"] = pin
+    return response
+
+
+async def regenerate_trip_pin(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
+    trip = await get_authorized_trip(trip_id, user)
+    if trip.get("passenger_user_id") != user.get("id"):
+        raise PermissionError("Only the passenger can generate the trip PIN.")
+    if not trip.get("verify_ride_with_pin"):
+        raise ValueError("This Ride Now trip does not require a PIN.")
+    if trip.get("status") != "PASSENGER_CONFIRMED_BOARDING":
+        raise ValueError("A new PIN can only be generated after boarding is confirmed.")
+    if trip.get("trip_pin_verified_at"):
+        raise ValueError("The trip PIN has already been verified.")
+    pin, pin_record = _new_trip_pin_record()
+    updated = await update_versioned_hailing_trip(
+        {"id": trip["id"], "status": "PASSENGER_CONFIRMED_BOARDING"},
+        {**pin_record, "updated_at": now_iso()},
+    )
+    if not updated:
+        raise ValueError("Ride Now trip changed while the PIN was being generated. Refresh and try again.")
+    await record_trip_event(updated, "trip_pin_regenerated", {})
+    await publish_hailing_trip_realtime(updated, "hailing.trip.pin_regenerated")
+    return {**public_trip(updated, user), "trip_pin": pin}
 
 
 async def verify_trip_pin(trip_id: str, pin: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can verify the trip PIN.")
@@ -602,7 +657,13 @@ async def verify_trip_pin(trip_id: str, pin: str, user: Dict[str, Any]) -> Dict[
         raise ValueError("Trip PIN is incorrect.")
     updated = await update_versioned_hailing_trip(
         {"id": trip["id"], "status": "PASSENGER_CONFIRMED_BOARDING"},
-        {"trip_pin_verified_at": now_iso(), "plain_trip_pin": None, "updated_at": now_iso()},
+        {
+            "trip_pin_verified_at": now_iso(),
+            "trip_pin_salt": None,
+            "trip_pin_code_hash": None,
+            "plain_trip_pin": None,
+            "updated_at": now_iso(),
+        },
     )
     if not updated:
         raise ValueError("Ride Now trip changed while the PIN was being verified. Refresh and try again.")
@@ -613,6 +674,7 @@ async def verify_trip_pin(trip_id: str, pin: str, user: Dict[str, Any]) -> Dict[
 
 
 async def start_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can start this trip.")
@@ -656,6 +718,7 @@ async def _ensure_driver_near_pickup_for_start(trip: Dict[str, Any]) -> None:
 
 
 async def update_trip_location(trip_id: str, payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can update trip location.")
@@ -682,6 +745,7 @@ async def update_trip_location(trip_id: str, payload: Dict[str, Any], user: Dict
 
 
 async def complete_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can complete this trip.")
@@ -693,6 +757,7 @@ async def complete_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def cancel_trip(trip_id: str, reason: Optional[str], user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     if trip.get("status") in FINAL_STATUSES:
         raise ValueError("This trip is already closed.")
@@ -731,6 +796,10 @@ async def rematch_after_driver_cancellation(trip: Dict[str, Any], reason: Option
             "vehicle_snapshot": None,
             "driver_location": None,
             "plain_trip_pin": None,
+            "trip_pin_salt": None,
+            "trip_pin_code_hash": None,
+            "trip_pin_attempts": 0,
+            "trip_pin_generated_at": None,
             "trip_pin_verified_at": None,
             "passenger_boarding_confirmed_at": None,
             "passenger_boarding_confirmed_by_user_id": None,
@@ -764,6 +833,7 @@ async def rematch_after_driver_cancellation(trip: Dict[str, Any], reason: Option
 
 
 async def record_safety_event(trip_id: str, payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    _require_hailing_enabled()
     trip = await get_authorized_trip(trip_id, user)
     event = await database.insert_one("hailing_trip_events", {
         "id": new_id(),
@@ -787,6 +857,8 @@ async def record_safety_event(trip_id: str, payload: Dict[str, Any], user: Dict[
 
 
 async def expire_pending_offers() -> int:
+    if not _hailing_enabled():
+        return 0
     pending = await database.find_many("hailing_dispatch_offers", {"status": "pending"})
     now = datetime.now(timezone.utc)
     changed = 0
@@ -815,6 +887,8 @@ async def expire_pending_offers() -> int:
 
 
 async def sweep_searching_trips() -> Dict[str, int]:
+    if not _hailing_enabled():
+        return {"checked": 0, "dispatched": 0, "timed_out": 0}
     searching = await database.find_many("hailing_trips", {"status": "SEARCHING"})
     dispatched = 0
     timed_out = 0
@@ -835,6 +909,8 @@ async def sweep_searching_trips() -> Dict[str, int]:
 
 
 async def sweep_hailing_dispatch() -> Dict[str, int]:
+    if not _hailing_enabled():
+        return {"expired_offers": 0, "checked": 0, "dispatched": 0, "timed_out": 0}
     expired = await expire_pending_offers()
     searching = await sweep_searching_trips()
     return {"expired_offers": expired, **searching}
@@ -843,6 +919,9 @@ async def sweep_hailing_dispatch() -> Dict[str, int]:
 async def hailing_dispatch_sweeper(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         interval = 3
+        if not _hailing_enabled():
+            logger.info("hailing_dispatch_sweeper_stopped feature_disabled=true")
+            return
         try:
             cities = await list_hailing_city_dispatch_settings()
             if cities:
@@ -857,6 +936,8 @@ async def hailing_dispatch_sweeper(stop_event: asyncio.Event) -> None:
 
 
 async def list_hailing_city_dispatch_settings() -> List[Dict[str, Any]]:
+    if not _hailing_enabled():
+        return []
     cities = await database.find_many("hailing_cities", {"enabled": True, "ride_hailing_enabled": True})
     return [_dispatch_config(city) for city in cities]
 

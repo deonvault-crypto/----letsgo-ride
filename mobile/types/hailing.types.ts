@@ -74,27 +74,41 @@ export type HailingServiceAreaResolution = {
   ride_classes: Array<HailingRideClassConfig | HailingRideClass>;
 };
 
+export type HailingRoute = {
+  distance_km: number;
+  duration_minutes?: number;
+  estimated_duration_minutes?: number;
+  duration_seconds?: number;
+  polyline?: string | null;
+  encoded_polyline?: string | null;
+};
+
+export type HailingFare = {
+  currency?: string;
+  ride_class?: HailingRideClass;
+  base_fare: number;
+  distance_fare: number;
+  time_fare: number;
+  booking_fee: number;
+  minimum_fare?: number;
+  surge_multiplier: number;
+  total_fare: number;
+  estimated_driver_earnings: number;
+  platform_commission?: number;
+  platform_commission_percent?: number;
+  high_demand?: boolean;
+};
+
 export type HailingQuote = {
   quote_id: string;
+  city_id?: string;
   currency: string;
   ride_class: HailingRideClass;
   pickup: HailingPlace;
   dropoff: HailingPlace;
-  city: HailingServiceArea | null;
-  route: {
-    distance_km: number;
-    duration_minutes: number;
-    polyline?: string | null;
-  };
-  fare: {
-    base_fare: number;
-    distance_fare: number;
-    time_fare: number;
-    booking_fee: number;
-    surge_multiplier: number;
-    total_fare: number;
-    estimated_driver_earnings: number;
-  };
+  city?: HailingServiceArea | null;
+  route: HailingRoute & { duration_minutes: number };
+  fare: HailingFare;
   expires_at: string;
 };
 
@@ -109,11 +123,19 @@ export type HailingParticipantSnapshot = {
   profile_photo_url?: string | null;
 };
 
+export type HailingVehicleSnapshot = HailingParticipantSnapshot & {
+  vehicle_id?: string | null;
+  make?: string | null;
+  model?: string | null;
+  color?: string | null;
+  plate_number?: string | null;
+};
+
 export type HailingTrip = {
   id: string;
   status: HailingTripStatus;
   city_id: string;
-  passenger_user_id: string;
+  passenger_user_id?: string;
   driver_user_id?: string | null;
   ride_class: HailingRideClass;
   payment_method: "cash";
@@ -122,12 +144,13 @@ export type HailingTrip = {
   trip_pin_verified_at?: string | null;
   pickup: HailingPlace;
   dropoff: HailingPlace;
-  route: HailingQuote["route"];
-  fare: HailingQuote["fare"] & { currency?: string };
+  route: HailingRoute;
+  fare: HailingFare;
   driver?: HailingParticipantSnapshot | null;
   passenger?: HailingParticipantSnapshot | null;
-  vehicle?: HailingParticipantSnapshot | null;
+  vehicle?: HailingVehicleSnapshot | null;
   trip_pin?: string | null;
+  search_expires_at?: string | null;
   created_at: string;
   updated_at: string;
   assigned_at?: string | null;
@@ -138,6 +161,7 @@ export type HailingTrip = {
 };
 
 export type HailingDriverStatus = {
+  driver_id?: string;
   online: boolean;
   presence: {
     status: "offline" | "available" | "offered" | "en_route" | "arrived" | "on_trip";
@@ -146,7 +170,7 @@ export type HailingDriverStatus = {
     last_seen_at?: string | null;
   } | null;
   active_trip: HailingTrip | null;
-  offer: HailingDispatchOffer | null;
+  offer?: HailingDispatchOffer | null;
   stats: {
     rides_today: number;
     gross_fares: number;

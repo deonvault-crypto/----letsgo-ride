@@ -12,6 +12,7 @@ from app.routers import activity, admin, auth, conversations, courier, drivers, 
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
+from app.services.hailing_security_service import clear_legacy_plaintext_hailing_pins
 from app.services.hailing_trip_service import hailing_dispatch_sweeper
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
@@ -101,13 +102,20 @@ async def on_startup():
     await database.connect()
     await realtime_event_service.start()
     await ensure_admin_seed_user()
-    await seed_zimbabwe_service_areas()
     if settings.enable_demo_seed:
         await seed_demo_rides()
     ride_lifecycle_stop_event = asyncio.Event()
     ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
-    hailing_dispatch_stop_event = asyncio.Event()
-    hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper(hailing_dispatch_stop_event))
+    if settings.hailing_enabled:
+        await seed_zimbabwe_service_areas()
+        await clear_legacy_plaintext_hailing_pins()
+        hailing_dispatch_stop_event = asyncio.Event()
+        hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper(hailing_dispatch_stop_event))
+        logger.info("hailing_runtime enabled=true")
+    else:
+        hailing_dispatch_stop_event = None
+        hailing_dispatch_task = None
+        logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")
     logger.info(
         "routing_smoke_gate app_env=%s enabled=%s configured=%s provider=%s region=%s",
         settings.app_env,
