@@ -21,6 +21,7 @@ GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autoco
 GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 
 _AUTOCOMPLETE_CACHE_TTL_SECONDS = 15 * 60
+_ROUTE_MATRIX_TIMEOUT_SECONDS = 2.5
 _autocomplete_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
 _ZIMBABWE_DISCOVERY = [
     ("Harare", "Harare, Zimbabwe", -17.824858, 31.053028),
@@ -452,6 +453,7 @@ async def compute_route_matrix(
         raise ValueError("Route matrix shortlist is too large.")
 
     api_key, region_code, timeout = _google_config()
+    matrix_timeout = min(float(timeout), _ROUTE_MATRIX_TIMEOUT_SECONDS)
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
@@ -476,7 +478,7 @@ async def compute_route_matrix(
         GOOGLE_ROUTE_MATRIX_URL,
         headers=headers,
         json=body,
-        timeout=timeout,
+        timeout=matrix_timeout,
     )
 
     routes: List[Dict[str, Any]] = []
