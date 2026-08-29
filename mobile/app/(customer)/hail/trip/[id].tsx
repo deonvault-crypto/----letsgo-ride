@@ -152,7 +152,7 @@ export default function CustomerHailingTripScreen() {
       {trip ? (
         <>
           <View style={styles.driverCard}>
-            <Avatar name={trip.driver?.name || "Driver"} imageUri={trip.driver?.profile_photo_url} size={54} />
+            <Avatar name={trip.driver?.name || "Driver"} imageUri={trip.driver?.profile_photo_url || undefined} size={54} />
             <View style={styles.flex}>
               <Text style={styles.cardLabel}>Driver</Text>
               <Text style={styles.cardTitle}>{trip.driver?.name || "Driver being assigned"}</Text>
