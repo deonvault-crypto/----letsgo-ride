@@ -7,6 +7,7 @@ import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
 import { useActiveHailingTrip } from "../../../hooks/useHailing";
 import { cancelHailingTrip } from "../../../services/hailingService";
+import { ridePalette } from "../../../components/platform/ridePalette";
 
 export default function HailingSearchingScreen() {
   const router = useRouter();
@@ -29,29 +30,35 @@ export default function HailingSearchingScreen() {
     router.replace(`/(customer)/hail/trip/${trip.id}` as never);
   }
 
+  const noDriver = trip?.status === "NO_DRIVER_FOUND";
+
   return (
     <Screen navRole="customer" refreshing={refreshing} onRefresh={reload}>
       <View style={styles.card}>
-        <View style={styles.iconRing}>
-          {trip?.status === "NO_DRIVER_FOUND" ? (
-            <MaterialCommunityIcons name="car-off" size={38} color={v2Theme.colors.warning} />
+        <View style={[styles.iconRing, noDriver && styles.iconRingWarning]}>
+          {noDriver ? (
+            <MaterialCommunityIcons name="car-off" size={34} color={v2Theme.colors.warning} />
           ) : (
-            <ActivityIndicator color={v2Theme.colors.brandStrong} size="large" />
+            <ActivityIndicator color={ridePalette.primary} size="large" />
           )}
         </View>
-        <Text style={styles.title}>{trip?.status === "NO_DRIVER_FOUND" ? "No drivers nearby right now" : "Finding an approved driver"}</Text>
+        <Text style={styles.title}>{noDriver ? "No drivers nearby right now" : "Finding your driver"}</Text>
         <Text style={styles.body}>
-          {trip?.status === "NO_DRIVER_FOUND"
-            ? "You can try again, change the ride class or use intercity rides."
-            : "Keep this screen open or come back later. Your trip is restored from the server if the app restarts."}
+          {noDriver
+            ? "Try again in a moment, change the ride class or use an intercity ride."
+            : "We’re checking approved nearby drivers. You can leave this screen — your request stays active."}
         </Text>
-        {trip ? <Text style={styles.meta}>Cash fare ${trip.fare.total_fare.toFixed(2)} · {trip.ride_class}</Text> : null}
+        {trip ? (
+          <View style={styles.metaPill}>
+            <Text style={styles.meta}>Cash ${trip.fare.total_fare.toFixed(2)} · {trip.ride_class}</Text>
+          </View>
+        ) : null}
       </View>
 
       {error ? <AppNotice message={error} actionLabel="Retry" onAction={reload} /> : null}
 
       <View style={styles.actions}>
-        {trip?.status === "NO_DRIVER_FOUND" ? (
+        {noDriver ? (
           <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/hail" as never)} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
             <Text style={styles.primaryText}>Try again</Text>
           </Pressable>
@@ -66,15 +73,17 @@ export default function HailingSearchingScreen() {
 }
 
 const styles = StyleSheet.create({
-  card: { minHeight: 360, borderRadius: 32, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 24, alignItems: "center", justifyContent: "center", gap: 13 },
-  iconRing: { width: 88, height: 88, borderRadius: 44, backgroundColor: v2Theme.colors.brandSofter, alignItems: "center", justifyContent: "center" },
-  title: { color: v2Theme.colors.ink, fontSize: 27, lineHeight: 32, textAlign: "center", fontWeight: "900", letterSpacing: -0.8 },
-  body: { color: v2Theme.colors.inkSecondary, fontSize: 14, lineHeight: 21, textAlign: "center" },
-  meta: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  card: { minHeight: 300, borderRadius: 28, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 22, alignItems: "center", justifyContent: "center", gap: 12 },
+  iconRing: { width: 78, height: 78, borderRadius: 39, backgroundColor: ridePalette.soft, alignItems: "center", justifyContent: "center" },
+  iconRingWarning: { backgroundColor: v2Theme.colors.warningSoft },
+  title: { color: v2Theme.colors.ink, fontSize: 25, lineHeight: 30, textAlign: "center", fontWeight: "900", letterSpacing: -0.7 },
+  body: { maxWidth: 300, color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 20, textAlign: "center" },
+  metaPill: { minHeight: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: ridePalette.soft, alignItems: "center", justifyContent: "center" },
+  meta: { color: ridePalette.primary, fontSize: 11, fontWeight: "900" },
   actions: { gap: 10 },
-  primary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
-  primaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+  primary: { minHeight: 54, borderRadius: 18, backgroundColor: ridePalette.primary, alignItems: "center", justifyContent: "center" },
+  primaryText: { color: ridePalette.white, fontSize: 13, fontWeight: "900" },
   danger: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.dangerSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(200,69,69,0.35)", alignItems: "center", justifyContent: "center" },
   dangerText: { color: v2Theme.colors.danger, fontSize: 13, fontWeight: "900" },
-  pressed: { opacity: 0.72 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
 });
