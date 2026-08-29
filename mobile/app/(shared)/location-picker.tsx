@@ -27,6 +27,9 @@ const HARARE_REGION: Region = {
 };
 
 const emptyMemory: LocationMemory = { home: null, work: null, recent: [] };
+const RIDE_ACCENT = "#111111";
+const FOOD_ACCENT = "#B65E16";
+const COURIER_ACCENT = "#2E68A2";
 
 type PickerKind = "pickup" | "dropoff" | "food";
 
@@ -36,6 +39,7 @@ export default function LocationPickerScreen() {
   const params = useLocalSearchParams<{ kind?: string; flow?: string }>();
   const kind: PickerKind = params.kind === "food" ? "food" : params.kind === "dropoff" ? "dropoff" : "pickup";
   const hailingFlow = params.flow === "hailing";
+  const accentColor = hailingFlow ? RIDE_ACCENT : kind === "food" ? FOOD_ACCENT : COURIER_ACCENT;
   const {
     pickup,
     dropoff,
@@ -347,7 +351,7 @@ export default function LocationPickerScreen() {
             returnKeyType="search"
             style={styles.searchInput}
           />
-          {searching || resolving ? <ActivityIndicator size="small" color={v2Theme.colors.brandStrong} /> : null}
+          {searching || resolving ? <ActivityIndicator size="small" color={accentColor} /> : null}
         </View>
 
         {suggestions.length > 0 ? (
@@ -378,17 +382,17 @@ export default function LocationPickerScreen() {
               style={({ pressed }) => [styles.currentPill, pressed && styles.pressed]}
             >
               {locating
-                ? <ActivityIndicator size="small" color={v2Theme.colors.brandStrong} />
-                : <MaterialCommunityIcons name="crosshairs-gps" size={19} color={v2Theme.colors.brandStrong} />}
+                ? <ActivityIndicator size="small" color={accentColor} />
+                : <MaterialCommunityIcons name="crosshairs-gps" size={19} color={accentColor} />}
               <Text style={styles.currentPillText}>{locating ? "Finding you…" : "Use my current location"}</Text>
             </Pressable>
 
             {showShortcuts && (memory.home || memory.work || memory.recent.length > 0) ? (
               <View style={styles.shortcutsCard}>
-                {memory.home ? <QuickPlace icon="home-outline" label="Home" choice={memory.home} onPress={useChoice} /> : null}
-                {memory.work ? <QuickPlace icon="briefcase-outline" label="Work" choice={memory.work} onPress={useChoice} /> : null}
+                {memory.home ? <QuickPlace icon="home-outline" label="Home" choice={memory.home} onPress={useChoice} accentColor={accentColor} /> : null}
+                {memory.work ? <QuickPlace icon="briefcase-outline" label="Work" choice={memory.work} onPress={useChoice} accentColor={accentColor} /> : null}
                 {memory.recent.slice(0, 1).map((choice, index) => (
-                  <QuickPlace key={`${choice.address}-${index}`} icon="history" label="Recent" choice={choice} onPress={useChoice} />
+                  <QuickPlace key={`${choice.address}-${index}`} icon="history" label="Recent" choice={choice} onPress={useChoice} accentColor={accentColor} />
                 ))}
               </View>
             ) : null}
@@ -400,7 +404,7 @@ export default function LocationPickerScreen() {
 
       {pinLookingUp && Platform.OS !== "web" ? (
         <View pointerEvents="none" style={[styles.mapStatus, { bottom: 188 + insets.bottom }]}>
-          <ActivityIndicator size="small" color={v2Theme.colors.brandStrong} />
+          <ActivityIndicator size="small" color={accentColor} />
           <Text style={styles.mapStatusText}>Finding this address…</Text>
         </View>
       ) : null}
@@ -408,7 +412,7 @@ export default function LocationPickerScreen() {
       <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 12) + 10 }]}>
         <View style={styles.sheetHandle} />
         <View style={styles.selectedCopy}>
-          <Text style={styles.selectedEyebrow}>{eyebrow}</Text>
+          <Text style={[styles.selectedEyebrow, { color: accentColor }]}>{eyebrow}</Text>
           <Text numberOfLines={1} style={styles.selectedTitle}>{selected?.label || "Choose a location"}</Text>
           <Text numberOfLines={2} style={styles.selectedBody}>
             {selected?.address || "Search above, use your location, or move the map to the exact spot."}
@@ -446,7 +450,7 @@ export default function LocationPickerScreen() {
           accessibilityRole="button"
           disabled={!selected}
           onPress={confirm}
-          style={({ pressed }) => [styles.confirmButton, !selected && styles.disabled, pressed && selected && styles.pressed]}
+          style={({ pressed }) => [styles.confirmButton, { backgroundColor: accentColor }, !selected && styles.disabled, pressed && selected && styles.pressed]}
         >
           <Text style={styles.confirmText}>
             {kind === "pickup" && hailingFlow ? "Confirm pickup" : kind === "dropoff" && hailingFlow ? "Confirm destination" : "Use this location"}
@@ -463,11 +467,13 @@ function QuickPlace({
   label,
   choice,
   onPress,
+  accentColor,
 }: {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   choice: LocationChoice;
   onPress: (choice: LocationChoice) => void;
+  accentColor: string;
 }) {
   return (
     <Pressable
@@ -475,7 +481,7 @@ function QuickPlace({
       onPress={() => onPress(choice)}
       style={({ pressed }) => [styles.quickPlace, pressed && styles.pressed]}
     >
-      <MaterialCommunityIcons name={icon} size={17} color={v2Theme.colors.brandStrong} />
+      <MaterialCommunityIcons name={icon} size={17} color={accentColor} />
       <Text style={styles.quickPlaceLabel}>{label}</Text>
     </Pressable>
   );
@@ -509,13 +515,13 @@ const styles = StyleSheet.create({
   bottomSheet: { position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 15, borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 9, paddingHorizontal: 18, gap: 10, backgroundColor: "rgba(255,255,255,0.985)", borderTopWidth: StyleSheet.hairlineWidth, borderColor: "rgba(12,17,13,0.10)", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.11, shadowRadius: 20, shadowOffset: { width: 0, height: -6 }, elevation: 12 },
   sheetHandle: { alignSelf: "center", width: 38, height: 4, borderRadius: 2, backgroundColor: v2Theme.colors.lineStrong, marginBottom: 1 },
   selectedCopy: { gap: 2 },
-  selectedEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1.15 },
+  selectedEyebrow: { fontSize: 9, fontWeight: "900", letterSpacing: 1.15 },
   selectedTitle: { color: v2Theme.colors.ink, fontSize: 19, lineHeight: 23, fontWeight: "900", letterSpacing: -0.35 },
   selectedBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16 },
   saveRow: { flexDirection: "row", gap: 7 },
   saveChip: { flex: 1, minHeight: 36, borderRadius: 14, paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: v2Theme.colors.surfaceMuted },
   saveChipText: { flexShrink: 1, color: v2Theme.colors.ink, fontSize: 9, fontWeight: "900" },
-  confirmButton: { minHeight: 54, borderRadius: 18, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: v2Theme.colors.brand },
+  confirmButton: { minHeight: 54, borderRadius: 18, paddingHorizontal: 18, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   confirmText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   disabled: { opacity: 0.42 },
   pressed: { opacity: 0.72, transform: [{ scale: 0.992 }] },
