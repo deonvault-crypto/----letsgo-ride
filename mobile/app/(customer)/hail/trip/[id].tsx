@@ -14,9 +14,34 @@ import {
   regenerateHailingTripPin,
   sendHailingSafetyEvent,
 } from "../../../../services/hailingService";
-import { HailingTrip } from "../../../../types/hailing.types";
+import { HailingTrip, HailingTripStatus } from "../../../../types/hailing.types";
 
-const terminal = new Set(["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"]);
+const RIDE_BLACK = "#111111";
+const terminal = new Set<HailingTripStatus>(["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"]);
+
+function statusTitle(status?: HailingTripStatus) {
+  switch (status) {
+    case "SEARCHING": return "Finding your driver";
+    case "DRIVER_ASSIGNED": return "Driver assigned";
+    case "DRIVER_EN_ROUTE": return "Driver on the way";
+    case "DRIVER_ARRIVED": return "Your driver is here";
+    case "PASSENGER_CONFIRMED_BOARDING": return "Ready to start";
+    case "IN_PROGRESS": return "Ride in progress";
+    case "COMPLETED": return "Ride completed";
+    case "CANCELLED_BY_PASSENGER": return "Ride cancelled";
+    case "CANCELLED_BY_DRIVER": return "Driver cancelled";
+    case "CANCELLED_BY_ADMIN": return "Ride cancelled";
+    case "NO_DRIVER_FOUND": return "No driver found";
+    default: return "Trip unavailable";
+  }
+}
+
+function terminalMessage(status: HailingTripStatus) {
+  if (status === "NO_DRIVER_FOUND") return "No approved driver accepted this request in time. You can try again whenever you’re ready.";
+  if (status === "CANCELLED_BY_DRIVER") return "The driver could not continue with this request. Book another ride and we’ll search again.";
+  if (status === "CANCELLED_BY_ADMIN") return "This ride was cancelled. You can book another ride whenever you’re ready.";
+  return "This ride request has been cancelled. No driver is being assigned anymore.";
+}
 
 export default function CustomerHailingTripScreen() {
   const router = useRouter();
@@ -125,25 +150,20 @@ export default function CustomerHailingTripScreen() {
     }
   }
 
-  const awaitingOptionalPin = Boolean(
-    trip?.status === "PASSENGER_CONFIRMED_BOARDING"
-      && trip.verify_ride_with_pin
-      && !trip.trip_pin_verified_at,
-  );
+  const awaitingOptionalPin = Boolean(trip?.status === "PASSENGER_CONFIRMED_BOARDING" && trip.verify_ride_with_pin && !trip.trip_pin_verified_at);
+  const terminalWithoutReceipt = Boolean(trip && terminal.has(trip.status) && trip.status !== "COMPLETED");
   const vehicleName = [trip?.vehicle?.make, trip?.vehicle?.model].filter(Boolean).join(" ");
   const vehicleMeta = [trip?.vehicle?.color, trip?.vehicle?.plate_number || trip?.vehicle?.plate].filter(Boolean).join(" · ");
   const vehicleDescription = [vehicleName || trip?.vehicle?.vehicle, vehicleMeta].filter(Boolean).join(" · ") || "Vehicle details appear after matching";
   const tripDurationMinutes = trip
-    ? trip.route.duration_minutes
-      ?? trip.route.estimated_duration_minutes
-      ?? (trip.route.duration_seconds ? trip.route.duration_seconds / 60 : undefined)
+    ? trip.route.duration_minutes ?? trip.route.estimated_duration_minutes ?? (trip.route.duration_seconds ? trip.route.duration_seconds / 60 : undefined)
     : undefined;
 
   return (
     <Screen navRole="customer" refreshing={refreshing} onRefresh={load}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>RIDE NOW</Text>
-        <Text style={styles.title}>{loading ? "Loading trip" : trip?.status.replaceAll("_", " ") || "Trip unavailable"}</Text>
+        <Text style={styles.title}>{loading ? "Loading trip" : statusTitle(trip?.status)}</Text>
         {trip ? <Text style={styles.body}>{trip.pickup.formatted_address} → {trip.dropoff.formatted_address}</Text> : null}
       </View>
 
@@ -151,15 +171,26 @@ export default function CustomerHailingTripScreen() {
 
       {trip ? (
         <>
-          <View style={styles.driverCard}>
-            <Avatar name={trip.driver?.name || "Driver"} imageUri={trip.driver?.profile_photo_url || undefined} size={54} />
-            <View style={styles.flex}>
-              <Text style={styles.cardLabel}>Driver</Text>
-              <Text style={styles.cardTitle}>{trip.driver?.name || "Driver being assigned"}</Text>
-              <Text style={styles.cardBody}>{vehicleDescription}</Text>
-              {trip.driver?.rating ? <Text style={styles.driverRating}>★ {trip.driver.rating.toFixed(1)}</Text> : null}
+          {terminalWithoutReceipt ? (
+            <View style={styles.terminalCard}>
+              <View style={styles.terminalIcon}><Text style={styles.terminalIconText}>×</Text></View>
+              <View style={styles.flex}>
+                <Text style={styles.cardLabel}>RIDE STATUS</Text>
+                <Text style={styles.cardTitle}>{statusTitle(trip.status)}</Text>
+                <Text style={styles.cardBody}>{terminalMessage(trip.status)}</Text>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View style={styles.driverCard}>
+              <Avatar name={trip.driver?.name || "Driver"} imageUri={trip.driver?.profile_photo_url || undefined} size={54} />
+              <View style={styles.flex}>
+                <Text style={styles.cardLabel}>Driver</Text>
+                <Text style={styles.cardTitle}>{trip.driver?.name || "Driver being assigned"}</Text>
+                <Text style={styles.cardBody}>{vehicleDescription}</Text>
+                {trip.driver?.rating ? <Text style={styles.driverRating}>★ {trip.driver.rating.toFixed(1)}</Text> : null}
+              </View>
+            </View>
+          )}
 
           {awaitingOptionalPin && tripPin ? (
             <View style={styles.pinCard}>
@@ -203,6 +234,11 @@ export default function CustomerHailingTripScreen() {
           </View>
 
           <View style={styles.actions}>
+            {terminalWithoutReceipt ? (
+              <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/hail" as never)} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+                <Text style={styles.primaryText}>Book another ride</Text>
+              </Pressable>
+            ) : null}
             {trip.status === "COMPLETED" ? (
               <Pressable accessibilityRole="button" onPress={() => router.replace(`/(customer)/hail/receipt/${trip.id}` as never)} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
                 <Text style={styles.primaryText}>View receipt</Text>
@@ -232,15 +268,18 @@ export default function CustomerHailingTripScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: 8 },
-  eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
+  eyebrow: { color: RIDE_BLACK, fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
   title: { color: v2Theme.colors.ink, fontSize: 31, lineHeight: 36, fontWeight: "900", letterSpacing: -1 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19 },
   driverCard: { minHeight: 100, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 15, flexDirection: "row", alignItems: "center", gap: 13 },
-  driverRating: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", marginTop: 3 },
-  pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 18, gap: 6 },
+  terminalCard: { minHeight: 118, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 16, flexDirection: "row", alignItems: "center", gap: 13 },
+  terminalIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "#F1F1EF", alignItems: "center", justifyContent: "center" },
+  terminalIconText: { color: RIDE_BLACK, fontSize: 27, lineHeight: 30, fontWeight: "700" },
+  driverRating: { color: RIDE_BLACK, fontSize: 11, fontWeight: "900", marginTop: 3 },
+  pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: RIDE_BLACK, padding: 18, gap: 6 },
   pinLabel: { color: "rgba(255,255,255,0.65)", fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
   pinBody: { color: "rgba(255,255,255,0.72)", fontSize: 12, lineHeight: 18 },
-  fareCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 18, gap: 5 },
+  fareCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: "#F2F2F0", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 18, gap: 5 },
   readyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 16, gap: 10 },
   cardLabel: { color: v2Theme.colors.inkTertiary, fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
   cardTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" },
@@ -248,7 +287,7 @@ const styles = StyleSheet.create({
   pin: { color: "#FFFFFF", fontSize: 42, fontWeight: "900", letterSpacing: 8 },
   price: { color: v2Theme.colors.ink, fontSize: 31, fontWeight: "900", letterSpacing: -1 },
   actions: { gap: 10 },
-  primary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
+  primary: { minHeight: 54, borderRadius: 18, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center" },
   primaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   secondary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center" },
   secondaryText: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
