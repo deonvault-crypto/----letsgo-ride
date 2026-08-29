@@ -82,6 +82,7 @@ export default function RootLayout() {
                   <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
                   <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
                   <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
+                  <Stack.Screen name="(shared)" options={{ gestureEnabled: false, animation: "none" }} />
                 </Stack>
               </FoodBasketProvider>
             </LocationDraftProvider>
