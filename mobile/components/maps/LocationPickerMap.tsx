@@ -24,9 +24,10 @@ const NativeLocationPickerMap = forwardRef<LocationPickerMapHandle, LocationPick
     const movementCompleteRef = useRef(onRegionChangeComplete);
     movementStartRef.current = onMovementStart;
     movementCompleteRef.current = onRegionChangeComplete;
+
     useImperativeHandle(forwardedRef, () => ({
       focus(region) {
-        mapRef.current?.animateToRegion(region, 320);
+        mapRef.current?.animateToRegion(region, 220);
       },
     }));
 
@@ -48,6 +49,11 @@ const NativeLocationPickerMap = forwardRef<LocationPickerMapHandle, LocationPick
         initialRegion={initialRegionRef.current}
         onPanDrag={beginUserMovement}
         onRegionChangeComplete={finishMovement}
+        pitchEnabled={false}
+        rotateEnabled={false}
+        showsCompass={false}
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
       />
     );
   },

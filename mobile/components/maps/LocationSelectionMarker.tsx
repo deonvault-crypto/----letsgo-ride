@@ -16,9 +16,11 @@ type LocationSelectionMarkerProps = {
 };
 
 /**
- * The fixed picker marker is anchored by its bottom tip to the map camera center.
- * Its 44 px frame preserves a native-sized accessibility target independently of
- * the deliberately compact 22 x 32 px visual.
+ * A fixed precision marker anchored to the map camera center.
+ *
+ * The visual deliberately avoids the stock teardrop-pin silhouette. The dark
+ * locator puck stays readable over both light and detailed maps while the slim
+ * green stem and anchor dot make the exact coordinate unambiguous.
  */
 export function LocationSelectionMarker({ accessibilityLabel, style }: LocationSelectionMarkerProps) {
   return (
@@ -31,11 +33,11 @@ export function LocationSelectionMarker({ accessibilityLabel, style }: LocationS
       style={[styles.anchorFrame, style]}
     >
       <View testID="location-selection-marker-visual" style={styles.visual}>
-        <View style={styles.tailOutline} />
-        <View style={styles.tailFill} />
-        <View style={styles.headOutline} />
-        <View style={styles.headFill} />
+        <View style={styles.halo} />
+        <View style={styles.puck} />
         <View testID="location-selection-marker-dot" style={styles.centerDot} />
+        <View style={styles.stem} />
+        <View style={styles.anchorDot} />
       </View>
     </View>
   );
@@ -59,58 +61,58 @@ const styles = StyleSheet.create({
     height: LOCATION_SELECTION_MARKER_METRICS.visualHeight,
     alignItems: "center",
   },
-  tailOutline: {
+  halo: {
     position: "absolute",
-    left: 5,
-    top: 17.5,
-    width: 12,
-    height: 12,
-    borderBottomRightRadius: 2,
-    backgroundColor: "#075C2A",
-    transform: [{ rotate: "45deg" }],
-  },
-  tailFill: {
-    position: "absolute",
-    left: 6,
-    top: 18.5,
-    width: 10,
-    height: 10,
-    borderBottomRightRadius: 1.5,
-    backgroundColor: v2Theme.colors.brand,
-    transform: [{ rotate: "45deg" }],
-  },
-  headOutline: {
-    position: "absolute",
-    left: 0,
     top: 0,
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#075C2A",
-    shadowColor: v2Theme.colors.shadow,
-    shadowOpacity: 0.16,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    backgroundColor: "rgba(17,139,68,0.16)",
   },
-  headFill: {
+  puck: {
     position: "absolute",
-    left: 1,
-    top: 1,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: v2Theme.colors.brand,
+    top: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    backgroundColor: "#101712",
+    shadowColor: v2Theme.colors.shadow,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   centerDot: {
     position: "absolute",
-    left: 8.5,
     top: 8.5,
     width: LOCATION_SELECTION_MARKER_METRICS.centerDotSize,
     height: LOCATION_SELECTION_MARKER_METRICS.centerDotSize,
     borderRadius: LOCATION_SELECTION_MARKER_METRICS.centerDotSize / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(7,92,42,0.28)",
     backgroundColor: "#FFFFFF",
+  },
+  stem: {
+    position: "absolute",
+    top: 20,
+    width: 2,
+    height: 8,
+    borderRadius: 1,
+    backgroundColor: v2Theme.colors.brand,
+  },
+  anchorDot: {
+    position: "absolute",
+    bottom: 0,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+    backgroundColor: v2Theme.colors.brand,
+    shadowColor: v2Theme.colors.shadow,
+    shadowOpacity: 0.16,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
 });
