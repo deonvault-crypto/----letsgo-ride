@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.config import get_settings
 from app.database import database
@@ -39,24 +39,27 @@ class DispatchPolicy:
 
 def dispatch_policy(city: Optional[Dict[str, Any]]) -> DispatchPolicy:
     dispatch = dict((city or {}).get("dispatch") or {})
-    raw_steps = dispatch.get("radius_steps_km") or dispatch.get("expansion_radii_km") or [2.0, 4.0, 8.0, 15.0]
+    raw_steps = dispatch.get("radius_steps_km") or [2.0, 4.0, 8.0, 15.0]
     positive_steps = sorted({float(value) for value in raw_steps if float(value) > 0})
-    maximum_radius = float(dispatch.get("maximum_radius_km") or (positive_steps[-1] if positive_steps else 15.0))
+    maximum_radius = max(0.5, min(float(dispatch.get("maximum_radius_km") or 15.0), 80.0))
+    initial_radius = max(0.25, min(float(dispatch.get("initial_radius_km") or 2.0), maximum_radius))
     steps = tuple(radius for radius in positive_steps if radius <= maximum_radius)
-    if not steps:
-        steps = (min(2.0, maximum_radius),)
+    if initial_radius not in steps:
+        steps = tuple(sorted({*steps, initial_radius}))
+    if maximum_radius not in steps:
+        steps = tuple(sorted({*steps, maximum_radius}))
 
     candidate_limit = max(4, min(int(dispatch.get("candidate_limit") or 16), 40))
     eta_rank_limit = max(1, min(int(dispatch.get("eta_rank_limit") or 8), candidate_limit))
     return DispatchPolicy(
-        initial_radius_km=float(dispatch.get("initial_radius_km") or steps[0]),
+        initial_radius_km=initial_radius,
         radius_steps_km=steps,
         maximum_radius_km=maximum_radius,
-        offer_timeout_seconds=max(5, int(dispatch.get("offer_timeout_seconds") or 25)),
-        search_timeout_seconds=max(30, int(dispatch.get("search_timeout_seconds") or dispatch.get("request_timeout_seconds") or 120)),
-        driver_stale_seconds=max(10, int(dispatch.get("driver_stale_seconds") or dispatch.get("driver_stale_after_seconds") or 75)),
-        dispatch_sweeper_interval_seconds=max(2, int(dispatch.get("dispatch_sweeper_interval_seconds") or 3)),
-        boarding_start_radius_meters=max(50, int(dispatch.get("boarding_start_radius_meters") or 250)),
+        offer_timeout_seconds=max(5, min(int(dispatch.get("offer_timeout_seconds") or 25), 120)),
+        search_timeout_seconds=max(30, min(int(dispatch.get("search_timeout_seconds") or 120), 600)),
+        driver_stale_seconds=max(10, min(int(dispatch.get("driver_stale_seconds") or 75), 300)),
+        dispatch_sweeper_interval_seconds=max(2, min(int(dispatch.get("dispatch_sweeper_interval_seconds") or 3), 30)),
+        boarding_start_radius_meters=max(50, min(int(dispatch.get("boarding_start_radius_meters") or 250), 1500)),
         candidate_limit=candidate_limit,
         eta_rank_limit=eta_rank_limit,
         road_eta_ranking_enabled=bool(dispatch.get("road_eta_ranking_enabled", True)),
