@@ -18,9 +18,9 @@ type LocationSelectionMarkerProps = {
 /**
  * A fixed precision marker anchored to the map camera center.
  *
- * The visual deliberately avoids the stock teardrop-pin silhouette. The dark
- * locator puck stays readable over both light and detailed maps while the slim
- * green stem and anchor dot make the exact coordinate unambiguous.
+ * The visual deliberately avoids the stock teardrop-pin silhouette. The black
+ * locator puck, stem and anchor dot keep the exact coordinate unambiguous while
+ * staying consistent with the Ride Now black-first visual language.
  */
 export function LocationSelectionMarker({ accessibilityLabel, style }: LocationSelectionMarkerProps) {
   return (
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "rgba(17,139,68,0.16)",
+    backgroundColor: "rgba(17,17,17,0.14)",
   },
   puck: {
     position: "absolute",
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     borderWidth: 2,
     borderColor: "#FFFFFF",
-    backgroundColor: "#101712",
+    backgroundColor: "#111111",
     shadowColor: v2Theme.colors.shadow,
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     width: 2,
     height: 8,
     borderRadius: 1,
-    backgroundColor: v2Theme.colors.brand,
+    backgroundColor: "#111111",
   },
   anchorDot: {
     position: "absolute",
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     borderWidth: 1.5,
     borderColor: "#FFFFFF",
-    backgroundColor: v2Theme.colors.brand,
+    backgroundColor: "#111111",
     shadowColor: v2Theme.colors.shadow,
     shadowOpacity: 0.16,
     shadowRadius: 2,

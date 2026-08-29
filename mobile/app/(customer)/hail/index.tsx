@@ -14,6 +14,9 @@ import { createHailingQuote, requestHailingTrip } from "../../../services/hailin
 import { HailingPlace, HailingQuote, HailingRideClass, HailingRideClassConfig } from "../../../types/hailing.types";
 
 const fallbackRideClasses: HailingRideClassConfig[] = [{ id: "ECONOMY", label: "Economy", enabled: true }];
+const RIDE_BLACK = "#111111";
+const RIDE_BLACK_SOFT = "#F2F2F2";
+const RIDE_BLACK_MID = "#2A2A2A";
 
 function toHailingPlace(choice: NonNullable<ReturnType<typeof useLocationDraft>["pickup"]>): HailingPlace {
   return {
@@ -157,7 +160,7 @@ export default function HailingHomeScreen() {
 
       {!routeReady ? (
         <View style={styles.routeHint}>
-          <MaterialCommunityIcons name="gesture-tap" size={18} color={v2Theme.colors.brandStrong} />
+          <MaterialCommunityIcons name="gesture-tap" size={18} color={RIDE_BLACK} />
           <Text style={styles.routeHintText}>
             {!pickup ? "Start with your pickup. Destination comes next." : "Pickup set. Now choose your destination."}
           </Text>
@@ -219,7 +222,7 @@ export default function HailingHomeScreen() {
           style={({ pressed }) => [styles.pinOption, pressed && styles.pressed]}
         >
           <View style={[styles.pinIcon, verifyWithPin && styles.pinIconActive]}>
-            <MaterialCommunityIcons name="shield-key-outline" size={19} color={verifyWithPin ? "#FFFFFF" : v2Theme.colors.brandStrong} />
+            <MaterialCommunityIcons name="shield-key-outline" size={19} color={verifyWithPin ? "#FFFFFF" : RIDE_BLACK} />
           </View>
           <View style={styles.flex}>
             <Text style={styles.pinTitle}>Safety PIN</Text>
@@ -294,49 +297,49 @@ function LocationRow({
 
 const styles = StyleSheet.create({
   hero: { gap: 4, paddingTop: 1 },
-  eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
+  eyebrow: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
   title: { color: v2Theme.colors.ink, fontSize: 34, lineHeight: 38, fontWeight: "900", letterSpacing: -1.15 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19, maxWidth: 335 },
-  activeCard: { borderRadius: 22, backgroundColor: v2Theme.colors.ink, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
-  activeIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
+  activeCard: { borderRadius: 22, backgroundColor: RIDE_BLACK, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 },
+  activeIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: RIDE_BLACK_MID, alignItems: "center", justifyContent: "center" },
   activeTitle: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   activeBody: { color: "rgba(255,255,255,0.66)", fontSize: 10, marginTop: 2 },
   routeCard: { borderRadius: 24, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden" },
   locationRow: { minHeight: 70, paddingHorizontal: 15, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12 },
-  locationMarker: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
-  locationMarkerDestination: { borderRadius: 3, borderColor: v2Theme.colors.ink, backgroundColor: v2Theme.colors.ink },
-  locationMarkerCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: v2Theme.colors.brand },
+  locationMarker: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: RIDE_BLACK, alignItems: "center", justifyContent: "center" },
+  locationMarkerDestination: { borderRadius: 3, borderColor: RIDE_BLACK, backgroundColor: RIDE_BLACK },
+  locationMarkerCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: RIDE_BLACK },
   locationLabel: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "900", letterSpacing: 0.8, textTransform: "uppercase" },
   locationValue: { color: v2Theme.colors.ink, fontSize: 15, lineHeight: 19, fontWeight: "800", marginTop: 2 },
   routeLineWrap: { height: 1, paddingLeft: 21, backgroundColor: v2Theme.colors.line },
   routeLine: { position: "absolute", left: 21, top: -16, width: 1, height: 33, backgroundColor: v2Theme.colors.lineStrong },
-  routeHint: { minHeight: 42, borderRadius: 16, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: v2Theme.colors.brandSofter },
+  routeHint: { minHeight: 42, borderRadius: 16, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: RIDE_BLACK_SOFT },
   routeHintText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 16, fontWeight: "700" },
   section: { gap: 9 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900", letterSpacing: -0.35 },
   classGrid: { flexDirection: "row", gap: 7, flexWrap: "wrap" },
   classPill: { minHeight: 46, borderRadius: 16, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surface, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
-  classPillActive: { backgroundColor: v2Theme.colors.ink, borderColor: v2Theme.colors.ink },
+  classPillActive: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
   classText: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "900" },
   classTextActive: { color: "#FFFFFF" },
-  quoteCard: { borderRadius: 22, backgroundColor: v2Theme.colors.brandSofter, padding: 16, gap: 5 },
+  quoteCard: { borderRadius: 22, backgroundColor: RIDE_BLACK_SOFT, padding: 16, gap: 5 },
   quoteTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
-  quoteLabel: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  quoteLabel: { color: RIDE_BLACK, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   quotePrice: { color: v2Theme.colors.ink, fontSize: 32, lineHeight: 36, fontWeight: "900", letterSpacing: -1, marginTop: 2 },
   quoteBody: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "700" },
-  etaPill: { minHeight: 34, paddingHorizontal: 10, borderRadius: 17, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.72)" },
+  etaPill: { minHeight: 34, paddingHorizontal: 10, borderRadius: 17, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.86)" },
   etaText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
   surge: { color: v2Theme.colors.warning, fontSize: 10, fontWeight: "900", marginTop: 2 },
   pinOption: { minHeight: 66, borderRadius: 20, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  pinIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  pinIconActive: { backgroundColor: v2Theme.colors.brand },
+  pinIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: RIDE_BLACK_SOFT, alignItems: "center", justifyContent: "center" },
+  pinIconActive: { backgroundColor: RIDE_BLACK },
   pinToggle: { width: 42, height: 24, borderRadius: 12, backgroundColor: v2Theme.colors.lineStrong, justifyContent: "center", paddingHorizontal: 3 },
-  pinToggleOn: { backgroundColor: v2Theme.colors.brand },
+  pinToggleOn: { backgroundColor: RIDE_BLACK },
   pinKnob: { width: 18, height: 18, borderRadius: 9, backgroundColor: "#FFFFFF" },
   pinKnobOn: { alignSelf: "flex-end" },
   pinTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
   pinBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 14, marginTop: 2 },
-  primaryAction: { minHeight: 56, borderRadius: 18, paddingHorizontal: 18, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  primaryAction: { minHeight: 56, borderRadius: 18, paddingHorizontal: 18, backgroundColor: RIDE_BLACK, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   primaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
   intercityLink: { minHeight: 68, borderRadius: 20, backgroundColor: v2Theme.colors.surfaceMuted, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
   intercityIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
