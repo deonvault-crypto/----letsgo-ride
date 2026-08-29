@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect } from "react";
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -18,9 +19,17 @@ export default function HailingSearchingScreen() {
   const params = useLocalSearchParams<{ tripId?: string }>();
   const { trip, loading, error, reload, setTrip } = useActiveHailingTrip(true);
 
+  useEffect(() => {
+    if (loading || !trip || trip.status === "SEARCHING" || trip.status === "NO_DRIVER_FOUND") return;
+    router.replace(`/(customer)/hail/trip/${trip.id}` as never);
+  }, [loading, router, trip?.id, trip?.status]);
+
   async function cancel() {
     const id = trip?.id || params.tripId;
-    if (!id) return router.replace("/(customer)/hail" as never);
+    if (!id) {
+      router.replace("/(customer)/hail" as never);
+      return;
+    }
     try {
       const next = await cancelHailingTrip(id, "Passenger cancelled while searching");
       setTrip(next);
@@ -28,10 +37,6 @@ export default function HailingSearchingScreen() {
     } catch {
       reload();
     }
-  }
-
-  if (!loading && trip && trip.status !== "SEARCHING" && trip.status !== "NO_DRIVER_FOUND") {
-    router.replace(`/(customer)/hail/trip/${trip.id}` as never);
   }
 
   const noDriver = trip?.status === "NO_DRIVER_FOUND";
