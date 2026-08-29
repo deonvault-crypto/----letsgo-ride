@@ -73,6 +73,17 @@ export function updateHailingDriverPresence(data: { location: HailingCoordinate;
   });
 }
 
+export function updateHailingTripLocation(
+  id: string,
+  data: { location: HailingCoordinate; heading?: number | null; speed?: number | null; accuracy?: number | null },
+) {
+  return requestData<HailingTrip>({
+    method: "POST",
+    url: `/hailing/trips/${encodeURIComponent(id)}/location`,
+    data,
+  });
+}
+
 type DriverOfferEnvelope = {
   offer: Omit<HailingDispatchOffer, "trip">;
   trip: HailingTrip;
