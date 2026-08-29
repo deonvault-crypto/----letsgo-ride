@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { AppState, AppStateStatus } from "react-native";
 
 import {
+  getHailingConfig,
   getHailingDriverStatus,
   updateHailingDriverPresence,
   updateHailingTripLocation,
@@ -10,6 +11,7 @@ import { DeviceLocation, watchForegroundLocation } from "../../services/location
 import type { HailingTripStatus } from "../../types/hailing.types";
 
 const STATUS_REFRESH_MS = 8000;
+const DISABLED_REFRESH_MS = 60000;
 const ACTIVE_TRIP_STATUSES = new Set<HailingTripStatus>([
   "DRIVER_ASSIGNED",
   "DRIVER_EN_ROUTE",
@@ -46,6 +48,7 @@ export function HailingDriverLocationSync() {
   const sendInFlight = useRef(false);
   const reconciliationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
+  const featureEnabled = useRef<boolean | null>(null);
 
   const stopLocationWatch = useCallback(() => {
     generation.current += 1;
@@ -98,6 +101,15 @@ export function HailingDriverLocationSync() {
   const reconcile = useCallback(async () => {
     if (!mounted.current || appState.current !== "active") return;
     try {
+      if (featureEnabled.current !== true) {
+        const config = await getHailingConfig();
+        featureEnabled.current = config.enabled;
+        if (!config.enabled) {
+          stopLocationWatch();
+          return;
+        }
+      }
+
       const status = await getHailingDriverStatus();
       if (!mounted.current || appState.current !== "active") return;
       if (!status.online) {
@@ -111,7 +123,7 @@ export function HailingDriverLocationSync() {
         await startLocationWatch({ kind: "presence" });
       }
     } catch {
-      // A transient status failure must not tear down a healthy foreground watch.
+      // A transient status/config failure must not tear down a healthy foreground watch.
     }
   }, [startLocationWatch, stopLocationWatch]);
 
@@ -120,14 +132,14 @@ export function HailingDriverLocationSync() {
 
     const schedule = () => {
       if (reconciliationTimer.current) clearTimeout(reconciliationTimer.current);
+      const delay = featureEnabled.current === false ? DISABLED_REFRESH_MS : STATUS_REFRESH_MS;
       reconciliationTimer.current = setTimeout(async () => {
         await reconcile();
         if (mounted.current) schedule();
-      }, STATUS_REFRESH_MS);
+      }, delay);
     };
 
-    void reconcile();
-    schedule();
+    void reconcile().finally(schedule);
 
     const stateSubscription = AppState.addEventListener("change", (nextState) => {
       appState.current = nextState;
