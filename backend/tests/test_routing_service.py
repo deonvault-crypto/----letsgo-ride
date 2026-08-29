@@ -7,6 +7,7 @@ from app.services.routing_service import (
     RoutingNotConfiguredError,
     autocomplete_places,
     compute_route,
+    compute_route_matrix,
     geocode_address,
     reverse_geocode_location,
     routing_status,
@@ -84,6 +85,67 @@ class RoutingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["encoded_polyline"], "encoded-route")
         self.assertEqual(result["origin"], origin)
         self.assertEqual(result["destination"], destination)
+
+    async def test_compute_route_matrix_returns_pickup_eta_by_origin(self):
+        provider_payload = [
+            {
+                "originIndex": 1,
+                "destinationIndex": 0,
+                "status": {},
+                "condition": "ROUTE_EXISTS",
+                "distanceMeters": 1800,
+                "duration": "240s",
+            },
+            {
+                "originIndex": 0,
+                "destinationIndex": 0,
+                "status": {},
+                "condition": "ROUTE_EXISTS",
+                "distanceMeters": 900,
+                "duration": "420s",
+            },
+        ]
+        origins = [
+            {"latitude": -17.8252, "longitude": 31.0335},
+            {"latitude": -17.82, "longitude": 31.045},
+        ]
+        destination = {"latitude": -17.8248, "longitude": 31.053}
+
+        with patch("app.services.routing_service.get_settings", return_value=self.google_settings()), patch(
+            "app.services.routing_service._request_json_list", return_value=provider_payload
+        ) as request_json:
+            result = await compute_route_matrix(origins, destination)
+
+        self.assertEqual(result[0], {"origin_index": 1, "distance_meters": 1800, "duration_seconds": 240})
+        self.assertEqual(result[1], {"origin_index": 0, "distance_meters": 900, "duration_seconds": 420})
+        kwargs = request_json.call_args.kwargs
+        self.assertEqual(kwargs["json"]["routingPreference"], "TRAFFIC_AWARE")
+        self.assertEqual(kwargs["json"]["regionCode"], "ZW")
+        self.assertEqual(len(kwargs["json"]["origins"]), 2)
+        self.assertNotIn("test-key", str(kwargs["json"]))
+
+    async def test_route_matrix_ignores_unroutable_elements(self):
+        provider_payload = [
+            {
+                "originIndex": 0,
+                "destinationIndex": 0,
+                "condition": "ROUTE_NOT_FOUND",
+            },
+            {
+                "originIndex": 1,
+                "destinationIndex": 0,
+                "status": {"code": 7},
+                "condition": "ROUTE_MATRIX_ELEMENT_CONDITION_UNSPECIFIED",
+            },
+        ]
+        with patch("app.services.routing_service.get_settings", return_value=self.google_settings()), patch(
+            "app.services.routing_service._request_json_list", return_value=provider_payload
+        ):
+            with self.assertRaises(RoutingError):
+                await compute_route_matrix(
+                    [{"latitude": -17.82, "longitude": 31.04}, {"latitude": -17.81, "longitude": 31.05}],
+                    {"latitude": -17.8248, "longitude": 31.053},
+                )
 
     async def test_reverse_geocode_returns_customer_facing_address(self):
         provider_payload = {
