@@ -2,50 +2,62 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LetsGoRide Zimbabwe | Move, Eat & Send</title>
-  <meta name="description" content="LetsGoRide connects rides, food delivery and courier services in one Zimbabwean platform for customers, drivers, couriers and merchants.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Move. Eat. Send. | LetsGoRide Zimbabwe</title>
+  <meta name="description" content="Rides, food and courier in one app built for Zimbabwe. Move, eat and send with LetsGoRide.">
   <link rel="canonical" href="https://letsgoride.site/">
-  <meta name="theme-color" content="#0b7a42">
+  <meta name="theme-color" content="#f7f4ed">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="LetsGoRide">
-  <meta property="og:title" content="Zimbabwe moves with LetsGoRide.">
-  <meta property="og:description" content="Rides, food delivery and courier services in one Zimbabwean platform.">
+  <meta property="og:title" content="Move. Eat. Send. | LetsGoRide Zimbabwe">
+  <meta property="og:description" content="Rides, food and courier in one app built for Zimbabwe.">
   <meta property="og:url" content="https://letsgoride.site/">
-  <meta property="og:image" content="https://letsgoride.site/assets/ride-harare-owned-v2.jpg">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="800">
-  <meta property="og:image:alt" content="A car travelling along a tree-lined Harare road">
+  <meta property="og:image" content="https://letsgoride.site/assets/hero-move-eat-send-web-1680.webp">
+  <meta property="og:image:width" content="1672">
+  <meta property="og:image:height" content="941">
+  <meta property="og:image:alt" content="A LetsGoRide customer and courier in a contemporary Zimbabwean city scene">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Zimbabwe moves with LetsGoRide.">
-  <meta name="twitter:description" content="Rides, food delivery and courier services in one Zimbabwean platform.">
-  <meta name="twitter:image" content="https://letsgoride.site/assets/ride-harare-owned-v2.jpg">
-  <link rel="preload" as="image" href="/assets/ride-harare-owned-v2.jpg" type="image/jpeg">
-  <link rel="stylesheet" href="/site-v2.css?v=20260827-2">
+  <meta name="twitter:title" content="Move. Eat. Send. | LetsGoRide Zimbabwe">
+  <meta name="twitter:description" content="Rides, food and courier in one app built for Zimbabwe.">
+  <meta name="twitter:image" content="https://letsgoride.site/assets/hero-move-eat-send-web-1680.webp">
+  <link rel="preload" as="image" href="/assets/hero-move-eat-send-web-1680.webp" type="image/webp" media="(min-width: 761px)">
+  <link rel="preload" as="image" href="/assets/hero-move-eat-send-web-960.webp" type="image/webp" media="(max-width: 760px)">
+  <link rel="stylesheet" href="/site-v2.css?v=20260828-2">
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "LetsGoRide",
-      "url": "https://letsgoride.site/",
-      "email": "support@letsgoride.site",
-      "areaServed": "Zimbabwe",
-      "sameAs": [
-        "https://apps.apple.com/pl/app/letsgo-ride-zimbabwe/id6772862281",
-        "https://play.google.com/store/apps/details?id=com.letsgo.ride"
+      "@graph": [
+        {
+          "@type": "Organization",
+          "name": "LetsGoRide",
+          "url": "https://letsgoride.site/",
+          "email": "support@letsgoride.site",
+          "areaServed": "Zimbabwe",
+          "sameAs": [
+            "https://apps.apple.com/pl/app/letsgo-ride-zimbabwe/id6772862281",
+            "https://play.google.com/store/apps/details?id=com.letsgo.ride"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "name": "LetsGoRide",
+          "url": "https://letsgoride.site/",
+          "description": "Rides, food and courier in one app built for Zimbabwe."
+        }
       ]
     }
   </script>
 </head>
-<body>
+<body class="home-page">
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header class="site-header">
+  <header class="site-header" data-site-header>
     <div class="container nav-shell">
       <a class="brand" href="/" aria-label="LetsGoRide home">Lets<span class="go">Go</span>Ride</a>
-      <button class="menu-button" type="button" data-menu-button aria-expanded="false" aria-controls="siteNav">Menu</button>
+      <button class="menu-button" type="button" data-menu-button aria-expanded="false" aria-controls="siteNav"><span>Menu</span></button>
       <nav class="nav-links" id="siteNav" data-nav aria-label="Primary navigation">
         <a href="#services">Services</a>
-        <a href="#partners">Earn & sell</a>
+        <a href="#partners">Earn</a>
         <a href="#safety">Safety</a>
         <a href="/support">Support</a>
         <a class="nav-cta" href="#download">Get the app</a>
@@ -54,149 +66,256 @@
   </header>
 
   <main id="main">
-    <section class="hero">
-      <div class="container hero-grid">
-        <div class="hero-content">
-          <p class="eyebrow">Zimbabwe's everyday mobility platform</p>
-          <h1>Zimbabwe moves with <span class="accent">LetsGoRide.</span></h1>
-          <p class="hero-copy">One trusted app for rides, food delivery and courier services—connecting customers with the drivers, couriers and merchants who keep daily life moving.</p>
-          <div class="hero-actions">
-            <a class="button primary" href="#download">Get the app</a>
-            <a class="button secondary" href="#services">Explore services</a>
-          </div>
+    <section class="hero-cinematic" aria-labelledby="hero-title">
+      <picture class="hero-cinematic-media">
+        <source media="(max-width: 760px)" srcset="/assets/hero-move-eat-send-web-960.webp">
+        <img src="/assets/hero-move-eat-send-web-1680.webp" width="1672" height="941" alt="A customer using LetsGoRide beside a car as a courier prepares a delivery" fetchpriority="high" decoding="async">
+      </picture>
+      <div class="hero-cinematic-shade" aria-hidden="true"></div>
+      <div class="container hero-cinematic-content">
+        <p class="hero-wordmark" aria-label="LetsGoRide">Lets<span>Go</span>Ride</p>
+        <h1 id="hero-title">Move. Eat. Send.</h1>
+        <p>Rides, food and courier — one platform built for Zimbabwe.</p>
+        <div class="hero-actions">
+          <a class="button hero-primary" href="#download">Get the app</a>
+          <a class="button hero-secondary" href="#services">Explore services</a>
         </div>
-        <figure class="hero-photo">
-          <img src="/assets/ride-harare-owned-v2.jpg" width="1200" height="800" alt="A car travelling along a tree-lined Harare road" fetchpriority="high" decoding="async">
-          <figcaption>
-            <strong>Made for everyday movement.</strong>
-            <span>Move · Eat · Send</span>
-          </figcaption>
-        </figure>
       </div>
+      <a class="hero-scroll" href="#services" aria-label="Explore LetsGoRide services"><span>Explore</span><i aria-hidden="true"></i></a>
+      <p class="hero-truth">One app. Three everyday services.</p>
     </section>
 
-    <section class="section services-section" id="services">
+    <section class="worlds section" id="services" aria-labelledby="worlds-title">
       <div class="container">
-        <div class="section-head">
-          <div>
-            <p class="section-label">Customer services</p>
-            <h2>One account for the journeys and deliveries that matter.</h2>
-          </div>
-          <p class="section-intro">Choose the service you need, confirm the details in the app and keep the latest activity together in one place.</p>
-        </div>
-        <div class="service-list">
-          <article class="service-row">
-            <div class="service-title"><span>01</span><h3>Rides</h3></div>
-            <p>Find posted routes, request a seat and keep trip details and activity records close at hand.</p>
-            <a href="#download">Use LetsGoRide</a>
-          </article>
-          <article class="service-row">
-            <div class="service-title"><span>02</span><h3>Food</h3></div>
-            <p>Browse available restaurants and menus, place eligible orders and follow each order's progress.</p>
-            <a href="#download">Browse in the app</a>
-          </article>
-          <article class="service-row">
-            <div class="service-title"><span>03</span><h3>Courier</h3></div>
-            <p>Set precise pickup and drop-off points, request a delivery and follow its current status.</p>
-            <a href="#download">Send with LetsGoRide</a>
-          </article>
+        <header class="editorial-heading reveal">
+          <p class="section-kicker">The LetsGoRide app</p>
+          <h2 id="worlds-title">One day. Three worlds.</h2>
+          <p>Get where you are going, choose a meal, or send what matters — designed to live together in one app.</p>
+        </header>
+        <div class="worlds-list">
+          <a class="world world-move reveal" href="#rides">
+            <span class="world-number">01</span>
+            <span class="world-verb">Move</span>
+            <span class="world-name">Rides</span>
+            <span class="world-note">Search routes. Request a seat. Travel together.</span>
+            <span class="world-arrow" aria-hidden="true">↘</span>
+          </a>
+          <a class="world world-eat reveal" href="#food">
+            <span class="world-number">02</span>
+            <span class="world-verb">Eat</span>
+            <span class="world-name">Food</span>
+            <span class="world-note">Browse real availability. Order from published menus.</span>
+            <span class="world-arrow" aria-hidden="true">↘</span>
+          </a>
+          <a class="world world-send reveal" href="#courier">
+            <span class="world-number">03</span>
+            <span class="world-verb">Send</span>
+            <span class="world-name">Courier</span>
+            <span class="world-note">Set precise points. Request. Follow the handoff.</span>
+            <span class="world-arrow" aria-hidden="true">↘</span>
+          </a>
         </div>
       </div>
     </section>
 
-    <section class="section editorial-section" aria-label="Food and courier services">
-      <div class="container story-grid">
-        <article class="story">
-          <img src="/assets/food-local-owned-v1.jpg" width="1536" height="1024" alt="A table of freshly prepared local food" loading="lazy" decoding="async">
-          <div class="story-copy">
-            <p class="section-label">Eat</p>
-            <h2>Local food, clearly presented.</h2>
-            <p>See real restaurant availability, choose from the menus that are open for ordering and follow order updates in the app.</p>
-          </div>
-        </article>
-        <article class="story story-reverse">
-          <img src="/assets/courier-handoff-owned-v2.jpg" width="1200" height="800" alt="A courier handing a parcel to a customer" loading="lazy" decoding="async">
-          <div class="story-copy">
-            <p class="section-label">Send</p>
-            <h2>From pickup to handoff.</h2>
-            <p>Choose accurate locations, review the delivery details and stay informed as an assigned courier completes the job.</p>
-          </div>
-        </article>
+    <section class="service-story rides-story" id="rides" aria-labelledby="rides-title">
+      <div class="service-story-media reveal">
+        <picture>
+          <source media="(max-width: 760px)" srcset="/assets/rides-harare-web-760.webp">
+          <img src="/assets/rides-harare-web-1440.webp" width="1440" height="960" alt="A LetsGoRide driver welcoming a passenger beside a car in Harare" loading="lazy" decoding="async">
+        </picture>
+        <div class="ride-search-card ui-card" aria-label="Illustration of ride search in the LetsGoRide app">
+          <p>Find a ride</p>
+          <div><span>From</span><strong>Your starting point</strong></div>
+          <div><span>To</span><strong>Where you are going</strong></div>
+          <span class="ui-action">Search routes</span>
+        </div>
+      </div>
+      <div class="service-story-copy reveal">
+        <p class="section-kicker light">Move · Rides</p>
+        <h2 id="rides-title">From here to there, together.</h2>
+        <p>Search posted routes, request your seat and keep the trip details close — from driver confirmation to arrival.</p>
+        <ul class="feature-line" aria-label="Ride features">
+          <li>Route search</li>
+          <li>Seat requests</li>
+          <li>Trip details</li>
+          <li>Ride messaging</li>
+        </ul>
+        <a class="story-link story-link-light" href="#download">Find your next ride <span aria-hidden="true">→</span></a>
       </div>
     </section>
 
-    <section class="section partner-band" id="partners">
+    <section class="service-story food-story" id="food" aria-labelledby="food-title">
+      <div class="service-story-copy reveal">
+        <p class="section-kicker">Eat · Food</p>
+        <h2 id="food-title">Food you love, delivered.</h2>
+        <p>Explore published restaurant menus, build your basket and follow every accepted order through preparation and delivery.</p>
+        <div class="food-journey" aria-label="Food order journey">
+          <span class="active">Choose</span><i></i><span>Order</span><i></i><span>Follow</span>
+        </div>
+        <a class="story-link" href="#download">Explore Food in the app <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="service-story-media reveal">
+        <picture>
+          <source media="(max-width: 760px)" srcset="/assets/food-merchant-web-760.webp">
+          <img src="/assets/food-merchant-web-1440.webp" width="1440" height="1080" alt="A restaurant team handing a prepared order to a courier in Harare" loading="lazy" decoding="async">
+        </picture>
+        <div class="food-status-card ui-card" aria-label="Illustration of a food order status in the LetsGoRide app">
+          <span class="status-dot"></span>
+          <div><small>Order journey</small><strong>Prepared with live status updates</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="service-story courier-story" id="courier" aria-labelledby="courier-title">
+      <div class="courier-route-art" aria-hidden="true">
+        <span class="route-origin"></span>
+        <svg viewBox="0 0 420 240" role="presentation"><path d="M28 196 C92 40, 208 268, 386 54" pathLength="1"></path></svg>
+        <span class="route-destination"></span>
+      </div>
+      <div class="service-story-media reveal">
+        <picture>
+          <source media="(max-width: 760px)" srcset="/assets/courier-handoff-web-760.webp">
+          <img src="/assets/courier-handoff-web-1440.webp" width="1440" height="960" alt="A LetsGoRide courier handing a parcel to a customer" loading="lazy" decoding="async">
+        </picture>
+      </div>
+      <div class="service-story-copy reveal">
+        <p class="section-kicker">Send · Courier</p>
+        <h2 id="courier-title">Pickup. Track. Delivered.</h2>
+        <p>Choose precise pickup and drop-off points, review the quote and follow your parcel through to its PIN-confirmed handoff.</p>
+        <div class="courier-points">
+          <div><span class="point point-start"></span><small>Pickup</small><strong>Pin the exact place</strong></div>
+          <div><span class="point point-end"></span><small>Drop-off</small><strong>Follow the delivery</strong></div>
+        </div>
+        <a class="story-link" href="#download">Send with LetsGoRide <span aria-hidden="true">→</span></a>
+      </div>
+    </section>
+
+    <section class="app-experience section" aria-labelledby="app-title">
+      <div class="container app-experience-grid">
+        <div class="app-copy reveal">
+          <p class="section-kicker">Inside LetsGoRide</p>
+          <h2 id="app-title">Three services.<br>One app.</h2>
+          <p>The same clear experience carries you from ride search to meal order to parcel delivery.</p>
+          <div class="app-tabs" role="tablist" aria-label="LetsGoRide app services">
+            <button id="app-tab-move" type="button" role="tab" aria-controls="app-panel-move" aria-selected="true" data-app-tab="move">Move</button>
+            <button id="app-tab-eat" type="button" role="tab" aria-controls="app-panel-eat" aria-selected="false" tabindex="-1" data-app-tab="eat">Eat</button>
+            <button id="app-tab-send" type="button" role="tab" aria-controls="app-panel-send" aria-selected="false" tabindex="-1" data-app-tab="send">Send</button>
+          </div>
+        </div>
+        <div class="device-stage reveal" data-device-stage data-active-service="move" aria-live="polite">
+          <div class="device-glow" aria-hidden="true"></div>
+          <div class="phone-shell phone-main">
+            <div class="phone-sensor" aria-hidden="true"></div>
+            <div class="phone-screen screen-move" id="app-panel-move" role="tabpanel" aria-labelledby="app-tab-move" data-app-panel="move">
+              <div class="phone-top"><span>Lets<span>Go</span>Ride</span><i></i></div>
+              <p class="phone-greeting">Where are you going?</p>
+              <div class="phone-route"><span></span><div><small>From</small><strong>Choose a starting point</strong></div></div>
+              <div class="phone-route destination"><span></span><div><small>To</small><strong>Choose a destination</strong></div></div>
+              <span class="phone-button">Search rides</span>
+              <div class="phone-mini-card"><i></i><span><small>Upcoming rides</small><strong>Routes appear when drivers post</strong></span></div>
+            </div>
+            <div class="phone-screen screen-eat" id="app-panel-eat" role="tabpanel" aria-labelledby="app-tab-eat" data-app-panel="eat" hidden>
+              <div class="phone-top"><span>Lets<span>Go</span>Ride</span><i></i></div>
+              <p class="phone-greeting">What are you craving?</p>
+              <div class="phone-chips"><span>Chicken</span><span>Pizza</span><span>Bakery</span></div>
+              <div class="phone-food-hero"><small>Food</small><strong>Browse published menus</strong></div>
+              <div class="phone-mini-card"><i></i><span><small>Order status</small><strong>Follow accepted orders</strong></span></div>
+            </div>
+            <div class="phone-screen screen-send" id="app-panel-send" role="tabpanel" aria-labelledby="app-tab-send" data-app-panel="send" hidden>
+              <div class="phone-top"><span>Lets<span>Go</span>Ride</span><i></i></div>
+              <p class="phone-greeting">Send a parcel</p>
+              <div class="phone-map"><span class="map-road one"></span><span class="map-road two"></span><span class="map-pin"></span></div>
+              <div class="phone-route"><span></span><div><small>Pickup</small><strong>Set the exact point</strong></div></div>
+              <div class="phone-route destination"><span></span><div><small>Drop-off</small><strong>Add a destination</strong></div></div>
+              <span class="phone-button">Review delivery</span>
+            </div>
+          </div>
+          <div class="phone-shell phone-back" aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="zimbabwe-story" aria-labelledby="zimbabwe-title">
+      <div class="container zimbabwe-grid">
+        <div class="zim-word reveal" aria-hidden="true">ZW</div>
+        <div class="zimbabwe-copy reveal">
+          <p class="section-kicker light">Home, by design</p>
+          <h2 id="zimbabwe-title">Made for Zimbabwe.</h2>
+          <p>Built around the way Zimbabwe moves, eats and sends — with local context at the heart of the experience.</p>
+        </div>
+        <div class="zimbabwe-lines" aria-hidden="true"><span></span><span></span><span></span></div>
+      </div>
+    </section>
+
+    <section class="partners section" id="partners" aria-labelledby="partners-title">
       <div class="container">
-        <div class="section-head">
-          <div>
-            <p class="section-label">Earn and sell</p>
-            <h2>A working platform for the people behind every service.</h2>
-          </div>
-          <p class="section-intro">Driver, courier and merchant accounts each have tools built around their day-to-day work and reviewed account details.</p>
+        <header class="editorial-heading partner-heading reveal">
+          <p class="section-kicker">Work with LetsGoRide</p>
+          <h2 id="partners-title">Drive. Deliver. Sell.</h2>
+          <p>Dedicated workspaces put trips, deliveries and restaurant operations where each partner needs them.</p>
+        </header>
+        <div class="partner-paths">
+          <article class="partner-path partner-driver reveal">
+            <span>01 · Driver</span>
+            <h3>Take the wheel.</h3>
+            <p>Post eligible trips, review passenger requests and manage your driving calendar.</p>
+            <a href="#download">Drive with LetsGoRide <i aria-hidden="true">→</i></a>
+          </article>
+          <article class="partner-path partner-courier reveal">
+            <span>02 · Courier</span>
+            <h3>Keep deliveries moving.</h3>
+            <p>Review eligible offers, manage active work and complete secure parcel handoffs.</p>
+            <a href="#download">Deliver with LetsGoRide <i aria-hidden="true">→</i></a>
+          </article>
+          <article class="partner-path partner-merchant reveal">
+            <span>03 · Merchant</span>
+            <h3>Bring your menu online.</h3>
+            <p>Manage published menus, availability and accepted orders from a dedicated store workspace.</p>
+            <a href="#download">Partner with LetsGoRide <i aria-hidden="true">→</i></a>
+          </article>
         </div>
-        <div class="partner-grid">
-          <article>
-            <span>Driver</span>
-            <h3>Plan and manage trips.</h3>
-            <p>Post eligible trips, review passenger requests, manage your calendar and keep trip information current.</p>
-          </article>
-          <article>
-            <span>Courier</span>
-            <h3>See offers and deliver.</h3>
-            <p>Go online, review eligible offers, manage active deliveries, shifts and earnings from one workspace.</p>
-          </article>
-          <article>
-            <span>Merchant</span>
-            <h3>Run your store.</h3>
-            <p>Manage orders, menus, availability, opening hours and operating information through dedicated merchant tools.</p>
-          </article>
-        </div>
-        <a class="text-link light-link" href="#download">Get the app to work with LetsGoRide <span aria-hidden="true">→</span></a>
       </div>
     </section>
 
-    <section class="section how-section">
-      <div class="container">
-        <div class="section-head compact-head">
-          <div>
-            <p class="section-label">How it works</p>
-            <h2>Simple from the first tap.</h2>
-          </div>
+    <section class="trust section" id="safety" aria-labelledby="trust-title">
+      <div class="container trust-layout">
+        <div class="trust-copy reveal">
+          <p class="section-kicker">Trust & safety</p>
+          <h2 id="trust-title">Built around trust.</h2>
+          <p>Real-world services need clear identities, useful records and a way to get help.</p>
+          <a class="story-link" href="/safety">See how safety works <span aria-hidden="true">→</span></a>
         </div>
-        <ol class="steps">
-          <li><span>01</span><div><h3>Download LetsGoRide</h3><p>Create or sign in to your account and choose the role that matches how you use the platform.</p></div></li>
-          <li><span>02</span><div><h3>Choose a service</h3><p>Review the details, location and availability shown for your ride, order or delivery.</p></div></li>
-          <li><span>03</span><div><h3>Follow your activity</h3><p>Keep current updates, history, messages and support access together in the app.</p></div></li>
+        <div class="trust-principles">
+          <article class="reveal"><span>01</span><div><h3>Reviewed partner access</h3><p>Driver, courier and merchant access follows an application and review process.</p></div></article>
+          <article class="reveal"><span>02</span><div><h3>Private verification records</h3><p>Identity documents use protected access rather than public profile links.</p></div></article>
+          <article class="reveal"><span>03</span><div><h3>Support when it matters</h3><p>Activity records, issue reporting and public support routes help keep people accountable.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="how section" aria-labelledby="how-title">
+      <div class="container">
+        <header class="how-heading reveal">
+          <p class="section-kicker">How it works</p>
+          <h2 id="how-title">Everyday needs.<br>Three simple steps.</h2>
+        </header>
+        <ol class="how-steps">
+          <li class="reveal"><span>1</span><strong>Choose a service</strong><p>Open LetsGoRide and pick rides, food or courier.</p></li>
+          <li class="reveal"><span>2</span><strong>Make your request</strong><p>Review the details and confirm what you need.</p></li>
+          <li class="reveal"><span>3</span><strong>Move, eat or send</strong><p>Follow the latest status from the same app.</p></li>
         </ol>
       </div>
     </section>
 
-    <section class="section trust-section" id="safety">
-      <div class="container">
-        <div class="section-head">
-          <div>
-            <p class="section-label">Safety and trust</p>
-            <h2>Clear controls for real-world services.</h2>
-          </div>
-          <p class="section-intro">LetsGoRide combines reviewed partner accounts, private verification information, secure sessions and accessible support paths.</p>
-        </div>
-        <div class="trust-grid">
-          <div class="trust-item"><h3>Reviewed partner accounts</h3><p>Driver, courier and merchant access follows role-specific application and review steps.</p></div>
-          <div class="trust-item"><h3>Private identity records</h3><p>Verification documents use protected access and are not presented as public profile content.</p></div>
-          <div class="trust-item"><h3>Support and accountability</h3><p>Trip, order and delivery activity stays tied to the right account, with public support and safety routes when help is needed.</p></div>
-        </div>
-        <a class="text-link" href="/safety">Read LetsGoRide safety guidance <span aria-hidden="true">→</span></a>
-      </div>
-    </section>
-
-    <section class="section" id="download">
-      <div class="container">
-        <div class="download-panel">
-          <div>
-            <p class="section-label">LetsGoRide app</p>
-            <h2>Available on iPhone and Android.</h2>
-            <p>Download LetsGoRide from the official App Store or Google Play listing.</p>
-          </div>
+    <section class="download" id="download" aria-labelledby="download-title">
+      <div class="download-orbit orbit-one" aria-hidden="true"></div>
+      <div class="download-orbit orbit-two" aria-hidden="true"></div>
+      <div class="container download-grid">
+        <div class="download-copy reveal">
+          <p class="section-kicker light">LetsGoRide for iPhone and Android</p>
+          <h2 id="download-title">Ready when you are.</h2>
+          <p>The multi-service experience is rolling out through official LetsGoRide app updates.</p>
           <div class="store-links">
             <a href="https://apps.apple.com/pl/app/letsgo-ride-zimbabwe/id6772862281" target="_blank" rel="noopener noreferrer" aria-label="Download LetsGoRide on the App Store">
               <img src="/assets/app-store-badge.svg" width="135" height="40" alt="Download on the App Store">
@@ -205,53 +324,52 @@
               <img src="/assets/google-play-badge.svg" width="180" height="53" alt="Get it on Google Play">
             </a>
           </div>
+          <p class="store-availability">Features can vary by app version and service availability.</p>
         </div>
-      </div>
-    </section>
-
-    <section class="section support-section">
-      <div class="container contact-strip">
-        <div>
-          <p class="section-label">Help when you need it</p>
-          <h2>Talk to LetsGoRide Support.</h2>
-          <p>Get help with accounts, rides, food orders, courier deliveries, verification, privacy and safety.</p>
-        </div>
-        <div class="contact-actions">
-          <a class="button primary" href="/support">Visit Support</a>
-          <a class="text-link" href="mailto:support@letsgoride.site">support@letsgoride.site</a>
-        </div>
+        <div class="download-mark reveal" aria-label="LetsGoRide"><span>Lets</span><em>Go</em><span>Ride</span></div>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="container">
+      <div class="footer-lead">
+        <a class="brand brand-light" href="/">Lets<span class="go">Go</span>Ride</a>
+        <p>Move. Eat. Send.</p>
+      </div>
       <div class="footer-grid">
-        <div class="footer-brand">
-          <a class="brand" href="/">Lets<span class="go">Go</span>Ride</a>
-          <p>Rides, food delivery and courier services through one Zimbabwean platform.</p>
+        <div class="footer-col">
+          <h3>Product</h3>
+          <a href="#rides">Rides</a>
+          <a href="#food">Food</a>
+          <a href="#courier">Courier</a>
         </div>
         <div class="footer-col">
-          <h3>Platform</h3>
-          <a href="#services">Services</a>
-          <a href="#partners">Earn & sell</a>
-          <a href="/support">Support</a>
+          <h3>Earn</h3>
+          <a href="#partners">Driver</a>
+          <a href="#partners">Courier</a>
+          <a href="#partners">Merchant</a>
+        </div>
+        <div class="footer-col">
+          <h3>Company</h3>
           <a href="/safety">Safety</a>
+          <a href="/support">Support</a>
+          <a href="mailto:support@letsgoride.site">Email us</a>
         </div>
         <div class="footer-col">
-          <h3>Legal & privacy</h3>
-          <a href="/privacy">Privacy Policy</a>
-          <a href="/terms">Terms of Use</a>
+          <h3>Legal</h3>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
           <a href="/delete-account">Delete account</a>
           <a href="/legal">Legal centre</a>
         </div>
       </div>
       <div class="footer-bottom">
-        <span>© <span data-year></span> LetsGoRide. All rights reserved.</span>
-        <a href="mailto:support@letsgoride.site">support@letsgoride.site</a>
+        <span>© <span data-year></span> LetsGoRide. Zimbabwe.</span>
+        <div><a href="https://apps.apple.com/pl/app/letsgo-ride-zimbabwe/id6772862281" target="_blank" rel="noopener noreferrer">App Store</a><a href="https://play.google.com/store/apps/details?id=com.letsgo.ride" target="_blank" rel="noopener noreferrer">Google Play</a></div>
       </div>
     </div>
   </footer>
-  <script src="/site-v2.js?v=20260827-2"></script>
+  <script src="/site-v2.js?v=20260828-2"></script>
 </body>
 </html>
