@@ -47,6 +47,12 @@ COLLECTION_NAMES = [
     "menu_items",
     "food_orders",
     "food_order_events",
+    "hailing_cities",
+    "hailing_driver_presence",
+    "hailing_quotes",
+    "hailing_trips",
+    "hailing_dispatch_offers",
+    "hailing_trip_events",
 ]
 
 PERSISTENT_DATABASE_ENVS = {"staging", "production"}
@@ -179,6 +185,58 @@ class Database:
         await self.db["ride_requests"].create_index(
             [("user_id", 1), ("updated_at", -1)],
             name="ride_requests_by_passenger",
+        )
+        await self.db["hailing_cities"].create_index(
+            [("slug", 1)],
+            name="unique_hailing_city_slug",
+            unique=True,
+        )
+        await self.db["hailing_cities"].create_index(
+            [("enabled", 1), ("ride_hailing_enabled", 1), ("country_code", 1)],
+            name="hailing_city_availability",
+        )
+        await self.db["hailing_driver_presence"].create_index(
+            [("driver_id", 1)],
+            name="unique_hailing_presence_driver",
+            unique=True,
+        )
+        await self.db["hailing_driver_presence"].create_index(
+            [("location", "2dsphere")],
+            name="hailing_presence_location",
+        )
+        await self.db["hailing_driver_presence"].create_index(
+            [("city_id", 1), ("status", 1), ("ride_class", 1), ("last_seen_at", -1)],
+            name="hailing_presence_dispatch",
+        )
+        await self.db["hailing_trips"].create_index(
+            [("passenger_user_id", 1), ("status", 1), ("created_at", -1)],
+            name="hailing_active_by_passenger",
+        )
+        await self.db["hailing_trips"].create_index(
+            [("driver_user_id", 1), ("status", 1), ("created_at", -1)],
+            name="hailing_active_by_driver",
+        )
+        await self.db["hailing_trips"].create_index(
+            [("city_id", 1), ("status", 1), ("created_at", -1)],
+            name="hailing_trips_by_city_status",
+        )
+        await self.db["hailing_trips"].create_index(
+            [("passenger_user_id", 1), ("client_request_id", 1)],
+            name="unique_hailing_trip_idempotency",
+            unique=True,
+            partialFilterExpression={"client_request_id": {"$type": "string"}},
+        )
+        await self.db["hailing_dispatch_offers"].create_index(
+            [("trip_id", 1), ("status", 1)],
+            name="hailing_offers_by_trip",
+        )
+        await self.db["hailing_dispatch_offers"].create_index(
+            [("driver_id", 1), ("status", 1), ("expires_at", 1)],
+            name="hailing_pending_offer_by_driver",
+        )
+        await self.db["hailing_quotes"].create_index(
+            [("user_id", 1), ("expires_at", 1)],
+            name="hailing_quotes_by_user_expiry",
         )
 
     async def _prepare_unique_user_email_index(self) -> None:

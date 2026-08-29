@@ -8,9 +8,11 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import activity, admin, auth, conversations, courier, drivers, food, health, media, merchant, notifications, operations, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist
+from app.routers import activity, admin, auth, conversations, courier, drivers, food, hailing, health, media, merchant, notifications, operations, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
+from app.services.hailing_city_service import seed_zimbabwe_service_areas
+from app.services.hailing_trip_service import hailing_dispatch_sweeper
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
@@ -28,6 +30,8 @@ app = FastAPI(
 )
 ride_lifecycle_stop_event: asyncio.Event | None = None
 ride_lifecycle_task: asyncio.Task | None = None
+hailing_dispatch_stop_event: asyncio.Event | None = None
+hailing_dispatch_task: asyncio.Task | None = None
 staging_routing_smoke_task: asyncio.Task | None = None
 staging_courier_dispatch_smoke_task: asyncio.Task | None = None
 
@@ -93,14 +97,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.on_event("startup")
 async def on_startup():
-    global ride_lifecycle_stop_event, ride_lifecycle_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     await database.connect()
     await realtime_event_service.start()
     await ensure_admin_seed_user()
+    await seed_zimbabwe_service_areas()
     if settings.enable_demo_seed:
         await seed_demo_rides()
     ride_lifecycle_stop_event = asyncio.Event()
     ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
+    hailing_dispatch_stop_event = asyncio.Event()
+    hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper(hailing_dispatch_stop_event))
     logger.info(
         "routing_smoke_gate app_env=%s enabled=%s configured=%s provider=%s region=%s",
         settings.app_env,
@@ -124,11 +131,15 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    global ride_lifecycle_stop_event, ride_lifecycle_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     if ride_lifecycle_stop_event:
         ride_lifecycle_stop_event.set()
     if ride_lifecycle_task:
         ride_lifecycle_task.cancel()
+    if hailing_dispatch_stop_event:
+        hailing_dispatch_stop_event.set()
+    if hailing_dispatch_task:
+        hailing_dispatch_task.cancel()
     if staging_routing_smoke_task:
         staging_routing_smoke_task.cancel()
     if staging_courier_dispatch_smoke_task:
@@ -148,6 +159,8 @@ app.include_router(conversations.router)
 app.include_router(notifications.router)
 app.include_router(realtime.router)
 app.include_router(drivers.router)
+app.include_router(hailing.router)
+app.include_router(hailing.admin_router)
 app.include_router(courier.router)
 app.include_router(food.router)
 app.include_router(merchant.router)

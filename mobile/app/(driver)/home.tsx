@@ -10,6 +10,7 @@ import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { VerifiedBadge, isIdentityVerified } from "../../components/ui/VerifiedBadge";
 import { v2Theme } from "../../constants/v2Theme";
+import { useHailingDriverWorkspace } from "../../hooks/useHailing";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useDriver } from "../../hooks/useDriver";
 import { useDriverRides } from "../../hooks/useDriverRides";
@@ -25,6 +26,7 @@ export default function DriverHomeScreen() {
   const { driver } = useDriver();
   const { rides: ownRides, loading, error, reload } = useDriverRides();
   const { requests, loading: requestsLoading, error: requestsError, reload: reloadRequests } = useDriverRequests();
+  const { status: hailingStatus, offer: hailingOffer } = useHailingDriverWorkspace(false);
 
   const driverStatus = driver?.verified
     ? "Verified"
@@ -75,6 +77,16 @@ export default function DriverHomeScreen() {
           <MaterialCommunityIcons name="chevron-right" size={21} color={v2Theme.colors.inkTertiary} />
         </Pressable>
       ) : null}
+
+      <Pressable accessibilityRole="button" accessibilityLabel="Open Ride Now driver workspace" onPress={() => router.push("/(driver)/hailing" as never)} style={({ pressed }) => [styles.hailingCard, pressed && styles.pressed]}>
+        <View style={styles.hailingIcon}><MaterialCommunityIcons name={hailingStatus?.online ? "car-connected" : "car-arrow-right"} size={25} color="#FFFFFF" /></View>
+        <View style={styles.hailingCopy}>
+          <Text style={styles.hailingEyebrow}>RIDE NOW</Text>
+          <Text style={styles.hailingTitle}>{hailingOffer ? "New local ride request" : hailingStatus?.online ? "You’re online for local rides" : "Go online for local hailing"}</Text>
+          <Text style={styles.hailingBody}>{hailingOffer ? "Review pickup, destination and fare before accepting." : "Keep this separate from your intercity posted trips."}</Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={22} color="#FFFFFF" />
+      </Pressable>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Posted trips</Text><Text style={styles.sectionSub}>Your carpool schedule</Text></View><Pressable accessibilityRole="button" onPress={() => router.push("/(driver)/trips" as never)} hitSlop={8}><Text style={styles.seeAll}>See all</Text></Pressable></View>
@@ -133,6 +145,12 @@ const styles = StyleSheet.create({
   verificationCopy: { flex: 1, gap: 3 },
   verificationTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
   verificationBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
+  hailingCard: { minHeight: 104, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 16, flexDirection: "row", alignItems: "center", gap: 13 },
+  hailingIcon: { width: 50, height: 50, borderRadius: 18, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
+  hailingCopy: { flex: 1, gap: 3 },
+  hailingEyebrow: { color: "#8FE6AE", fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
+  hailingTitle: { color: "#FFFFFF", fontSize: 16, lineHeight: 21, fontWeight: "900" },
+  hailingBody: { color: "rgba(255,255,255,0.66)", fontSize: 10, lineHeight: 15 },
   section: { gap: 10 },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },

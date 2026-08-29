@@ -38,6 +38,12 @@ class Settings:
         self.rate_limit_redis_url = self._get_env_first("RATE_LIMIT_REDIS_URL", "REALTIME_REDIS_URL", "REDIS_URL")
         self.session_lifetime_days = max(1, int(os.getenv("SESSION_LIFETIME_DAYS", "30")))
         self.realtime_channel = os.getenv("REALTIME_CHANNEL", "letsgoride:realtime:v1").strip() or "letsgoride:realtime:v1"
+        raw_hailing_enabled = os.getenv("HAILING_ENABLED")
+        self.hailing_enabled = (
+            self._parse_bool(raw_hailing_enabled)
+            if raw_hailing_enabled is not None
+            else self.app_env.strip().lower() in {"development", "test", "staging"}
+        )
 
         # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
         self.routing_provider = os.getenv("ROUTING_PROVIDER", "disabled").strip().lower()

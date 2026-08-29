@@ -440,6 +440,7 @@ export default function AdminDashboardScreen() {
         <View style={styles.section}>
           <SectionTitle title="Account actions" />
           <ListTile icon="refresh" title="Refresh data" subtitle="Reload admin dashboard records" onPress={load} />
+          <ListTile icon="car-connected" title="Ride Now control" subtitle="Manage hailing cities, driver eligibility and active trips" onPress={() => router.push("/(admin)/hailing" as never)} />
           <ListTile icon="shield-check-outline" title="Review verifications" subtitle="Open the driver verification queue" onPress={() => switchSection("verifications")} />
           <ListTile icon="logout" title="Logout" subtitle="Sign out of the admin account" danger onPress={handleLogout} />
         </View>

@@ -25,6 +25,7 @@ export function resolveNotificationRoute({ data = {}, notificationType, role }: 
   const rideId = opaqueId(data?.ride_id);
   const supportMessageId = opaqueId(data?.support_message_id);
   const reportId = opaqueId(data?.report_id);
+  const hailingTripId = opaqueId(data?.hailing_trip_id);
 
   if (target === "merchant_order") {
     return role === "merchant" && restaurantId ? `/(merchant)/restaurant/${restaurantId}` : null;
@@ -37,6 +38,11 @@ export function resolveNotificationRoute({ data = {}, notificationType, role }: 
   }
   if (target === "customer_delivery") {
     return role === "passenger" && deliveryId ? `/(customer)/courier/${deliveryId}` : null;
+  }
+  if (target === "hailing_trip") {
+    if (role === "driver" && hailingTripId) return `/(driver)/hailing/trip/${hailingTripId}`;
+    if (role === "passenger" && hailingTripId) return `/(customer)/hail/trip/${hailingTripId}`;
+    return null;
   }
 
   if (conversationId && (role === "passenger" || role === "driver")) {
@@ -51,6 +57,8 @@ export function resolveNotificationRoute({ data = {}, notificationType, role }: 
   if (deliveryId && role === "passenger") return `/(customer)/courier/${deliveryId}`;
   if (rideId && role === "driver") return `/(driver)/trip/${rideId}`;
   if (rideId && role === "passenger") return `/(customer)/ride/${rideId}`;
+  if (hailingTripId && role === "driver") return `/(driver)/hailing/trip/${hailingTripId}`;
+  if (hailingTripId && role === "passenger") return `/(customer)/hail/trip/${hailingTripId}`;
   if (supportMessageId && role) return "/(shared)/support";
   if (reportId && role) return "/(shared)/safety";
   return null;

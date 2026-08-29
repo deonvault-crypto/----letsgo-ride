@@ -45,6 +45,31 @@ async def ensure_conversation_for_request(request: Dict[str, Any], ride: Optiona
     return created
 
 
+async def ensure_conversation_for_hailing_trip(trip: Dict[str, Any]) -> Dict[str, Any]:
+    if trip.get("status") == "SEARCHING" or not trip.get("driver_user_id"):
+        api_error("Ride Now messaging unlocks after a driver is assigned.", 400)
+    existing = await database.find_one("conversations", {"hailing_trip_id": trip["id"]})
+    if existing:
+        return existing
+    timestamp = now_iso()
+    conversation = {
+        "id": new_id(),
+        "hailing_trip_id": trip["id"],
+        "driver_user_id": trip.get("driver_user_id"),
+        "driver_id": trip.get("driver_id"),
+        "passenger_id": trip.get("passenger_user_id"),
+        "status": "active",
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "last_message_at": None,
+        "last_message": None,
+        "last_message_sender_id": None,
+    }
+    created = await insert_versioned_conversation(conversation)
+    await publish_conversation_realtime(created, "conversation.created")
+    return created
+
+
 async def list_conversations_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     conversations = await database.find_many("conversations")
     allowed = [conversation for conversation in conversations if can_access_conversation(user, conversation)]
@@ -55,6 +80,7 @@ async def enrich_conversation(conversation: Dict[str, Any], user: Optional[Dict[
     enriched = dict(conversation)
     ride = await database.find_one("rides", {"id": conversation.get("ride_id")}) if conversation.get("ride_id") else None
     request = await database.find_one("ride_requests", {"id": conversation.get("request_id")}) if conversation.get("request_id") else None
+    hailing_trip = await database.find_one("hailing_trips", {"id": conversation.get("hailing_trip_id")}) if conversation.get("hailing_trip_id") else None
     driver = await database.find_one("users", {"id": conversation.get("driver_user_id")}) if conversation.get("driver_user_id") else None
     passenger = await database.find_one("users", {"id": conversation.get("passenger_id")}) if conversation.get("passenger_id") else None
     latest = None
@@ -70,7 +96,14 @@ async def enrich_conversation(conversation: Dict[str, Any], user: Optional[Dict[
                 "destination": ride.get("destination"),
                 "date": ride.get("date"),
                 "time": ride.get("time"),
-            } if ride else None,
+            } if ride else ({
+                "id": hailing_trip.get("id"),
+                "origin": (hailing_trip.get("pickup") or {}).get("formatted_address"),
+                "destination": (hailing_trip.get("dropoff") or {}).get("formatted_address"),
+                "date": str(hailing_trip.get("created_at") or "")[:10],
+                "time": None,
+                "trip_type": "hailing",
+            } if hailing_trip else None),
             "request_status": request.get("status") if request else None,
             "driver_name": driver.get("name") if driver else None,
             "driver_profile_photo_url": driver.get("profile_photo_url") if driver else None,
@@ -135,7 +168,13 @@ async def send_message(conversation: Dict[str, Any], sender: Dict[str, Any], bod
             "message",
             title,
             "Open LetsGoRide to reply.",
-            {"conversation_id": conversation["id"], "ride_id": conversation.get("ride_id"), "request_id": conversation.get("request_id")},
+            {
+                "conversation_id": conversation["id"],
+                "ride_id": conversation.get("ride_id"),
+                "request_id": conversation.get("request_id"),
+                "hailing_trip_id": conversation.get("hailing_trip_id"),
+                "notification_target": "hailing_trip" if conversation.get("hailing_trip_id") else None,
+            },
         )
     await publish_conversation_realtime(
         updated_conversation,

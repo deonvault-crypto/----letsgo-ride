@@ -10,13 +10,18 @@ import { AppNotice } from "../../components/ui/AppNotice";
 import { PopularRouteChips } from "../../components/ui/PopularRouteChips";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
+import { useActiveHailingTrip, useHailingConfig } from "../../hooks/useHailing";
 import { useRides } from "../../hooks/useRides";
 import { isRideBookable } from "../../utils/tripLifecycle";
 
 export default function CustomerHomeScreen() {
   const router = useRouter();
   const { rides, loading, refreshing, error, reload } = useRides();
+  const { config: hailingConfig } = useHailingConfig();
+  const { trip: activeHailingTrip } = useActiveHailingTrip(false);
   const upcomingRides = rides.filter((ride) => isRideBookable(ride));
+  const hailingEnabled = hailingConfig?.enabled !== false;
+  const activeHailing = activeHailingTrip && !["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"].includes(activeHailingTrip.status);
 
   function chooseService(service: CustomerService) {
     if (service === "ride") return;
@@ -39,16 +44,27 @@ export default function CustomerHomeScreen() {
 
       <ServiceSwitcher value="ride" onChange={chooseService} />
 
-      <Pressable accessibilityRole="button" accessibilityLabel="Search for a ride" onPress={() => router.push("/(customer)/search" as never)} style={({ pressed }) => [styles.whereCard, pressed && styles.pressed]}>
+      {hailingEnabled ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={activeHailing ? "Open active Ride Now trip" : "Request a Ride Now"} onPress={() => router.push(activeHailing ? `/(customer)/hail/trip/${activeHailingTrip.id}` as never : "/(customer)/hail" as never)} style={({ pressed }) => [styles.rideNowCard, pressed && styles.pressed]}>
+          <View style={styles.rideNowCopy}>
+            <Text style={styles.rideNowEyebrow}>RIDE NOW</Text>
+            <Text style={styles.rideNowTitle}>{activeHailing ? "Continue your city ride" : "Where to?"}</Text>
+            <Text style={styles.rideNowBody}>{activeHailing ? activeHailingTrip.status.replaceAll("_", " ") : "Request a private local ride with an approved driver."}</Text>
+          </View>
+          <View style={styles.rideNowAction}><MaterialCommunityIcons name="car-arrow-right" size={24} color="#FFFFFF" /></View>
+        </Pressable>
+      ) : null}
+
+      <Pressable accessibilityRole="button" accessibilityLabel="Search intercity and scheduled rides" onPress={() => router.push("/(customer)/search" as never)} style={({ pressed }) => [styles.whereCard, pressed && styles.pressed]}>
         <View style={styles.whereIcon}><MaterialCommunityIcons name="magnify" size={27} color={v2Theme.colors.ink} /></View>
-        <View style={styles.whereCopy}><Text style={styles.whereTitle}>Where are you going?</Text><Text style={styles.whereSubtitle}>Search routes, dates and available seats</Text></View>
+        <View style={styles.whereCopy}><Text style={styles.whereTitle}>Intercity / Scheduled rides</Text><Text style={styles.whereSubtitle}>Search routes, dates and available seats</Text></View>
         <MaterialCommunityIcons name="arrow-right" size={23} color={v2Theme.colors.ink} />
       </Pressable>
 
       <View style={styles.section}>
         <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>For you</Text><Pressable onPress={() => router.push("/(shared)/services" as never)} hitSlop={8}><Text style={styles.textAction}>See all</Text></Pressable></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRail}>
-          <ServiceStoryCard compact title="Ride" subtitle="Local and city-to-city journeys" eyebrow="GO" icon="car-outline" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push("/(customer)/search" as never)} />
+          <ServiceStoryCard compact title="Ride Now" subtitle="Local private rides" eyebrow="GO" icon="car-arrow-right" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push(hailingEnabled ? "/(customer)/hail" as never : "/(customer)/search" as never)} />
           <ServiceStoryCard compact title="Food" subtitle="Kitchens and dishes near you" eyebrow="EAT" icon="food-fork-drink" image={require("../../assets/images/food-marketplace-owned-v1.png")} onPress={() => router.push("/(customer)/food" as never)} />
           <ServiceStoryCard compact title="Courier" subtitle="Parcels with live tracking" eyebrow="SEND" icon="package-variant-closed" image={require("../../assets/images/courier-handoff-owned-v2.jpg")} onPress={() => router.push("/(shared)/courier" as never)} />
         </ScrollView>
@@ -80,6 +96,12 @@ const styles = StyleSheet.create({
   eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.35 },
   headline: { color: v2Theme.colors.ink, fontSize: v2Theme.type.display, lineHeight: 39, fontWeight: "900", letterSpacing: -1.2 },
   subhead: { color: v2Theme.colors.inkSecondary, fontSize: v2Theme.type.body, lineHeight: 22, maxWidth: 340 },
+  rideNowCard: { minHeight: 142, borderRadius: 30, backgroundColor: v2Theme.colors.ink, padding: 19, flexDirection: "row", alignItems: "center", gap: 15, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.18, shadowRadius: 22, shadowOffset: { width: 0, height: 12 }, elevation: 4 },
+  rideNowCopy: { flex: 1, gap: 5 },
+  rideNowEyebrow: { color: "#8FE6AE", fontSize: 10, fontWeight: "900", letterSpacing: 1.25 },
+  rideNowTitle: { color: "#FFFFFF", fontSize: 29, lineHeight: 34, fontWeight: "900", letterSpacing: -0.9 },
+  rideNowBody: { color: "rgba(255,255,255,0.66)", fontSize: 13, lineHeight: 19 },
+  rideNowAction: { width: 52, height: 52, borderRadius: 18, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
   whereCard: { minHeight: 82, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, paddingHorizontal: v2Theme.spacing.lg, flexDirection: "row", alignItems: "center", gap: v2Theme.spacing.md, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.06, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 3 },
   whereIcon: { width: 48, height: 48, borderRadius: v2Theme.radius.lg, alignItems: "center", justifyContent: "center", backgroundColor: v2Theme.colors.surfaceMuted },
   whereCopy: { flex: 1, gap: 4 },

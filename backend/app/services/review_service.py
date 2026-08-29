@@ -57,6 +57,10 @@ async def completed_trips_count_for_user(user_id: str, role: Optional[str] = Non
             ride = await database.find_one("rides", {"id": request.get("ride_id")})
             if ride and canonical_trip_status(ride.get("status")) == TRIP_STATUS_COMPLETED:
                 count += 1
+    if role in (None, "driver"):
+        count += len(await database.find_many("hailing_trips", {"driver_user_id": user_id, "status": "COMPLETED"}))
+    if role in (None, "passenger"):
+        count += len(await database.find_many("hailing_trips", {"passenger_user_id": user_id, "status": "COMPLETED"}))
     return count
 
 
@@ -106,10 +110,13 @@ async def _completed_public_reviews(reviews: List[Dict[str, Any]]) -> List[Dict[
         if not _is_safe_public_review(review):
             continue
         ride = await database.find_one("rides", {"id": review.get("trip_id")})
-        if not ride or not is_public_ride(ride):
+        if ride and is_public_ride(ride):
+            ride = await apply_ride_lifecycle(ride)
+            if canonical_trip_status(ride.get("status")) == TRIP_STATUS_COMPLETED:
+                visible_reviews.append(review)
             continue
-        ride = await apply_ride_lifecycle(ride)
-        if canonical_trip_status(ride.get("status")) == TRIP_STATUS_COMPLETED:
+        hailing_trip = await database.find_one("hailing_trips", {"id": review.get("trip_id")})
+        if hailing_trip and hailing_trip.get("status") == "COMPLETED":
             visible_reviews.append(review)
     return visible_reviews
 
@@ -157,41 +164,99 @@ async def _create_private_safety_report(review: Dict[str, Any], reviewer: Dict[s
     return created
 
 
+async def _create_private_hailing_safety_report(review: Dict[str, Any], reviewer: Dict[str, Any], trip: Dict[str, Any]) -> Dict[str, Any]:
+    timestamp = now_iso()
+    report = {
+        "id": new_id(),
+        "user_id": reviewer["id"],
+        "user_name": reviewer.get("name"),
+        "user_email": reviewer.get("email"),
+        "user_phone": reviewer.get("phone"),
+        "report_type": "Safety issue from Ride Now review",
+        "message": review.get("comment") or "A low-rating Ride Now review requested safety follow-up.",
+        "hailing_trip_id": trip.get("id"),
+        "review_id": review.get("id"),
+        "reviewee_id": review.get("reviewee_id"),
+        "status": "submitted",
+        "private": True,
+        "is_demo": False,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+    created = await database.insert_one("reports", report)
+    await notify_admins(
+        "safety_report",
+        "Safety report from Ride Now review",
+        "A private safety report from a completed Ride Now review needs admin review.",
+        {"report_id": created["id"], "review_id": review.get("id"), "hailing_trip_id": trip.get("id")},
+    )
+    return created
+
+
 async def create_review(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status, is_public_ride
 
     ride = await database.find_one("rides", {"id": payload.get("trip_id")})
-    if not ride or not is_public_ride(ride):
-        raise ValueError("Ride not found.")
-    ride = await apply_ride_lifecycle(ride)
-    if canonical_trip_status(ride.get("status")) != TRIP_STATUS_COMPLETED:
-        raise ValueError("Reviews unlock after a completed trip.")
-
-    driver_user_id = ride.get("user_id")
-    confirmed_requests = await _confirmed_requests_for_ride(ride["id"])
-    confirmed_passenger_ids = {request.get("user_id") for request in confirmed_requests}
     reviewee_id = payload.get("reviewee_id")
+    trip_type = "intercity"
 
-    if user.get("id") == driver_user_id:
-        reviewer_role = "driver"
-        reviewee_role = "passenger"
-        if reviewee_id not in confirmed_passenger_ids:
-            raise PermissionError("Drivers can only review confirmed passengers on this trip.")
-    elif user.get("id") in confirmed_passenger_ids:
-        reviewer_role = "passenger"
-        reviewee_role = "driver"
-        if reviewee_id != driver_user_id:
-            raise PermissionError("Passengers can only review the driver for this trip.")
+    if ride and is_public_ride(ride):
+        ride = await apply_ride_lifecycle(ride)
+        if canonical_trip_status(ride.get("status")) != TRIP_STATUS_COMPLETED:
+            raise ValueError("Reviews unlock after a completed trip.")
+
+        driver_user_id = ride.get("user_id")
+        confirmed_requests = await _confirmed_requests_for_ride(ride["id"])
+        confirmed_passenger_ids = {request.get("user_id") for request in confirmed_requests}
+
+        if user.get("id") == driver_user_id:
+            reviewer_role = "driver"
+            reviewee_role = "passenger"
+            if reviewee_id not in confirmed_passenger_ids:
+                raise PermissionError("Drivers can only review confirmed passengers on this trip.")
+        elif user.get("id") in confirmed_passenger_ids:
+            reviewer_role = "passenger"
+            reviewee_role = "driver"
+            if reviewee_id != driver_user_id:
+                raise PermissionError("Passengers can only review the driver for this trip.")
+        else:
+            raise PermissionError("Only confirmed trip participants can leave reviews.")
+        trip_id = ride["id"]
+        notification_data = {"ride_id": ride["id"]}
+        safety_trip = ride
     else:
-        raise PermissionError("Only confirmed trip participants can leave reviews.")
+        hailing_trip = await database.find_one("hailing_trips", {"id": payload.get("trip_id")})
+        if not hailing_trip:
+            raise ValueError("Ride not found.")
+        if hailing_trip.get("status") != "COMPLETED":
+            raise ValueError("Reviews unlock after a completed trip.")
+        trip_type = "hailing"
+        driver_user_id = hailing_trip.get("driver_user_id")
+        passenger_user_id = hailing_trip.get("passenger_user_id")
+        if user.get("id") == driver_user_id:
+            reviewer_role = "driver"
+            reviewee_role = "passenger"
+            if reviewee_id != passenger_user_id:
+                raise PermissionError("Drivers can only review the passenger on this Ride Now trip.")
+        elif user.get("id") == passenger_user_id:
+            reviewer_role = "passenger"
+            reviewee_role = "driver"
+            if reviewee_id != driver_user_id:
+                raise PermissionError("Passengers can only review the driver for this Ride Now trip.")
+        else:
+            raise PermissionError("Only Ride Now trip participants can leave reviews.")
+        trip_id = hailing_trip["id"]
+        notification_data = {"hailing_trip_id": hailing_trip["id"], "notification_target": "hailing_trip"}
+        safety_trip = hailing_trip
 
-    if await _has_review(ride["id"], user["id"], reviewee_id):
+    if await _has_review(trip_id, user["id"], reviewee_id):
         raise ValueError("You already reviewed this person for this trip.")
 
     timestamp = now_iso()
     review = {
         "id": new_id(),
-        "trip_id": ride["id"],
+        "trip_id": trip_id,
+        "trip_type": trip_type,
         "reviewer_id": user["id"],
         "reviewee_id": reviewee_id,
         "reviewer_role": reviewer_role,
@@ -207,7 +272,11 @@ async def create_review(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[s
     created = await database.insert_one("reviews", review)
 
     if created["safety_report_requested"]:
-        report = await _create_private_safety_report(created, user, ride)
+        report = await (
+            _create_private_hailing_safety_report(created, user, safety_trip)
+            if trip_type == "hailing"
+            else _create_private_safety_report(created, user, safety_trip)
+        )
         created = await database.update_one(
             "reviews",
             created["id"],
@@ -220,7 +289,7 @@ async def create_review(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[s
         "trip_review",
         "New trip review",
         "A completed-trip participant left you a review.",
-        {"ride_id": ride["id"], "review_id": created["id"]},
+        {**notification_data, "review_id": created["id"]},
     )
     return created
 
@@ -279,6 +348,46 @@ async def pending_reviews_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]
                 "ride_origin": ride.get("origin"),
                 "ride_destination": ride.get("destination"),
                 "completed_at": lifecycle_ride.get("completed_at"),
+            }
+        )
+
+    hailing_driver_trips = await database.find_many("hailing_trips", {"driver_user_id": user["id"], "status": "COMPLETED"})
+    for trip in hailing_driver_trips:
+        passenger_id = trip.get("passenger_user_id")
+        if not passenger_id or await _has_review(trip["id"], user["id"], passenger_id):
+            continue
+        passenger = await database.find_one("users", {"id": passenger_id})
+        pending.append(
+            {
+                "trip_id": trip["id"],
+                "trip_type": "hailing",
+                "reviewer_role": "driver",
+                "reviewee_id": passenger_id,
+                "reviewee_role": "passenger",
+                "reviewee_name": _public_display_name(passenger, (trip.get("passenger_snapshot") or {}).get("name") or "Passenger"),
+                "ride_origin": (trip.get("pickup") or {}).get("formatted_address"),
+                "ride_destination": (trip.get("dropoff") or {}).get("formatted_address"),
+                "completed_at": trip.get("completed_at"),
+            }
+        )
+
+    hailing_passenger_trips = await database.find_many("hailing_trips", {"passenger_user_id": user["id"], "status": "COMPLETED"})
+    for trip in hailing_passenger_trips:
+        driver_user_id = trip.get("driver_user_id")
+        if not driver_user_id or await _has_review(trip["id"], user["id"], driver_user_id):
+            continue
+        driver = await database.find_one("users", {"id": driver_user_id})
+        pending.append(
+            {
+                "trip_id": trip["id"],
+                "trip_type": "hailing",
+                "reviewer_role": "passenger",
+                "reviewee_id": driver_user_id,
+                "reviewee_role": "driver",
+                "reviewee_name": _public_display_name(driver, (trip.get("driver_snapshot") or {}).get("name") or "Driver"),
+                "ride_origin": (trip.get("pickup") or {}).get("formatted_address"),
+                "ride_destination": (trip.get("dropoff") or {}).get("formatted_address"),
+                "completed_at": trip.get("completed_at"),
             }
         )
 
