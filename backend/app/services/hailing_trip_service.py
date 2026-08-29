@@ -3,33 +3,30 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, List, Optional
 
 from app.config import get_settings
 from app.database import database
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import create_code_record, code_matches
 from app.services.hailing_city_service import get_city, haversine_km, point
+from app.services.hailing_dispatch_service import (
+    dispatch_policy,
+    offer_ranking_fields,
+    ranked_dispatch_candidates,
+    release_candidate_reservation,
+    reserve_candidate,
+)
 from app.services.hailing_fare_service import quote_expired
 from app.services.hailing_realtime_service import publish_hailing_admin_realtime, publish_hailing_trip_realtime, update_versioned_hailing_trip
+from app.services.hailing_state import ACTIVE_DRIVER_STATUSES, ACTIVE_PASSENGER_STATUSES, FINAL_STATUSES, TRANSITIONS
 from app.services.notification_service import create_app_notification, notify_admins
 from app.utils import new_id, now_iso
 
 
 logger = logging.getLogger(__name__)
-
-ACTIVE_PASSENGER_STATUSES = {"SEARCHING", "DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS"}
-ACTIVE_DRIVER_STATUSES = {"DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS"}
-FINAL_STATUSES = {"COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"}
-TRANSITIONS = {
-    "SEARCHING": {"DRIVER_ASSIGNED", "NO_DRIVER_FOUND", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_ADMIN"},
-    "DRIVER_ASSIGNED": {"DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN"},
-    "DRIVER_EN_ROUTE": {"DRIVER_ARRIVED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN"},
-    "DRIVER_ARRIVED": {"PASSENGER_CONFIRMED_BOARDING", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN"},
-    "PASSENGER_CONFIRMED_BOARDING": {"IN_PROGRESS", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN"},
-    "IN_PROGRESS": {"COMPLETED", "CANCELLED_BY_ADMIN"},
-}
 
 
 def _hailing_enabled() -> bool:
@@ -46,36 +43,6 @@ def parse_time(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(str(value))
     except (TypeError, ValueError):
         return None
-
-
-def fresh_cutoff(seconds: int) -> str:
-    return (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
-
-
-def _dispatch_config(city: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    dispatch = dict((city or {}).get("dispatch") or {})
-    radius_steps = dispatch.get("radius_steps_km") or dispatch.get("expansion_radii_km") or [2.0, 4.0, 8.0, 15.0]
-    maximum_radius = float(dispatch.get("maximum_radius_km") or max(float(radius) for radius in radius_steps))
-    normalized_steps = sorted({float(radius) for radius in radius_steps if float(radius) <= maximum_radius})
-    if not normalized_steps:
-        normalized_steps = [min(2.0, maximum_radius)]
-    return {
-        "initial_radius_km": float(dispatch.get("initial_radius_km") or normalized_steps[0]),
-        "radius_steps_km": normalized_steps,
-        "maximum_radius_km": maximum_radius,
-        "offer_timeout_seconds": int(dispatch.get("offer_timeout_seconds") or 25),
-        "search_timeout_seconds": int(dispatch.get("search_timeout_seconds") or dispatch.get("request_timeout_seconds") or 120),
-        "driver_stale_seconds": int(dispatch.get("driver_stale_seconds") or dispatch.get("driver_stale_after_seconds") or 75),
-        "dispatch_sweeper_interval_seconds": int(dispatch.get("dispatch_sweeper_interval_seconds") or 3),
-        "boarding_start_radius_meters": int(dispatch.get("boarding_start_radius_meters") or 250),
-    }
-
-
-def _next_radius(current: float, steps: Iterable[float], maximum: float) -> float:
-    for radius in sorted(float(item) for item in steps):
-        if radius > current:
-            return min(radius, maximum)
-    return maximum
 
 
 def _new_trip_pin_record() -> tuple[str, Dict[str, Any]]:
@@ -142,7 +109,7 @@ async def active_trip_for_user(user: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
 async def transition_trip(trip: Dict[str, Any], next_status: str, updates: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     current = str(trip.get("status") or "")
-    if next_status not in TRANSITIONS.get(current, set()):
+    if next_status not in TRANSITIONS.get(current, frozenset()):
         raise ValueError(f"Ride Now trip cannot move from {current} to {next_status}.")
     timestamp = now_iso()
     updated = await update_versioned_hailing_trip(
@@ -169,13 +136,26 @@ async def record_trip_event(trip: Dict[str, Any], event_type: str, payload: Dict
     })
 
 
+async def _cancel_pending_dispatch_offers(trip_id: str) -> int:
+    pending = await database.find_many("hailing_dispatch_offers", {"trip_id": trip_id, "status": "pending"})
+    changed = 0
+    for offer in pending:
+        cancelled = await database.update_one_if(
+            "hailing_dispatch_offers",
+            {"id": offer["id"], "status": "pending"},
+            {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
+        )
+        if not cancelled:
+            continue
+        changed += 1
+        if offer.get("driver_id"):
+            await release_candidate_reservation(str(offer["driver_id"]), trip_id)
+    return changed
+
+
 async def close_search_no_driver(trip: Dict[str, Any], reason: str) -> Dict[str, Any]:
     updated = await transition_trip(trip, "NO_DRIVER_FOUND", {"no_driver_reason": reason, "search_ended_at": now_iso()})
-    await database.update_many(
-        "hailing_dispatch_offers",
-        {"trip_id": trip["id"], "status": "pending"},
-        {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
-    )
+    await _cancel_pending_dispatch_offers(trip["id"])
     await create_app_notification(
         user_id=trip["passenger_user_id"],
         title="No drivers nearby",
@@ -258,8 +238,8 @@ async def create_trip_from_quote(payload: Dict[str, Any], user: Dict[str, Any]) 
             return public_trip(prior, user)
     timestamp = now_iso()
     city = await get_city(quote["city_id"])
-    dispatch = _dispatch_config(city)
-    search_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=dispatch["search_timeout_seconds"])).isoformat()
+    policy = dispatch_policy(city)
+    search_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=policy.search_timeout_seconds)).isoformat()
     trip = {
         "id": new_id(),
         "quote_id": quote["id"],
@@ -280,8 +260,10 @@ async def create_trip_from_quote(payload: Dict[str, Any], user: Dict[str, Any]) 
         "verify_ride_with_pin": bool(payload.get("verify_ride_with_pin")),
         "search_started_at": timestamp,
         "search_expires_at": search_expires_at,
-        "current_dispatch_radius_km": dispatch["initial_radius_km"],
+        "current_dispatch_radius_km": policy.initial_radius_km,
         "dispatch_attempt_count": 0,
+        "dispatch_claim_token": None,
+        "dispatch_claim_expires_at": timestamp,
         "client_request_id": payload.get("client_request_id"),
         "realtime_version": 1,
         "created_at": timestamp,
@@ -296,125 +278,123 @@ async def create_trip_from_quote(payload: Dict[str, Any], user: Dict[str, Any]) 
     return public_trip(await database.find_one("hailing_trips", {"id": created["id"]}) or created, user)
 
 
+async def _claim_dispatch_attempt(trip_id: str) -> tuple[str, Optional[Dict[str, Any]]]:
+    token = new_id()
+    now = datetime.now(timezone.utc)
+    lease_expires_at = (now + timedelta(seconds=15)).isoformat()
+    updates = {
+        "dispatch_claim_token": token,
+        "dispatch_claim_expires_at": lease_expires_at,
+        "updated_at": now_iso(),
+    }
+    claimed = await database.update_one_if(
+        "hailing_trips",
+        {"id": trip_id, "status": "SEARCHING", "dispatch_claim_token": None},
+        updates,
+    )
+    if not claimed:
+        claimed = await database.update_one_if(
+            "hailing_trips",
+            {"id": trip_id, "status": "SEARCHING", "dispatch_claim_expires_at": {"$lte": now.isoformat()}},
+            updates,
+        )
+    return token, claimed
+
+
+async def _release_dispatch_claim(trip_id: str, token: str) -> None:
+    await database.update_one_if(
+        "hailing_trips",
+        {"id": trip_id, "dispatch_claim_token": token},
+        {"dispatch_claim_token": None, "dispatch_claim_expires_at": now_iso(), "updated_at": now_iso()},
+    )
+
+
 async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _hailing_enabled():
         return None
-    current = await database.find_one("hailing_trips", {"id": trip["id"]}) or trip
-    if current.get("status") != "SEARCHING":
+    claim_token, current = await _claim_dispatch_attempt(trip["id"])
+    if not current:
+        pending = await database.find_many("hailing_dispatch_offers", {"trip_id": trip["id"], "status": "pending"})
+        return sorted(pending, key=lambda item: item.get("created_at") or "")[0] if pending else None
+
+    try:
+        pending = await database.find_many("hailing_dispatch_offers", {"trip_id": current["id"], "status": "pending"})
+        if pending:
+            return sorted(pending, key=lambda item: item.get("created_at") or "")[0]
+        city = await get_city(current["city_id"])
+        if not city:
+            await close_search_no_driver(current, "city_unavailable")
+            return None
+        policy = dispatch_policy(city)
+        radius = min(float(current.get("current_dispatch_radius_km") or policy.initial_radius_km), policy.maximum_radius_km)
+        candidates = await ranked_dispatch_candidates(current, radius, policy)
+        if not candidates:
+            await update_versioned_hailing_trip(
+                {"id": current["id"], "status": "SEARCHING"},
+                {"current_dispatch_radius_km": policy.next_radius(radius), "updated_at": now_iso()},
+            )
+            return None
+
+        for candidate in candidates:
+            reserved = await reserve_candidate(candidate, current, policy)
+            if not reserved:
+                continue
+            timestamp = now_iso()
+            expires_at = (datetime.now(timezone.utc) + timedelta(seconds=policy.offer_timeout_seconds)).isoformat()
+            try:
+                offer = await database.insert_one("hailing_dispatch_offers", {
+                    "id": new_id(),
+                    "trip_id": current["id"],
+                    "driver_id": candidate["driver_id"],
+                    "driver_user_id": candidate["user_id"],
+                    "status": "pending",
+                    **offer_ranking_fields(candidate, len(candidates)),
+                    "offered_at": timestamp,
+                    "expires_at": expires_at,
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
+                })
+            except Exception:
+                await release_candidate_reservation(str(candidate["driver_id"]), current["id"])
+                raise
+
+            updated_trip = await update_versioned_hailing_trip(
+                {"id": current["id"], "status": "SEARCHING"},
+                {
+                    "current_dispatch_radius_km": radius,
+                    "dispatch_attempt_count": int(current.get("dispatch_attempt_count") or 0) + 1,
+                    "last_offer_id": offer["id"],
+                    "last_offer_at": timestamp,
+                    "updated_at": timestamp,
+                },
+            )
+            if not updated_trip:
+                await database.update_one_if(
+                    "hailing_dispatch_offers",
+                    {"id": offer["id"], "status": "pending"},
+                    {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
+                )
+                await release_candidate_reservation(str(candidate["driver_id"]), current["id"])
+                return None
+            logger.info(
+                "offer_created offer_id=%s trip_id=%s driver_id=%s ranking=%s candidates=%s",
+                offer["id"],
+                current["id"],
+                offer["driver_id"],
+                offer.get("ranking_method"),
+                offer.get("candidate_count"),
+            )
+            return offer
         return None
-    pending = await database.find_many("hailing_dispatch_offers", {"trip_id": current["id"], "status": "pending"})
-    if pending:
-        return sorted(pending, key=lambda item: item.get("created_at") or "")[0]
-    city = await get_city(trip["city_id"])
-    if not city:
-        await close_search_no_driver(current, "city_unavailable")
-        return None
-    dispatch = _dispatch_config(city)
-    radius = float(current.get("current_dispatch_radius_km") or dispatch["initial_radius_km"])
-    radius = min(radius, dispatch["maximum_radius_km"])
-    candidates = await eligible_drivers(current, radius, dispatch["driver_stale_seconds"])
-    if not candidates:
-        next_radius = _next_radius(radius, dispatch["radius_steps_km"], dispatch["maximum_radius_km"])
-        await update_versioned_hailing_trip(
-            {"id": current["id"], "status": "SEARCHING"},
-            {"current_dispatch_radius_km": next_radius, "updated_at": now_iso()},
-        )
-        return None
-    driver_presence = candidates[0]
-    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=int(dispatch.get("offer_timeout_seconds") or 25))).isoformat()
-    offer = await database.insert_one("hailing_dispatch_offers", {
-        "id": new_id(),
-        "trip_id": current["id"],
-        "driver_id": driver_presence["driver_id"],
-        "driver_user_id": driver_presence["user_id"],
-        "status": "pending",
-        "pickup_distance_km": driver_presence.get("pickup_distance_km"),
-        "offered_at": now_iso(),
-        "expires_at": expires_at,
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-    })
-    await database.update_one("hailing_driver_presence", driver_presence["id"], {"status": "offered", "updated_at": now_iso()})
-    await update_versioned_hailing_trip(
-        {"id": current["id"], "status": "SEARCHING"},
-        {
-            "current_dispatch_radius_km": radius,
-            "dispatch_attempt_count": int(current.get("dispatch_attempt_count") or 0) + 1,
-            "last_offer_id": offer["id"],
-            "last_offer_at": now_iso(),
-            "updated_at": now_iso(),
-        },
-    )
-    logger.info("offer_created offer_id=%s trip_id=%s driver_id=%s", offer["id"], current["id"], offer["driver_id"])
-    return offer
+    finally:
+        await _release_dispatch_claim(trip["id"], claim_token)
 
 
 async def eligible_drivers(trip: Dict[str, Any], radius_km: float, stale_seconds: int) -> List[Dict[str, Any]]:
-    if not _hailing_enabled():
-        return []
-    pickup = trip["pickup"]
-    if database.db is not None:
-        cursor = database.db["hailing_driver_presence"].find({
-            "city_id": trip["city_id"],
-            "ride_class": trip["ride_class"],
-            "status": "available",
-            "last_seen_at": {"$gte": fresh_cutoff(stale_seconds)},
-            "location": {
-                "$near": {
-                    "$geometry": {"type": "Point", "coordinates": [pickup["longitude"], pickup["latitude"]]},
-                    "$maxDistance": int(radius_km * 1000),
-                }
-            },
-        }).limit(8)
-        rows = [database._clean(item) async for item in cursor]
-    else:
-        rows = await database.find_many("hailing_driver_presence", {
-            "city_id": trip["city_id"],
-            "ride_class": trip["ride_class"],
-            "status": "available",
-        })
-    fresh_rows = []
-    cutoff = parse_time(fresh_cutoff(stale_seconds))
-    for row in rows:
-        seen = parse_time(row.get("last_seen_at"))
-        if not seen or not cutoff or seen < cutoff:
-            continue
-        coords = (row.get("location") or {}).get("coordinates") or []
-        if len(coords) != 2:
-            continue
-        distance = haversine_km(point(pickup["latitude"], pickup["longitude"]), point(coords[1], coords[0]))
-        if distance <= radius_km and await _driver_can_receive_trip_offer(row, trip):
-            fresh_rows.append({**row, "pickup_distance_km": round(distance, 3)})
-    return sorted(fresh_rows, key=lambda item: item["pickup_distance_km"])
-
-
-async def _driver_can_receive_trip_offer(presence: Dict[str, Any], trip: Dict[str, Any]) -> bool:
-    if not _hailing_enabled():
-        return False
-    driver_id = presence.get("driver_id")
-    if not driver_id:
-        return False
-    prior_offers = await database.find_many("hailing_dispatch_offers", {"trip_id": trip["id"], "driver_id": driver_id})
-    if any(offer.get("status") in {"pending", "accepted", "declined", "expired", "cancelled"} for offer in prior_offers):
-        return False
-    conflicting_offers = await database.find_many("hailing_dispatch_offers", {"driver_id": driver_id, "status": "pending"})
-    if conflicting_offers:
-        return False
-    active_trips = await database.find_many("hailing_trips", {"driver_id": driver_id, "status": {"$in": list(ACTIVE_DRIVER_STATUSES)}})
-    if active_trips:
-        return False
-    driver = await database.find_one("drivers", {"id": driver_id})
-    if not driver or not driver.get("verified") or driver.get("verification_status") != "approved":
-        return False
-    if driver.get("hailing_enabled") is not True:
-        return False
-    if str(driver.get("status") or "").lower() in {"suspended", "blocked"}:
-        return False
-    approved_cities = driver.get("approved_hailing_city_ids") or []
-    if trip.get("city_id") not in approved_cities:
-        return False
-    approved_classes = driver.get("approved_hailing_classes") or []
-    return trip.get("ride_class") in approved_classes
+    """Compatibility surface backed by the single authoritative dispatch engine."""
+    city = await get_city(trip.get("city_id"))
+    policy = replace(dispatch_policy(city), driver_stale_seconds=stale_seconds)
+    return await ranked_dispatch_candidates(trip, radius_km, policy)
 
 
 async def driver_go_online(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -437,6 +417,8 @@ async def driver_go_online(payload: Dict[str, Any], user: Dict[str, Any]) -> Dic
         "heading": payload.get("heading"),
         "speed": payload.get("speed"),
         "accuracy": payload.get("accuracy"),
+        "offered_trip_id": None,
+        "offered_at": None,
         "last_seen_at": timestamp,
         "last_location_at": timestamp,
         "online_since": timestamp,
@@ -457,7 +439,22 @@ async def driver_go_offline(user: Dict[str, Any]) -> Dict[str, Any]:
     active = await active_trip_for_user(user)
     if active:
         raise ValueError("Complete or cancel the active Ride Now trip before going offline.")
-    updated = await database.update_one("hailing_driver_presence", presence["id"], {"status": "offline", "updated_at": now_iso()})
+    updated = await database.update_one(
+        "hailing_driver_presence",
+        presence["id"],
+        {"status": "offline", "offered_trip_id": None, "offered_at": None, "updated_at": now_iso()},
+    )
+    pending = await database.find_many("hailing_dispatch_offers", {"driver_id": driver["id"], "status": "pending"})
+    for offer in pending:
+        cancelled = await database.update_one_if(
+            "hailing_dispatch_offers",
+            {"id": offer["id"], "status": "pending"},
+            {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
+        )
+        if cancelled:
+            trip = await database.find_one("hailing_trips", {"id": offer.get("trip_id")})
+            if trip and trip.get("status") == "SEARCHING":
+                await create_dispatch_offer(trip)
     return updated or {"status": "offline"}
 
 
@@ -502,7 +499,15 @@ async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     if not offer or offer.get("status") != "pending":
         raise ValueError("Ride offer is no longer available.")
     if quote_expired({"expires_at": offer.get("expires_at")}):
-        await database.update_one("hailing_dispatch_offers", offer["id"], {"status": "expired", "updated_at": now_iso()})
+        await database.update_one_if(
+            "hailing_dispatch_offers",
+            {"id": offer["id"], "status": "pending"},
+            {"status": "expired", "expired_at": now_iso(), "updated_at": now_iso()},
+        )
+        await release_candidate_reservation(driver["id"], offer["trip_id"])
+        trip = await database.find_one("hailing_trips", {"id": offer["trip_id"]})
+        if trip and trip.get("status") == "SEARCHING":
+            await create_dispatch_offer(trip)
         raise ValueError("Ride offer has expired.")
     trip = await database.find_one("hailing_trips", {"id": offer["trip_id"]})
     if not trip or trip.get("status") != "SEARCHING":
@@ -533,18 +538,27 @@ async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
             "trip_pin_generated_at": None,
             "trip_pin_verified_at": None,
             "assigned_at": now_iso(),
+            "dispatch_claim_token": None,
+            "dispatch_claim_expires_at": now_iso(),
             "updated_at": now_iso(),
         },
     )
     if not updated_trip:
-        await database.update_one("hailing_dispatch_offers", offer["id"], {"status": "cancelled", "updated_at": now_iso()})
+        await database.update_one_if(
+            "hailing_dispatch_offers",
+            {"id": offer["id"], "status": "accepted"},
+            {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
+        )
+        await release_candidate_reservation(driver["id"], trip["id"])
         raise ValueError("Ride already accepted.")
-    await database.update_many(
-        "hailing_dispatch_offers",
-        {"trip_id": trip["id"], "status": "pending"},
-        {"status": "cancelled", "updated_at": now_iso()},
-    )
-    await database.update_one("hailing_driver_presence", f"hailing-presence-{driver['id']}", {"status": "en_route", "updated_at": now_iso()})
+    await _cancel_pending_dispatch_offers(trip["id"])
+    transitioned = await release_candidate_reservation(driver["id"], trip["id"], next_status="en_route")
+    if not transitioned:
+        await database.update_one(
+            "hailing_driver_presence",
+            f"hailing-presence-{driver['id']}",
+            {"status": "en_route", "offered_trip_id": None, "offered_at": None, "updated_at": now_iso()},
+        )
     await create_app_notification(
         user_id=updated_trip["passenger_user_id"],
         title="Driver found",
@@ -564,13 +578,19 @@ async def decline_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     offer = await database.find_one("hailing_dispatch_offers", {"id": offer_id, "driver_id": driver["id"]})
     if not offer or offer.get("status") != "pending":
         raise ValueError("Ride offer is no longer available.")
-    updated = await database.update_one("hailing_dispatch_offers", offer["id"], {"status": "declined", "declined_at": now_iso(), "updated_at": now_iso()})
-    await database.update_one("hailing_driver_presence", f"hailing-presence-{driver['id']}", {"status": "available", "updated_at": now_iso()})
+    updated = await database.update_one_if(
+        "hailing_dispatch_offers",
+        {"id": offer["id"], "status": "pending"},
+        {"status": "declined", "declined_at": now_iso(), "updated_at": now_iso()},
+    )
+    if not updated:
+        raise ValueError("Ride offer is no longer available.")
+    await release_candidate_reservation(driver["id"], offer["trip_id"])
     logger.info("offer_declined offer_id=%s trip_id=%s driver_id=%s", offer_id, offer.get("trip_id"), driver["id"])
     trip = await database.find_one("hailing_trips", {"id": offer["trip_id"]})
     if trip and trip.get("status") == "SEARCHING":
         await create_dispatch_offer(trip)
-    return updated or offer
+    return updated
 
 
 async def mark_arrived(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -692,8 +712,8 @@ async def start_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 
 async def _ensure_driver_near_pickup_for_start(trip: Dict[str, Any]) -> None:
     city = await get_city(trip["city_id"])
-    dispatch = _dispatch_config(city)
-    allowed_meters = float(dispatch["boarding_start_radius_meters"])
+    policy = dispatch_policy(city)
+    allowed_meters = float(policy.boarding_start_radius_meters)
     latest = trip.get("driver_location")
     if not latest and trip.get("driver_id"):
         presence = await database.find_one("hailing_driver_presence", {"driver_id": trip["driver_id"]})
@@ -751,7 +771,11 @@ async def complete_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
         raise PermissionError("Only the assigned driver can complete this trip.")
     updated = await transition_trip(trip, "COMPLETED", {"completed_at": now_iso(), "payment_status": "cash_collected" if trip.get("payment_method") == "cash" else trip.get("payment_status")})
     if trip.get("driver_id"):
-        await database.update_one("hailing_driver_presence", f"hailing-presence-{trip['driver_id']}", {"status": "available", "updated_at": now_iso()})
+        await database.update_one(
+            "hailing_driver_presence",
+            f"hailing-presence-{trip['driver_id']}",
+            {"status": "available", "offered_trip_id": None, "offered_at": None, "updated_at": now_iso()},
+        )
     await create_app_notification(user_id=trip["passenger_user_id"], title="Trip completed", body="Thanks for riding with LetsGoRide.", notification_type="trip_updates", data={"notification_target": "hailing_trip", "hailing_trip_id": trip_id})
     return public_trip(updated, user)
 
@@ -775,8 +799,13 @@ async def cancel_trip(trip_id: str, reason: Optional[str], user: Dict[str, Any])
     else:
         raise PermissionError("You can only cancel Ride Now trips connected to your account.")
     updated = await transition_trip(trip, status, {"cancelled_at": now_iso(), "cancelled_by": user.get("id"), "cancel_reason": reason})
+    await _cancel_pending_dispatch_offers(trip["id"])
     if trip.get("driver_id"):
-        await database.update_one("hailing_driver_presence", f"hailing-presence-{trip['driver_id']}", {"status": "available", "updated_at": now_iso()})
+        await database.update_one(
+            "hailing_driver_presence",
+            f"hailing-presence-{trip['driver_id']}",
+            {"status": "available", "offered_trip_id": None, "offered_at": None, "updated_at": now_iso()},
+        )
     return public_trip(updated, user)
 
 
@@ -807,13 +836,19 @@ async def rematch_after_driver_cancellation(trip: Dict[str, Any], reason: Option
             "previous_driver_cancelled_by_driver_id": former_driver_id,
             "previous_driver_cancel_reason": reason,
             "current_dispatch_radius_km": float(trip.get("current_dispatch_radius_km") or 2),
+            "dispatch_claim_token": None,
+            "dispatch_claim_expires_at": timestamp,
             "updated_at": timestamp,
         },
     )
     if not updated:
         raise ValueError("Ride Now trip changed while it was being cancelled. Refresh and try again.")
     if former_driver_id:
-        await database.update_one("hailing_driver_presence", f"hailing-presence-{former_driver_id}", {"status": "available", "updated_at": now_iso()})
+        await database.update_one(
+            "hailing_driver_presence",
+            f"hailing-presence-{former_driver_id}",
+            {"status": "available", "offered_trip_id": None, "offered_at": None, "updated_at": now_iso()},
+        )
         await database.update_many(
             "hailing_dispatch_offers",
             {"trip_id": trip["id"], "driver_id": former_driver_id, "status": "accepted"},
@@ -876,10 +911,7 @@ async def expire_pending_offers() -> int:
         changed += 1
         driver_id = offer.get("driver_id")
         if driver_id:
-            conflicts = await database.find_many("hailing_dispatch_offers", {"driver_id": driver_id, "status": "pending"})
-            active = await database.find_many("hailing_trips", {"driver_id": driver_id, "status": {"$in": list(ACTIVE_DRIVER_STATUSES)}})
-            if not conflicts and not active:
-                await database.update_one("hailing_driver_presence", f"hailing-presence-{driver_id}", {"status": "available", "updated_at": now_iso()})
+            await release_candidate_reservation(str(driver_id), str(offer.get("trip_id") or ""))
         trip = await database.find_one("hailing_trips", {"id": offer.get("trip_id")})
         if trip and trip.get("status") == "SEARCHING":
             await create_dispatch_offer(trip)
@@ -939,7 +971,10 @@ async def list_hailing_city_dispatch_settings() -> List[Dict[str, Any]]:
     if not _hailing_enabled():
         return []
     cities = await database.find_many("hailing_cities", {"enabled": True, "ride_hailing_enabled": True})
-    return [_dispatch_config(city) for city in cities]
+    return [
+        {"dispatch_sweeper_interval_seconds": dispatch_policy(city).dispatch_sweeper_interval_seconds}
+        for city in cities
+    ]
 
 
 async def driver_stats(user: Dict[str, Any]) -> Dict[str, Any]:
