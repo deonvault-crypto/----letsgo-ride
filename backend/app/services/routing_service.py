@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 GOOGLE_GEOCODE_URL = "https://geocode.googleapis.com/v4/geocode/address/{address}"
 GOOGLE_REVERSE_GEOCODE_URL = "https://geocode.googleapis.com/v4/geocode/location/{latitude},{longitude}"
 GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+GOOGLE_ROUTE_MATRIX_URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
 GOOGLE_PLACES_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete"
 GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 
@@ -117,7 +118,7 @@ def _provider_error_details(response: requests.Response) -> tuple[str, str]:
     return status, message
 
 
-def _request_json(method: str, url: str, **kwargs: Any) -> Dict[str, Any]:
+def _request_json_value(method: str, url: str, **kwargs: Any) -> Any:
     response = requests.request(method, url, **kwargs)
     try:
         response.raise_for_status()
@@ -131,12 +132,23 @@ def _request_json(method: str, url: str, **kwargs: Any) -> Dict[str, Any]:
         )
         raise RoutingError("Routing provider request failed.") from exc
     try:
-        payload = response.json()
+        return response.json()
     except ValueError as exc:
         raise RoutingError("Routing provider returned an invalid response.") from exc
+
+
+def _request_json(method: str, url: str, **kwargs: Any) -> Dict[str, Any]:
+    payload = _request_json_value(method, url, **kwargs)
     if not isinstance(payload, dict):
         raise RoutingError("Routing provider returned an invalid response.")
     return payload
+
+
+def _request_json_list(method: str, url: str, **kwargs: Any) -> List[Dict[str, Any]]:
+    payload = _request_json_value(method, url, **kwargs)
+    if not isinstance(payload, list):
+        raise RoutingError("Routing provider returned an invalid route matrix response.")
+    return [item for item in payload if isinstance(item, dict)]
 
 
 async def geocode_address(address: str) -> Dict[str, Any]:
@@ -427,6 +439,76 @@ async def compute_route(
             "longitude": float(destination["longitude"]),
         },
     }
+
+
+async def compute_route_matrix(
+    origins: List[Dict[str, float]],
+    destination: Dict[str, float],
+) -> List[Dict[str, Any]]:
+    """Return traffic-aware pickup travel times for a small driver shortlist."""
+    if not origins:
+        return []
+    if len(origins) > 25:
+        raise ValueError("Route matrix shortlist is too large.")
+
+    api_key, region_code, timeout = _google_config()
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "originIndex,destinationIndex,status,condition,distanceMeters,duration",
+    }
+    body = {
+        "origins": [
+            {"waypoint": {"location": {"latLng": {"latitude": float(origin["latitude"]), "longitude": float(origin["longitude"])}}}}
+            for origin in origins
+        ],
+        "destinations": [
+            {"waypoint": {"location": {"latLng": {"latitude": float(destination["latitude"]), "longitude": float(destination["longitude"])}}}}
+        ],
+        "travelMode": "DRIVE",
+        "routingPreference": "TRAFFIC_AWARE",
+        "regionCode": region_code,
+        "units": "METRIC",
+    }
+    payload = await asyncio.to_thread(
+        _request_json_list,
+        "POST",
+        GOOGLE_ROUTE_MATRIX_URL,
+        headers=headers,
+        json=body,
+        timeout=timeout,
+    )
+
+    routes: List[Dict[str, Any]] = []
+    for element in payload:
+        origin_index = element.get("originIndex")
+        destination_index = element.get("destinationIndex")
+        status = element.get("status") or {}
+        condition = element.get("condition")
+        distance_meters = element.get("distanceMeters")
+        if not isinstance(origin_index, int) or destination_index != 0:
+            continue
+        if isinstance(status, dict) and status.get("code") not in {None, 0}:
+            continue
+        if condition not in {None, "ROUTE_EXISTS"}:
+            continue
+        if not isinstance(distance_meters, (int, float)):
+            continue
+        try:
+            duration_seconds = _parse_duration_seconds(element.get("duration"))
+        except RoutingError:
+            continue
+        routes.append(
+            {
+                "origin_index": origin_index,
+                "distance_meters": int(round(float(distance_meters))),
+                "duration_seconds": duration_seconds,
+            }
+        )
+
+    if not routes:
+        raise RoutingNoResultError("No drivable pickup routes were found for the driver shortlist.")
+    return routes
 
 
 async def resolve_route(
