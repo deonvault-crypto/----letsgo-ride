@@ -120,7 +120,7 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
     async def test_quote_calculation_minimum_surge_and_route_provider(self):
         city = await get_city("zw-harare")
         fare = calculate_fare(city, "ECONOMY", 0, 0)
-        self.assertEqual(fare["total_fare"], 3.0)
+        self.assertEqual(fare["total_fare"], 1.0)
         city["pricing"]["ECONOMY"]["surge_multiplier"] = 1.5
         surge = calculate_fare(city, "ECONOMY", 10, 20)
         self.assertTrue(surge["high_demand"])
@@ -201,6 +201,7 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
             {
                 "id": "driver-profile-no-city",
                 "user_id": "driver-no-city",
+                "city": "Harare",
                 "verified": True,
                 "verification_status": "approved",
                 "status": "active",

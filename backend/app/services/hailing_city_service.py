@@ -8,7 +8,12 @@ from app.database import database
 from app.utils import now_iso
 
 
-DEFAULT_CITY_PRICING = {
+PRICING_VERSION = 2
+
+# Exact V1 values are retained only so seeded service areas can be migrated safely.
+# A class is upgraded only when every stored field still matches this legacy profile;
+# any admin-customized class is preserved as-is.
+LEGACY_CITY_PRICING_V1 = {
     "ECONOMY": {
         "enabled": True,
         "base_fare": 2.00,
@@ -42,6 +47,49 @@ DEFAULT_CITY_PRICING = {
         "booking_fee": 1.00,
         "cancellation_fee": 0.00,
         "platform_commission_percent": 15.0,
+        "maximum_pickup_radius_km": 10.0,
+        "surge_multiplier": 1.0,
+    },
+}
+
+# Driver-first launch economics for Zimbabwe. Economy is intentionally tuned so
+# ordinary short urban trips land around the $1-$3 range while distance/time still
+# scale longer trips. Comfort/XL remain disabled by default but have sane future
+# pricing rather than inheriting the old premium table.
+DEFAULT_CITY_PRICING = {
+    "ECONOMY": {
+        "enabled": True,
+        "base_fare": 0.45,
+        "per_km": 0.28,
+        "per_minute": 0.025,
+        "minimum_fare": 1.00,
+        "booking_fee": 0.00,
+        "cancellation_fee": 0.00,
+        "platform_commission_percent": 3.0,
+        "maximum_pickup_radius_km": 15.0,
+        "surge_multiplier": 1.0,
+    },
+    "COMFORT": {
+        "enabled": False,
+        "base_fare": 0.60,
+        "per_km": 0.36,
+        "per_minute": 0.03,
+        "minimum_fare": 1.40,
+        "booking_fee": 0.00,
+        "cancellation_fee": 0.00,
+        "platform_commission_percent": 3.0,
+        "maximum_pickup_radius_km": 12.0,
+        "surge_multiplier": 1.0,
+    },
+    "XL": {
+        "enabled": False,
+        "base_fare": 0.75,
+        "per_km": 0.42,
+        "per_minute": 0.04,
+        "minimum_fare": 1.80,
+        "booking_fee": 0.00,
+        "cancellation_fee": 0.00,
+        "platform_commission_percent": 3.0,
         "maximum_pickup_radius_km": 10.0,
         "surge_multiplier": 1.0,
     },
@@ -167,10 +215,26 @@ def city_template(name: str, slug: str, province: str, latitude: float, longitud
         "pickup_enabled": True,
         "dropoff_enabled": True,
         "pricing": {key: dict(value) for key, value in DEFAULT_CITY_PRICING.items()},
+        "pricing_version": PRICING_VERSION,
         "dispatch": dict(DEFAULT_DISPATCH_SETTINGS),
         "created_at": timestamp,
         "updated_at": timestamp,
     }
+
+
+def _migrate_legacy_pricing(existing: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    current_pricing = existing.get("pricing") or {}
+    migrated = {key: dict(value) for key, value in current_pricing.items()}
+    changed = False
+    for ride_class in ("ECONOMY", "COMFORT", "XL"):
+        current = current_pricing.get(ride_class)
+        legacy = LEGACY_CITY_PRICING_V1[ride_class]
+        if not isinstance(current, dict):
+            continue
+        if all(current.get(field) == value for field, value in legacy.items()):
+            migrated[ride_class] = dict(DEFAULT_CITY_PRICING[ride_class])
+            changed = True
+    return migrated if changed else None
 
 
 async def seed_zimbabwe_service_areas() -> None:
@@ -183,6 +247,10 @@ async def seed_zimbabwe_service_areas() -> None:
                 for key, value in desired.items()
                 if key in {"country", "country_code", "timezone", "currency", "location"}
             }
+            migrated_pricing = _migrate_legacy_pricing(existing)
+            if migrated_pricing is not None:
+                updates["pricing"] = migrated_pricing
+                updates["pricing_version"] = PRICING_VERSION
             await database.update_one("hailing_cities", existing["id"], {**updates, "updated_at": now_iso()})
             continue
         await database.insert_one("hailing_cities", desired)
@@ -329,6 +397,7 @@ async def upsert_city(payload: Dict[str, Any], actor: Dict[str, Any]) -> Dict[st
         "timezone": "Africa/Harare",
         "currency": "USD",
         "pricing": pricing,
+        "pricing_version": PRICING_VERSION,
         "dispatch": dispatch,
         **data,
         "updated_at": timestamp,
