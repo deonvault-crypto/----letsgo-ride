@@ -1,0 +1,61 @@
+name: Hailing TestFlight Build
+
+on:
+  push:
+    branches:
+      - testflight-hailing
+    paths:
+      - .github/workflows/eas-testflight-hailing.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-testflight-hailing-ios
+  cancel-in-progress: false
+
+jobs:
+  enqueue-testflight-build:
+    name: Build and submit staging-backed iOS app to TestFlight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout TestFlight branch
+        uses: actions/checkout@v4
+        with:
+          ref: testflight-hailing
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN repository secret is required."
+            exit 1
+          fi
+
+      # Map-first Ride Now TestFlight refresh: full map booking sheet, car-class art and cancelled-state cleanup.
+      - name: Enqueue iOS TestFlight build and automatic submission
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >-
+          npx eas-cli@latest build
+          --platform ios
+          --profile testflight
+          --auto-submit-with-profile production
+          --non-interactive
+          --no-wait
+          --message "Ride Now map-first staging TestFlight"
