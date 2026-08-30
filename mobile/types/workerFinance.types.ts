@@ -6,6 +6,8 @@ export type WorkerPayoutMethod = {
   method_type: PayoutMethodType;
   account_holder_name: string;
   bank_name?: string | null;
+  branch_name?: string | null;
+  branch_code?: string | null;
   currency: string;
   masked_reference: string;
   is_default: boolean;
@@ -60,6 +62,17 @@ export type PayoutMethodInput = {
   account_number?: string;
   branch_name?: string;
   branch_code?: string;
+  currency?: string;
+  make_default?: boolean;
+};
+
+export type PayoutMethodUpdateInput = {
+  account_holder_name?: string;
+  mobile_number?: string;
+  bank_name?: string;
+  account_number?: string;
+  branch_name?: string | null;
+  branch_code?: string | null;
   currency?: string;
   make_default?: boolean;
 };
