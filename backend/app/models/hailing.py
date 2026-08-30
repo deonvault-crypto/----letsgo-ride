@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 RideClass = Literal["ECONOMY", "COMFORT", "XL"]
-PaymentMethod = Literal["cash"]
+PaymentMethod = Literal["cash", "card"]
 HailingTripStatus = Literal[
     "SEARCHING",
     "DRIVER_ASSIGNED",
@@ -54,13 +54,29 @@ class HailingQuoteBody(BaseModel):
     ride_class: RideClass = "ECONOMY"
 
 
+class HailingCardSetupBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quote_id: str = Field(min_length=8, max_length=80)
+    client_request_id: str = Field(min_length=8, max_length=120)
+
+
 class HailingTripCreateBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     quote_id: str = Field(min_length=8, max_length=80)
     payment_method: PaymentMethod = "cash"
     client_request_id: Optional[str] = Field(default=None, min_length=8, max_length=120)
+    payment_intent_id: Optional[str] = Field(default=None, min_length=8, max_length=120)
     verify_ride_with_pin: bool = False
+
+    @model_validator(mode="after")
+    def validate_payment_contract(self):
+        if self.payment_method == "card" and not self.payment_intent_id:
+            raise ValueError("Card payment requires a completed card authorization.")
+        if self.payment_method == "cash" and self.payment_intent_id:
+            raise ValueError("Cash rides cannot include a card authorization.")
+        return self
 
 
 class HailingCancelBody(BaseModel):
