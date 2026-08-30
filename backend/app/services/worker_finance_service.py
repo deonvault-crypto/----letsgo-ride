@@ -60,11 +60,14 @@ def _masked_reference(payload: Dict[str, Any]) -> str:
 
 def _public_method(row: Dict[str, Any]) -> Dict[str, Any]:
     payload = _decrypt_payload(str(row.get("encrypted_payload") or ""))
+    is_bank = payload.get("method_type") == "BANK"
     return {
         "id": row.get("id"),
         "method_type": payload.get("method_type"),
         "account_holder_name": payload.get("account_holder_name"),
-        "bank_name": payload.get("bank_name") if payload.get("method_type") == "BANK" else None,
+        "bank_name": payload.get("bank_name") if is_bank else None,
+        "branch_name": payload.get("branch_name") if is_bank else None,
+        "branch_code": payload.get("branch_code") if is_bank else None,
         "currency": payload.get("currency") or "USD",
         "masked_reference": row.get("masked_reference") or _masked_reference(payload),
         "is_default": bool(row.get("is_default")),
@@ -92,6 +95,34 @@ def _normalized_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     return result
+
+
+def _merged_update_payload(existing_payload: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge a partial edit without ever substituting masked display data for secrets."""
+
+    merged = dict(existing_payload)
+    method_type = str(existing_payload.get("method_type") or "").upper()
+    if method_type not in {"ECOCASH", "BANK"}:
+        raise RuntimeError("Saved payout data is invalid.")
+
+    bank_fields = {"bank_name", "account_number", "branch_name", "branch_code"}
+    if method_type == "ECOCASH" and bank_fields.intersection(updates):
+        raise ValueError("Bank fields cannot be edited on an EcoCash payout method.")
+    if method_type == "BANK" and "mobile_number" in updates:
+        raise ValueError("An EcoCash mobile number cannot be edited on a bank payout method.")
+
+    required_fields = {"account_holder_name", "currency"}
+    required_fields.add("mobile_number" if method_type == "ECOCASH" else "bank_name")
+    if method_type == "BANK":
+        required_fields.add("account_number")
+    for field in required_fields:
+        if field in updates and updates[field] is None:
+            raise ValueError(f"{field.replace('_', ' ').title()} cannot be cleared.")
+
+    for field in ("account_holder_name", "currency", "mobile_number", "bank_name", "account_number", "branch_name", "branch_code"):
+        if field in updates:
+            merged[field] = updates[field]
+    return _normalized_payload(merged)
 
 
 async def list_payout_methods(user: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -143,7 +174,9 @@ async def update_payout_method(method_id: str, payload: Dict[str, Any], user: Di
     )
     if not existing:
         raise ValueError("Payout method not found.")
-    clean = _normalized_payload(payload)
+
+    existing_payload = _decrypt_payload(str(existing.get("encrypted_payload") or ""))
+    clean = _merged_update_payload(existing_payload, payload)
     timestamp = now_iso()
     make_default = bool(payload.get("make_default"))
     if make_default:
