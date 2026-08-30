@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   # Keep push and PR runs in separate lanes. The platform PR's jobs are skipped
@@ -22,11 +22,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  regenerate-postcss-lock:
+    name: Regenerate patched PostCSS lock once
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release/2.0.2-final-consolidation' && github.event.head_commit.message == 'Prepare one-time PostCSS lock regeneration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout with parent
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Generate canonical PostCSS override lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm pkg set overrides.postcss=8.5.26
+          npm install --ignore-scripts
+          node - <<'NODE'
+          const lock = require('./package-lock.json');
+          const postcss = lock.packages?.['node_modules/postcss'];
+          if (!postcss || postcss.version !== '8.5.26') {
+            throw new Error(`Expected postcss@8.5.26 in lockfile, got ${postcss?.version || 'missing'}`);
+          }
+          console.log(`Resolved postcss@${postcss.version}`);
+          NODE
+          npm audit --omit=dev || true
+          cd ..
+          # The generated commit must restore the normal read-only CI workflow.
+          git checkout HEAD^ -- .github/workflows/platform-v2-ci.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package.json mobile/package-lock.json .github/workflows/platform-v2-ci.yml
+          git diff --cached --check
+          git commit -m "Pin patched PostCSS for Expo 54"
+          git push --force origin HEAD:refs/heads/automation/postcss-8.5.26
+
   mobile:
     name: Mobile typecheck and tests
-    # platform-v2-m1-m6 is validated on its exact push SHA. Its long-lived PR to
-    # main must not spend a second full CI run on GitHub's synthetic merge SHA.
-    if: github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6'
+    # Skip only the one-time lock-generation commit. The generated release commit
+    # is validated later on its exact SHA through this normal job.
+    if: (github.event_name != 'push' || github.event.head_commit.message != 'Prepare one-time PostCSS lock regeneration') && (github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -117,8 +161,9 @@ jobs:
 
   backend:
     name: Backend import, syntax and service tests
-    # See the mobile job: validate the staging branch once, on the exact SHA.
-    if: github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6'
+    # Skip only the one-time lock-generation commit. The generated release commit
+    # is validated later on its exact SHA through this normal job.
+    if: (github.event_name != 'push' || github.event.head_commit.message != 'Prepare one-time PostCSS lock regeneration') && (github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
