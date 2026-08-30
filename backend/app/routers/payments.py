@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, Request
 
 from app.auth import get_current_user
 from app.config import get_settings
+from app.database import database
 from app.models.hailing import HailingCardTripCreateBody, HailingStripeIntentBody
+from app.services.hailing_trip_service import public_trip
 from app.services.rate_limit_service import RateLimit, rate_limit_service
 from app.services.stripe_payment_service import (
     create_authorized_hailing_trip,
@@ -69,6 +71,14 @@ async def create_hailing_card_trip(
         RateLimit(8, 300),
         identity=str(user.get("id") or ""),
     )
+    existing = await database.find_one(
+        "hailing_trips",
+        {"stripe_payment_intent_id": payload.stripe_payment_intent_id},
+    )
+    if existing:
+        if existing.get("passenger_user_id") != user.get("id"):
+            api_error("This card authorization belongs to another account.", 403)
+        return api_success(public_trip(existing, user))
     try:
         return api_success(await create_authorized_hailing_trip(payload.model_dump(), user))
     except PermissionError as exc:
