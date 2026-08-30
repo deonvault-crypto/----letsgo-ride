@@ -20,6 +20,16 @@
         "EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB": "false"
       }
     },
+    "testflight": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://letsgoride-v2-staging.onrender.com",
+        "EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB": "false"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
     "production": {
       "autoIncrement": true,
       "env": {
