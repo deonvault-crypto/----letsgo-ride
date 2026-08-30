@@ -65,12 +65,12 @@ describe("Food restaurant data stability", () => {
     jest.clearAllMocks();
   });
 
-  it("shows a skeleton without fake zero counts on first load", () => {
+  it("shows a skeleton without fake availability counts on first load", () => {
     mockListRestaurants.mockReturnValue(new Promise(() => undefined));
     const screen = render(<CustomerFoodScreen />);
     expect(screen.getByLabelText("Loading restaurants")).toBeOnTheScreen();
-    expect(screen.queryByText(/0 accepting orders/i)).toBeNull();
-    expect(screen.getByText("Browse menus near you")).toBeOnTheScreen();
+    expect(screen.queryByText(/accepting orders/i)).toBeNull();
+    expect(screen.getByText("Explore nearby restaurants and order from places that are open right now.")).toBeOnTheScreen();
   });
 
   it("keeps successful restaurant data visible during refresh", async () => {
@@ -80,7 +80,9 @@ describe("Food restaurant data stability", () => {
     expect(await screen.findByText("LetsGoRide Kitchen")).toBeOnTheScreen();
     refresh(screen);
     expect(screen.getByText("LetsGoRide Kitchen")).toBeOnTheScreen();
-    expect(screen.getByText("1 accepting orders now")).toBeOnTheScreen();
+    expect(screen.getByText("1 place to explore")).toBeOnTheScreen();
+    expect(screen.getByText("Open now")).toBeOnTheScreen();
+    expect(screen.queryByText(/accepting orders/i)).toBeNull();
     await act(async () => { pending.resolve([kitchen, bakery]); });
     expect((await screen.findAllByText("Borrowdale Bakery")).length).toBeGreaterThan(0);
   });
@@ -110,12 +112,13 @@ describe("Food restaurant data stability", () => {
     expect(screen.queryByText(/old failure/i)).toBeNull();
   });
 
-  it("visually separates the orderable restaurant from compact directory entries", async () => {
+  it("visually separates open restaurants from compact unavailable directory entries", async () => {
     mockListRestaurants.mockResolvedValueOnce([kitchen, ...directoryRestaurants]);
     const screen = render(<CustomerFoodScreen />);
 
-    await screen.findByText("AVAILABLE NOW");
-    expect(screen.getByText("MORE IN ZIMBABWE")).toBeOnTheScreen();
+    await screen.findByText("Open now");
+    expect(screen.getByText("More restaurants")).toBeOnTheScreen();
+    expect(screen.queryByText(/accepting orders/i)).toBeNull();
     expect(screen.getByTestId("orderable-restaurant-kitchen-1")).toBeOnTheScreen();
     expect(screen.getByTestId("food-image-kitchen-owned")).toBeOnTheScreen();
     expect(screen.getAllByText("KFC Zimbabwe")).toHaveLength(1);
