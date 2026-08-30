@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.auth import get_admin_user, get_current_user
 from app.config import get_settings
@@ -405,13 +405,34 @@ async def admin_upsert_city(payload: HailingCityUpsertBody, user=Depends(get_adm
 
 
 @admin_router.get("/drivers")
-async def admin_hailing_drivers(user=Depends(get_admin_user)):
+async def admin_hailing_drivers(
+    limit: int = Query(default=100, ge=1, le=250),
+    offset: int = Query(default=0, ge=0, le=5000),
+    user=Depends(get_admin_user),
+):
     _ = user
-    drivers = await database.find_many("drivers")
-    rows = []
-    for driver in sorted(drivers, key=lambda item: item.get("name") or item.get("created_at") or ""):
-        presence = await database.find_one("hailing_driver_presence", {"driver_id": driver.get("id")})
-        rows.append(_hailing_driver_payload(driver, presence))
+    fetch_limit = offset + limit
+    drivers = await database.find_many(
+        "drivers",
+        sort=[("name", 1), ("created_at", -1)],
+        limit=fetch_limit,
+    )
+    drivers = drivers[offset:offset + limit]
+    driver_ids = [str(driver.get("id")) for driver in drivers if driver.get("id")]
+    presences = (
+        await database.find_many(
+            "hailing_driver_presence",
+            {"driver_id": {"$in": driver_ids}},
+            limit=len(driver_ids),
+        )
+        if driver_ids
+        else []
+    )
+    presence_by_driver = {str(presence.get("driver_id")): presence for presence in presences}
+    rows = [
+        _hailing_driver_payload(driver, presence_by_driver.get(str(driver.get("id"))))
+        for driver in drivers
+    ]
     return api_success(rows)
 
 
@@ -446,8 +467,18 @@ async def admin_update_hailing_driver(driver_id: str, payload: HailingDriverElig
 
 
 @admin_router.get("/trips")
-async def admin_trips(user=Depends(get_admin_user)):
-    trips = await database.find_many("hailing_trips")
+async def admin_trips(
+    limit: int = Query(default=100, ge=1, le=250),
+    offset: int = Query(default=0, ge=0, le=5000),
+    user=Depends(get_admin_user),
+):
+    fetch_limit = offset + limit
+    trips = await database.find_many(
+        "hailing_trips",
+        sort=[("created_at", -1)],
+        limit=fetch_limit,
+    )
+    trips = trips[offset:offset + limit]
     return api_success([public_trip(trip, user) for trip in trips])
 
 
