@@ -23,7 +23,7 @@ export default function ServicesScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Order & send</Text>
-        <ServiceStoryCard title="Food" subtitle="Discover kitchens and dishes near you" eyebrow="ORDER IN" icon="food-fork-drink" image={require("../../assets/images/food-marketplace-owned-v1.png")} onPress={() => router.push("/(customer)/food" as never)} />
+        <ServiceStoryCard title="Food" subtitle="Discover kitchens and dishes near you" eyebrow="ORDER IN" icon="food-fork-drink" image={require("../../assets/images/food-landing-editorial-owned-v1.jpg")} onPress={() => router.push("/(customer)/food" as never)} />
         <ServiceStoryCard title="Courier" subtitle="Send parcels and documents with live tracking" eyebrow="SEND IT" icon="package-variant-closed" image={require("../../assets/images/courier-handoff-owned-v2.jpg")} onPress={() => router.push("/(shared)/courier" as never)} />
       </View>
     </Screen>
