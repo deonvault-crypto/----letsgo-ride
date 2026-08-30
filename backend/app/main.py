@@ -14,6 +14,7 @@ from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
 from app.services.hailing_security_service import clear_legacy_plaintext_hailing_pins
 from app.services.hailing_trip_service import hailing_dispatch_sweeper
+from app.services.product_hardening_storage_service import ensure_product_hardening_indexes
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
@@ -100,6 +101,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def on_startup():
     global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     await database.connect()
+    await ensure_product_hardening_indexes()
     await realtime_event_service.start()
     await ensure_admin_seed_user()
     if settings.enable_demo_seed:
