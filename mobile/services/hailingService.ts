@@ -90,10 +90,6 @@ export function verifyHailingTripPin(id: string, pin: string) {
   return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/verify-pin`, data: { pin } });
 }
 
-export function confirmHailingBoarding(id: string) {
-  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/confirm-boarding` });
-}
-
 export function regenerateHailingTripPin(id: string) {
   return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/regenerate-pin` });
 }
