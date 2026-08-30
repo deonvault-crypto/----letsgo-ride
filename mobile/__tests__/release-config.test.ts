@@ -24,7 +24,7 @@ describe("production release configuration", () => {
   it("keeps the existing Store identities and uses the V2 production origin", () => {
     expect(appConfig.ios.bundleIdentifier).toBe("co.zw.letsgoride");
     expect(appConfig.android.package).toBe("com.letsgo.ride");
-    expect(appConfig.version).toBe("2.0.0");
+    expect(appConfig.version).toBe("2.0.2");
     expect(easConfig.build.production.env.EXPO_PUBLIC_API_BASE_URL).toBe(
       "https://letsgoride-v2-production.onrender.com",
     );
