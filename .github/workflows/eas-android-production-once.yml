@@ -54,60 +54,36 @@ jobs:
 
           url="$(jq -r '.data.builds.byId.logFiles[0] // empty' /tmp/response.json)"
           test -n "$url"
-          curl --fail --silent --show-error --location "$url" -o /tmp/eas-log.bin
+          curl --compressed --fail --silent --show-error --location "$url" -o /tmp/eas-log.txt
 
           echo '=== LOG FILE TYPE ==='
-          file /tmp/eas-log.bin
+          file /tmp/eas-log.txt
           echo '=== LOG MAGIC BYTES ==='
-          xxd -l 24 /tmp/eas-log.bin
+          xxd -l 24 /tmp/eas-log.txt
 
           python - <<'PY'
           from pathlib import Path
-          import gzip, io, json, zipfile
-
-          src = Path('/tmp/eas-log.bin').read_bytes()
-          out = b''
-          kind = 'raw'
-          try:
-              if src.startswith(b'\x1f\x8b'):
-                  out = gzip.decompress(src)
-                  kind = 'gzip'
-              elif src.startswith(b'PK\x03\x04'):
-                  kind = 'zip'
-                  with zipfile.ZipFile(io.BytesIO(src)) as zf:
-                      chunks = []
-                      for name in zf.namelist():
-                          if not name.endswith('/'):
-                              chunks.append(zf.read(name))
-                      out = b'\n'.join(chunks)
-              else:
-                  out = src
-          except Exception as exc:
-              print(f'DECODE_WARNING {exc!r}')
-              out = src
-
+          raw = Path('/tmp/eas-log.txt').read_bytes()
           text = None
           for encoding in ('utf-8', 'utf-16', 'latin-1'):
               try:
-                  candidate = out.decode(encoding)
+                  candidate = raw.decode(encoding)
                   if candidate:
                       text = candidate
                       break
               except Exception:
                   pass
           if text is None:
-              text = out.decode('utf-8', errors='replace')
-
+              text = raw.decode('utf-8', errors='replace')
           text = text.replace('\x00', '')
           Path('/tmp/eas-log-decoded.txt').write_text(text, encoding='utf-8')
-          print(f'DECODE_KIND {kind}')
           print(f'DECODED_CHARS {len(text)}')
           PY
 
           echo '=== GRADLE FAILURE EXCERPTS ==='
-          grep -niE -B 30 -A 90 \
+          grep -aniE -B 35 -A 100 \
             'FAILURE: Build failed|What went wrong|Execution failed for task|Could not resolve|Could not determine|Caused by:|Manifest merger failed|Duplicate class|AAPT2?|resource.*not found|google-services|R8|Kotlin compilation|Gradle build daemon disappeared|BUILD FAILED|error:' \
-            /tmp/eas-log-decoded.txt | tail -n 700 || true
+            /tmp/eas-log-decoded.txt | tail -n 800 || true
 
-          echo '=== FINAL 220 LOG LINES ==='
-          tail -n 220 /tmp/eas-log-decoded.txt
+          echo '=== FINAL 260 LOG LINES ==='
+          tail -n 260 /tmp/eas-log-decoded.txt
