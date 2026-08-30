@@ -296,7 +296,7 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
                 await accept_offer(offer["id"], self.driver_user)
         self.assertEqual((await database.find_one("hailing_dispatch_offers", {"id": offer["id"]}))["status"], "pending")
 
-    async def test_normal_boarding_trip_start_location_complete_and_cash_state_without_pin(self):
+    async def test_normal_trip_starts_from_driver_arrival_without_passenger_gate(self):
         await driver_go_online(
             {"city_id": "zw-harare", "ride_class": "ECONOMY", "location": {"latitude": -17.8248, "longitude": 31.053}},
             self.driver_user,
@@ -313,12 +313,11 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("trip_pin", accepted)
         with self.assertRaises(ValueError):
             await accept_offer(offer["id"], self.driver_user)
-        await mark_arrived(trip["id"], self.driver_user)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "Mark your arrival"):
             await start_trip(trip["id"], self.driver_user)
-        onboard = await confirm_passenger_boarding(trip["id"], self.customer)
-        self.assertEqual(onboard["status"], "PASSENGER_CONFIRMED_BOARDING")
-        self.assertNotIn("trip_pin", onboard)
+        await mark_arrived(trip["id"], self.driver_user)
+        with self.assertRaisesRegex(ValueError, "does not require passenger boarding confirmation"):
+            await confirm_passenger_boarding(trip["id"], self.customer)
         with self.assertRaisesRegex(ValueError, "does not require"):
             await verify_trip_pin(trip["id"], "000000", self.driver_user)
         started = await start_trip(trip["id"], self.driver_user)
