@@ -9,6 +9,7 @@ on:
     branches:
       - main
       - platform-v2-m1-m6
+      - 'release/**'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +17,7 @@ permissions:
 
 concurrency:
   # Keep push and PR runs in separate lanes. The platform PR's jobs are skipped
-  # below, while the exact staging-branch push remains the authoritative run.
+  # below, while exact integration/release branch pushes remain authoritative.
   group: platform-v2-ci-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
