@@ -20,6 +20,7 @@ from app.models.hailing import (
 )
 from app.services.audit_service import write_audit_log
 from app.services.conversation_service import ensure_conversation_for_hailing_trip, enrich_conversation
+from app.services.driver_finance_stats_service import driver_stats
 from app.services.hailing_city_service import (
     enabled_ride_classes,
     list_service_areas,
@@ -39,7 +40,6 @@ from app.services.hailing_trip_service import (
     driver_go_offline,
     driver_go_online,
     driver_profile_for_user,
-    driver_stats,
     get_authorized_trip,
     mark_arrived,
     public_trip,
