@@ -12,6 +12,7 @@ concurrency:
   group: stripe-card-ci
   cancel-in-progress: true
 
+# Temporary branch gate: remove after the Stripe payment branch is green.
 jobs:
   backend:
     runs-on: ubuntu-latest
