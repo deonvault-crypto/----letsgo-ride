@@ -1,0 +1,66 @@
+name: EAS Android Production Once
+
+on:
+  push:
+    branches:
+      - automation/android-production-build-14b124b4
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-android-production-14b124b4
+  cancel-in-progress: false
+
+jobs:
+  build-android-production:
+    name: Build Android production 14b124b4
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout frozen release candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 14b124b4896c1481325fc8ebaf4fcab009431e83
+
+      - name: Verify exact source SHA
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          expected="14b124b4896c1481325fc8ebaf4fcab009431e83"
+          echo "Source SHA: $actual"
+          test "$actual" = "$expected"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies reproducibly
+        run: npm ci
+
+      - name: Verify Android release policy
+        run: npm run verify:android
+
+      - name: Verify Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN repository secret is required."
+            exit 1
+          fi
+
+      - name: Build production Android AAB on EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile production --non-interactive
