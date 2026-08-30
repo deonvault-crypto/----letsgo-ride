@@ -8,6 +8,7 @@ import { HailingMapBackdrop } from "../../components/hailing/HailingMapBackdrop"
 import { AppNotice } from "../../components/ui/AppNotice";
 import { v2Theme } from "../../constants/v2Theme";
 import { useHailingDriverWorkspace } from "../../hooks/useHailing";
+import { useHailingDriverLocationSync } from "../../hooks/useHailingDriverLocationSync";
 import { acceptHailingOffer, declineHailingOffer, goHailingDriverOffline, goHailingDriverOnline, resolveHailingServiceArea } from "../../services/hailingService";
 import { getCurrentDeviceLocation } from "../../services/locationService";
 import { HailingCoordinate, HailingRideClass } from "../../types/hailing.types";
@@ -27,6 +28,14 @@ export default function DriverHailingScreen() {
   const online = Boolean(status?.online);
   const activeTrip = status?.active_trip;
   const live = realtimeState === "connected";
+
+  useHailingDriverLocationSync({
+    enabled: online && !activeTrip,
+    onLocation: (location) => setCurrentLocation({ latitude: location.latitude, longitude: location.longitude }),
+    onError: (locationError) => {
+      if (/permission|location access/i.test(locationError.message)) setNotice(locationError.message);
+    },
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -156,7 +165,7 @@ export default function DriverHailingScreen() {
           <>
             <Text style={styles.eyebrow}>RIDE NOW DRIVER</Text>
             <Text style={styles.title}>You’re online</Text>
-            <Text style={styles.body}>{loading ? "Connecting to live dispatch…" : "Requests will appear here instantly. Keep LetsGoRide available while you’re driving."}</Text>
+            <Text style={styles.body}>{loading ? "Connecting to live dispatch…" : "Requests appear here in real time. Your live position keeps dispatch accurate while you’re online."}</Text>
             <View style={styles.metrics}>
               <Metric label="Today" value={String(status?.stats.rides_today || 0)} />
               <Metric label="Gross" value={`$${(status?.stats.gross_fares || 0).toFixed(2)}`} />
