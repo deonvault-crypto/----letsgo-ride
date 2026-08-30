@@ -10,6 +10,7 @@ import {
   HailingServiceArea,
   HailingServiceAreaResolution,
   HailingTrip,
+  HailingTripShare,
 } from "../types/hailing.types";
 import type { Conversation } from "../types/conversation.types";
 
@@ -18,11 +19,7 @@ export function getHailingConfig() {
 }
 
 export function resolveHailingServiceArea(location: HailingCoordinate) {
-  return requestData<HailingServiceAreaResolution>({
-    method: "POST",
-    url: "/hailing/service-area/resolve",
-    data: location,
-  });
+  return requestData<HailingServiceAreaResolution>({ method: "POST", url: "/hailing/service-area/resolve", data: location });
 }
 
 export function createHailingQuote(data: { pickup: HailingPlace; dropoff: HailingPlace; ride_class: HailingRideClass }) {
@@ -41,12 +38,12 @@ export function getHailingTrip(id: string) {
   return requestData<HailingTrip>({ method: "GET", url: `/hailing/trips/${encodeURIComponent(id)}` });
 }
 
+export function shareHailingTrip(id: string) {
+  return requestData<HailingTripShare>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/share` });
+}
+
 export function cancelHailingTrip(id: string, reason?: string) {
-  return requestData<HailingTrip>({
-    method: "POST",
-    url: `/hailing/trips/${encodeURIComponent(id)}/cancel`,
-    data: { reason: reason || undefined },
-  });
+  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/cancel`, data: { reason: reason || undefined } });
 }
 
 export function getHailingDriverStatus() {
@@ -54,11 +51,7 @@ export function getHailingDriverStatus() {
 }
 
 export function goHailingDriverOnline(data: { city_id: string; ride_class: HailingRideClass; location: HailingCoordinate }) {
-  return requestData<HailingDriverStatus["presence"]>({
-    method: "POST",
-    url: "/hailing/driver/online",
-    data,
-  });
+  return requestData<HailingDriverStatus["presence"]>({ method: "POST", url: "/hailing/driver/online", data });
 }
 
 export function goHailingDriverOffline() {
@@ -66,28 +59,14 @@ export function goHailingDriverOffline() {
 }
 
 export function updateHailingDriverPresence(data: { location: HailingCoordinate; heading?: number | null; speed?: number | null; accuracy?: number | null }) {
-  return requestData<HailingDriverStatus["presence"]>({
-    method: "POST",
-    url: "/hailing/driver/presence",
-    data,
-  });
+  return requestData<HailingDriverStatus["presence"]>({ method: "POST", url: "/hailing/driver/presence", data });
 }
 
-export function updateHailingTripLocation(
-  id: string,
-  data: { location: HailingCoordinate; heading?: number | null; speed?: number | null; accuracy?: number | null },
-) {
-  return requestData<HailingTrip>({
-    method: "POST",
-    url: `/hailing/trips/${encodeURIComponent(id)}/location`,
-    data,
-  });
+export function updateHailingTripLocation(id: string, data: { location: HailingCoordinate; heading?: number | null; speed?: number | null; accuracy?: number | null }) {
+  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/location`, data });
 }
 
-type DriverOfferEnvelope = {
-  offer: Omit<HailingDispatchOffer, "trip">;
-  trip: HailingTrip;
-};
+type DriverOfferEnvelope = { offer: Omit<HailingDispatchOffer, "trip">; trip: HailingTrip };
 
 export async function getHailingDriverOffer(): Promise<HailingDispatchOffer | null> {
   const envelope = await requestData<DriverOfferEnvelope | null>({ method: "GET", url: "/hailing/driver/offer" });
@@ -100,11 +79,7 @@ export function acceptHailingOffer(id: string) {
 }
 
 export function declineHailingOffer(id: string, reason?: string) {
-  return requestData<HailingDispatchOffer>({
-    method: "POST",
-    url: `/hailing/offers/${encodeURIComponent(id)}/decline`,
-    data: { reason: reason || undefined },
-  });
+  return requestData<HailingDispatchOffer>({ method: "POST", url: `/hailing/offers/${encodeURIComponent(id)}/decline`, data: { reason: reason || undefined } });
 }
 
 export function markHailingDriverArrived(id: string) {
@@ -112,11 +87,7 @@ export function markHailingDriverArrived(id: string) {
 }
 
 export function verifyHailingTripPin(id: string, pin: string) {
-  return requestData<HailingTrip>({
-    method: "POST",
-    url: `/hailing/trips/${encodeURIComponent(id)}/verify-pin`,
-    data: { pin },
-  });
+  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/verify-pin`, data: { pin } });
 }
 
 export function confirmHailingBoarding(id: string) {
@@ -136,18 +107,11 @@ export function completeHailingTrip(id: string) {
 }
 
 export function sendHailingSafetyEvent(id: string, data: { kind?: string; message: string }) {
-  return requestData<{ recorded: boolean }>({
-    method: "POST",
-    url: `/hailing/trips/${encodeURIComponent(id)}/safety-event`,
-    data,
-  });
+  return requestData<{ recorded: boolean }>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/safety-event`, data });
 }
 
 export function openHailingConversation(id: string) {
-  return requestData<Conversation>({
-    method: "POST",
-    url: `/hailing/trips/${encodeURIComponent(id)}/conversation`,
-  });
+  return requestData<Conversation>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/conversation` });
 }
 
 export type AdminHailingDriver = {
@@ -161,12 +125,7 @@ export type AdminHailingDriver = {
   hailing_enabled: boolean;
   approved_hailing_city_ids: string[];
   approved_hailing_classes: HailingRideClass[];
-  current_presence?: {
-    status?: string;
-    city_id?: string;
-    ride_class?: HailingRideClass;
-    last_seen_at?: string;
-  } | null;
+  current_presence?: { status?: string; city_id?: string; ride_class?: HailingRideClass; last_seen_at?: string } | null;
 };
 
 export function listAdminHailingCities() {
@@ -177,16 +136,8 @@ export function listAdminHailingDrivers() {
   return requestData<AdminHailingDriver[]>({ method: "GET", url: "/admin/hailing/drivers" });
 }
 
-export function updateAdminHailingDriverEligibility(driverId: string, data: {
-  hailing_enabled: boolean;
-  approved_hailing_city_ids: string[];
-  approved_hailing_classes: HailingRideClass[];
-}) {
-  return requestData<AdminHailingDriver>({
-    method: "PATCH",
-    url: `/admin/hailing/drivers/${encodeURIComponent(driverId)}/eligibility`,
-    data,
-  });
+export function updateAdminHailingDriverEligibility(driverId: string, data: { hailing_enabled: boolean; approved_hailing_city_ids: string[]; approved_hailing_classes: HailingRideClass[] }) {
+  return requestData<AdminHailingDriver>({ method: "PATCH", url: `/admin/hailing/drivers/${encodeURIComponent(driverId)}/eligibility`, data });
 }
 
 export function listAdminHailingTrips() {
