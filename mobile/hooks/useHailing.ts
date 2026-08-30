@@ -17,6 +17,7 @@ import {
 import { useScreenReconciliation } from "./useScreenReconciliation";
 
 const RECOVERY_REFRESH_MS = 6500;
+const CONNECTED_RECONCILIATION_MS = 15000;
 const TERMINAL_STATUSES = new Set([
   "COMPLETED",
   "CANCELLED_BY_PASSENGER",
@@ -105,10 +106,21 @@ export function useActiveHailingTrip(autoRefresh = true) {
 
   useEffect(() => {
     clearTimer();
-    if (!autoRefresh || connectionState === "connected" || !trip || TERMINAL_STATUSES.has(trip.status)) return undefined;
-    timer.current = setTimeout(() => void load(), RECOVERY_REFRESH_MS);
-    return clearTimer;
-  }, [autoRefresh, clearTimer, connectionState, load, trip?.id, trip?.status, trip?.updated_at]);
+    if (!autoRefresh || !trip || TERMINAL_STATUSES.has(trip.status)) return undefined;
+    let cancelled = false;
+    const schedule = () => {
+      const delay = connectionState === "connected" ? CONNECTED_RECONCILIATION_MS : RECOVERY_REFRESH_MS;
+      timer.current = setTimeout(async () => {
+        await load();
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      clearTimer();
+    };
+  }, [autoRefresh, clearTimer, connectionState, load, trip?.id, trip?.status]);
 
   useEffect(() => clearTimer, [clearTimer]);
   return { trip, loading, refreshing, error, reload: load, setTrip, realtimeState: connectionState };
@@ -164,10 +176,21 @@ export function useHailingTripRealtime(tripId: string, enabled = true) {
 
   useEffect(() => {
     clearTimer();
-    if (!enabled || connectionState === "connected" || !trip || TERMINAL_STATUSES.has(trip.status)) return undefined;
-    timer.current = setTimeout(() => void load(), RECOVERY_REFRESH_MS);
-    return clearTimer;
-  }, [clearTimer, connectionState, enabled, load, trip?.id, trip?.status, trip?.updated_at]);
+    if (!enabled || !trip || TERMINAL_STATUSES.has(trip.status)) return undefined;
+    let cancelled = false;
+    const schedule = () => {
+      const delay = connectionState === "connected" ? CONNECTED_RECONCILIATION_MS : RECOVERY_REFRESH_MS;
+      timer.current = setTimeout(async () => {
+        await load();
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      clearTimer();
+    };
+  }, [clearTimer, connectionState, enabled, load, trip?.id, trip?.status]);
 
   useEffect(() => clearTimer, [clearTimer]);
   return { trip, loading, refreshing, error, reload: load, setTrip, realtimeState: connectionState };
@@ -227,10 +250,21 @@ export function useHailingDriverWorkspace(autoRefresh = true) {
     clearTimer();
     const active = status?.active_trip && !TERMINAL_STATUSES.has(status.active_trip.status);
     const waiting = status?.presence?.status === "available" || status?.presence?.status === "offered";
-    if (!autoRefresh || connectionState === "connected" || (!active && !offer && !waiting)) return undefined;
-    timer.current = setTimeout(() => void load(), RECOVERY_REFRESH_MS);
-    return clearTimer;
-  }, [autoRefresh, clearTimer, connectionState, load, offer?.id, status?.active_trip?.id, status?.active_trip?.status, status?.presence?.status]);
+    if (!autoRefresh || (!active && !offer && !waiting)) return undefined;
+    let cancelled = false;
+    const schedule = () => {
+      const delay = connectionState === "connected" ? CONNECTED_RECONCILIATION_MS : RECOVERY_REFRESH_MS;
+      timer.current = setTimeout(async () => {
+        await load();
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      clearTimer();
+    };
+  }, [autoRefresh, clearTimer, connectionState, load, Boolean(offer), status?.active_trip?.id, status?.active_trip?.status, status?.presence?.status]);
 
   useEffect(() => clearTimer, [clearTimer]);
   return { status, offer, loading, refreshing, error, reload: load, setStatus, setOffer, realtimeState: connectionState };
