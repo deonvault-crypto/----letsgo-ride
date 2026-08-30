@@ -1,6 +1,8 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from app.database import database
+from app.services.driver_finance_stats_service import driver_stats
 from app.services.worker_finance_service import _driver_trip_financials, _driver_wallet
 
 
@@ -106,6 +108,51 @@ class DriverCashCardFinancePolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(entries["card-trip"]["platform_commission_usd"], 4.00)
         self.assertEqual(entries["card-trip"]["worker_earnings_usd"], 16.00)
         self.assertNotIn("cancelled-trip", entries)
+
+    async def test_driver_daily_stats_use_card_only_fee_policy_and_ignore_old_cash_commission(self):
+        await database.replace_collection(
+            "hailing_trips",
+            [
+                {
+                    "id": "cash-today",
+                    "driver_id": "driver-1",
+                    "status": "COMPLETED",
+                    "payment_method": "cash",
+                    "fare": {"total_fare": 10.00, "platform_commission": 3.00},
+                    "completed_at": "2026-08-30T08:00:00+00:00",
+                },
+                {
+                    "id": "card-today",
+                    "driver_id": "driver-1",
+                    "status": "COMPLETED",
+                    "payment_method": "card",
+                    "fare": {"total_fare": 20.00, "platform_commission": 2.00},
+                    "completed_at": "2026-08-30T09:00:00+00:00",
+                },
+                {
+                    "id": "yesterday",
+                    "driver_id": "driver-1",
+                    "status": "COMPLETED",
+                    "payment_method": "card",
+                    "fare": {"total_fare": 100.00, "platform_commission": 10.00},
+                    "completed_at": "2026-08-29T09:00:00+00:00",
+                },
+            ],
+        )
+
+        with patch(
+            "app.services.driver_finance_stats_service.driver_profile_for_user",
+            new=AsyncMock(return_value={"id": "driver-1"}),
+        ), patch(
+            "app.services.driver_finance_stats_service._harare_day_window_utc",
+            return_value=("2026-08-30T00:00:00+00:00", "2026-08-31T00:00:00+00:00"),
+        ):
+            stats = await driver_stats(self.user)
+
+        self.assertEqual(stats["today_ride_count"], 2)
+        self.assertEqual(stats["today_gross_fares"], 30.00)
+        self.assertEqual(stats["today_platform_commission"], 2.00)
+        self.assertEqual(stats["today_estimated_earnings"], 28.00)
 
 
 if __name__ == "__main__":
