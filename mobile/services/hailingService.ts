@@ -150,14 +150,36 @@ export function listAdminHailingCities() {
   return requestData<HailingServiceArea[]>({ method: "GET", url: "/admin/hailing/cities" });
 }
 
-export function listAdminHailingDrivers() {
-  return requestData<AdminHailingDriver[]>({ method: "GET", url: "/admin/hailing/drivers" });
+type AdminHailingPage<T> = {
+  count: number;
+  items: T[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
+export async function listAdminHailingDrivers(options: { limit?: number; offset?: number } = {}) {
+  const page = await requestData<AdminHailingPage<AdminHailingDriver>>({
+    method: "GET",
+    url: "/admin/hailing/drivers",
+    params: { limit: options.limit ?? 50, offset: options.offset ?? 0 },
+  });
+  return page.items;
 }
 
 export function updateAdminHailingDriverEligibility(driverId: string, data: { hailing_enabled: boolean; approved_hailing_city_ids: string[]; approved_hailing_classes: HailingRideClass[] }) {
   return requestData<AdminHailingDriver>({ method: "PATCH", url: `/admin/hailing/drivers/${encodeURIComponent(driverId)}/eligibility`, data });
 }
 
-export function listAdminHailingTrips() {
-  return requestData<HailingTrip[]>({ method: "GET", url: "/admin/hailing/trips" });
+export async function listAdminHailingTrips(options: { limit?: number; offset?: number; activeOnly?: boolean } = {}) {
+  const page = await requestData<AdminHailingPage<HailingTrip>>({
+    method: "GET",
+    url: "/admin/hailing/trips",
+    params: {
+      limit: options.limit ?? 50,
+      offset: options.offset ?? 0,
+      active_only: options.activeOnly ?? true,
+    },
+  });
+  return page.items;
 }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.auth import get_admin_user, get_current_user
 from app.config import get_settings
@@ -405,14 +405,41 @@ async def admin_upsert_city(payload: HailingCityUpsertBody, user=Depends(get_adm
 
 
 @admin_router.get("/drivers")
-async def admin_hailing_drivers(user=Depends(get_admin_user)):
+async def admin_hailing_drivers(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    user=Depends(get_admin_user),
+):
     _ = user
-    drivers = await database.find_many("drivers")
-    rows = []
-    for driver in sorted(drivers, key=lambda item: item.get("name") or item.get("created_at") or ""):
-        presence = await database.find_one("hailing_driver_presence", {"driver_id": driver.get("id")})
-        rows.append(_hailing_driver_payload(driver, presence))
-    return api_success(rows)
+    filters: dict = {}
+    count = await database.count("drivers", filters)
+    drivers = await database.find_many(
+        "drivers",
+        filters,
+        sort=[("created_at", -1), ("id", 1)],
+        skip=offset,
+        limit=limit,
+    )
+    driver_ids = [driver.get("id") for driver in drivers if driver.get("id")]
+    presences = (
+        await database.find_many("hailing_driver_presence", {"driver_id": {"$in": driver_ids}})
+        if driver_ids
+        else []
+    )
+    presence_by_driver = {presence.get("driver_id"): presence for presence in presences}
+    rows = [
+        _hailing_driver_payload(driver, presence_by_driver.get(driver.get("id")))
+        for driver in drivers
+    ]
+    return api_success(
+        {
+            "count": count,
+            "items": rows,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(rows) < count,
+        }
+    )
 
 
 @admin_router.patch("/drivers/{driver_id}/eligibility")
@@ -446,9 +473,45 @@ async def admin_update_hailing_driver(driver_id: str, payload: HailingDriverElig
 
 
 @admin_router.get("/trips")
-async def admin_trips(user=Depends(get_admin_user)):
-    trips = await database.find_many("hailing_trips")
-    return api_success([public_trip(trip, user) for trip in trips])
+async def admin_trips(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    active_only: bool = Query(default=False),
+    status: str | None = Query(default=None),
+    user=Depends(get_admin_user),
+):
+    filters: dict = {}
+    if status:
+        filters["status"] = status.strip().upper()
+    elif active_only:
+        filters["status"] = {
+            "$in": [
+                "SEARCHING",
+                "DRIVER_ASSIGNED",
+                "DRIVER_EN_ROUTE",
+                "DRIVER_ARRIVED",
+                "PASSENGER_CONFIRMED_BOARDING",
+                "IN_PROGRESS",
+            ]
+        }
+    count = await database.count("hailing_trips", filters)
+    trips = await database.find_many(
+        "hailing_trips",
+        filters,
+        sort=[("created_at", -1), ("id", 1)],
+        skip=offset,
+        limit=limit,
+    )
+    rows = [public_trip(trip, user) for trip in trips]
+    return api_success(
+        {
+            "count": count,
+            "items": rows,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(rows) < count,
+        }
+    )
 
 
 @admin_router.post("/trips/{trip_id}/cancel")

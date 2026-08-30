@@ -183,6 +183,15 @@ class Database:
             [("delivery_id", 1), ("recorded_at", 1)],
             name="courier_location_snapshots_by_delivery_time",
         )
+        await self.db["courier_location_snapshots"].create_index(
+            [("expires_at", 1)],
+            expireAfterSeconds=0,
+            name="courier_location_snapshots_ttl",
+        )
+        await self.db["drivers"].create_index(
+            [("created_at", -1), ("id", 1)],
+            name="drivers_admin_hailing_recent",
+        )
         await self.db["rides"].create_index(
             [("user_id", 1), ("updated_at", -1)],
             name="driver_rides_workspace",
@@ -348,6 +357,7 @@ class Database:
         filters: Optional[Dict[str, Any]] = None,
         *,
         sort: Optional[Sequence[Tuple[str, int]]] = None,
+        skip: Optional[int] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         filters = filters or {}
@@ -355,6 +365,8 @@ class Database:
             cursor = self.db[collection].find(filters)
             if sort:
                 cursor = cursor.sort(list(sort))
+            if skip is not None:
+                cursor = cursor.skip(max(0, int(skip)))
             if limit is not None:
                 cursor = cursor.limit(max(0, int(limit)))
             return [self._clean(item) async for item in cursor]
@@ -370,6 +382,8 @@ class Database:
                     key=lambda item: (item.get(field) is None, item.get(field)),
                     reverse=int(direction) < 0,
                 )
+        if skip is not None:
+            rows = rows[max(0, int(skip)) :]
         if limit is not None:
             rows = rows[: max(0, int(limit))]
         return rows
