@@ -5,22 +5,22 @@ const root = path.resolve(__dirname, "..");
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
 
 describe("startup performance architecture", () => {
-  it("bounds the branded launch and supports reduced motion", () => {
+  it("keeps the branded launch short and supports reduced motion", () => {
     const source = read("app/index.tsx");
-    expect(source).toContain("STANDARD_LAUNCH_MS = 1900");
-    expect(source).toContain("REDUCED_MOTION_LAUNCH_MS = 650");
+    expect(source).toContain("STANDARD_LAUNCH_MS = 1250");
+    expect(source).toContain("REDUCED_MOTION_LAUNCH_MS = 350");
     expect(source).toContain("AccessibilityInfo.isReduceMotionEnabled");
-    expect(source).not.toContain("loadingTrack");
+    expect(source).not.toContain("ActivityIndicator");
   });
 
-  it("uses the canonical lightweight native rider scene without template cards or raster media", () => {
+  it("uses a premium lightweight route cue without the old cartoon rider scene", () => {
     const source = read("app/index.tsx");
-    expect(source).toContain("ScooterIllustration");
-    expect(source).toContain("deliveryBox");
-    expect(source).toContain("pathSegment");
-    expect(source).toContain("pinRipple");
-    expect(source).not.toContain("routeCard");
-    expect(source).not.toContain('name="moped"');
+    expect(source).toContain("routeStage");
+    expect(source).toContain("vehiclePoint");
+    expect(source).toContain("MOVE · EAT · SEND");
+    expect(source).not.toContain("ScooterIllustration");
+    expect(source).not.toContain("deliveryBox");
+    expect(source).not.toContain("riderTorso");
     expect(source).not.toContain("require(");
   });
 
