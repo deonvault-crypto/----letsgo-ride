@@ -45,8 +45,9 @@ export function PendingReviewReminder() {
   }, [isGuest, loading, pathname, user?.id]);
 
   if (!review || !safePath(pathname)) return null;
-  const key = `${review.transaction_type}:${review.transaction_id}:${review.reviewee_id}`;
-  const copy = promptCopy(review);
+  const currentReview = review;
+  const key = `${currentReview.transaction_type}:${currentReview.transaction_id}:${currentReview.reviewee_id}`;
+  const copy = promptCopy(currentReview);
 
   function dismiss() {
     dismissed.current.add(key);
@@ -54,8 +55,10 @@ export function PendingReviewReminder() {
   }
 
   function openReview() {
+    const transactionId = currentReview.transaction_id;
+    const transactionType = currentReview.transaction_type;
     setReview(null);
-    router.push({ pathname: "/(shared)/review", params: { transactionId: review.transaction_id, transactionType: review.transaction_type } } as never);
+    router.push({ pathname: "/(shared)/review", params: { transactionId, transactionType } } as never);
   }
 
   return (
