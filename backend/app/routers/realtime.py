@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -16,6 +17,7 @@ router = APIRouter(tags=["realtime"])
 REALTIME_PROTOCOL = "letsgoride.realtime.v1"
 AUTH_PROTOCOL_PREFIX = "letsgoride.auth."
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 def _protocols(websocket: WebSocket) -> list[str]:
@@ -24,6 +26,10 @@ def _protocols(websocket: WebSocket) -> list[str]:
         for item in websocket.headers.get("sec-websocket-protocol", "").split(",")
         if item.strip()
     ]
+
+
+def _has_auth_protocol(websocket: WebSocket) -> bool:
+    return any(protocol.startswith(AUTH_PROTOCOL_PREFIX) for protocol in _protocols(websocket))
 
 
 def _access_token(websocket: WebSocket) -> str:
@@ -37,9 +43,17 @@ def _access_token(websocket: WebSocket) -> str:
 
 
 def _origin_allowed(websocket: WebSocket) -> bool:
-    origin = websocket.headers.get("origin", "").rstrip("/")
+    origin = websocket.headers.get("origin", "").strip().rstrip("/")
     allowed = {item.rstrip("/") for item in settings.cors_origins}
-    return not origin or "*" in allowed or origin in allowed
+    if not origin or origin == "null" or "*" in allowed or origin in allowed:
+        return True
+    # Native clients authenticate with a bearer-equivalent token carried in the
+    # WebSocket subprotocol list. Unlike cookie-authenticated browser sockets,
+    # possession of this token is required and is validated before registration.
+    # Allowing that authenticated-native handshake avoids false 403s from platform-
+    # generated Origin headers while still rejecting untrusted browser origins that
+    # do not possess an app session token.
+    return _has_auth_protocol(websocket)
 
 
 async def _authenticate(websocket: WebSocket):
@@ -82,10 +96,21 @@ async def _handle_client_message(connection: RealtimeConnection, raw_message: st
 @router.websocket("/realtime")
 async def realtime_socket(websocket: WebSocket):
     if not _origin_allowed(websocket):
+        origin = websocket.headers.get("origin", "").strip()
+        logger.warning(
+            "realtime_ws_rejected reason=origin origin=%s has_auth_protocol=%s",
+            origin[:160] if origin else "<empty>",
+            _has_auth_protocol(websocket),
+        )
         await websocket.close(code=4403)
         return
     user = await _authenticate(websocket)
     if not user:
+        logger.warning(
+            "realtime_ws_rejected reason=authentication has_authorization=%s has_auth_protocol=%s",
+            websocket.headers.get("authorization", "").lower().startswith("bearer "),
+            _has_auth_protocol(websocket),
+        )
         await websocket.close(code=4401)
         return
 
@@ -94,6 +119,12 @@ async def realtime_socket(websocket: WebSocket):
     await websocket.accept(subprotocol=selected_protocol)
     principal = await principal_for_user(user)
     connection = await connection_manager.register(websocket, principal)
+    logger.info(
+        "realtime_ws_connected user_id=%s role=%s protocol=%s",
+        user.get("id"),
+        user.get("role"),
+        selected_protocol or "none",
+    )
     await connection_manager.send_control(
         connection,
         {
