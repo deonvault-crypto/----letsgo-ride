@@ -8,6 +8,7 @@ import { HailingMapBackdrop } from "../../../../components/hailing/HailingMapBac
 import { AppNotice } from "../../../../components/ui/AppNotice";
 import { v2Theme } from "../../../../constants/v2Theme";
 import { useHailingTripRealtime } from "../../../../hooks/useHailing";
+import { useHailingDriverLocationSync } from "../../../../hooks/useHailingDriverLocationSync";
 import {
   cancelHailingTrip,
   completeHailingTrip,
@@ -16,7 +17,7 @@ import {
   startHailingTrip,
   verifyHailingTripPin,
 } from "../../../../services/hailingService";
-import { HailingTrip, HailingTripStatus } from "../../../../types/hailing.types";
+import { HailingCoordinate, HailingTrip, HailingTripStatus } from "../../../../types/hailing.types";
 
 const RIDE_BLACK = "#111111";
 const TERMINAL = new Set<HailingTripStatus>([
@@ -32,6 +33,7 @@ function statusTitle(status?: HailingTripStatus) {
     case "DRIVER_ASSIGNED":
     case "DRIVER_EN_ROUTE": return "Head to pickup";
     case "DRIVER_ARRIVED": return "Passenger pickup";
+    case "PASSENGER_CONFIRMED_BOARDING": return "Safety check";
     case "IN_PROGRESS": return "Drive to destination";
     case "COMPLETED": return "Trip completed";
     case "CANCELLED_BY_PASSENGER": return "Passenger cancelled";
@@ -47,6 +49,7 @@ function statusHint(status?: HailingTripStatus) {
     case "DRIVER_ASSIGNED":
     case "DRIVER_EN_ROUTE": return "Follow the map to the pickup point.";
     case "DRIVER_ARRIVED": return "Start when the passenger is safely in the vehicle.";
+    case "PASSENGER_CONFIRMED_BOARDING": return "Complete the optional safety check, then start the trip.";
     case "IN_PROGRESS": return "Follow the route to the destination.";
     case "COMPLETED": return "Fare recorded. You’re ready for the next ride.";
     default: return "Trip status updates live.";
@@ -60,8 +63,18 @@ export default function DriverHailingTripScreen() {
   const tripId = String(params.id || "");
   const { trip, loading, error, reload, setTrip, realtimeState } = useHailingTripRealtime(tripId, Boolean(tripId));
   const [pin, setPin] = useState("");
+  const [currentLocation, setCurrentLocation] = useState<HailingCoordinate | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useHailingDriverLocationSync({
+    enabled: Boolean(trip && !TERMINAL.has(trip.status)),
+    tripId: trip?.id,
+    onLocation: (location) => setCurrentLocation({ latitude: location.latitude, longitude: location.longitude }),
+    onError: (locationError) => {
+      if (/permission|location access/i.test(locationError.message)) setNotice(locationError.message);
+    },
+  });
 
   async function mutate(name: string, action: () => Promise<HailingTrip>, fallback: string) {
     try {
@@ -102,9 +115,15 @@ export default function DriverHailingTripScreen() {
     }
   }
 
-  const canCancel = Boolean(trip && ["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED"].includes(trip.status));
+  const canCancel = Boolean(trip && ["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING"].includes(trip.status));
   const destination = trip?.status === "IN_PROGRESS" ? trip.dropoff : trip?.pickup;
-  const needsPin = Boolean(trip?.status === "DRIVER_ARRIVED" && trip.verify_ride_with_pin && !trip.trip_pin_verified_at);
+  const needsPin = Boolean(trip?.status === "PASSENGER_CONFIRMED_BOARDING" && trip.verify_ride_with_pin && !trip.trip_pin_verified_at);
+  const canStart = Boolean(
+    trip && (
+      (trip.status === "DRIVER_ARRIVED" && !trip.verify_ride_with_pin)
+      || (trip.status === "PASSENGER_CONFIRMED_BOARDING" && (!trip.verify_ride_with_pin || Boolean(trip.trip_pin_verified_at)))
+    ),
+  );
   const live = realtimeState === "connected";
 
   return (
@@ -114,7 +133,7 @@ export default function DriverHailingTripScreen() {
         pickup={trip?.pickup}
         dropoff={trip?.dropoff}
         route={trip?.route}
-        driverLocation={trip?.driver_location}
+        driverLocation={currentLocation || trip?.driver_location}
         bottomPadding={390}
       />
 
@@ -192,7 +211,7 @@ export default function DriverHailingTripScreen() {
               </View>
             ) : null}
 
-            {trip.status === "DRIVER_ARRIVED" && !needsPin ? (
+            {canStart ? (
               <Pressable accessibilityRole="button" disabled={Boolean(busyAction)} onPress={() => void mutate("start", () => startHailingTrip(trip.id), "Unable to start this trip.")} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
                 <Text style={styles.primaryText}>{busyAction === "start" ? "Starting trip…" : "Start trip"}</Text>
                 <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
