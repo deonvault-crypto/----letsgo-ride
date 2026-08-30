@@ -53,6 +53,15 @@ export type HailingConfig = {
   digital_payments: string[];
 };
 
+export type HailingCardSetup = {
+  payment_intent_id: string;
+  client_secret: string;
+  publishable_key: string;
+  status: string;
+  amount: number;
+  currency: string;
+};
+
 export type HailingServiceArea = {
   id: string;
   name: string;
@@ -146,8 +155,16 @@ export type HailingTrip = {
   passenger_user_id?: string;
   driver_user_id?: string | null;
   ride_class: HailingRideClass;
-  payment_method: "cash";
-  payment_status: "pending" | "cash_due" | "cash_collected" | "paid" | "failed" | "refunded";
+  payment_method: "cash" | "card";
+  payment_status:
+    | "pending"
+    | "cash_due"
+    | "cash_collected"
+    | "authorized"
+    | "authorization_released"
+    | "paid"
+    | "failed"
+    | "refunded";
   verify_ride_with_pin?: boolean;
   trip_pin_verified_at?: string | null;
   pickup: HailingPlace;
