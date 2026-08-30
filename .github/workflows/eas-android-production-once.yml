@@ -1,4 +1,4 @@
-name: EAS Android Failure Diagnostic
+name: EAS Android Gradle Diagnostic
 
 on:
   push:
@@ -9,12 +9,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: eas-android-diagnostic-14b124b4
+  group: eas-android-gradle-diagnostic-14b124b4
   cancel-in-progress: false
 
 jobs:
-  inspect-failed-build:
-    name: Inspect failed EAS build 3ce0f3e1
+  inspect-gradle-failure:
+    name: Extract Gradle failure for 3ce0f3e1
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -26,11 +26,6 @@ jobs:
         with:
           ref: 14b124b4896c1481325fc8ebaf4fcab009431e83
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Verify Expo token
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -39,63 +34,88 @@ jobs:
           set -euo pipefail
           test -n "$EXPO_TOKEN"
 
-      - name: Inspect EAS build metadata and Gradle logs
+      - name: Query Expo GraphQL and extract Gradle error
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           BUILD_ID: 3ce0f3e1-861b-4bfb-ab19-0cfdaa6773b5
         shell: bash
         run: |
           set -euo pipefail
-          npx eas-cli@latest build:view "$BUILD_ID" --json > /tmp/eas-build.json
-          node <<'NODE'
-          const fs = require('fs');
-          const build = JSON.parse(fs.readFileSync('/tmp/eas-build.json', 'utf8'));
-          const summary = {
-            id: build.id,
-            status: build.status,
-            platform: build.platform,
-            appVersion: build.appVersion,
-            appBuildVersion: build.appBuildVersion,
-            sdkVersion: build.sdkVersion,
-            runtimeVersion: build.runtimeVersion,
-            gitCommitHash: build.gitCommitHash,
-            error: build.error,
-            createdAt: build.createdAt,
-            completedAt: build.completedAt,
-          };
-          console.log('EAS_BUILD_SUMMARY ' + JSON.stringify(summary));
 
-          const urls = [];
-          function walk(value, path = []) {
-            if (typeof value === 'string') {
-              const label = path.join('.').toLowerCase();
-              if (/^https?:\/\//.test(value) && label.includes('log')) urls.push(value);
-              return;
-            }
-            if (Array.isArray(value)) {
-              value.forEach((item, index) => walk(item, [...path, String(index)]));
-              return;
-            }
-            if (value && typeof value === 'object') {
-              Object.entries(value).forEach(([key, item]) => walk(item, [...path, key]));
+          cat > /tmp/query.txt <<'GRAPHQL'
+          query BuildById($buildId: ID!) {
+            builds {
+              byId(buildId: $buildId) {
+                id
+                status
+                platform
+                error {
+                  errorCode
+                  message
+                  docsUrl
+                }
+                logFiles
+                artifacts {
+                  buildUrl
+                  applicationArchiveUrl
+                  buildArtifactsUrl
+                }
+                sdkVersion
+                appVersion
+                appBuildVersion
+                gitCommitHash
+                createdAt
+                completedAt
+              }
             }
           }
-          walk(build);
-          fs.writeFileSync('/tmp/eas-log-urls.txt', [...new Set(urls)].join('\n'));
-          console.log(`Discovered ${new Set(urls).size} EAS log URL(s).`);
-          NODE
+          GRAPHQL
 
+          jq -n --rawfile query /tmp/query.txt --arg buildId "$BUILD_ID" \
+            '{query:$query, variables:{buildId:$buildId}}' > /tmp/request.json
+
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $EXPO_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data @/tmp/request.json \
+            https://api.expo.dev/graphql > /tmp/response.json
+
+          if jq -e '.errors and (.errors | length > 0)' /tmp/response.json >/dev/null; then
+            echo 'Expo GraphQL returned errors:'
+            jq '.errors | map({message, extensions})' /tmp/response.json
+            exit 1
+          fi
+
+          jq '.data.builds.byId | {
+            id,
+            status,
+            platform,
+            error,
+            sdkVersion,
+            appVersion,
+            appBuildVersion,
+            gitCommitHash,
+            createdAt,
+            completedAt,
+            logFileCount: ((.logFiles // []) | length)
+          }' /tmp/response.json
+
+          jq -r '.data.builds.byId.logFiles[]?' /tmp/response.json > /tmp/log-urls.txt
           mkdir -p /tmp/eas-logs
           index=0
           while IFS= read -r url; do
             [ -n "$url" ] || continue
-            curl --fail --silent --show-error --location "$url" -o "/tmp/eas-logs/log-${index}.txt" || true
+            curl --fail --silent --show-error --location "$url" -o "/tmp/eas-logs/log-${index}.txt"
             index=$((index + 1))
-          done < /tmp/eas-log-urls.txt
+          done < /tmp/log-urls.txt
 
-          echo "=== GRADLE FAILURE EXCERPTS ==="
-          if find /tmp/eas-logs -type f -size +0c | grep -q .; then
-            grep -RniE -B 12 -A 35 'FAILURE:|What went wrong|Execution failed for task|Could not resolve|Caused by:|Manifest merger failed|Duplicate class|AAPT|resource.*not found|google-services|R8|Kotlin|Gradle build daemon disappeared|error:' /tmp/eas-logs || true
-          else
-            echo "No downloadable log files were exposed by build:view JSON."
+          echo "Downloaded ${index} EAS log file(s)."
+          echo '=== GRADLE FAILURE EXCERPTS ==='
+          if [ "$index" -eq 0 ]; then
+            echo 'No log files returned by Expo GraphQL.'
+            exit 1
           fi
+
+          grep -RniE -B 20 -A 60 \
+            'FAILURE: Build failed|What went wrong|Execution failed for task|Could not resolve|Could not determine|Caused by:|Manifest merger failed|Duplicate class|AAPT2?|resource.*not found|google-services|R8|Kotlin compilation|Gradle build daemon disappeared|BUILD FAILED|error:' \
+            /tmp/eas-logs | tail -n 500 || true
