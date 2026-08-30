@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request
 
 from app.auth import get_current_user
 from app.config import get_settings
-from app.models.hailing import HailingStripeIntentBody, HailingTripCreateBody
+from app.models.hailing import HailingCardTripCreateBody, HailingStripeIntentBody
 from app.services.rate_limit_service import RateLimit, rate_limit_service
 from app.services.stripe_payment_service import (
     create_authorized_hailing_trip,
@@ -59,14 +59,10 @@ async def create_hailing_stripe_intent(
 
 @router.post("/hailing/stripe/trips")
 async def create_hailing_card_trip(
-    payload: HailingTripCreateBody,
+    payload: HailingCardTripCreateBody,
     request: Request,
     user=Depends(get_current_user),
 ):
-    if payload.payment_method != "card":
-        api_error("This endpoint only creates card-authorized Ride Now trips.", 400)
-    if not payload.client_request_id or not payload.stripe_payment_intent_id:
-        api_error("Card authorization is required before requesting the ride.", 400)
     await rate_limit_service.enforce(
         request,
         "hailing-card-trip-create",
