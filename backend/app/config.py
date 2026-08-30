@@ -14,9 +14,6 @@ class Settings:
         self.app_env = os.getenv("APP_ENV", "development")
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
-        # No universal fallback code is shipped in source. Mock verification is only
-        # available when an explicit environment value is provided and the environment
-        # gate below allows it.
         self.mock_otp = os.getenv("MOCK_OTP", "").strip()
         self.allow_staging_mock_otp = self._parse_bool(
             os.getenv("ALLOW_STAGING_MOCK_OTP", "false")
@@ -47,17 +44,28 @@ class Settings:
             else self.app_env.strip().lower() in {"development", "test", "staging"}
         )
 
-        # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
+        # Stripe card payments are fail-closed and environment isolated. A staging
+        # process may never boot with live credentials and production may never boot
+        # with test credentials. Publishable keys are safe to return to authenticated
+        # mobile clients; secret and webhook keys never leave the backend.
+        self.stripe_enabled = self._parse_bool(os.getenv("STRIPE_ENABLED", "false"))
+        self.stripe_account_id = self._get_env_first("STRIPE_ACCOUNT_ID")
+        self.stripe_secret_key = self._get_env_first("STRIPE_SECRET_KEY")
+        self.stripe_publishable_key = self._get_env_first("STRIPE_PUBLISHABLE_KEY")
+        self.stripe_webhook_secret = self._get_env_first("STRIPE_WEBHOOK_SECRET")
+        self.stripe_currency = (os.getenv("STRIPE_CURRENCY", "usd").strip().lower() or "usd")
+        self.stripe_timeout_seconds = self._parse_float(os.getenv("STRIPE_TIMEOUT_SECONDS", "10"), 10.0)
+        if self.stripe_enabled:
+            self._validate_stripe_environment()
+
         self.routing_provider = os.getenv("ROUTING_PROVIDER", "disabled").strip().lower()
         self.google_maps_api_key = self._get_env_first("GOOGLE_MAPS_API_KEY")
         self.routing_region_code = os.getenv("ROUTING_REGION_CODE", "ZW").strip().upper() or "ZW"
         self.routing_timeout_seconds = self._parse_float(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"), 8.0)
-        # Explicitly opt-in to real provider calls during staging startup. Never enabled by default.
         self.routing_staging_smoke_test_enabled = self._parse_bool(
             os.getenv("ROUTING_STAGING_SMOKE_TEST_ENABLED", "false")
         )
 
-        # Delivery pricing is deliberately disabled until commercial rates are explicitly configured.
         self.courier_auto_pricing_enabled = self._parse_bool(
             os.getenv("COURIER_AUTO_PRICING_ENABLED", "false")
         )
@@ -76,7 +84,6 @@ class Settings:
         self.courier_payout_percent = self._parse_nonnegative_float(
             os.getenv("COURIER_PAYOUT_PERCENT", "0"), 0.0
         )
-        # End-to-end dispatch smoke test is staging-only and opt-in.
         self.courier_dispatch_staging_smoke_test_enabled = self._parse_bool(
             os.getenv("COURIER_DISPATCH_STAGING_SMOKE_TEST_ENABLED", "false")
         )
@@ -114,10 +121,28 @@ class Settings:
         if self.is_production and (not self.cors_origins_configured or not self.cors_origins or "*" in self.cors_origins):
             raise RuntimeError("Production CORS_ORIGINS must contain explicit trusted origins.")
 
+    def _validate_stripe_environment(self) -> None:
+        required = {
+            "STRIPE_SECRET_KEY": self.stripe_secret_key,
+            "STRIPE_PUBLISHABLE_KEY": self.stripe_publishable_key,
+            "STRIPE_WEBHOOK_SECRET": self.stripe_webhook_secret,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise RuntimeError(f"Stripe payments are enabled but missing: {', '.join(missing)}")
+        app_env = self.app_env.strip().lower()
+        if app_env == "production":
+            if not self.stripe_secret_key.startswith("sk_live_") or not self.stripe_publishable_key.startswith("pk_live_"):
+                raise RuntimeError("Production Stripe payments require live-mode keys.")
+        elif app_env == "staging":
+            if not self.stripe_secret_key.startswith("sk_test_") or not self.stripe_publishable_key.startswith("pk_test_"):
+                raise RuntimeError("Staging Stripe payments require test-mode keys.")
+        if not self.stripe_webhook_secret.startswith("whsec_"):
+            raise RuntimeError("STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret.")
+
     @staticmethod
     def _parse_origins(value: str) -> List[str]:
-        origins = [origin.strip() for origin in value.split(",") if origin.strip()]
-        return origins
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
     @staticmethod
     def _parse_bool(value: str) -> bool:
@@ -166,6 +191,15 @@ class Settings:
     @property
     def routing_configured(self) -> bool:
         return self.routing_provider == "google" and bool(self.google_maps_api_key)
+
+    @property
+    def stripe_configured(self) -> bool:
+        return bool(
+            self.stripe_enabled
+            and self.stripe_secret_key
+            and self.stripe_publishable_key
+            and self.stripe_webhook_secret
+        )
 
     @property
     def courier_pricing_configured(self) -> bool:
