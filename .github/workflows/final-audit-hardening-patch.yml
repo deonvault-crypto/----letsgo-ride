@@ -1,0 +1,118 @@
+name: Final audit hardening patch
+
+on:
+  push:
+    branches:
+      - release/2.0.2-final-audit-hardening
+    paths:
+      - .github/workflows/final-audit-hardening-patch.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/2.0.2-final-audit-hardening
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply bounded admin and courier retention fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match in {path}, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          db = "backend/app/database.py"
+          replace_once(
+              db,
+              '''        await self.db["courier_location_snapshots"].create_index(\n            [("delivery_id", 1), ("recorded_at", 1)],\n            name="courier_location_snapshots_by_delivery_time",\n        )\n        await self.db["rides"].create_index(''',
+              '''        await self.db["courier_location_snapshots"].create_index(\n            [("delivery_id", 1), ("recorded_at", 1)],\n            name="courier_location_snapshots_by_delivery_time",\n        )\n        await self.db["courier_location_snapshots"].create_index(\n            [("expires_at", 1)],\n            expireAfterSeconds=0,\n            name="courier_location_snapshots_ttl",\n        )\n        await self.db["drivers"].create_index(\n            [("created_at", -1), ("id", 1)],\n            name="drivers_admin_hailing_recent",\n        )\n        await self.db["rides"].create_index(''',
+          )
+          replace_once(
+              db,
+              '''        sort: Optional[Sequence[Tuple[str, int]]] = None,\n        limit: Optional[int] = None,\n    ) -> List[Dict[str, Any]]:\n        filters = filters or {}\n        if self.db is not None:\n            cursor = self.db[collection].find(filters)\n            if sort:\n                cursor = cursor.sort(list(sort))\n            if limit is not None:\n                cursor = cursor.limit(max(0, int(limit)))\n            return [self._clean(item) async for item in cursor]\n\n        self._ensure_memory_allowed()\n        rows = []\n        for item in self.memory[collection]:\n            if self._matches(item, filters):\n                rows.append(deepcopy(item))\n        if sort:\n            for field, direction in reversed(list(sort)):\n                rows.sort(\n                    key=lambda item: (item.get(field) is None, item.get(field)),\n                    reverse=int(direction) < 0,\n                )\n        if limit is not None:\n            rows = rows[: max(0, int(limit))]\n        return rows''',
+              '''        sort: Optional[Sequence[Tuple[str, int]]] = None,\n        skip: Optional[int] = None,\n        limit: Optional[int] = None,\n    ) -> List[Dict[str, Any]]:\n        filters = filters or {}\n        if self.db is not None:\n            cursor = self.db[collection].find(filters)\n            if sort:\n                cursor = cursor.sort(list(sort))\n            if skip is not None:\n                cursor = cursor.skip(max(0, int(skip)))\n            if limit is not None:\n                cursor = cursor.limit(max(0, int(limit)))\n            return [self._clean(item) async for item in cursor]\n\n        self._ensure_memory_allowed()\n        rows = []\n        for item in self.memory[collection]:\n            if self._matches(item, filters):\n                rows.append(deepcopy(item))\n        if sort:\n            for field, direction in reversed(list(sort)):\n                rows.sort(\n                    key=lambda item: (item.get(field) is None, item.get(field)),\n                    reverse=int(direction) < 0,\n                )\n        if skip is not None:\n            rows = rows[max(0, int(skip)) :]\n        if limit is not None:\n            rows = rows[: max(0, int(limit))]\n        return rows''',
+          )
+
+          router = "backend/app/routers/hailing.py"
+          replace_once(router, "from fastapi import APIRouter, Depends, Request", "from fastapi import APIRouter, Depends, Query, Request")
+          replace_once(
+              router,
+              '''@admin_router.get("/drivers")\nasync def admin_hailing_drivers(user=Depends(get_admin_user)):\n    _ = user\n    drivers = await database.find_many("drivers")\n    rows = []\n    for driver in sorted(drivers, key=lambda item: item.get("name") or item.get("created_at") or ""):\n        presence = await database.find_one("hailing_driver_presence", {"driver_id": driver.get("id")})\n        rows.append(_hailing_driver_payload(driver, presence))\n    return api_success(rows)''',
+              '''@admin_router.get("/drivers")\nasync def admin_hailing_drivers(\n    limit: int = Query(default=50, ge=1, le=100),\n    offset: int = Query(default=0, ge=0),\n    user=Depends(get_admin_user),\n):\n    _ = user\n    filters: dict = {}\n    count = await database.count("drivers", filters)\n    drivers = await database.find_many(\n        "drivers",\n        filters,\n        sort=[("created_at", -1), ("id", 1)],\n        skip=offset,\n        limit=limit,\n    )\n    driver_ids = [driver.get("id") for driver in drivers if driver.get("id")]\n    presences = (\n        await database.find_many("hailing_driver_presence", {"driver_id": {"$in": driver_ids}})\n        if driver_ids\n        else []\n    )\n    presence_by_driver = {presence.get("driver_id"): presence for presence in presences}\n    rows = [\n        _hailing_driver_payload(driver, presence_by_driver.get(driver.get("id")))\n        for driver in drivers\n    ]\n    return api_success(\n        {\n            "count": count,\n            "items": rows,\n            "limit": limit,\n            "offset": offset,\n            "has_more": offset + len(rows) < count,\n        }\n    )''',
+          )
+          replace_once(
+              router,
+              '''@admin_router.get("/trips")\nasync def admin_trips(user=Depends(get_admin_user)):\n    trips = await database.find_many("hailing_trips")\n    return api_success([public_trip(trip, user) for trip in trips])''',
+              '''@admin_router.get("/trips")\nasync def admin_trips(\n    limit: int = Query(default=50, ge=1, le=100),\n    offset: int = Query(default=0, ge=0),\n    active_only: bool = Query(default=False),\n    status: str | None = Query(default=None),\n    user=Depends(get_admin_user),\n):\n    filters: dict = {}\n    if status:\n        filters["status"] = status.strip().upper()\n    elif active_only:\n        filters["status"] = {\n            "$in": [\n                "SEARCHING",\n                "DRIVER_ASSIGNED",\n                "DRIVER_EN_ROUTE",\n                "DRIVER_ARRIVED",\n                "PASSENGER_CONFIRMED_BOARDING",\n                "IN_PROGRESS",\n            ]\n        }\n    count = await database.count("hailing_trips", filters)\n    trips = await database.find_many(\n        "hailing_trips",\n        filters,\n        sort=[("created_at", -1), ("id", 1)],\n        skip=offset,\n        limit=limit,\n    )\n    rows = [public_trip(trip, user) for trip in trips]\n    return api_success(\n        {\n            "count": count,\n            "items": rows,\n            "limit": limit,\n            "offset": offset,\n            "has_more": offset + len(rows) < count,\n        }\n    )''',
+          )
+
+          mobile = "mobile/services/hailingService.ts"
+          replace_once(
+              mobile,
+              '''export function listAdminHailingDrivers() {\n  return requestData<AdminHailingDriver[]>({ method: "GET", url: "/admin/hailing/drivers" });\n}''',
+              '''type AdminHailingPage<T> = {\n  count: number;\n  items: T[];\n  limit: number;\n  offset: number;\n  has_more: boolean;\n};\n\nexport async function listAdminHailingDrivers(options: { limit?: number; offset?: number } = {}) {\n  const page = await requestData<AdminHailingPage<AdminHailingDriver>>({\n    method: "GET",\n    url: "/admin/hailing/drivers",\n    params: { limit: options.limit ?? 50, offset: options.offset ?? 0 },\n  });\n  return page.items;\n}''',
+          )
+          replace_once(
+              mobile,
+              '''export function listAdminHailingTrips() {\n  return requestData<HailingTrip[]>({ method: "GET", url: "/admin/hailing/trips" });\n}''',
+              '''export async function listAdminHailingTrips(options: { limit?: number; offset?: number; activeOnly?: boolean } = {}) {\n  const page = await requestData<AdminHailingPage<HailingTrip>>({\n    method: "GET",\n    url: "/admin/hailing/trips",\n    params: {\n      limit: options.limit ?? 50,\n      offset: options.offset ?? 0,\n      active_only: options.activeOnly ?? true,\n    },\n  });\n  return page.items;\n}''',
+          )
+
+          Path("backend/tests/test_hailing_admin_scale.py").write_text('''from __future__ import annotations\n\nimport unittest\nfrom unittest.mock import AsyncMock, patch\n\nfrom app.database import COLLECTION_NAMES, database\nfrom app.routers.hailing import admin_hailing_drivers, admin_trips\n\n\nclass HailingAdminScaleTests(unittest.IsolatedAsyncioTestCase):\n    async def asyncSetUp(self):\n        database.db = None\n        for collection in COLLECTION_NAMES:\n            await database.replace_collection(collection, [])\n        self.admin = {"id": "admin-1", "role": "admin"}\n\n    async def test_find_many_skip_applies_after_sort_and_before_limit(self):\n        for index in range(6):\n            await database.insert_one("audit_logs", {"id": f"row-{index}", "created_at": index})\n        rows = await database.find_many(\n            "audit_logs", sort=[("created_at", 1)], skip=2, limit=2\n        )\n        self.assertEqual([row["id"] for row in rows], ["row-2", "row-3"])\n\n    async def test_admin_driver_page_bulk_loads_presence_without_n_plus_one(self):\n        for index in range(5):\n            driver_id = f"driver-{index}"\n            await database.insert_one(\n                "drivers",\n                {\n                    "id": driver_id,\n                    "user_id": f"user-{index}",\n                    "name": f"Driver {index}",\n                    "created_at": f"2026-08-3{index}T12:00:00+00:00",\n                    "hailing_enabled": True,\n                },\n            )\n            await database.insert_one(\n                "hailing_driver_presence",\n                {"id": f"presence-{index}", "driver_id": driver_id, "status": "available"},\n            )\n\n        with patch.object(database, "find_one", new=AsyncMock(side_effect=AssertionError("N+1 presence lookup"))):\n            response = await admin_hailing_drivers(limit=2, offset=1, user=self.admin)\n\n        page = response["data"]\n        self.assertEqual(page["count"], 5)\n        self.assertEqual(page["limit"], 2)\n        self.assertEqual(page["offset"], 1)\n        self.assertTrue(page["has_more"])
+        self.assertEqual(len(page["items"]), 2)\n        self.assertTrue(all(item["current_presence"] for item in page["items"]))\n\n    async def test_admin_trip_page_is_bounded_and_can_filter_to_active(self):\n        statuses = ["SEARCHING", "DRIVER_ARRIVED", "COMPLETED", "CANCELLED", "IN_PROGRESS"]\n        for index, status in enumerate(statuses):\n            await database.insert_one(\n                "hailing_trips",\n                {\n                    "id": f"trip-{index}",\n                    "status": status,\n                    "created_at": f"2026-08-3{index}T12:00:00+00:00",\n                    "passenger_user_id": f"passenger-{index}",\n                },\n            )\n\n        response = await admin_trips(\n            limit=2, offset=0, active_only=True, status=None, user=self.admin\n        )\n        page = response["data"]\n        self.assertEqual(page["count"], 3)\n        self.assertEqual(len(page["items"]), 2)\n        self.assertTrue(page["has_more"])
+        self.assertTrue(\n            all(item["status"] not in {"COMPLETED", "CANCELLED"} for item in page["items"])\n        )\n\n\nif __name__ == "__main__":\n    unittest.main()\n''')
+          PY
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run backend regression suite
+        working-directory: backend
+        env:
+          LETSGORIDE_ALLOW_MEMORY_DB: 'true'
+          APP_ENV: test
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Verify mobile type safety
+        working-directory: mobile
+        run: |
+          npm ci
+          npm run typecheck
+
+      - name: Commit hardened code
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/database.py backend/app/routers/hailing.py backend/tests/test_hailing_admin_scale.py mobile/services/hailingService.ts
+          if git diff --cached --quiet; then
+            echo "No code changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(release): bound admin hailing and expire courier telemetry"
+          git push origin HEAD:release/2.0.2-final-audit-hardening
