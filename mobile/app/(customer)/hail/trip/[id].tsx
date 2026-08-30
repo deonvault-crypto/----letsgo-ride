@@ -1,10 +1,13 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { HailingMapBackdrop } from "../../../../components/hailing/HailingMapBackdrop";
+import { BottomNav } from "../../../../components/layout/BottomNav";
 import { AppNotice } from "../../../../components/ui/AppNotice";
 import { Avatar } from "../../../../components/ui/Avatar";
-import { Screen } from "../../../../components/ui/Screen";
 import { v2Theme } from "../../../../constants/v2Theme";
 import {
   cancelHailingTrip,
@@ -13,15 +16,17 @@ import {
   openHailingConversation,
   regenerateHailingTripPin,
   sendHailingSafetyEvent,
+  shareHailingTrip,
 } from "../../../../services/hailingService";
 import { HailingTrip, HailingTripStatus } from "../../../../types/hailing.types";
 
 const RIDE_BLACK = "#111111";
-const terminal = new Set<HailingTripStatus>(["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"]);
+const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
+const TERMINAL = new Set<HailingTripStatus>(["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"]);
+const SHAREABLE = new Set<HailingTripStatus>(["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS"]);
 
 function statusTitle(status?: HailingTripStatus) {
   switch (status) {
-    case "SEARCHING": return "Finding your driver";
     case "DRIVER_ASSIGNED": return "Driver assigned";
     case "DRIVER_EN_ROUTE": return "Driver on the way";
     case "DRIVER_ARRIVED": return "Your driver is here";
@@ -32,26 +37,36 @@ function statusTitle(status?: HailingTripStatus) {
     case "CANCELLED_BY_DRIVER": return "Driver cancelled";
     case "CANCELLED_BY_ADMIN": return "Ride cancelled";
     case "NO_DRIVER_FOUND": return "No driver found";
-    default: return "Trip unavailable";
+    default: return "Restoring your ride…";
   }
 }
 
-function terminalMessage(status: HailingTripStatus) {
-  if (status === "NO_DRIVER_FOUND") return "No approved driver accepted this request in time. You can try again whenever you’re ready.";
-  if (status === "CANCELLED_BY_DRIVER") return "The driver could not continue with this request. Book another ride and we’ll search again.";
-  if (status === "CANCELLED_BY_ADMIN") return "This ride was cancelled. You can book another ride whenever you’re ready.";
-  return "This ride request has been cancelled. No driver is being assigned anymore.";
+function statusBody(status?: HailingTripStatus) {
+  switch (status) {
+    case "DRIVER_ASSIGNED": return "Your driver accepted the request. Live location will update as they approach.";
+    case "DRIVER_EN_ROUTE": return "Your driver is travelling to the pickup point.";
+    case "DRIVER_ARRIVED": return "Check the driver, vehicle colour and plate before getting in.";
+    case "PASSENGER_CONFIRMED_BOARDING": return "You confirmed you’re in the car. The driver can start the trip.";
+    case "IN_PROGRESS": return "Your trip is active. You can share this live status with someone you trust.";
+    case "COMPLETED": return "Your trip is complete. Your receipt and rating are ready.";
+    case "CANCELLED_BY_DRIVER": return "The driver could not continue. You can request another ride.";
+    case "NO_DRIVER_FOUND": return "No approved driver accepted in time. Try again when you’re ready.";
+    case "CANCELLED_BY_PASSENGER":
+    case "CANCELLED_BY_ADMIN": return "This ride is closed and no driver is being assigned.";
+    default: return "Getting the latest trip state from the server.";
+  }
 }
 
 export default function CustomerHailingTripScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string }>();
   const tripId = String(params.id || "");
   const [trip, setTrip] = useState<HailingTrip | null>(null);
   const [tripPin, setTripPin] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -59,241 +74,262 @@ export default function CustomerHailingTripScreen() {
     try {
       setRefreshing(true);
       const next = await getHailingTrip(tripId);
-      setTrip(next);
-      if (!next.verify_ride_with_pin || next.trip_pin_verified_at || terminal.has(next.status) || next.status === "IN_PROGRESS") {
-        setTripPin(null);
+      if (next.status === "SEARCHING") {
+        router.replace(`/(customer)/hail/searching?tripId=${encodeURIComponent(next.id)}` as never);
+        return;
       }
+      setTrip(next);
+      if (!next.verify_ride_with_pin || next.trip_pin_verified_at || TERMINAL.has(next.status) || next.status === "IN_PROGRESS") setTripPin(null);
       setNotice(null);
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to refresh this trip.");
+      setNotice(err instanceof Error ? err.message : "Unable to restore this ride.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [tripId]);
+  }, [router, tripId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (!trip || terminal.has(trip.status)) return undefined;
-    const timer = setTimeout(load, 4500);
+    if (!trip || TERMINAL.has(trip.status)) return undefined;
+    const timer = setTimeout(() => void load(), 4500);
     return () => clearTimeout(timer);
-  }, [load, trip?.id, trip?.status]);
+  }, [load, trip?.id, trip?.status, trip?.updated_at]);
 
-  async function cancel() {
-    if (!trip) return;
+  async function perform(name: string, action: () => Promise<void>) {
     try {
-      setBusy(true);
+      setBusyAction(name);
+      setNotice(null);
+      await action();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "That action could not be completed.");
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function goBack() { router.replace("/(customer)/home" as never); }
+
+  function cancel() {
+    if (!trip) return;
+    void perform("cancel", async () => {
       const next = await cancelHailingTrip(trip.id, "Passenger cancelled");
       setTrip(next);
       setTripPin(null);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to cancel this trip.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
-  async function safety() {
+  function safety() {
     if (!trip) return;
-    try {
-      setBusy(true);
-      await sendHailingSafetyEvent(trip.id, { kind: "help_requested", message: "Passenger requested help from the hailing trip screen." });
-      setNotice("Support has been notified. If you are in immediate danger, call emergency services.");
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to send this safety request.");
-    } finally {
-      setBusy(false);
-    }
+    void perform("safety", async () => {
+      await sendHailingSafetyEvent(trip.id, { kind: "help_requested", message: "Passenger requested help from the live Ride Now screen." });
+      setNotice("LetsGoRide support has been notified. Use local emergency services if you need immediate help.");
+    });
   }
 
-  async function confirmBoarding() {
+  function confirmBoarding() {
     if (!trip) return;
-    try {
-      setBusy(true);
+    void perform("boarding", async () => {
       const next = await confirmHailingBoarding(trip.id);
       setTrip(next);
       if (next.trip_pin) setTripPin(next.trip_pin);
-      setNotice(next.verify_ride_with_pin ? "Use this one-time PIN to verify the ride with your driver." : "Ready to go. Waiting for your driver to start the trip.");
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to confirm boarding.");
-    } finally {
-      setBusy(false);
-    }
+      setNotice(next.verify_ride_with_pin ? "Tell this one-time PIN only to your assigned driver." : "Boarding confirmed. Waiting for the driver to start the trip.");
+    });
   }
 
-  async function regeneratePin() {
+  function regeneratePin() {
     if (!trip) return;
-    try {
-      setBusy(true);
+    void perform("pin", async () => {
       const next = await regenerateHailingTripPin(trip.id);
       setTrip(next);
-      if (!next.trip_pin) throw new Error("A new PIN could not be generated. Please try again.");
+      if (!next.trip_pin) throw new Error("A new PIN could not be generated.");
       setTripPin(next.trip_pin);
-      setNotice("A new one-time PIN was generated. Your previous PIN no longer works.");
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to generate a new PIN.");
-    } finally {
-      setBusy(false);
-    }
+      setNotice("A new one-time PIN was generated. The previous PIN no longer works.");
+    });
   }
 
-  async function messageDriver() {
+  function messageDriver() {
     if (!trip) return;
-    try {
-      setBusy(true);
+    void perform("message", async () => {
       const conversation = await openHailingConversation(trip.id);
       router.push(`/(shared)/conversation/${conversation.id}` as never);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to open this trip conversation.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
-  const awaitingOptionalPin = Boolean(trip?.status === "PASSENGER_CONFIRMED_BOARDING" && trip.verify_ride_with_pin && !trip.trip_pin_verified_at);
-  const terminalWithoutReceipt = Boolean(trip && terminal.has(trip.status) && trip.status !== "COMPLETED");
+  function shareTrip() {
+    if (!trip) return;
+    void perform("share", async () => {
+      const shared = await shareHailingTrip(trip.id);
+      await Share.share({
+        title: "LetsGoRide live trip",
+        message: `I’m travelling with LetsGoRide. Follow my live trip status: ${shared.share_url}`,
+        url: shared.share_url,
+      });
+    });
+  }
+
   const vehicleName = [trip?.vehicle?.make, trip?.vehicle?.model].filter(Boolean).join(" ");
   const vehicleMeta = [trip?.vehicle?.color, trip?.vehicle?.plate_number || trip?.vehicle?.plate].filter(Boolean).join(" · ");
   const vehicleDescription = [vehicleName || trip?.vehicle?.vehicle, vehicleMeta].filter(Boolean).join(" · ") || "Vehicle details appear after matching";
-  const tripDurationMinutes = trip
-    ? trip.route.duration_minutes ?? trip.route.estimated_duration_minutes ?? (trip.route.duration_seconds ? trip.route.duration_seconds / 60 : undefined)
-    : undefined;
+  const awaitingPin = Boolean(trip?.status === "PASSENGER_CONFIRMED_BOARDING" && trip.verify_ride_with_pin && !trip.trip_pin_verified_at);
+  const canCancel = Boolean(trip && ["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING"].includes(trip.status));
 
   return (
-    <Screen navRole="customer" refreshing={refreshing} onRefresh={load}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>RIDE NOW</Text>
-        <Text style={styles.title}>{loading ? "Loading trip" : statusTitle(trip?.status)}</Text>
-        {trip ? <Text style={styles.body}>{trip.pickup.formatted_address} → {trip.dropoff.formatted_address}</Text> : null}
+    <SafeAreaView edges={[]} style={styles.root}>
+      <StatusBar barStyle="dark-content" />
+      <HailingMapBackdrop pickup={trip?.pickup} dropoff={trip?.dropoff} route={trip?.route} driverLocation={trip?.driver_location} bottomPadding={430} />
+
+      <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to Home" hitSlop={8} onPress={goBack} style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}>
+          <MaterialCommunityIcons name="chevron-left" size={27} color={RIDE_BLACK} />
+        </Pressable>
+        <View style={styles.statusPill}><Text numberOfLines={1} style={styles.statusPillText}>{trip ? statusTitle(trip.status) : "RIDE NOW"}</Text></View>
+        {!trip || TERMINAL.has(trip.status) ? <View style={styles.topSpacer} /> : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Ride safety" hitSlop={8} disabled={busyAction === "safety"} onPress={safety} style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}>
+            <MaterialCommunityIcons name="shield-outline" size={21} color={RIDE_BLACK} />
+          </Pressable>
+        )}
       </View>
 
-      {notice ? <AppNotice message={notice} actionLabel="Refresh" onAction={load} /> : null}
-
-      {trip ? (
-        <>
-          {terminalWithoutReceipt ? (
-            <View style={styles.terminalCard}>
-              <View style={styles.terminalIcon}><Text style={styles.terminalIconText}>×</Text></View>
-              <View style={styles.flex}>
-                <Text style={styles.cardLabel}>RIDE STATUS</Text>
-                <Text style={styles.cardTitle}>{statusTitle(trip.status)}</Text>
-                <Text style={styles.cardBody}>{terminalMessage(trip.status)}</Text>
-              </View>
+      <View style={styles.sheet}>
+        <View style={styles.handle} />
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <View style={styles.headingRow}>
+            <View style={styles.flex}>
+              <Text style={styles.eyebrow}>RIDE NOW</Text>
+              <Text style={styles.title}>{loading && !trip ? "Restoring your ride…" : statusTitle(trip?.status)}</Text>
+              <Text style={styles.body}>{statusBody(trip?.status)}</Text>
             </View>
-          ) : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Refresh ride" hitSlop={6} disabled={refreshing} onPress={() => void load()} style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name="refresh" size={19} color={RIDE_BLACK} />
+            </Pressable>
+          </View>
+
+          {loading && !trip ? <View style={styles.skeleton}><View style={styles.skeletonWide} /><View style={styles.skeletonShort} /></View> : null}
+          {notice ? <AppNotice message={notice} actionLabel="Refresh" onAction={() => void load()} onDismiss={() => setNotice(null)} /> : null}
+
+          {trip?.driver && !TERMINAL.has(trip.status) ? (
             <View style={styles.driverCard}>
-              <Avatar name={trip.driver?.name || "Driver"} imageUri={trip.driver?.profile_photo_url || undefined} size={54} />
+              <Avatar name={trip.driver.name || "Driver"} imageUri={trip.driver.profile_photo_url || undefined} size={52} />
               <View style={styles.flex}>
-                <Text style={styles.cardLabel}>Driver</Text>
-                <Text style={styles.cardTitle}>{trip.driver?.name || "Driver being assigned"}</Text>
-                <Text style={styles.cardBody}>{vehicleDescription}</Text>
-                {trip.driver?.rating ? <Text style={styles.driverRating}>★ {trip.driver.rating.toFixed(1)}</Text> : null}
+                <Text style={styles.driverName}>{trip.driver.name || "Your driver"}</Text>
+                <Text style={styles.vehicle}>{vehicleDescription}</Text>
+                {typeof trip.driver.rating === "number" ? <Text style={styles.rating}>★ {trip.driver.rating.toFixed(1)}</Text> : <Text style={styles.newDriver}>NEW DRIVER · VERIFIED</Text>}
               </View>
             </View>
-          )}
+          ) : null}
 
-          {awaitingOptionalPin && tripPin ? (
-            <View style={styles.pinCard}>
-              <Text style={styles.pinLabel}>Ride verification PIN</Text>
-              <Text accessibilityLabel={`Trip PIN ${tripPin}`} style={styles.pin}>{tripPin}</Text>
-              <Text style={styles.pinBody}>Tell this PIN only to your assigned driver. It is not stored as readable text on the server.</Text>
+          {trip ? (
+            <View style={styles.routeCard}>
+              <View style={styles.routeRow}><View style={styles.routeDot} /><View style={styles.flex}><Text style={styles.routeLabel}>PICKUP</Text><Text numberOfLines={1} style={styles.routeValue}>{trip.pickup.formatted_address}</Text></View></View>
+              <View style={styles.routeDivider} />
+              <View style={styles.routeRow}><View style={styles.routeSquare} /><View style={styles.flex}><Text style={styles.routeLabel}>DESTINATION</Text><Text numberOfLines={1} style={styles.routeValue}>{trip.dropoff.formatted_address}</Text></View></View>
             </View>
           ) : null}
 
-          {awaitingOptionalPin && !tripPin ? (
-            <View style={styles.readyCard}>
-              <Text style={styles.cardLabel}>Verification PIN needed</Text>
-              <Text style={styles.cardBody}>For security, the PIN is shown only when it is generated. If you reopened the app, generate a new PIN and the old one will stop working.</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Generate new ride verification PIN" disabled={busy} onPress={regeneratePin} style={({ pressed }) => [styles.secondary, busy && styles.disabled, pressed && styles.pressed]}>
-                <Text style={styles.secondaryText}>Generate new PIN</Text>
-              </Pressable>
-            </View>
+          {awaitingPin && tripPin ? (
+            <View style={styles.pinCard}><Text style={styles.pinLabel}>RIDE VERIFICATION PIN</Text><Text accessibilityLabel={`Trip PIN ${tripPin}`} style={styles.pin}>{tripPin}</Text><Text style={styles.pinBody}>Tell this code only to the assigned driver.</Text></View>
           ) : null}
 
-          {trip.status === "DRIVER_ARRIVED" ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Confirm I am in the car" disabled={busy} onPress={confirmBoarding} style={({ pressed }) => [styles.primary, busy && styles.disabled, pressed && styles.pressed]}>
-              <Text style={styles.primaryText}>I’m in the car</Text>
+          {awaitingPin && !tripPin ? (
+            <Pressable accessibilityRole="button" disabled={busyAction === "pin"} onPress={regeneratePin} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}>
+              <MaterialCommunityIcons name="shield-key-outline" size={19} color="#FFFFFF" /><Text style={styles.secondaryActionText}>{busyAction === "pin" ? "Generating a new PIN…" : "Generate new safety PIN"}</Text>
             </Pressable>
           ) : null}
 
-          {trip.status === "PASSENGER_CONFIRMED_BOARDING" && (!trip.verify_ride_with_pin || trip.trip_pin_verified_at) ? (
-            <View style={styles.readyCard}>
-              <Text style={styles.cardLabel}>Ready to go</Text>
-              <Text style={styles.cardBody}>Waiting for your driver to start the trip.</Text>
+          {trip?.status === "DRIVER_ARRIVED" ? (
+            <Pressable accessibilityRole="button" disabled={busyAction === "boarding"} onPress={confirmBoarding} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+              <Text style={styles.primaryActionText}>{busyAction === "boarding" ? "Confirming you’re in the car…" : "I’m in the car"}</Text><MaterialCommunityIcons name="arrow-right" size={19} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
+
+          {trip && SHAREABLE.has(trip.status) ? (
+            <View style={styles.actionGrid}>
+              <QuickAction icon="share-variant-outline" label={busyAction === "share" ? "Preparing link…" : "Share trip"} disabled={Boolean(busyAction)} onPress={shareTrip} />
+              <QuickAction icon="message-outline" label={busyAction === "message" ? "Opening…" : "Message"} disabled={Boolean(busyAction)} onPress={messageDriver} />
             </View>
           ) : null}
 
-          <View style={styles.fareCard}>
-            <Text style={styles.cardLabel}>Cash fare</Text>
-            <Text style={styles.price}>${trip.fare.total_fare.toFixed(2)}</Text>
-            <Text style={styles.cardBody}>
-              {trip.route.distance_km.toFixed(1)} km
-              {tripDurationMinutes ? ` · about ${Math.round(tripDurationMinutes)} min` : ""}
-              {` · ${trip.ride_class}`}
-            </Text>
-          </View>
+          {trip?.status === "COMPLETED" ? (
+            <Pressable accessibilityRole="button" onPress={() => router.replace(`/(customer)/hail/receipt/${trip.id}` as never)} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+              <Text style={styles.primaryActionText}>Receipt & rate driver</Text><MaterialCommunityIcons name="arrow-right" size={19} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
 
-          <View style={styles.actions}>
-            {terminalWithoutReceipt ? (
-              <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/hail" as never)} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
-                <Text style={styles.primaryText}>Book another ride</Text>
-              </Pressable>
-            ) : null}
-            {trip.status === "COMPLETED" ? (
-              <Pressable accessibilityRole="button" onPress={() => router.replace(`/(customer)/hail/receipt/${trip.id}` as never)} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
-                <Text style={styles.primaryText}>View receipt</Text>
-              </Pressable>
-            ) : null}
-            {!terminal.has(trip.status) ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Request trip safety help" disabled={busy} onPress={safety} style={({ pressed }) => [styles.secondary, busy && styles.disabled, pressed && styles.pressed]}>
-                <Text style={styles.secondaryText}>Get help</Text>
-              </Pressable>
-            ) : null}
-            {trip.driver && ["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS"].includes(trip.status) ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Message assigned driver" disabled={busy} onPress={messageDriver} style={({ pressed }) => [styles.secondary, busy && styles.disabled, pressed && styles.pressed]}>
-                <Text style={styles.secondaryText}>Message driver</Text>
-              </Pressable>
-            ) : null}
-            {["SEARCHING", "DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING"].includes(trip.status) ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Cancel Ride Now trip" disabled={busy} onPress={cancel} style={({ pressed }) => [styles.danger, busy && styles.disabled, pressed && styles.pressed]}>
-                <Text style={styles.dangerText}>Cancel trip</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </>
-      ) : null}
-    </Screen>
+          {trip && TERMINAL.has(trip.status) && trip.status !== "COMPLETED" ? (
+            <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/hail" as never)} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+              <Text style={styles.primaryActionText}>Book another ride</Text><MaterialCommunityIcons name="arrow-right" size={19} color="#FFFFFF" />
+            </Pressable>
+          ) : null}
+
+          {canCancel ? (
+            <Pressable accessibilityRole="button" disabled={busyAction === "cancel"} onPress={cancel} style={({ pressed }) => [styles.cancelAction, pressed && styles.pressed]}>
+              <Text style={styles.cancelActionText}>{busyAction === "cancel" ? "Cancelling your ride…" : "Cancel ride"}</Text>
+            </Pressable>
+          ) : null}
+
+          {trip ? <Text style={styles.fareLine}>Cash fare ${trip.fare.total_fare.toFixed(2)} · {trip.route.distance_km.toFixed(1)} km · {trip.ride_class}</Text> : null}
+        </ScrollView>
+      </View>
+
+      <BottomNav role="customer" />
+    </SafeAreaView>
+  );
+}
+
+function QuickAction({ icon, label, disabled, onPress }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; label: string; disabled: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.quickAction, disabled && styles.disabled, pressed && styles.pressed]}>
+      <MaterialCommunityIcons name={icon} size={19} color={RIDE_BLACK} /><Text style={styles.quickActionText}>{label}</Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { gap: 8 },
-  eyebrow: { color: RIDE_BLACK, fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
-  title: { color: v2Theme.colors.ink, fontSize: 31, lineHeight: 36, fontWeight: "900", letterSpacing: -1 },
-  body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19 },
-  driverCard: { minHeight: 100, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 15, flexDirection: "row", alignItems: "center", gap: 13 },
-  terminalCard: { minHeight: 118, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 16, flexDirection: "row", alignItems: "center", gap: 13 },
-  terminalIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "#F1F1EF", alignItems: "center", justifyContent: "center" },
-  terminalIconText: { color: RIDE_BLACK, fontSize: 27, lineHeight: 30, fontWeight: "700" },
-  driverRating: { color: RIDE_BLACK, fontSize: 11, fontWeight: "900", marginTop: 3 },
-  pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: RIDE_BLACK, padding: 18, gap: 6 },
-  pinLabel: { color: "rgba(255,255,255,0.65)", fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
-  pinBody: { color: "rgba(255,255,255,0.72)", fontSize: 12, lineHeight: 18 },
-  fareCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: "#F2F2F0", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 18, gap: 5 },
-  readyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 16, gap: 10 },
-  cardLabel: { color: v2Theme.colors.inkTertiary, fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
-  cardTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" },
-  cardBody: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
-  pin: { color: "#FFFFFF", fontSize: 42, fontWeight: "900", letterSpacing: 8 },
-  price: { color: v2Theme.colors.ink, fontSize: 31, fontWeight: "900", letterSpacing: -1 },
-  actions: { gap: 10 },
-  primary: { minHeight: 54, borderRadius: 18, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center" },
-  primaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
-  secondary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center" },
-  secondaryText: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" },
-  danger: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.dangerSoft, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(200,69,69,0.35)", alignItems: "center", justifyContent: "center" },
-  dangerText: { color: v2Theme.colors.danger, fontSize: 13, fontWeight: "900" },
+  root: { flex: 1, backgroundColor: "#ECECE8" },
+  topBar: { position: "absolute", left: 16, right: 16, zIndex: 30, elevation: 30, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  topButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.97)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.10)", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+  topSpacer: { width: 48, height: 48 },
+  statusPill: { minHeight: 36, maxWidth: 220, paddingHorizontal: 13, borderRadius: 18, backgroundColor: "rgba(17,17,17,0.94)", alignItems: "center", justifyContent: "center" },
+  statusPillText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
+  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, maxHeight: "58%", minHeight: 265, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12, overflow: "hidden" },
+  handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
+  content: { paddingHorizontal: 15, paddingTop: 10, paddingBottom: 17, gap: 11 },
+  headingRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  eyebrow: { color: RIDE_BLACK, fontSize: 9, fontWeight: "900", letterSpacing: 1.3 },
+  title: { color: v2Theme.colors.ink, fontSize: 25, lineHeight: 29, fontWeight: "900", letterSpacing: -0.7, marginTop: 1 },
+  body: { color: v2Theme.colors.inkSecondary, fontSize: 10.5, lineHeight: 16, marginTop: 3 },
+  refresh: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F0F0EE", alignItems: "center", justifyContent: "center" },
+  skeleton: { borderRadius: 18, backgroundColor: "#F6F5F2", padding: 14, gap: 9 },
+  skeletonWide: { height: 13, width: "75%", borderRadius: 7, backgroundColor: "#E3E2DE" },
+  skeletonShort: { height: 10, width: "48%", borderRadius: 5, backgroundColor: "#E9E8E4" },
+  driverCard: { minHeight: 76, borderRadius: 20, backgroundColor: "#F7F7F5", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 11, flexDirection: "row", alignItems: "center", gap: 11 },
+  driverName: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
+  vehicle: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 },
+  rating: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", marginTop: 3 },
+  newDriver: { color: v2Theme.colors.inkSecondary, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.55, marginTop: 3 },
+  routeCard: { borderRadius: 18, backgroundColor: "#F7F7F5", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden" },
+  routeRow: { minHeight: 49, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9 },
+  routeDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: RIDE_BLACK },
+  routeSquare: { width: 10, height: 10, borderRadius: 2, backgroundColor: RIDE_BLACK },
+  routeDivider: { height: StyleSheet.hairlineWidth, marginLeft: 30, backgroundColor: v2Theme.colors.lineStrong },
+  routeLabel: { color: v2Theme.colors.inkTertiary, fontSize: 7.5, fontWeight: "900", letterSpacing: 0.7 },
+  routeValue: { color: v2Theme.colors.ink, fontSize: 10.5, fontWeight: "800", marginTop: 2 },
+  pinCard: { borderRadius: 18, backgroundColor: RIDE_BLACK, padding: 15, gap: 4 },
+  pinLabel: { color: "rgba(255,255,255,0.62)", fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  pin: { color: "#FFFFFF", fontSize: 29, fontWeight: "900", letterSpacing: 6 },
+  pinBody: { color: "rgba(255,255,255,0.7)", fontSize: 9.5 },
+  actionGrid: { flexDirection: "row", gap: 8 },
+  quickAction: { flex: 1, minHeight: 47, borderRadius: 16, backgroundColor: "#F1F1EF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  quickActionText: { color: RIDE_BLACK, fontSize: 10.5, fontWeight: "900" },
+  primaryAction: { minHeight: 52, borderRadius: 18, backgroundColor: RIDE_BLACK, paddingHorizontal: 15, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  primaryActionText: { color: "#FFFFFF", fontSize: 12.5, fontWeight: "900" },
+  secondaryAction: { minHeight: 50, borderRadius: 18, backgroundColor: RIDE_BLACK, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  secondaryActionText: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" },
+  cancelAction: { minHeight: 46, borderRadius: 16, backgroundColor: "#F3F1EE", alignItems: "center", justifyContent: "center" },
+  cancelActionText: { color: v2Theme.colors.danger, fontSize: 10.5, fontWeight: "900" },
+  fareLine: { color: v2Theme.colors.inkTertiary, fontSize: 9, textAlign: "center", fontWeight: "700" },
   flex: { flex: 1 },
   disabled: { opacity: 0.48 },
-  pressed: { opacity: 0.72 },
+  pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
 });
