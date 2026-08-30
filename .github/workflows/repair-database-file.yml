@@ -1,0 +1,44 @@
+name: Repair database file
+
+on:
+  push:
+    branches:
+      - release/2.0.2-final-audit-hardening
+    paths:
+      - .github/workflows/repair-database-file.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/2.0.2-final-audit-hardening
+          fetch-depth: 0
+
+      - name: Restore exact parent database file and align TTL name
+        run: |
+          git show 7a54119ce3314b663e3a74cf9c72ed025a117a50:backend/app/database.py > backend/app/database.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('backend/app/database.py')
+          text = path.read_text()
+          old = 'name="courier_location_snapshots_ttl"'
+          new = 'name="courier_telemetry_ttl"'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one TTL index name, got {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+
+      - name: Commit exact repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/database.py
+          git commit -m "fix(db): preserve database implementation while aligning TTL index"
+          git push origin HEAD:release/2.0.2-final-audit-hardening
