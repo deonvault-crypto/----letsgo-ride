@@ -143,7 +143,16 @@ class ScaleHardeningTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_driver_stats_reads_only_harare_today(self):
         user = {"id": "driver-user", "role": "driver"}
-        await database.insert_one("drivers", {"id": "driver-1", "user_id": user["id"], "status": "approved"})
+        await database.insert_one(
+            "drivers",
+            {
+                "id": "driver-1",
+                "user_id": user["id"],
+                "status": "approved",
+                "verified": True,
+                "verification_status": "approved",
+            },
+        )
         harare_tz = timezone(timedelta(hours=2))
         today_local = datetime.now(harare_tz).replace(hour=12, minute=0, second=0, microsecond=0)
         yesterday_local = today_local - timedelta(days=1)
