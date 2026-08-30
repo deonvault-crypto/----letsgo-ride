@@ -43,7 +43,7 @@ def safe_hailing_trip_payload(trip: Dict[str, Any]) -> Dict[str, Any]:
         "fare": trip.get("fare"),
         "driver": trip.get("driver_snapshot"),
         "vehicle": trip.get("vehicle_snapshot"),
-        "driver_location": trip.get("driver_location") if trip.get("status") in {"DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "IN_PROGRESS"} else None,
+        "driver_location": trip.get("driver_location") if trip.get("status") in {"DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS"} else None,
         "created_at": trip.get("created_at"),
         "updated_at": trip.get("updated_at"),
         "assigned_at": trip.get("assigned_at"),
@@ -72,6 +72,46 @@ async def publish_hailing_trip_realtime(trip: Dict[str, Any], event_type: str) -
         logger.warning(
             "hailing_realtime_publish_failed trip_id=%s version=%s error=%s",
             trip.get("id"), hailing_realtime_version(trip), type(exc).__name__,
+        )
+        return False
+
+
+async def publish_hailing_driver_offer_realtime(
+    offer: Dict[str, Any],
+    event_type: str,
+    *,
+    version: int,
+) -> bool:
+    """Publish offer lifecycle changes only to the driver who owns the offer."""
+    driver_user_id = str(offer.get("driver_user_id") or "")
+    offer_id = str(offer.get("id") or "")
+    if not driver_user_id or not offer_id:
+        return False
+    try:
+        published = await realtime_event_service.publish_user_event(
+            event_type=event_type,
+            resource_type="hailing_offer",
+            resource_id=offer_id,
+            version=max(1, int(version)),
+            user_ids=[driver_user_id],
+            payload={
+                "offer_id": offer_id,
+                "trip_id": offer.get("trip_id"),
+                "driver_id": offer.get("driver_id"),
+                "status": offer.get("status"),
+                "expires_at": offer.get("expires_at"),
+                "updated_at": offer.get("updated_at"),
+            },
+        )
+        if not published:
+            logger.warning("hailing_offer_realtime_unavailable offer_id=%s", offer_id)
+        return published
+    except Exception as exc:
+        logger.warning(
+            "hailing_offer_realtime_publish_failed offer_id=%s driver_user_id=%s error=%s",
+            offer_id,
+            driver_user_id,
+            type(exc).__name__,
         )
         return False
 
