@@ -58,7 +58,7 @@ async def payout_method_create(payload: PayoutMethodCreateBody, user=Depends(get
 @router.patch("/payout-methods/{method_id}")
 async def payout_method_update(method_id: str, payload: PayoutMethodUpdateBody, user=Depends(get_current_user)):
     try:
-        return api_success(await update_payout_method(method_id, payload.model_dump(), user))
+        return api_success(await update_payout_method(method_id, payload.model_dump(exclude_unset=True), user))
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
