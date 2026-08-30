@@ -1,5 +1,5 @@
 import { requestData } from "./api";
-import { PayoutMethodInput, WorkerPayoutMethod, WorkerWallet } from "../types/workerFinance.types";
+import { PayoutMethodInput, PayoutMethodUpdateInput, WorkerPayoutMethod, WorkerWallet } from "../types/workerFinance.types";
 
 export function getWorkerWallet() {
   return requestData<WorkerWallet>({ method: "GET", url: "/worker/finance/wallet" });
@@ -13,7 +13,7 @@ export function createWorkerPayoutMethod(data: PayoutMethodInput) {
   return requestData<WorkerPayoutMethod>({ method: "POST", url: "/worker/finance/payout-methods", data });
 }
 
-export function updateWorkerPayoutMethod(id: string, data: PayoutMethodInput) {
+export function updateWorkerPayoutMethod(id: string, data: PayoutMethodUpdateInput) {
   return requestData<WorkerPayoutMethod>({ method: "PATCH", url: `/worker/finance/payout-methods/${encodeURIComponent(id)}`, data });
 }
 
