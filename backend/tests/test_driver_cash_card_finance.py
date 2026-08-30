@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from app.database import database
-from app.services.worker_wallet_service import _trip_finance, wallet_summary
+from app.services.worker_wallet_service import DRIVER_PAYOUT_HISTORY_LIMIT, _trip_finance, wallet_summary
 
 
 class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
@@ -86,6 +86,39 @@ class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cash_entry["platform_commission_usd"], 0.0)
         self.assertEqual(cash_entry["worker_earnings_usd"], 10.00)
         self.assertEqual(pending_entry["settlement_state"], "payment_pending")
+
+    async def test_paid_out_total_is_lifetime_exact_while_history_is_bounded(self):
+        await database.insert_one(
+            "hailing_trips",
+            {
+                "id": "card-paid-large",
+                "driver_user_id": self.user["id"],
+                "status": "COMPLETED",
+                "payment_method": "card",
+                "payment_status": "paid",
+                "fare": {"total_fare": 200.00, "platform_commission": 6.00},
+                "created_at": "2026-08-30T11:00:00+00:00",
+            },
+        )
+        payout_count = DRIVER_PAYOUT_HISTORY_LIMIT + 10
+        for index in range(payout_count):
+            await database.insert_one(
+                "worker_payouts",
+                {
+                    "id": f"payout-{index:03d}",
+                    "user_id": self.user["id"],
+                    "worker_role": "driver",
+                    "status": "paid",
+                    "amount_usd": 1.00,
+                    "created_at": f"2026-08-30T12:{index:02d}:00+00:00",
+                },
+            )
+
+        wallet = await wallet_summary(self.user)
+
+        self.assertEqual(wallet["paid_out_usd"], float(payout_count))
+        self.assertEqual(len(wallet["payout_history"]), DRIVER_PAYOUT_HISTORY_LIMIT)
+        self.assertEqual(wallet["available_balance_usd"], 194.00 - payout_count)
 
 
 if __name__ == "__main__":
