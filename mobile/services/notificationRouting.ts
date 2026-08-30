@@ -39,6 +39,9 @@ export function resolveNotificationRoute({ data = {}, notificationType, role }: 
   if (target === "customer_delivery") {
     return role === "passenger" && deliveryId ? `/(customer)/courier/${deliveryId}` : null;
   }
+  if (target === "hailing_driver_offer") {
+    return role === "driver" ? "/(driver)/hailing" : null;
+  }
   if (target === "hailing_trip") {
     if (role === "driver" && hailingTripId) return `/(driver)/hailing/trip/${hailingTripId}`;
     if (role === "passenger" && hailingTripId) return `/(customer)/hail/trip/${hailingTripId}`;
