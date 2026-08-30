@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.database import database
 from app.routers import activity, admin, auth, conversations, courier, drivers, food, hailing, health, media, merchant, notifications, operations, payments, public_tracking, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist, worker_finance
 from app.services.auth_service import ensure_admin_seed_user
+from app.services.database_startup_scale_service import install_database_startup_scale_guard
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
 from app.services.hailing_scale_service import driver_stats_scaled, hailing_dispatch_sweeper_scaled
@@ -22,6 +23,10 @@ from app.services.staging_routing_smoke_service import run_staging_routing_smoke
 from app.services.stripe_scale_service import stripe_payment_reconciliation_sweeper_scaled
 from app.utils import api_success
 
+
+# Database.connect() creates core indexes. Install the steady-state fast path before
+# the first startup event so a healthy process restart never reloads every user.
+install_database_startup_scale_guard()
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -150,7 +155,6 @@ async def on_startup():
         "courier_dispatch_smoke_gate app_env=%s enabled=%s routing_configured=%s pricing_configured=%s",
         settings.app_env,
         settings.courier_dispatch_staging_smoke_test_enabled,
-        settings.routing_configured,
         settings.courier_pricing_configured,
     )
     if settings.courier_dispatch_staging_smoke_test_enabled:
