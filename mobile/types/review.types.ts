@@ -1,17 +1,29 @@
-export type ReviewRole = "driver" | "passenger";
+export type ReviewRole = "driver" | "passenger" | "courier" | "restaurant" | "customer";
+export type ReviewTransactionType = "intercity" | "hailing" | "courier" | "food_restaurant" | "food_courier";
 
-export type ReviewCategoryRatings = {
-  safety?: number;
-  punctuality?: number;
-  communication?: number;
-  vehicle_cleanliness?: number;
-  respectful_behavior?: number;
-  payment_reliability?: number;
-};
+export type ReviewCategoryRatings = Partial<Record<
+  | "safety"
+  | "punctuality"
+  | "communication"
+  | "vehicle_cleanliness"
+  | "respectful_behavior"
+  | "payment_reliability"
+  | "delivery_time"
+  | "package_handling"
+  | "professionalism"
+  | "food_quality"
+  | "order_accuracy"
+  | "packaging"
+  | "delivery_experience"
+  | "handling",
+  number
+>>;
 
 export type PublicReview = {
   id: string;
-  trip_id: string;
+  transaction_id?: string;
+  transaction_type?: ReviewTransactionType;
+  trip_id?: string;
   reviewer_role: ReviewRole;
   reviewee_role: ReviewRole;
   reviewer_name: string;
@@ -29,18 +41,22 @@ export type ReviewSummary = {
 };
 
 export type PendingReview = {
-  trip_id: string;
+  transaction_id: string;
+  transaction_type: ReviewTransactionType;
+  trip_id?: string;
   reviewer_role: ReviewRole;
   reviewee_id: string;
   reviewee_role: ReviewRole;
   reviewee_name: string;
+  category_keys?: Array<keyof ReviewCategoryRatings>;
   ride_origin?: string;
   ride_destination?: string;
   completed_at?: string;
 };
 
 export type ReviewCreateInput = {
-  trip_id: string;
+  transaction_id: string;
+  transaction_type: ReviewTransactionType;
   reviewee_id: string;
   rating: number;
   category_ratings: ReviewCategoryRatings;
