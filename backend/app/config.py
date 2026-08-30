@@ -47,6 +47,16 @@ class Settings:
             else self.app_env.strip().lower() in {"development", "test", "staging"}
         )
 
+        # Stripe card payments fail closed. Staging/test environments only accept
+        # Stripe test keys, while production only accepts live keys. Secret values
+        # are server-side only and are never included in API responses or logs.
+        self.stripe_card_payments_enabled = self._parse_bool(
+            os.getenv("STRIPE_CARD_PAYMENTS_ENABLED", "false")
+        )
+        self.stripe_secret_key = self._get_env_first("STRIPE_SECRET_KEY")
+        self.stripe_publishable_key = self._get_env_first("STRIPE_PUBLISHABLE_KEY")
+        self.stripe_webhook_secret = self._get_env_first("STRIPE_WEBHOOK_SECRET")
+
         # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
         self.routing_provider = os.getenv("ROUTING_PROVIDER", "disabled").strip().lower()
         self.google_maps_api_key = self._get_env_first("GOOGLE_MAPS_API_KEY")
@@ -166,6 +176,18 @@ class Settings:
     @property
     def routing_configured(self) -> bool:
         return self.routing_provider == "google" and bool(self.google_maps_api_key)
+
+    @property
+    def stripe_key_mode_valid(self) -> bool:
+        if not self.stripe_secret_key or not self.stripe_publishable_key:
+            return False
+        if self.is_production:
+            return self.stripe_secret_key.startswith("sk_live_") and self.stripe_publishable_key.startswith("pk_live_")
+        return self.stripe_secret_key.startswith("sk_test_") and self.stripe_publishable_key.startswith("pk_test_")
+
+    @property
+    def stripe_card_payments_configured(self) -> bool:
+        return bool(self.stripe_card_payments_enabled and self.stripe_key_mode_valid)
 
     @property
     def courier_pricing_configured(self) -> bool:
