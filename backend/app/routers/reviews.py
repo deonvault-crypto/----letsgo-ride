@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
 from app.models.review import ReviewCreateBody
-from app.services.review_service import create_review, pending_reviews_for_user, public_review_summary_for_user
+from app.services.review_service import (
+    create_review,
+    pending_reviews_for_user,
+    public_review_summary_for_restaurant,
+    public_review_summary_for_user,
+)
 from app.utils import api_error, api_success
 
 
@@ -17,6 +22,14 @@ async def pending_reviews(user=Depends(get_current_user)):
 @router.get("/user/{user_id}")
 async def public_user_reviews(user_id: str):
     return api_success(await public_review_summary_for_user(user_id))
+
+
+@router.get("/restaurant/{restaurant_id}")
+async def public_restaurant_reviews(restaurant_id: str):
+    try:
+        return api_success(await public_review_summary_for_restaurant(restaurant_id))
+    except ValueError as exc:
+        api_error(str(exc), 404)
 
 
 @router.post("")
