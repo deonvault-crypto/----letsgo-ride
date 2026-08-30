@@ -1,17 +1,24 @@
 from typing import Dict, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
-ReviewRole = Literal["driver", "passenger"]
+ReviewRole = Literal["driver", "passenger", "courier", "restaurant", "customer"]
+ReviewTransactionType = Literal["intercity", "hailing", "courier", "food_restaurant", "food_courier"]
 
 
 class ReviewCreateBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    trip_id: str = Field(min_length=1, max_length=80)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    transaction_id: str = Field(
+        min_length=1,
+        max_length=80,
+        validation_alias=AliasChoices("transaction_id", "trip_id"),
+    )
+    transaction_type: Optional[ReviewTransactionType] = None
     reviewee_id: str = Field(min_length=1, max_length=80)
     rating: int = Field(ge=1, le=5)
-    category_ratings: Dict[str, int] = Field(default_factory=dict, max_length=6)
+    category_ratings: Dict[str, int] = Field(default_factory=dict, max_length=8)
     comment: Optional[str] = Field(default=None, max_length=1200)
     safety_report_requested: bool = False
 
@@ -25,6 +32,14 @@ class ReviewCreateBody(BaseModel):
             "vehicle_cleanliness",
             "respectful_behavior",
             "payment_reliability",
+            "delivery_time",
+            "package_handling",
+            "professionalism",
+            "food_quality",
+            "order_accuracy",
+            "packaging",
+            "delivery_experience",
+            "handling",
         }
         cleaned: Dict[str, int] = {}
         for key, score in value.items():
