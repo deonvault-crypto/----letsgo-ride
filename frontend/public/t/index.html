@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111111" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <title>Live trip · LetsGoRide</title>
+  <link rel="icon" href="/favicon.svg" />
+  <style>
+    :root { color-scheme: light; --ink:#111; --muted:#747474; --paper:#f8f5ee; --card:#fff; --line:#dedbd4; --green:#118b44; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(720px,100%); margin:0 auto; padding:max(22px,env(safe-area-inset-top)) 20px max(36px,env(safe-area-inset-bottom)); }
+    .brand { font-size:25px; font-weight:900; letter-spacing:-1px; margin:4px 0 34px; }
+    .brand .go { color:var(--green); }
+    .eyebrow { font-size:11px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:var(--green); }
+    h1 { margin:7px 0 10px; font-size:clamp(34px,8vw,54px); line-height:.98; letter-spacing:-2.2px; }
+    .sub { margin:0; color:var(--muted); font-size:15px; line-height:1.55; }
+    .card { margin-top:22px; background:var(--card); border:1px solid var(--line); border-radius:24px; padding:18px; }
+    .person { display:flex; gap:14px; align-items:center; }
+    .avatar { width:58px; height:58px; border-radius:50%; background:#eceae5; object-fit:cover; display:grid; place-items:center; font-weight:900; font-size:21px; }
+    .name { font-size:18px; font-weight:900; }
+    .meta { margin-top:4px; color:var(--muted); font-size:13px; }
+    .route { display:grid; grid-template-columns:16px 1fr; gap:10px 12px; margin-top:18px; }
+    .dot,.square { width:12px; height:12px; margin-top:3px; background:#111; }
+    .dot { border-radius:50%; }
+    .square { border-radius:3px; }
+    .route strong { display:block; font-size:14px; }
+    .route span { color:var(--muted); font-size:12px; line-height:1.45; }
+    .live { display:flex; align-items:center; gap:9px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line); font-size:12px; font-weight:800; }
+    .pulse { width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 0 5px rgba(17,139,68,.12); }
+    .privacy { margin:20px 2px 0; color:var(--muted); font-size:11px; line-height:1.55; }
+    .error { margin-top:24px; padding:18px; border:1px solid var(--line); border-radius:20px; background:#fff; }
+    .error strong { display:block; margin-bottom:6px; }
+    .hidden { display:none !important; }
+    .skeleton { background:linear-gradient(90deg,#ece9e2 25%,#f5f2ec 38%,#ece9e2 63%); background-size:400% 100%; animation:shimmer 1.4s ease infinite; border-radius:10px; height:18px; }
+    @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:0 0} }
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">Lets<span class="go">Go</span>Ride</div>
+  <section id="loading">
+    <div class="eyebrow">LIVE TRIP</div>
+    <h1>Opening trip…</h1>
+    <p class="sub">Getting the latest ride status securely.</p>
+    <div class="card"><div class="skeleton" style="width:55%"></div><div class="skeleton" style="width:88%;margin-top:14px"></div><div class="skeleton" style="width:72%;margin-top:10px"></div></div>
+  </section>
+  <section id="content" class="hidden">
+    <div class="eyebrow">SHARED RIDE STATUS</div>
+    <h1 id="status">Ride in progress</h1>
+    <p class="sub">A LetsGoRide passenger shared this live trip with you.</p>
+    <div class="card">
+      <div class="person">
+        <div id="avatarFallback" class="avatar">D</div>
+        <img id="avatar" class="avatar hidden" alt="Driver profile" referrerpolicy="no-referrer" />
+        <div><div id="driverName" class="name">Driver</div><div id="vehicle" class="meta">Verified vehicle</div><div id="rating" class="meta hidden"></div></div>
+      </div>
+      <div class="route">
+        <div class="dot"></div><div><strong>Pickup</strong><span id="pickup"></span></div>
+        <div class="square"></div><div><strong>Destination</strong><span id="dropoff"></span></div>
+      </div>
+      <div class="live"><span class="pulse"></span><span id="updated">Live status</span></div>
+    </div>
+    <p class="privacy">This temporary, read-only safety link does not reveal the passenger’s phone number, email, messages or LetsGoRide account. It expires automatically after the trip.</p>
+  </section>
+  <section id="error" class="error hidden"><strong>Trip link unavailable</strong><span id="errorMessage">This link may have expired.</span></section>
+</main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const requestedApi = params.get('api') || '';
+  const allowedApis = new Set([
+    'https://letsgoride-v2-production.onrender.com',
+    'https://letsgoride-v2-staging.onrender.com'
+  ]);
+  const api = allowedApis.has(requestedApi) ? requestedApi : 'https://letsgoride-v2-production.onrender.com';
+  const loading = document.getElementById('loading');
+  const content = document.getElementById('content');
+  const errorBox = document.getElementById('error');
+  let timer = null;
+
+  const statusText = status => ({
+    DRIVER_ASSIGNED:'Driver assigned', DRIVER_EN_ROUTE:'Driver on the way', DRIVER_ARRIVED:'Driver has arrived',
+    PASSENGER_CONFIRMED_BOARDING:'Passenger boarded', IN_PROGRESS:'Ride in progress', COMPLETED:'Ride completed',
+    CANCELLED_BY_PASSENGER:'Ride cancelled', CANCELLED_BY_DRIVER:'Ride cancelled', CANCELLED_BY_ADMIN:'Ride cancelled'
+  }[status] || 'Live ride status');
+
+  const render = data => {
+    loading.classList.add('hidden'); errorBox.classList.add('hidden'); content.classList.remove('hidden');
+    document.getElementById('status').textContent = statusText(data.status);
+    const firstName = data.driver?.first_name || 'Driver';
+    document.getElementById('driverName').textContent = firstName;
+    document.getElementById('avatarFallback').textContent = firstName.charAt(0).toUpperCase();
+    if (data.driver?.profile_photo_url) {
+      const image = document.getElementById('avatar'); image.src = data.driver.profile_photo_url; image.classList.remove('hidden');
+      document.getElementById('avatarFallback').classList.add('hidden');
+    }
+    const vehicle = [data.vehicle?.color, data.vehicle?.make, data.vehicle?.model, data.vehicle?.plate_number].filter(Boolean).join(' · ');
+    document.getElementById('vehicle').textContent = vehicle || 'Verified vehicle';
+    if (typeof data.driver?.rating === 'number') {
+      const rating = document.getElementById('rating'); rating.textContent = `★ ${data.driver.rating.toFixed(1)}`; rating.classList.remove('hidden');
+    }
+    document.getElementById('pickup').textContent = data.pickup?.formatted_address || 'Pickup point';
+    document.getElementById('dropoff').textContent = data.dropoff?.formatted_address || 'Destination';
+    const updated = data.driver_location?.updated_at || data.updated_at;
+    document.getElementById('updated').textContent = updated ? `Updated ${new Date(updated).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}` : 'Live status';
+    if (['COMPLETED','CANCELLED_BY_PASSENGER','CANCELLED_BY_DRIVER','CANCELLED_BY_ADMIN','NO_DRIVER_FOUND'].includes(data.status) && timer) {
+      clearInterval(timer); timer = null;
+    }
+  };
+
+  const fail = message => {
+    loading.classList.add('hidden'); content.classList.add('hidden'); errorBox.classList.remove('hidden');
+    document.getElementById('errorMessage').textContent = message || 'This link may have expired.';
+    if (timer) { clearInterval(timer); timer = null; }
+  };
+
+  const load = async () => {
+    if (!token || token.length < 20) return fail('This shared trip link is invalid.');
+    try {
+      const response = await fetch(`${api}/public/tracking/hailing/${encodeURIComponent(token)}`, {headers:{Accept:'application/json'}, cache:'no-store'});
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body.success !== true) throw new Error(body.error || 'This shared trip link is no longer available.');
+      render(body.data || {});
+    } catch (error) { fail(error instanceof Error ? error.message : 'Unable to load this shared trip.'); }
+  };
+  void load();
+  timer = setInterval(load, 8000);
+})();
+</script>
+</body>
+</html>
