@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
 from app.models.food import FoodOrderCancelBody, FoodOrderCreateBody
+from app.services.food_scale_service import (
+    list_customer_orders_scaled as list_customer_orders,
+    list_order_events_scaled as list_order_events,
+)
 from app.services.food_service import (
     cancel_food_order,
     create_food_order,
     get_customer_order,
     get_restaurant,
     get_restaurant_menu,
-    list_customer_orders,
-    list_order_events,
     list_restaurants,
 )
 from app.utils import api_error, api_success

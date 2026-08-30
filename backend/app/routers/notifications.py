@@ -1,7 +1,7 @@
 from typing import Optional
 
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user
 from app.database import database
@@ -62,18 +62,26 @@ async def unregister_token(payload: PushTokenBody, user=Depends(get_current_user
 
 
 @router.get("")
-async def list_notifications(user=Depends(get_current_user)):
-    notifications = await database.find_many("app_notifications", {"user_id": user["id"]})
-    notifications.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+async def list_notifications(
+    limit: int = Query(default=100, ge=1, le=100),
+    user=Depends(get_current_user),
+):
+    notifications = await database.find_many(
+        "app_notifications",
+        {"user_id": user["id"]},
+        sort=[("created_at", -1)],
+        limit=limit,
+    )
     return api_success(notifications)
 
 
 @router.post("/read-all")
 async def mark_all_read(user=Depends(get_current_user)):
-    notifications = await database.find_many("app_notifications", {"user_id": user["id"]})
-    for notification in notifications:
-        if not notification.get("read"):
-            await database.update_one("app_notifications", notification["id"], {"read": True, "updated_at": now_iso()})
+    await database.update_many(
+        "app_notifications",
+        {"user_id": user["id"], "read": {"$ne": True}},
+        {"read": True, "updated_at": now_iso()},
+    )
     return api_success({"read": True})
 
 

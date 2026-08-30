@@ -261,6 +261,7 @@ async def create_authorized_hailing_trip(payload: Dict[str, Any], user: Dict[str
         "verify_ride_with_pin": bool(payload.get("verify_ride_with_pin")),
         "search_started_at": timestamp,
         "search_expires_at": search_expires_at,
+        "next_dispatch_at": timestamp,
         "current_dispatch_radius_km": policy.initial_radius_km,
         "dispatch_attempt_count": 0,
         "dispatch_claim_token": None,

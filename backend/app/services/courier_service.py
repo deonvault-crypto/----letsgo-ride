@@ -194,8 +194,13 @@ async def list_user_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 async def list_delivery_events(delivery_id: str, user: Dict[str, Any]) -> List[Dict[str, Any]]:
     await get_delivery(delivery_id, user)
-    events = await database.find_many("courier_events", {"delivery_id": delivery_id})
-    return sorted(events, key=lambda item: str(item.get("created_at") or ""))
+    events = await database.find_many(
+        "courier_events",
+        {"delivery_id": delivery_id},
+        sort=[("created_at", 1)],
+        limit=200,
+    )
+    return events
 
 
 async def cancel_delivery(
