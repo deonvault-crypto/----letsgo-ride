@@ -15,10 +15,11 @@ from app.services.hailing_city_service import seed_zimbabwe_service_areas
 from app.services.hailing_security_service import clear_legacy_plaintext_hailing_pins
 from app.services.hailing_trip_service import hailing_dispatch_sweeper
 from app.services.product_hardening_storage_service import ensure_product_hardening_indexes
-from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
+from app.services.ride_lifecycle_scale_service import ride_lifecycle_sweeper_bounded
+from app.services.ride_service import seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
-from app.services.stripe_payment_service import stripe_payment_reconciliation_sweeper
+from app.services.stripe_reconciliation_service import stripe_payment_reconciliation_sweeper_bounded
 from app.utils import api_success
 
 
@@ -110,21 +111,28 @@ async def on_startup():
     if settings.enable_demo_seed:
         await seed_demo_rides()
     ride_lifecycle_stop_event = asyncio.Event()
-    ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
+    ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper_bounded(ride_lifecycle_stop_event))
     if settings.hailing_enabled:
         await seed_zimbabwe_service_areas()
         await clear_legacy_plaintext_hailing_pins()
         hailing_dispatch_stop_event = asyncio.Event()
+        # Preserve the Codex-hardened/native Ride Now dispatch worker. It already
+        # uses next_dispatch_at and bounded indexed due-work queries.
         hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper(hailing_dispatch_stop_event))
-        logger.info("hailing_runtime enabled=true")
+        logger.info("hailing_runtime enabled=true bounded_dispatch=true")
     else:
         hailing_dispatch_stop_event = None
         hailing_dispatch_task = None
         logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")
     if settings.stripe_configured:
         stripe_payment_stop_event = asyncio.Event()
-        stripe_payment_task = asyncio.create_task(stripe_payment_reconciliation_sweeper(stripe_payment_stop_event))
-        logger.info("stripe_payment_runtime enabled=true account_id=%s", settings.stripe_account_id or "configured")
+        stripe_payment_task = asyncio.create_task(
+            stripe_payment_reconciliation_sweeper_bounded(stripe_payment_stop_event)
+        )
+        logger.info(
+            "stripe_payment_runtime enabled=true account_id=%s bounded_reconciliation=true",
+            settings.stripe_account_id or "configured",
+        )
     else:
         stripe_payment_stop_event = None
         stripe_payment_task = None
