@@ -1,0 +1,64 @@
+name: Final audit hardening patch v2
+
+on:
+  push:
+    branches:
+      - release/2.0.2-final-audit-hardening
+    paths:
+      - .github/workflows/final-audit-hardening-patch-v2.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/2.0.2-final-audit-hardening
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply patch
+        run: python .github/scripts/final_audit_patch.py
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run backend regression suite
+        working-directory: backend
+        env:
+          LETSGORIDE_ALLOW_MEMORY_DB: 'true'
+          APP_ENV: test
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Verify mobile type safety
+        working-directory: mobile
+        run: |
+          npm ci
+          npm run typecheck
+
+      - name: Commit hardened code
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/database.py backend/app/routers/hailing.py backend/tests/test_hailing_admin_scale.py mobile/services/hailingService.ts
+          if git diff --cached --quiet; then
+            echo "No code changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(release): bound admin hailing and expire courier telemetry"
+          git push origin HEAD:release/2.0.2-final-audit-hardening
