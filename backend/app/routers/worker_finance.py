@@ -3,7 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
+from app.database import database
 from app.models.worker_finance import PayoutMethodCreateBody, PayoutMethodDefaultBody, PayoutMethodUpdateBody
+
+# MongoDB creates collections lazily. Keep development/test memory behavior equivalent
+# without expanding the core database module with domain-specific bootstrap logic.
+database.memory.setdefault("worker_payout_methods", [])
+database.memory.setdefault("worker_payouts", [])
+
 from app.services.worker_finance_service import (
     create_payout_method,
     delete_payout_method,
