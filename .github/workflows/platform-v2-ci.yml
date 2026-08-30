@@ -14,12 +14,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: platform-v2-ci-${{ github.event.pull_request.number || github.ref }}
+  group: platform-v2-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   mobile:
     name: Mobile typecheck and tests
+    # platform-v2-m1-m6 is validated on its exact push SHA. Its long-lived PR to
+    # main must not spend a second full CI run on GitHub's synthetic merge SHA.
+    if: github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -66,6 +69,8 @@ jobs:
 
   backend:
     name: Backend import, syntax and service tests
+    # See the mobile job: validate the staging branch once, on the exact SHA.
+    if: github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
