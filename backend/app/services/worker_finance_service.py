@@ -252,60 +252,13 @@ def _money(value: Any) -> float:
 
 
 async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
-    driver = await database.find_one("drivers", {"user_id": user["id"]})
-    if not driver:
-        raise PermissionError("Complete your Driver profile before opening the wallet.")
-    trips = await database.find_many("hailing_trips", {"driver_user_id": user["id"], "status": "COMPLETED"})
-    entries = []
-    gross = commission = net = cash_collected = digital_earnings = 0.0
-    for trip in trips:
-        fare = trip.get("fare") or {}
-        trip_gross = _money(fare.get("total_fare"))
-        trip_commission = _money(fare.get("platform_commission"))
-        trip_net = round(max(0.0, trip_gross - trip_commission), 2)
-        gross += trip_gross
-        commission += trip_commission
-        net += trip_net
-        payment_method = str(trip.get("payment_method") or "cash").lower()
-        if payment_method == "cash":
-            cash_collected += trip_gross
-            settlement_state = "cash_collected_by_driver"
-        else:
-            digital_earnings += trip_net
-            settlement_state = "accrued"
-        entries.append(
-            {
-                "id": f"hailing:{trip['id']}",
-                "source_type": "RIDE_NOW",
-                "source_id": trip["id"],
-                "label": f"Ride Now · {(trip.get('dropoff') or {}).get('formatted_address') or 'completed trip'}",
-                "gross_usd": trip_gross,
-                "platform_commission_usd": trip_commission,
-                "worker_earnings_usd": trip_net,
-                "payment_method": payment_method,
-                "settlement_state": settlement_state,
-                "occurred_at": trip.get("completed_at") or trip.get("updated_at"),
-            }
-        )
-    payouts = await database.find_many("worker_payouts", {"user_id": user["id"], "worker_role": "driver", "status": "paid"})
-    paid_out = sum(_money(item.get("amount_usd")) for item in payouts)
-    available = max(0.0, round(digital_earnings - paid_out, 2))
-    entries.sort(key=lambda item: str(item.get("occurred_at") or ""), reverse=True)
-    return {
-        "currency": "USD",
-        "worker_role": "driver",
-        "available_balance_usd": available,
-        "gross_earnings_usd": round(gross, 2),
-        "net_earnings_usd": round(net, 2),
-        "cash_collected_usd": round(cash_collected, 2),
-        "digital_earnings_usd": round(digital_earnings, 2),
-        "amount_due_to_platform_usd": round(commission if cash_collected else 0.0, 2),
-        "platform_commission_usd": round(commission, 2),
-        "paid_out_usd": round(paid_out, 2),
-        "ledger": entries[:100],
-        "payout_history": sorted(payouts, key=lambda item: str(item.get("created_at") or ""), reverse=True)[:50],
-        "settlement_integrated": False,
-    }
+    """Compatibility path: Driver accounting has one authoritative implementation."""
+
+    # Imported lazily to avoid a module cycle: worker_wallet_service reuses the
+    # payout-method helpers from this module for both worker roles.
+    from app.services.worker_wallet_service import wallet_summary as fair_wallet_summary
+
+    return await fair_wallet_summary(user)
 
 
 async def _courier_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
