@@ -1,0 +1,53 @@
+name: Android R8 Prebuild Check
+
+on:
+  push:
+    branches:
+      - automation/android-r8-prebuild-8c6c7112
+
+permissions:
+  contents: read
+
+jobs:
+  verify-generated-proguard:
+    name: Verify generated Stripe R8 rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout fixed release candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 8c6c71123e126111757268c009e45cc45aba5328
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies reproducibly
+        run: npm ci
+
+      - name: Generate Android project only
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Verify generated ProGuard rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          rules=android/app/proguard-rules.pro
+          test -f "$rules"
+          grep -F -- '-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivity$g' "$rules"
+          grep -F -- '-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Args' "$rules"
+          grep -F -- '-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Error' "$rules"
+          grep -F -- '-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter' "$rules"
+          grep -F -- '-dontwarn com.stripe.android.pushProvisioning.PushProvisioningEphemeralKeyProvider' "$rules"
+          if grep -F -- '-ignorewarnings' "$rules"; then
+            echo 'Broad R8 ignorewarnings is forbidden.'
+            exit 1
+          fi
+          echo 'All five narrow Stripe optional push-provisioning rules were generated.'
