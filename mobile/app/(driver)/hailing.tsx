@@ -28,6 +28,16 @@ export default function DriverHailingScreen() {
   const online = Boolean(status?.online);
   const activeTrip = status?.active_trip;
   const live = realtimeState === "connected";
+  const offerDriverEarnings = offer
+    ? offer.trip.payment_method === "cash"
+      ? offer.trip.fare.total_fare
+      : offer.trip.fare.estimated_driver_earnings
+    : 0;
+  const offerPaymentPolicy = offer
+    ? offer.trip.payment_method === "cash"
+      ? "CASH · 100% YOURS"
+      : `CARD · ${Number(offer.trip.fare.platform_commission_percent || 0).toFixed(0)}% LETSGORIDE FEE`
+    : "";
 
   useHailingDriverLocationSync({
     enabled: online && !activeTrip,
@@ -125,7 +135,7 @@ export default function DriverHailingScreen() {
         dropoff={offer?.trip.dropoff}
         route={offer?.trip.route}
         driverLocation={currentLocation}
-        bottomPadding={offer ? 420 : 330}
+        bottomPadding={offer ? 440 : 330}
       />
 
       <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
@@ -146,7 +156,14 @@ export default function DriverHailingScreen() {
         {offer ? (
           <>
             <Text style={styles.eyebrow}>NEW RIDE REQUEST</Text>
-            <Text style={styles.title}>${offer.trip.fare.total_fare.toFixed(2)} · {offer.trip.route.distance_km.toFixed(1)} km</Text>
+            <Text style={styles.title}>${offerDriverEarnings.toFixed(2)} to you · {offer.trip.route.distance_km.toFixed(1)} km</Text>
+            <View style={styles.paymentPolicyPill}>
+              <MaterialCommunityIcons name={offer.trip.payment_method === "cash" ? "cash" : "credit-card-outline"} size={16} color={RIDE_BLACK} />
+              <View style={styles.flex}>
+                <Text style={styles.paymentPolicyText}>{offerPaymentPolicy}</Text>
+                <Text style={styles.paymentPolicyMeta}>Customer fare ${offer.trip.fare.total_fare.toFixed(2)}</Text>
+              </View>
+            </View>
             <View style={styles.routeCard}>
               <RouteRow icon="circle-slice-8" label="PICKUP" value={offer.trip.pickup.formatted_address} />
               <View style={styles.routeDivider} />
@@ -169,7 +186,7 @@ export default function DriverHailingScreen() {
             <View style={styles.metrics}>
               <Metric label="Today" value={String(status?.stats.rides_today || 0)} />
               <Metric label="Gross" value={`$${(status?.stats.gross_fares || 0).toFixed(2)}`} />
-              <Metric label="Est. net" value={`$${(status?.stats.estimated_net || 0).toFixed(2)}`} />
+              <Metric label="You keep" value={`$${(status?.stats.estimated_net || 0).toFixed(2)}`} />
             </View>
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => void goOffline()} style={({ pressed }) => [styles.offlineButton, busy && styles.disabled, pressed && styles.pressed]}>
               <Text style={styles.offlineText}>{busy ? "Going offline…" : "Go offline"}</Text>
@@ -226,6 +243,9 @@ const styles = StyleSheet.create({
   eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900", letterSpacing: 1.2 },
   title: { color: RIDE_BLACK, fontSize: 26, lineHeight: 30, fontWeight: "900", letterSpacing: -0.8 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
+  paymentPolicyPill: { minHeight: 48, borderRadius: 16, backgroundColor: "#F2EFE7", paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 9 },
+  paymentPolicyText: { color: RIDE_BLACK, fontSize: 9, fontWeight: "900", letterSpacing: 0.7 },
+  paymentPolicyMeta: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "700", marginTop: 2 },
   routeCard: { borderRadius: 19, backgroundColor: v2Theme.colors.surfaceMuted, paddingHorizontal: 13, paddingVertical: 10 },
   routeRow: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: 10 },
   routeDivider: { height: StyleSheet.hairlineWidth, backgroundColor: v2Theme.colors.lineStrong, marginLeft: 25 },
