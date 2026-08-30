@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { DeliveryMap } from "../../../components/maps/DeliveryMap";
+import { AppButton } from "../../../components/ui/AppButton";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
 import { useCourierDeliveryRealtime } from "../../../hooks/useCourierDeliveryRealtime";
@@ -75,6 +76,19 @@ export default function CustomerCourierDeliveryScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function openReview(completed: CourierDelivery) {
+    const isFoodDelivery = completed.source_type === "FOOD_ORDER";
+    const transactionId = isFoodDelivery ? (completed.food_order_id || completed.source_id) : completed.id;
+    if (!transactionId) {
+      router.push("/(shared)/activity" as never);
+      return;
+    }
+    router.push({
+      pathname: "/(shared)/review",
+      params: isFoodDelivery ? { transactionId } : { transactionId, transactionType: "courier" },
+    } as never);
   }
 
   if (loading && !delivery) {
@@ -164,6 +178,24 @@ export default function CustomerCourierDeliveryScreen() {
           ) : null}
 
           {delivery.status === "DELIVERED" ? <DeliveredCard handoff={handoff} pulse={pulse} /> : null}
+
+          {delivery.status === "DELIVERED" ? (
+            <View style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewIcon}><MaterialCommunityIcons name="star-outline" size={24} color="#111111" /></View>
+                <View style={styles.reviewCopy}>
+                  <Text style={styles.reviewTitle}>{delivery.source_type === "FOOD_ORDER" ? "How was the whole order?" : "How was your courier?"}</Text>
+                  <Text style={styles.reviewBody}>{delivery.source_type === "FOOD_ORDER" ? "Rate the restaurant and courier separately. We keep those scores independent." : "Rate delivery time, communication, package handling and professionalism."}</Text>
+                </View>
+              </View>
+              <AppButton
+                title={delivery.source_type === "FOOD_ORDER" ? "Rate your order" : "Rate your courier"}
+                variant="secondary"
+                icon={<MaterialCommunityIcons name="star-check-outline" size={20} color="#111111" />}
+                onPress={() => openReview(delivery)}
+              />
+            </View>
+          ) : null}
 
           <JourneyCard status={delivery.status} />
 
@@ -379,6 +411,7 @@ const styles = StyleSheet.create({
   trackingAvatar: { width: 46, height: 46, borderRadius: 17, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, trackingCopy: { flex: 1, gap: 4 }, trackingTitle: { color: v2Theme.colors.ink, fontSize: 13, fontWeight: "900" }, trackingMeta: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900" }, helpButton: { width: 44, height: 44, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 16, gap: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft }, pinHeader: { flexDirection: "row", gap: 11, alignItems: "center" }, pinIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, pinCopy: { flex: 1, gap: 3 }, pinTitle: { color: v2Theme.colors.ink, fontSize: 16, fontWeight: "900" }, pinBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, pinDigits: { flexDirection: "row", justifyContent: "center", gap: 9 }, pinDigit: { width: 52, height: 62, borderRadius: 18, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong }, pinDigitText: { color: v2Theme.colors.ink, fontSize: 27, fontWeight: "900" }, securityRow: { borderRadius: 16, backgroundColor: v2Theme.colors.surface, padding: 11, flexDirection: "row", gap: 8, alignItems: "flex-start" }, securityText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
   successCard: { borderRadius: v2Theme.radius.xl, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 }, successIcon: { width: 52, height: 52, borderRadius: 19, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, successCopy: { flex: 1, gap: 3 }, successTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" }, successBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
+  reviewCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: "#F4F1EA", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 15, gap: 13 }, reviewHeader: { flexDirection: "row", alignItems: "center", gap: 11 }, reviewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }, reviewCopy: { flex: 1, gap: 3 }, reviewTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, reviewBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   journeyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 15, gap: 15 }, journeyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }, journeyNow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900" }, journeyTrack: { flexDirection: "row" }, journeyItem: { flex: 1, minWidth: 0 }, journeyTop: { flexDirection: "row", alignItems: "center" }, journeyNode: { width: 24, height: 24, borderRadius: 12, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, journeyNodeComplete: { backgroundColor: v2Theme.colors.brand }, journeyNodeActive: { shadowColor: v2Theme.colors.brand, shadowOpacity: 0.32, shadowRadius: 8, elevation: 3 }, journeyNodeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.inkTertiary }, journeyConnector: { flex: 1, height: 3, backgroundColor: v2Theme.colors.surfaceMuted }, journeyConnectorComplete: { backgroundColor: v2Theme.colors.brand }, journeyLabel: { marginTop: 7, color: v2Theme.colors.inkTertiary, fontSize: 7, lineHeight: 10, fontWeight: "800", paddingRight: 2 }, journeyLabelComplete: { color: v2Theme.colors.ink }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
   routeCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, overflow: "hidden" }, routeRow: { minHeight: 66, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line }, routeIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, routeCopy: { flex: 1, gap: 3 }, routeLabel: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" }, routeValue: { color: v2Theme.colors.ink, fontSize: 11, lineHeight: 16, fontWeight: "800" },
   cancelButton: { minHeight: 50, borderRadius: 17, backgroundColor: v2Theme.colors.dangerSoft, alignItems: "center", justifyContent: "center" }, cancelText: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" }, activityCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13 }, activityHeader: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, activityCount: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "900" }, eventRow: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 10 }, eventBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: v2Theme.colors.line }, eventDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: v2Theme.colors.brand }, eventCopy: { flex: 1, gap: 3 }, eventTitle: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" }, eventTime: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "700" }, disabled: { opacity: 0.45 }, pressed: { opacity: 0.72 },
