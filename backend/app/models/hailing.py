@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 RideClass = Literal["ECONOMY", "COMFORT", "XL"]
-PaymentMethod = Literal["cash", "card"]
 HailingTripStatus = Literal[
     "SEARCHING",
     "DRIVER_ASSIGNED",
@@ -62,13 +61,24 @@ class HailingStripeIntentBody(BaseModel):
 
 
 class HailingTripCreateBody(BaseModel):
+    """Cash Ride Now creation. Card trips use the separate Stripe-verified contract below."""
+
     model_config = ConfigDict(extra="forbid")
 
     quote_id: str = Field(min_length=8, max_length=80)
-    payment_method: PaymentMethod = "cash"
+    payment_method: Literal["cash"] = "cash"
     client_request_id: Optional[str] = Field(default=None, min_length=8, max_length=120)
     verify_ride_with_pin: bool = False
-    stripe_payment_intent_id: Optional[str] = Field(default=None, min_length=8, max_length=120)
+
+
+class HailingCardTripCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quote_id: str = Field(min_length=8, max_length=80)
+    payment_method: Literal["card"] = "card"
+    client_request_id: str = Field(min_length=8, max_length=120)
+    verify_ride_with_pin: bool = False
+    stripe_payment_intent_id: str = Field(min_length=8, max_length=120, pattern=r"^pi_[A-Za-z0-9_]+$")
 
 
 class HailingCancelBody(BaseModel):
