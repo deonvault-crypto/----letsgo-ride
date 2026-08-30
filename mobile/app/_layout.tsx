@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 
 import { PermissionReminder } from "../components/permissions/PermissionReminder";
+import { PendingReviewReminder } from "../components/reviews/PendingReviewReminder";
 import { FoodBasketProvider } from "../contexts/FoodBasketContext";
 import { LocationDraftProvider } from "../contexts/LocationDraftContext";
 import { NotificationProvider } from "../contexts/NotificationContext";
@@ -17,10 +18,7 @@ function NotificationResponseRouter() {
   const router = useRouter();
   const { user } = useSession();
 
-  useEffect(() => {
-    configureNotificationHandler();
-  }, []);
-
+  useEffect(() => { configureNotificationHandler(); }, []);
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data || {};
@@ -29,7 +27,6 @@ function NotificationResponseRouter() {
     });
     return () => subscription.remove();
   }, [router, user?.role]);
-
   return null;
 }
 
@@ -37,7 +34,6 @@ function SessionShellRouter() {
   const router = useRouter();
   const segments = useSegments();
   const { user, loading, isGuest } = useSession();
-
   useEffect(() => {
     const routeGroup = segments[0];
     if (loading || !routeGroup || routeGroup === "(auth)") return;
@@ -51,7 +47,6 @@ function SessionShellRouter() {
     const expectedGroup = roleHome.slice(1, roleHome.indexOf(")") + 1);
     if ((isGuest || user) && routeGroup !== expectedGroup) router.replace(roleHome as never);
   }, [isGuest, loading, router, segments, user]);
-
   return null;
 }
 
@@ -67,14 +62,7 @@ export default function RootLayout() {
             <LocationDraftProvider>
               <FoodBasketProvider>
                 <StatusBar style="dark" />
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    animation: "fade",
-                    animationDuration: 220,
-                    animationTypeForReplace: "push",
-                  }}
-                >
+                <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220, animationTypeForReplace: "push" }}>
                   <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
                   <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
                   <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
@@ -84,6 +72,7 @@ export default function RootLayout() {
                   <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
                   <Stack.Screen name="(shared)/location-picker" options={{ gestureEnabled: false, animation: "none" }} />
                 </Stack>
+                <PendingReviewReminder />
               </FoodBasketProvider>
             </LocationDraftProvider>
           </NotificationProvider>
