@@ -46,6 +46,50 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Classify npm audit findings without mutating dependencies
+        shell: bash
+        run: |
+          set -uo pipefail
+          npm audit --json > /tmp/npm-audit-full.json || true
+          npm audit --omit=dev --json > /tmp/npm-audit-prod.json || true
+          node <<'NODE'
+          const fs = require('fs');
+
+          const severityRank = { critical: 0, high: 1, moderate: 2, low: 3, info: 4 };
+
+          function summarize(path, label) {
+            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const metadata = report.metadata?.vulnerabilities || {};
+            const vulnerabilities = report.vulnerabilities || {};
+            console.log(`=== NPM AUDIT ${label} SUMMARY ===`);
+            console.log(JSON.stringify(metadata));
+
+            const rows = Object.entries(vulnerabilities)
+              .map(([name, item]) => ({
+                name,
+                severity: item.severity,
+                direct: Boolean(item.isDirect),
+                range: item.range,
+                via: (item.via || []).map((entry) => typeof entry === 'string' ? entry : entry.name),
+                effects: item.effects || [],
+                fixAvailable: item.fixAvailable,
+              }))
+              .sort((a, b) => (severityRank[a.severity] ?? 99) - (severityRank[b.severity] ?? 99) || a.name.localeCompare(b.name));
+
+            for (const row of rows) {
+              console.log(`AUDIT_ITEM ${label} ${JSON.stringify(row)}`);
+            }
+            return Number(metadata.critical || 0);
+          }
+
+          const fullCritical = summarize('/tmp/npm-audit-full.json', 'FULL');
+          const prodCritical = summarize('/tmp/npm-audit-prod.json', 'PRODUCTION');
+          if (fullCritical > 0 || prodCritical > 0) {
+            console.error('Critical npm vulnerability detected; failing closed.');
+            process.exit(1);
+          }
+          NODE
+
       - name: Typecheck
         run: npm run typecheck
 
