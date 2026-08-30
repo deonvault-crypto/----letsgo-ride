@@ -12,18 +12,25 @@ from app.routers import activity, admin, auth, conversations, courier, drivers, 
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
+from app.services.hailing_scale_service import driver_stats_scaled, hailing_dispatch_sweeper_scaled
 from app.services.hailing_security_service import clear_legacy_plaintext_hailing_pins
-from app.services.hailing_trip_service import hailing_dispatch_sweeper
 from app.services.product_hardening_storage_service import ensure_product_hardening_indexes
-from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
+from app.services.ride_scale_service import ride_lifecycle_sweeper_scaled
+from app.services.ride_service import seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
-from app.services.stripe_payment_service import stripe_payment_reconciliation_sweeper
+from app.services.stripe_scale_service import stripe_payment_reconciliation_sweeper_scaled
 from app.utils import api_success
 
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Keep the router's public contract unchanged while replacing the lifetime-history
+# stats implementation with a database aggregation. This assignment is explicit so
+# older mobile builds and route paths remain untouched.
+hailing.driver_stats = driver_stats_scaled
+
 app = FastAPI(
     title="LetsGoRide API",
     version="0.1.0",
@@ -110,21 +117,21 @@ async def on_startup():
     if settings.enable_demo_seed:
         await seed_demo_rides()
     ride_lifecycle_stop_event = asyncio.Event()
-    ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper(ride_lifecycle_stop_event))
+    ride_lifecycle_task = asyncio.create_task(ride_lifecycle_sweeper_scaled(ride_lifecycle_stop_event))
     if settings.hailing_enabled:
         await seed_zimbabwe_service_areas()
         await clear_legacy_plaintext_hailing_pins()
         hailing_dispatch_stop_event = asyncio.Event()
-        hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper(hailing_dispatch_stop_event))
-        logger.info("hailing_runtime enabled=true")
+        hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper_scaled(hailing_dispatch_stop_event))
+        logger.info("hailing_runtime enabled=true scale_safe_sweeper=true")
     else:
         hailing_dispatch_stop_event = None
         hailing_dispatch_task = None
         logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")
     if settings.stripe_configured:
         stripe_payment_stop_event = asyncio.Event()
-        stripe_payment_task = asyncio.create_task(stripe_payment_reconciliation_sweeper(stripe_payment_stop_event))
-        logger.info("stripe_payment_runtime enabled=true account_id=%s", settings.stripe_account_id or "configured")
+        stripe_payment_task = asyncio.create_task(stripe_payment_reconciliation_sweeper_scaled(stripe_payment_stop_event))
+        logger.info("stripe_payment_runtime enabled=true account_id=%s bounded_reconciliation=true", settings.stripe_account_id or "configured")
     else:
         stripe_payment_stop_event = None
         stripe_payment_task = None
