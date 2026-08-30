@@ -12,7 +12,7 @@ import {
   setDefaultWorkerPayoutMethod,
   updateWorkerPayoutMethod,
 } from "../../services/workerFinanceService";
-import { PayoutMethodType, WorkerPayoutMethod, WorkerWallet } from "../../types/workerFinance.types";
+import { PayoutMethodType, WorkerLedgerEntry, WorkerPayoutMethod, WorkerWallet } from "../../types/workerFinance.types";
 
 export default function WalletScreen() {
   const [wallet, setWallet] = useState<WorkerWallet | null>(null);
@@ -187,19 +187,26 @@ export default function WalletScreen() {
         <View style={styles.heroCard}>
           <Text style={styles.kicker}>{roleLabel.toUpperCase()} WALLET</Text>
           <Text style={styles.balance}>{money(wallet.available_balance_usd)}</Text>
-          <Text style={styles.balanceLabel}>Available digital earnings</Text>
+          <Text style={styles.balanceLabel}>Available for payout</Text>
           <View style={styles.heroDivider} />
           <View style={styles.heroMetrics}>
-            <Metric label="Net earnings" value={money(wallet.net_earnings_usd)} />
+            <Metric label="Total take-home" value={money(wallet.net_earnings_usd)} />
             <Metric label="Paid out" value={money(wallet.paid_out_usd)} />
           </View>
         </View>
 
         <View style={styles.moneyGrid}>
-          <MoneyCard icon="cash-multiple" label="Cash collected" value={money(wallet.cash_collected_usd)} body="Cash collected directly on completed work." />
-          <MoneyCard icon="bank-transfer" label="Owed to LetsGoRide" value={money(wallet.amount_due_to_platform_usd)} body="Platform amount arising from completed cash work." />
-          <MoneyCard icon="credit-card-outline" label="Digital earnings" value={money(wallet.digital_earnings_usd)} body="Worker earnings recorded digitally before payouts." />
-          <MoneyCard icon="percent-outline" label="Platform commission" value={money(wallet.platform_commission_usd)} body="Commission recorded across completed work." />
+          {wallet.worker_role === "driver" ? <>
+            <MoneyCard icon="cash-multiple" label="Cash earnings" value={money(wallet.cash_collected_usd)} body="100% yours. LetsGoRide charges no fee on cash Ride Now trips." />
+            <MoneyCard icon="credit-card-outline" label="Card earnings" value={money(wallet.digital_earnings_usd)} body="Your card-trip earnings after the LetsGoRide card fee." />
+            <MoneyCard icon="percent-outline" label="Card platform fees" value={money(wallet.platform_commission_usd)} body="LetsGoRide only takes a platform fee from card-paid Ride Now trips." />
+            <MoneyCard icon="wallet-outline" label="Total take-home" value={money(wallet.net_earnings_usd)} body="Cash in full plus your net earnings from card trips." />
+          </> : <>
+            <MoneyCard icon="wallet-outline" label="Delivery earnings" value={money(wallet.net_earnings_usd)} body="Your recorded earnings from completed deliveries." />
+            <MoneyCard icon="credit-card-outline" label="Digital earnings" value={money(wallet.digital_earnings_usd)} body="Courier earnings recorded digitally before payouts." />
+            <MoneyCard icon="bank-transfer" label="Paid out" value={money(wallet.paid_out_usd)} body="Payouts already recorded as paid." />
+            <MoneyCard icon="cash-check" label="Available" value={money(wallet.available_balance_usd)} body="Digital earnings still available for payout." />
+          </>}
         </View>
 
         <View style={styles.section}>
@@ -301,7 +308,7 @@ export default function WalletScreen() {
                   <View style={styles.ledgerIcon}><MaterialCommunityIcons name={entry.source_type === "RIDE_NOW" ? "car-outline" : "package-variant-closed"} size={19} color={v2Theme.colors.ink} /></View>
                   <View style={styles.ledgerCopy}>
                     <Text numberOfLines={1} style={styles.ledgerTitle}>{entry.label}</Text>
-                    <Text style={styles.ledgerMeta}>{formatDate(entry.occurred_at)} · {entry.settlement_state.replaceAll("_", " ")}</Text>
+                    <Text style={styles.ledgerMeta}>{formatDate(entry.occurred_at)} · {ledgerSettlementLabel(entry)}</Text>
                   </View>
                   <Text style={styles.ledgerAmount}>{money(entry.worker_earnings_usd)}</Text>
                 </View>
@@ -312,7 +319,7 @@ export default function WalletScreen() {
 
         <View style={styles.settlementNote}>
           <MaterialCommunityIcons name="information-outline" size={21} color={v2Theme.colors.inkSecondary} />
-          <Text style={styles.settlementText}>{wallet.settlement_integrated ? "Payout settlement is connected." : "Balances are being recorded now. Automatic withdrawals and payout settlement are not connected yet, so the app will not pretend a transfer has been sent."}</Text>
+          <Text style={styles.settlementText}>{wallet.settlement_integrated ? "Payout settlement is connected." : "Cash Ride Now earnings stay with the driver immediately. Digital balances are recorded here, but automatic withdrawals and payout settlement are not connected yet."}</Text>
         </View>
       </> : null}
     </Screen>
@@ -333,6 +340,12 @@ function MoneyCard({ icon, label, value, body }: { icon: keyof typeof MaterialCo
 
 function MethodTab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return <Pressable accessibilityRole="button" onPress={onPress} style={[styles.methodTab, active && styles.methodTabActive]}><Text style={[styles.methodTabText, active && styles.methodTabTextActive]}>{label}</Text></Pressable>;
+}
+
+function ledgerSettlementLabel(entry: WorkerLedgerEntry) {
+  if (entry.source_type === "RIDE_NOW" && entry.payment_method === "cash") return "Cash · 100% yours";
+  if (entry.source_type === "RIDE_NOW" && entry.payment_method === "card") return "Card · after platform fee";
+  return entry.settlement_state.replaceAll("_", " ");
 }
 
 function money(value: number) {
