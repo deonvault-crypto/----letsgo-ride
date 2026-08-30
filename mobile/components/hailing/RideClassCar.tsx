@@ -8,282 +8,285 @@ type RideClassCarProps = {
   disabled?: boolean;
 };
 
-type VehicleProfile = {
+type VehicleGeometry = {
   bodyWidth: number;
-  bodyHeight: number;
   bodyLeft: number;
-  cabinWidth: number;
-  cabinHeight: number;
-  cabinLeft: number;
-  cabinBottom: number;
-  frontWheelLeft: number;
+  bodyBottom: number;
+  bodyHeight: number;
+  roofWidth: number;
+  roofLeft: number;
+  roofBottom: number;
+  roofHeight: number;
   rearWheelLeft: number;
-  windowSplit: number;
-  roofRadius: number;
+  frontWheelLeft: number;
+  windowLeft: number;
+  windowWidth: number;
+  windowHeight: number;
 };
 
-const profiles: Record<HailingRideClass, VehicleProfile> = {
+const geometry: Record<HailingRideClass, VehicleGeometry> = {
   ECONOMY: {
-    bodyWidth: 74,
-    bodyHeight: 17,
-    bodyLeft: 11,
-    cabinWidth: 42,
-    cabinHeight: 17,
-    cabinLeft: 28,
-    cabinBottom: 23,
-    frontWheelLeft: 65,
+    bodyWidth: 82,
+    bodyLeft: 9,
+    bodyBottom: 12,
+    bodyHeight: 22,
+    roofWidth: 46,
+    roofLeft: 27,
+    roofBottom: 30,
+    roofHeight: 18,
     rearWheelLeft: 20,
-    windowSplit: 19,
-    roofRadius: 10,
+    frontWheelLeft: 69,
+    windowLeft: 31,
+    windowWidth: 38,
+    windowHeight: 12,
   },
   COMFORT: {
-    bodyWidth: 82,
-    bodyHeight: 18,
-    bodyLeft: 7,
-    cabinWidth: 47,
-    cabinHeight: 18,
-    cabinLeft: 25,
-    cabinBottom: 24,
-    frontWheelLeft: 68,
+    bodyWidth: 88,
+    bodyLeft: 6,
+    bodyBottom: 12,
+    bodyHeight: 21,
+    roofWidth: 53,
+    roofLeft: 24,
+    roofBottom: 29,
+    roofHeight: 20,
     rearWheelLeft: 18,
-    windowSplit: 22,
-    roofRadius: 11,
+    frontWheelLeft: 70,
+    windowLeft: 29,
+    windowWidth: 43,
+    windowHeight: 13,
   },
   XL: {
-    bodyWidth: 86,
-    bodyHeight: 20,
-    bodyLeft: 5,
-    cabinWidth: 59,
-    cabinHeight: 22,
-    cabinLeft: 19,
-    cabinBottom: 25,
-    frontWheelLeft: 70,
-    rearWheelLeft: 16,
-    windowSplit: 28,
-    roofRadius: 9,
+    bodyWidth: 91,
+    bodyLeft: 4,
+    bodyBottom: 11,
+    bodyHeight: 25,
+    roofWidth: 65,
+    roofLeft: 16,
+    roofBottom: 32,
+    roofHeight: 21,
+    rearWheelLeft: 17,
+    frontWheelLeft: 72,
+    windowLeft: 21,
+    windowWidth: 55,
+    windowHeight: 14,
   },
 };
 
+function Wheel({ left }: { left: number }) {
+  return (
+    <View style={[styles.wheel, { left }]}>
+      <LinearGradient colors={["#6F7479", "#2B2E31"]} style={styles.rim}>
+        <View style={styles.hub} />
+      </LinearGradient>
+    </View>
+  );
+}
+
 export function RideClassCar({ rideClass, disabled = false }: RideClassCarProps) {
-  const profile = profiles[rideClass];
+  const car = geometry[rideClass];
+  const isXl = rideClass === "XL";
+  const isComfort = rideClass === "COMFORT";
+
   return (
     <View
       testID={`ride-class-car-${rideClass.toLowerCase()}`}
+      style={[styles.canvas, disabled && styles.disabled]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.canvas, disabled && styles.disabled]}
     >
-      <View style={styles.stage}>
-        <View style={styles.groundShadow} />
+      <View style={styles.shadow} />
 
-        <LinearGradient
-          colors={["#070707", "#242526", "#0C0C0D", "#353638"]}
-          locations={[0, 0.28, 0.66, 1]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[
-            styles.body,
-            {
-              width: profile.bodyWidth,
-              height: profile.bodyHeight,
-              left: profile.bodyLeft,
-            },
-          ]}
-        >
-          <View style={styles.bodyHighlight} />
-          <View style={styles.lowerSill} />
-          <View style={styles.frontLight} />
-          <View style={styles.rearLight} />
-        </LinearGradient>
+      <LinearGradient
+        colors={isComfort ? ["#363A3F", "#111315"] : isXl ? ["#25292D", "#090A0B"] : ["#4A4F53", "#17191B"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.body,
+          {
+            width: car.bodyWidth,
+            left: car.bodyLeft,
+            bottom: car.bodyBottom,
+            height: car.bodyHeight,
+          },
+        ]}
+      >
+        <View style={styles.beltLine} />
+        <View style={styles.rearLamp} />
+        <View style={styles.headLamp} />
+        <View style={styles.doorHandleRear} />
+        <View style={styles.doorHandleFront} />
+      </LinearGradient>
 
-        <LinearGradient
-          colors={["#151718", "#363B3F", "#101112"]}
-          locations={[0, 0.48, 1]}
-          start={{ x: 0.1, y: 0 }}
-          end={{ x: 0.9, y: 1 }}
-          style={[
-            styles.cabin,
-            {
-              width: profile.cabinWidth,
-              height: profile.cabinHeight,
-              left: profile.cabinLeft,
-              bottom: profile.cabinBottom,
-              borderTopLeftRadius: profile.roofRadius,
-              borderTopRightRadius: profile.roofRadius,
-            },
-          ]}
-        >
-          <LinearGradient
-            colors={["#BFCAD1", "#70808A", "#3A464E"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.windowGlass}
-          >
-            <View style={[styles.windowDivider, { left: profile.windowSplit }]} />
-            <View style={styles.glassReflection} />
-          </LinearGradient>
-        </LinearGradient>
+      <LinearGradient
+        colors={isComfort ? ["#444A50", "#171A1D"] : isXl ? ["#343A40", "#131517"] : ["#585E63", "#1D2023"]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={[
+          styles.roof,
+          {
+            width: car.roofWidth,
+            left: car.roofLeft,
+            bottom: car.roofBottom,
+            height: car.roofHeight,
+            borderTopLeftRadius: isXl ? 7 : 13,
+            borderTopRightRadius: isXl ? 7 : 15,
+          },
+        ]}
+      />
 
-        <View style={[styles.wheel, { left: profile.rearWheelLeft }]}>
-          <LinearGradient colors={["#080808", "#272727", "#050505"]} style={styles.tyre}>
-            <View style={styles.rim}><View style={styles.hub} /></View>
-          </LinearGradient>
-        </View>
-        <View style={[styles.wheel, { left: profile.frontWheelLeft }]}>
-          <LinearGradient colors={["#080808", "#272727", "#050505"]} style={styles.tyre}>
-            <View style={styles.rim}><View style={styles.hub} /></View>
-          </LinearGradient>
-        </View>
-      </View>
+      <LinearGradient
+        colors={["#C9D6DC", "#6F808A"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.windows,
+          {
+            left: car.windowLeft,
+            width: car.windowWidth,
+            height: car.windowHeight,
+            bottom: car.roofBottom + 3,
+          },
+        ]}
+      >
+        <View style={[styles.windowDivider, isXl && styles.windowDividerXl]} />
+      </LinearGradient>
+
+      <View style={[styles.lowerTrim, { left: car.bodyLeft + 8, width: car.bodyWidth - 16, bottom: car.bodyBottom + 5 }]} />
+      <Wheel left={car.rearWheelLeft} />
+      <Wheel left={car.frontWheelLeft} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   canvas: {
-    width: 104,
+    width: 100,
     height: 58,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  disabled: { opacity: 0.38 },
-  stage: {
-    width: 96,
-    height: 52,
     position: "relative",
   },
-  groundShadow: {
+  disabled: {
+    opacity: 0.36,
+  },
+  shadow: {
     position: "absolute",
     left: 13,
-    right: 5,
-    bottom: 3,
-    height: 8,
+    right: 6,
+    bottom: 5,
+    height: 9,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.12)",
-    transform: [{ scaleY: 0.5 }],
+    backgroundColor: "rgba(0,0,0,0.13)",
+    transform: [{ scaleY: 0.52 }],
   },
   body: {
     position: "absolute",
-    bottom: 10,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 11,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 7,
-    overflow: "hidden",
+    borderTopLeftRadius: 11,
+    borderTopRightRadius: 15,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.18)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  bodyHighlight: {
-    position: "absolute",
-    left: 7,
-    right: 8,
-    top: 2,
-    height: 1,
-    borderRadius: 1,
-    backgroundColor: "rgba(255,255,255,0.34)",
-  },
-  lowerSill: {
-    position: "absolute",
-    left: 13,
-    right: 12,
-    bottom: 2,
-    height: 2,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  frontLight: {
-    position: "absolute",
-    right: 1,
-    top: 4,
-    width: 5,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#F6F1D2",
-    opacity: 0.95,
-  },
-  rearLight: {
-    position: "absolute",
-    left: 1,
-    top: 5,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#A72727",
-    opacity: 0.9,
-  },
-  cabin: {
-    position: "absolute",
     overflow: "hidden",
+  },
+  roof: {
+    position: "absolute",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  windows: {
+    position: "absolute",
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 10,
     borderBottomLeftRadius: 3,
     borderBottomRightRadius: 3,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.16)",
-    transform: [{ skewX: "-5deg" }],
-  },
-  windowGlass: {
-    flex: 1,
-    marginHorizontal: 4,
-    marginTop: 3,
-    marginBottom: 3,
-    borderRadius: 5,
+    borderColor: "rgba(255,255,255,0.42)",
     overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.24)",
   },
   windowDivider: {
     position: "absolute",
-    top: -1,
-    bottom: -1,
+    left: "51%",
+    top: -2,
+    bottom: -2,
     width: 2,
-    backgroundColor: "#17191A",
-    opacity: 0.85,
+    backgroundColor: "rgba(17,19,21,0.88)",
+    transform: [{ rotate: "-4deg" }],
   },
-  glassReflection: {
+  windowDividerXl: {
+    left: "58%",
+  },
+  beltLine: {
     position: "absolute",
-    width: 21,
+    left: 9,
+    right: 8,
+    top: 9,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.26)",
+  },
+  lowerTrim: {
+    position: "absolute",
     height: 2,
-    top: 3,
-    left: 3,
+    borderRadius: 1,
+    backgroundColor: "rgba(255,255,255,0.17)",
+  },
+  rearLamp: {
+    position: "absolute",
+    left: 2,
+    top: 5,
+    width: 5,
+    height: 5,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.30)",
-    transform: [{ rotate: "-9deg" }],
+    backgroundColor: "#B72B31",
+  },
+  headLamp: {
+    position: "absolute",
+    right: 2,
+    top: 5,
+    width: 7,
+    height: 5,
+    borderRadius: 2,
+    backgroundColor: "#EEF4F6",
+  },
+  doorHandleRear: {
+    position: "absolute",
+    left: "48%",
+    top: 7,
+    width: 8,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(212,216,219,0.55)",
+  },
+  doorHandleFront: {
+    position: "absolute",
+    right: 18,
+    top: 7,
+    width: 8,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(212,216,219,0.55)",
   },
   wheel: {
     position: "absolute",
-    bottom: 4,
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: "#050505",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tyre: {
-    width: 15,
-    height: 15,
-    borderRadius: 8,
+    bottom: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#050607",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.7)",
     alignItems: "center",
     justifyContent: "center",
   },
   rim: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#9A9D9F",
-    borderWidth: 1,
-    borderColor: "#D9DADB",
+    width: 13,
+    height: 13,
+    borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
   },
   hub: {
-    width: 3,
-    height: 3,
+    width: 4,
+    height: 4,
     borderRadius: 2,
-    backgroundColor: "#333536",
+    backgroundColor: "#D5D9DC",
   },
 });
