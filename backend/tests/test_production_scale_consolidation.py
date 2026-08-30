@@ -143,6 +143,30 @@ class ProductionScaleConsolidationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(capture.await_count, STRIPE_RECONCILIATION_BATCH)
         self.assertEqual(result["captured"], STRIPE_RECONCILIATION_BATCH)
 
+    async def test_terminal_failed_stripe_records_do_not_hot_loop(self):
+        await database.insert_one(
+            "hailing_trips",
+            {
+                "id": "failed-card-trip",
+                "payment_method": "card",
+                "payment_status": "failed",
+                "status": "COMPLETED",
+                "updated_at": "001",
+            },
+        )
+        with patch(
+            "app.services.stripe_reconciliation_service.capture_hailing_trip_payment",
+            new=AsyncMock(return_value="capture_pending"),
+        ) as capture, patch(
+            "app.services.stripe_reconciliation_service.cancel_hailing_card_authorization",
+            new=AsyncMock(return_value="cancel_pending"),
+        ) as cancel:
+            result = await reconcile_hailing_card_payments_bounded()
+
+        self.assertEqual(capture.await_count, 0)
+        self.assertEqual(cancel.await_count, 0)
+        self.assertEqual(result, {"captured": 0, "released": 0, "deferred": 0})
+
 
 if __name__ == "__main__":
     unittest.main()
