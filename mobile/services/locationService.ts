@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import { Linking } from "react-native";
 
 export type DeviceLocation = {
   latitude: number;
@@ -14,16 +15,21 @@ export type ForegroundLocationWatchOptions = {
   timeInterval?: number;
 };
 
+export type LocationPermissionState = {
+  enabled: boolean;
+  canAskAgain: boolean;
+  requiresSettings: boolean;
+  status: "on" | "off";
+};
+
 export function isReliableCourierLocation(next: DeviceLocation, previous?: DeviceLocation | null) {
   if (!Number.isFinite(next.latitude) || !Number.isFinite(next.longitude)) return false;
   if (next.latitude < -90 || next.latitude > 90 || next.longitude < -180 || next.longitude > 180) return false;
   if (typeof next.accuracy === "number" && next.accuracy > 100) return false;
   if (!previous) return true;
-
   const elapsedSeconds = Math.max(0.001, (next.timestamp - previous.timestamp) / 1000);
   const movedMeters = distanceMeters(previous, next);
   if (movedMeters < 3 && elapsedSeconds < 8) return false;
-
   const impliedSpeed = movedMeters / elapsedSeconds;
   const reportedSpeed = typeof next.speed === "number" ? next.speed : 0;
   return impliedSpeed <= 55 || reportedSpeed >= impliedSpeed * 0.65;
@@ -41,60 +47,47 @@ function distanceMeters(a: Pick<DeviceLocation, "latitude" | "longitude">, b: Pi
 
 function normalizeLocation(location: Location.LocationObject): DeviceLocation {
   const available = (value: number | null) => typeof value === "number" && value >= 0 ? value : null;
-  return {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
-    accuracy: available(location.coords.accuracy),
-    heading: available(location.coords.heading),
-    speed: available(location.coords.speed),
-    timestamp: location.timestamp,
-  };
+  return { latitude: location.coords.latitude, longitude: location.coords.longitude, accuracy: available(location.coords.accuracy), heading: available(location.coords.heading), speed: available(location.coords.speed), timestamp: location.timestamp };
+}
+
+function permissionState(response: Location.LocationPermissionResponse): LocationPermissionState {
+  return { enabled: response.granted, canAskAgain: response.canAskAgain, requiresSettings: !response.granted && !response.canAskAgain, status: response.granted ? "on" : "off" };
+}
+
+export async function getForegroundLocationPermissionState() {
+  return permissionState(await Location.getForegroundPermissionsAsync());
+}
+
+export async function requestForegroundLocationPermission() {
+  return permissionState(await Location.requestForegroundPermissionsAsync());
+}
+
+export async function openLocationSettings() {
+  await Linking.openSettings();
 }
 
 export async function ensureForegroundLocationPermission() {
   const existing = await Location.getForegroundPermissionsAsync();
   if (existing.granted) return true;
-
   const requested = await Location.requestForegroundPermissionsAsync();
   return requested.granted;
 }
 
 export async function getCurrentDeviceLocation(): Promise<DeviceLocation> {
   const granted = await ensureForegroundLocationPermission();
-  if (!granted) {
-    throw new Error("Allow location access to use your current position. You can still search or move the map instead.");
-  }
-
-  const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
-  return normalizeLocation(location);
+  if (!granted) throw new Error("Allow location access to use your current position. You can still search or move the map instead.");
+  return normalizeLocation(await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }));
 }
 
-export async function watchForegroundLocation(
-  onLocation: (location: DeviceLocation) => void,
-  onError?: (error: Error) => void,
-  options: ForegroundLocationWatchOptions = {},
-) {
+export async function watchForegroundLocation(onLocation: (location: DeviceLocation) => void, onError?: (error: Error) => void, options: ForegroundLocationWatchOptions = {}) {
   const granted = await ensureForegroundLocationPermission();
   if (!granted) {
     const error = new Error("Location permission is required to share live journey progress.");
     onError?.(error);
     throw error;
   }
-
-  return Location.watchPositionAsync(
-    {
-      accuracy: Location.Accuracy.High,
-      distanceInterval: options.distanceInterval ?? 25,
-      timeInterval: options.timeInterval ?? 10000,
-    },
-    (location) => {
-      try {
-        onLocation(normalizeLocation(location));
-      } catch (error) {
-        onError?.(error instanceof Error ? error : new Error("Unable to process location update."));
-      }
-    },
-  );
+  return Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: options.distanceInterval ?? 25, timeInterval: options.timeInterval ?? 10000 }, (location) => {
+    try { onLocation(normalizeLocation(location)); }
+    catch (error) { onError?.(error instanceof Error ? error : new Error("Unable to process location update.")); }
+  });
 }
