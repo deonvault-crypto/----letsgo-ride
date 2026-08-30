@@ -32,34 +32,33 @@ export function AppButton({
   style,
 }: AppButtonProps) {
   const isDisabled = Boolean(disabled || loading);
+  const indicatorColor = variant === "primary" ? colors.card : variant === "danger" ? colors.danger : colors.whiteText;
+
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled, busy: Boolean(loading) }}
       disabled={isDisabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
         styles[variant],
         isDisabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
+        pressed && !isDisabled && styles.pressed,
         style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === "primary" ? colors.card : colors.whiteText} />
-      ) : (
-        <View style={styles.content}>
-          {icon}
-          <Text style={[
-            styles.text,
-            variant === "primary" && styles.primaryText,
-            variant === "danger" && styles.dangerText,
-            isDisabled && styles.disabledText,
-          ]}>
-            {title}
-          </Text>
-        </View>
-      )}
+      <View style={styles.content}>
+        {loading ? <ActivityIndicator size="small" color={indicatorColor} /> : icon}
+        <Text style={[
+          styles.text,
+          variant === "primary" && styles.primaryText,
+          variant === "danger" && styles.dangerText,
+          isDisabled && styles.disabledText,
+        ]}>
+          {title}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -105,6 +104,7 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: spacing.sm,
   },
   text: {
