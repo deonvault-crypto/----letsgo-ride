@@ -17,8 +17,8 @@ from app.services.worker_finance_service import (
     list_payout_methods,
     set_default_payout_method,
     update_payout_method,
-    wallet_summary,
 )
+from app.services.worker_wallet_service import wallet_summary
 from app.utils import api_error, api_success
 
 
