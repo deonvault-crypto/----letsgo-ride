@@ -17,6 +17,14 @@ from app.utils import now_iso
 logger = logging.getLogger(__name__)
 STRIPE_RECONCILIATION_BATCH = 50
 STRIPE_RECONCILIATION_SECONDS = 15
+UNRESOLVED_PAYMENT_STATUSES = [
+    None,
+    "pending",
+    "authorized",
+    "capture_pending",
+    "cancel_pending",
+    "failed",
+]
 
 
 async def reconcile_hailing_card_payments_scaled() -> Dict[str, int]:
@@ -30,7 +38,7 @@ async def reconcile_hailing_card_payments_scaled() -> Dict[str, int]:
         {
             "payment_method": "card",
             "status": "COMPLETED",
-            "payment_status": {"$nin": ["paid", "refunded"]},
+            "payment_status": {"$in": UNRESOLVED_PAYMENT_STATUSES},
         },
         sort=[("updated_at", 1)],
         limit=STRIPE_RECONCILIATION_BATCH,
@@ -40,7 +48,7 @@ async def reconcile_hailing_card_payments_scaled() -> Dict[str, int]:
         {
             "payment_method": "card",
             "status": {"$in": list(CARD_CANCEL_STATUSES)},
-            "payment_status": {"$nin": ["cancelled", "paid", "refunded"]},
+            "payment_status": {"$in": UNRESOLVED_PAYMENT_STATUSES},
         },
         sort=[("updated_at", 1)],
         limit=STRIPE_RECONCILIATION_BATCH,
