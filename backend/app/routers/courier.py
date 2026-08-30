@@ -19,13 +19,15 @@ from app.services.courier_service import (
     create_delivery,
     get_delivery,
     get_delivery_pin,
-    list_delivery_events,
-    list_user_deliveries,
     report_delivery_delay,
     set_delivery_quote,
     tracking_state,
-    update_courier_location,
     update_delivery_status,
+)
+from app.services.courier_scale_service import (
+    list_delivery_events_scaled as list_delivery_events,
+    list_user_deliveries_scaled as list_user_deliveries,
+    update_courier_location_scaled as update_courier_location,
 )
 from app.services.delivery_quote_service import (
     apply_calculated_delivery_quote,
