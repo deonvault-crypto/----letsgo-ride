@@ -1,0 +1,60 @@
+name: Final V3 CI
+
+on:
+  push:
+    branches:
+      - release/2.0.2-production-final-v3
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-v3-ci-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend final regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt pytest
+      - name: Compile backend
+        run: python -m compileall app
+      - name: Import API
+        run: python -c "import app.main"
+      - name: Full backend tests
+        run: python -m pytest -q
+
+  mobile:
+    name: Mobile final regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Android release verification
+        run: npm run verify:android
+      - name: Unit tests
+        run: npm test -- --runInBand
+      - name: Expo Doctor
+        run: npx expo-doctor
