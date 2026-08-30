@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { initPaymentSheet, initStripe, presentPaymentSheet } from "@stripe/stripe-react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
@@ -13,8 +14,20 @@ import { v2Theme } from "../../../constants/v2Theme";
 import { useLocationDraft } from "../../../contexts/LocationDraftContext";
 import { useActiveHailingTrip, useHailingConfig } from "../../../hooks/useHailing";
 import { hasSession } from "../../../services/authService";
-import { createHailingQuote, requestHailingTrip } from "../../../services/hailingService";
-import { HailingPlace, HailingQuote, HailingRideClass, HailingRideClassConfig } from "../../../types/hailing.types";
+import {
+  createHailingQuote,
+  createHailingStripePaymentIntent,
+  getPaymentConfig,
+  requestHailingTrip,
+} from "../../../services/hailingService";
+import {
+  HailingPaymentMethod,
+  HailingPlace,
+  HailingQuote,
+  HailingRideClass,
+  HailingRideClassConfig,
+  PaymentConfig,
+} from "../../../types/hailing.types";
 
 const RIDE_BLACK = "#111111";
 const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
@@ -46,6 +59,8 @@ export default function HailingHomeScreen() {
   const [requesting, setRequesting] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [verifyWithPin, setVerifyWithPin] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<HailingPaymentMethod>("cash");
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const classOptions = useMemo(
@@ -53,6 +68,25 @@ export default function HailingHomeScreen() {
     [config?.ride_classes],
   );
   const routeReady = Boolean(pickup && dropoff);
+  const cardEnabled = paymentConfig?.card_enabled === true;
+
+  useEffect(() => {
+    let mounted = true;
+    getPaymentConfig()
+      .then((next) => {
+        if (mounted) setPaymentConfig(next);
+      })
+      .catch(() => {
+        if (mounted) setPaymentConfig({ card_enabled: false, provider: null, currency: "USD" });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cardEnabled && paymentMethod === "card") setPaymentMethod("cash");
+  }, [cardEnabled, paymentMethod]);
 
   useEffect(() => {
     setQuote(null);
@@ -94,11 +128,37 @@ export default function HailingHomeScreen() {
     try {
       setRequesting(true);
       setError(null);
+      const clientRequestId = `hail-${quote.quote_id}`;
+      let stripePaymentIntentId: string | undefined;
+
+      if (paymentMethod === "card") {
+        if (!cardEnabled) throw new Error("Card payments are not available right now.");
+        const intent = await createHailingStripePaymentIntent({
+          quote_id: quote.quote_id,
+          client_request_id: clientRequestId,
+        });
+        await initStripe({ publishableKey: intent.publishable_key });
+        const initialized = await initPaymentSheet({
+          merchantDisplayName: "LetsGoRide",
+          paymentIntentClientSecret: intent.client_secret,
+          allowsDelayedPaymentMethods: false,
+          returnURL: "letsgoride://stripe-redirect",
+        });
+        if (initialized.error) throw new Error(initialized.error.message);
+        const presented = await presentPaymentSheet();
+        if (presented.error) {
+          if (presented.error.code === "Canceled") return;
+          throw new Error(presented.error.message);
+        }
+        stripePaymentIntentId = intent.payment_intent_id;
+      }
+
       const trip = await requestHailingTrip({
         quote_id: quote.quote_id,
-        payment_method: "cash",
-        client_request_id: `hail-${quote.quote_id}`,
+        payment_method: paymentMethod,
+        client_request_id: clientRequestId,
         verify_ride_with_pin: verifyWithPin,
+        stripe_payment_intent_id: stripePaymentIntentId,
       });
       router.replace(`/(customer)/hail/searching?tripId=${encodeURIComponent(trip.id)}` as never);
     } catch (err) {
@@ -137,13 +197,13 @@ export default function HailingHomeScreen() {
     : !dropoff
       ? "Choose destination"
       : requesting
-        ? "Sending your ride request…"
+        ? paymentMethod === "card" ? "Preparing secure card payment…" : "Sending your ride request…"
         : quoting
           ? "Calculating your fare…"
           : quote
             ? `Request ride · $${quote.fare.total_fare.toFixed(2)}`
             : "See fare";
-  const actionIcon = requesting ? "send-outline" : quoting ? "calculator-variant-outline" : "arrow-right";
+  const actionIcon = requesting ? (paymentMethod === "card" ? "credit-card-lock-outline" : "send-outline") : quoting ? "calculator-variant-outline" : "arrow-right";
 
   function handlePrimaryAction() {
     if (!pickup) {
@@ -165,7 +225,7 @@ export default function HailingHomeScreen() {
         pickup={pickup ? pickup.location : null}
         dropoff={dropoff ? dropoff.location : null}
         route={quote?.route}
-        bottomPadding={routeReady ? 470 : 360}
+        bottomPadding={routeReady ? 500 : 360}
       />
 
       <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
@@ -236,9 +296,33 @@ export default function HailingHomeScreen() {
 
           {quote ? (
             <View style={styles.quoteStrip}>
-              <View style={styles.quoteMetric}><Text style={styles.quoteMetricLabel}>CASH FARE</Text><Text style={styles.quoteMetricValue}>${quote.fare.total_fare.toFixed(2)}</Text></View>
+              <View style={styles.quoteMetric}><Text style={styles.quoteMetricLabel}>FARE</Text><Text style={styles.quoteMetricValue}>${quote.fare.total_fare.toFixed(2)}</Text></View>
               <View style={styles.quoteDivider} />
               <View style={styles.quoteMetric}><Text style={styles.quoteMetricLabel}>TRIP</Text><Text style={styles.quoteMeta}>{quote.route.distance_km.toFixed(1)} km · ~{Math.round(quote.route.duration_minutes)} min</Text></View>
+            </View>
+          ) : null}
+
+          {quote ? (
+            <View style={styles.paymentSection}>
+              <Text style={styles.paymentSectionTitle}>Payment</Text>
+              <View style={styles.paymentRail}>
+                <PaymentChoice
+                  icon="cash"
+                  label="Cash"
+                  caption="Pay the driver"
+                  selected={paymentMethod === "cash"}
+                  onPress={() => setPaymentMethod("cash")}
+                />
+                {cardEnabled ? (
+                  <PaymentChoice
+                    icon="credit-card-outline"
+                    label="Card"
+                    caption="Secure with Stripe"
+                    selected={paymentMethod === "card"}
+                    onPress={() => setPaymentMethod("card")}
+                  />
+                ) : null}
+              </View>
             </View>
           ) : null}
 
@@ -254,7 +338,7 @@ export default function HailingHomeScreen() {
             <View style={styles.primaryCopy}>
               <Text style={styles.primaryText}>{actionLabel}</Text>
               {quoting ? <Text style={styles.primaryHint}>Using the selected route and current fare rules</Text> : null}
-              {requesting ? <Text style={styles.primaryHint}>Your request is being sent securely</Text> : null}
+              {requesting ? <Text style={styles.primaryHint}>{paymentMethod === "card" ? "Your card is authorized securely before dispatch" : "Your request is being sent securely"}</Text> : null}
             </View>
             <MaterialCommunityIcons name={actionIcon} size={20} color="#FFFFFF" />
           </Pressable>
@@ -283,6 +367,26 @@ function LocationRow({ label, value, tone, onPress }: { label: string; value: st
   );
 }
 
+function PaymentChoice({ icon, label, caption, selected, onPress }: { icon: "cash" | "credit-card-outline"; label: string; caption: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.paymentChoice, selected && styles.paymentChoiceSelected, pressed && styles.pressed]}
+    >
+      <View style={[styles.paymentIcon, selected && styles.paymentIconSelected]}>
+        <MaterialCommunityIcons name={icon} size={18} color={selected ? "#FFFFFF" : RIDE_BLACK} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={[styles.paymentLabel, selected && styles.paymentLabelSelected]}>{label}</Text>
+        <Text style={[styles.paymentCaption, selected && styles.paymentCaptionSelected]}>{caption}</Text>
+      </View>
+      <MaterialCommunityIcons name={selected ? "radiobox-marked" : "radiobox-blank"} size={18} color={selected ? "#FFFFFF" : v2Theme.colors.inkTertiary} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#ECECE8" },
   topBar: { position: "absolute", left: 16, right: 16, zIndex: 30, elevation: 30, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
@@ -290,7 +394,7 @@ const styles = StyleSheet.create({
   topButtonSpacer: { width: 48, height: 48 },
   ridePill: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.94)", alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)" },
   ridePillText: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", letterSpacing: 1.25 },
-  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, maxHeight: "57%", minHeight: 248, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12, overflow: "hidden" },
+  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, maxHeight: "61%", minHeight: 248, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12, overflow: "hidden" },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
   sheetContent: { paddingHorizontal: 14, paddingTop: 9, paddingBottom: 16, gap: 11 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
@@ -324,6 +428,17 @@ const styles = StyleSheet.create({
   quoteMetricValue: { color: RIDE_BLACK, fontSize: 21, fontWeight: "900", letterSpacing: -0.5 },
   quoteMeta: { color: v2Theme.colors.inkSecondary, fontSize: 10, fontWeight: "800" },
   quoteDivider: { width: 1, height: 34, marginHorizontal: 10, backgroundColor: v2Theme.colors.lineStrong },
+  paymentSection: { gap: 7 },
+  paymentSectionTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  paymentRail: { flexDirection: "row", gap: 8 },
+  paymentChoice: { flex: 1, minHeight: 58, borderRadius: 17, backgroundColor: "#F7F7F5", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 8 },
+  paymentChoiceSelected: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
+  paymentIcon: { width: 32, height: 32, borderRadius: 11, backgroundColor: "#ECEDEB", alignItems: "center", justifyContent: "center" },
+  paymentIconSelected: { backgroundColor: "rgba(255,255,255,0.14)" },
+  paymentLabel: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
+  paymentLabelSelected: { color: "#FFFFFF" },
+  paymentCaption: { color: v2Theme.colors.inkSecondary, fontSize: 8, lineHeight: 11, marginTop: 1 },
+  paymentCaptionSelected: { color: "rgba(255,255,255,0.62)" },
   pinOption: { minHeight: 54, borderRadius: 17, backgroundColor: "#F7F7F5", paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9 },
   pinIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#ECEDEB", alignItems: "center", justifyContent: "center" },
   pinIconActive: { backgroundColor: RIDE_BLACK },
