@@ -27,19 +27,10 @@ export default function IndexScreen() {
   }, []);
 
   useEffect(() => {
-    reveal.setValue(0);
-    routeProgress.setValue(0);
-    finish.setValue(0);
+    reveal.setValue(0); routeProgress.setValue(0); finish.setValue(0);
     const animation = reduceMotion
-      ? Animated.sequence([
-        Animated.timing(reveal, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.timing(finish, { toValue: 1, duration: 100, useNativeDriver: true }),
-      ])
-      : Animated.sequence([
-        Animated.timing(reveal, { toValue: 1, duration: 260, useNativeDriver: true }),
-        Animated.timing(routeProgress, { toValue: 1, duration: 650, useNativeDriver: true }),
-        Animated.timing(finish, { toValue: 1, duration: 180, useNativeDriver: true }),
-      ]);
+      ? Animated.sequence([Animated.timing(reveal, { toValue: 1, duration: 220, useNativeDriver: true }), Animated.timing(finish, { toValue: 1, duration: 100, useNativeDriver: true })])
+      : Animated.sequence([Animated.timing(reveal, { toValue: 1, duration: 260, useNativeDriver: true }), Animated.timing(routeProgress, { toValue: 1, duration: 650, useNativeDriver: true }), Animated.timing(finish, { toValue: 1, duration: 180, useNativeDriver: true })]);
     animation.start();
     return () => animation.stop();
   }, [finish, reduceMotion, reveal, routeProgress]);
@@ -71,7 +62,6 @@ export default function IndexScreen() {
       <Animated.View style={[styles.content, { opacity: Animated.multiply(reveal, exitOpacity), transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
         <Text accessibilityRole="header" style={styles.wordmark}>Lets<Text style={styles.go}>Go</Text>Ride</Text>
         <Text style={styles.tagline}>MOVE · EAT · SEND</Text>
-
         <View accessibilityLabel="LetsGoRide is getting ready" style={styles.routeStage}>
           <View style={styles.routeBase} />
           <Animated.View style={[styles.routeActive, { transform: [{ scaleX: routeWidth }] }]} />
@@ -79,7 +69,6 @@ export default function IndexScreen() {
           <Animated.View style={[styles.vehiclePoint, { transform: [{ translateX: reduceMotion ? 224 : travel }] }]} />
           <View style={styles.endPoint} />
         </View>
-
         <Text style={styles.copy}>Zimbabwe moves with LetsGoRide.</Text>
       </Animated.View>
       <Text style={styles.footer}>RIDE · FOOD · COURIER</Text>
@@ -95,7 +84,7 @@ const styles = StyleSheet.create({
   tagline: { marginTop: 6, color: "#686A66", fontSize: 9, fontWeight: "900", letterSpacing: 2.1 },
   routeStage: { width: 258, height: 54, marginTop: 44, justifyContent: "center" },
   routeBase: { position: "absolute", left: 14, right: 14, height: 2, borderRadius: 1, backgroundColor: "#D3D2CC" },
-  routeActive: { position: "absolute", left: 14, width: 230, height: 2, borderRadius: 1, backgroundColor: "#111111", transformOrigin: "left center" },
+  routeActive: { position: "absolute", left: 14, width: 230, height: 2, borderRadius: 1, backgroundColor: "#111111" },
   startPoint: { position: "absolute", left: 7, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: "#111111", backgroundColor: "#F7F4EC", alignItems: "center", justifyContent: "center" },
   startCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#111111" },
   vehiclePoint: { position: "absolute", left: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: "#111111", borderWidth: 2, borderColor: "#F7F4EC" },
