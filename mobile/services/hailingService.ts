@@ -1,5 +1,6 @@
 import { requestData } from "./api";
 import {
+  HailingCardSetup,
   HailingConfig,
   HailingCoordinate,
   HailingDispatchOffer,
@@ -26,7 +27,17 @@ export function createHailingQuote(data: { pickup: HailingPlace; dropoff: Hailin
   return requestData<HailingQuote>({ method: "POST", url: "/hailing/quotes", data });
 }
 
-export function requestHailingTrip(data: { quote_id: string; payment_method?: "cash"; client_request_id?: string; verify_ride_with_pin?: boolean }) {
+export function prepareHailingCardPayment(data: { quote_id: string; client_request_id: string }) {
+  return requestData<HailingCardSetup>({ method: "POST", url: "/hailing/payments/card/setup", data });
+}
+
+export function requestHailingTrip(data: {
+  quote_id: string;
+  payment_method?: "cash" | "card";
+  client_request_id?: string;
+  payment_intent_id?: string;
+  verify_ride_with_pin?: boolean;
+}) {
   return requestData<HailingTrip>({ method: "POST", url: "/hailing/trips", data });
 }
 
