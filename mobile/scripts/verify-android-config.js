@@ -24,7 +24,7 @@ const minSdk = catalogNumber(catalog, "minSdk");
 
 if (compileSdk < 36 || targetSdk < 36) fail(`API 36 is required, resolved compileSdk=${compileSdk}, targetSdk=${targetSdk}.`);
 if (app.android.package !== "com.letsgo.ride") fail("the existing Google Play package identity changed.");
-if (app.android.allowBackup !== true) fail("Android backup policy must be explicit.");
+if (app.android.allowBackup !== false) fail("Android backup must be disabled for release so restored devices cannot inherit authenticated session material.");
 
 const secureStorePlugin = app.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "expo-secure-store");
 if (!secureStorePlugin || secureStorePlugin[1]?.configureAndroidBackup !== true) {
@@ -50,6 +50,12 @@ const forbiddenPermissions = [
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.QUERY_ALL_PACKAGES",
   "android.permission.SCHEDULE_EXACT_ALARM",
+  "android.permission.RECORD_AUDIO",
+  "android.permission.WRITE_EXTERNAL_STORAGE",
+  "android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.SYSTEM_ALERT_WINDOW",
+  "android.permission.RECEIVE_BOOT_COMPLETED",
+  "android.permission.USE_FINGERPRINT",
 ];
 for (const permission of forbiddenPermissions) {
   if (app.android.permissions.includes(permission)) fail(`unnecessary permission declared: ${permission}.`);
@@ -58,8 +64,10 @@ for (const permission of forbiddenPermissions) {
 console.log(JSON.stringify({
   expo: pkg.dependencies.expo,
   reactNative: pkg.dependencies["react-native"],
+  appVersion: app.version,
   compileSdk,
   targetSdk,
   minSdk,
   applicationId: app.android.package,
+  allowBackup: app.android.allowBackup,
 }));

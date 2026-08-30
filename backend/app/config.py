@@ -39,11 +39,21 @@ class Settings:
         self.session_lifetime_days = max(1, int(os.getenv("SESSION_LIFETIME_DAYS", "30")))
         self.realtime_channel = os.getenv("REALTIME_CHANNEL", "letsgoride:realtime:v1").strip() or "letsgoride:realtime:v1"
         raw_hailing_enabled = os.getenv("HAILING_ENABLED")
+        if self.is_production and raw_hailing_enabled is None:
+            raise RuntimeError("Production HAILING_ENABLED must be explicitly configured.")
         self.hailing_enabled = (
             self._parse_bool(raw_hailing_enabled)
             if raw_hailing_enabled is not None
             else self.app_env.strip().lower() in {"development", "test", "staging"}
         )
+        self.stripe_enabled = self._parse_bool(os.getenv("STRIPE_ENABLED", "false"))
+        self.stripe_account_id = os.getenv("STRIPE_ACCOUNT_ID", "").strip()
+        self.stripe_currency = os.getenv("STRIPE_CURRENCY", "usd").strip().lower()
+        self.stripe_secret_key = self._get_env_first("STRIPE_SECRET_KEY")
+        self.stripe_publishable_key = self._get_env_first("STRIPE_PUBLISHABLE_KEY")
+        self.stripe_webhook_secret = self._get_env_first("STRIPE_WEBHOOK_SECRET")
+        if self.stripe_enabled:
+            self._validate_stripe_configuration()
 
         # Routing/geocoding is intentionally provider-driven. No mobile client receives this key.
         self.routing_provider = os.getenv("ROUTING_PROVIDER", "disabled").strip().lower()
@@ -209,6 +219,37 @@ class Settings:
     @property
     def is_production(self) -> bool:
         return self.app_env.strip().lower() == "production"
+
+    def _validate_stripe_configuration(self) -> None:
+        app_env = self.app_env.strip().lower()
+        if self.stripe_currency != "usd":
+            raise RuntimeError("STRIPE_CURRENCY must be usd for this release.")
+        missing = [
+            name
+            for name, value in {
+                "STRIPE_ACCOUNT_ID": self.stripe_account_id,
+                "STRIPE_SECRET_KEY": self.stripe_secret_key,
+                "STRIPE_PUBLISHABLE_KEY": self.stripe_publishable_key,
+                "STRIPE_WEBHOOK_SECRET": self.stripe_webhook_secret,
+            }.items()
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(f"Stripe is enabled but required configuration is missing: {', '.join(missing)}")
+        if app_env == "production":
+            if not self.stripe_secret_key.startswith("sk_live_"):
+                raise RuntimeError("Production Stripe configuration must use a live secret key.")
+            if not self.stripe_publishable_key.startswith("pk_live_"):
+                raise RuntimeError("Production Stripe configuration must use a live publishable key.")
+            if not self.stripe_webhook_secret.startswith("whsec_"):
+                raise RuntimeError("Production Stripe configuration must include a webhook signing secret.")
+        elif app_env == "staging":
+            if not self.stripe_secret_key.startswith("sk_test_"):
+                raise RuntimeError("Staging Stripe configuration must use a test secret key.")
+            if not self.stripe_publishable_key.startswith("pk_test_"):
+                raise RuntimeError("Staging Stripe configuration must use a test publishable key.")
+            if not self.stripe_webhook_secret.startswith("whsec_"):
+                raise RuntimeError("Staging Stripe configuration must include a webhook signing secret.")
 
 
 @lru_cache

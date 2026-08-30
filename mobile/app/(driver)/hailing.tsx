@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { RideClassVehicle } from "../../components/hailing/RideClassVehicle";
 import { AppNotice } from "../../components/ui/AppNotice";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
@@ -113,6 +114,7 @@ export default function DriverHailingScreen() {
           <View style={styles.classGrid}>
             {(["ECONOMY", "COMFORT", "XL"] as const).map((option) => (
               <Pressable key={option} accessibilityRole="button" accessibilityState={{ selected: rideClass === option }} onPress={() => setRideClass(option)} style={({ pressed }) => [styles.classPill, rideClass === option && styles.classPillActive, pressed && styles.pressed]}>
+                <RideClassVehicle rideClass={option} compact />
                 <Text style={[styles.classText, rideClass === option && styles.classTextActive]}>{option}</Text>
               </Pressable>
             ))}
@@ -170,7 +172,7 @@ const styles = StyleSheet.create({
   classCard: { gap: 10 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" },
   classGrid: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  classPill: { minHeight: 43, borderRadius: 999, paddingHorizontal: 14, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center" },
+  classPill: { minHeight: 82, minWidth: 104, borderRadius: 24, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center", gap: 3 },
   classPillActive: { backgroundColor: v2Theme.colors.ink, borderColor: v2Theme.colors.ink },
   classText: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "900" },
   classTextActive: { color: "#FFFFFF" },

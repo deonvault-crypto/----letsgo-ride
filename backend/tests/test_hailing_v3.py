@@ -87,6 +87,30 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(disabled["supported"])
         self.assertFalse(disabled["enabled"])
 
+    async def test_production_never_resolves_external_coordinates_as_zimbabwe(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "APP_ENV": "production",
+                "PUBLIC_API_BASE_URL": "https://letsgoride-v2-production.onrender.com",
+                "CORS_ORIGINS": "https://letsgoride.site",
+                "HAILING_ENABLED": "true",
+                "STAGING_EXTERNAL_TEST_CITY_ID": "zw-harare",
+                "staging_external_test_location": "true",
+            },
+            clear=True,
+        ):
+            from app.config import get_settings
+
+            get_settings.cache_clear()
+            try:
+                resolved = await resolve_service_area(52.2297, 21.0122)
+            finally:
+                get_settings.cache_clear()
+            self.assertFalse(resolved["supported"])
+            self.assertFalse(resolved["enabled"])
+            self.assertEqual(resolved["reason"], "outside_zimbabwe")
+
     async def test_quote_calculation_minimum_surge_and_expiration(self):
         city = await get_city("zw-harare")
         fare = calculate_fare(city, "ECONOMY", 0, 0)

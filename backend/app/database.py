@@ -122,6 +122,7 @@ class Database:
         """Create the small set of operational indexes required by live product queries."""
         if self.db is None:
             return
+        await self._prepare_unique_user_id_index()
         await self._prepare_unique_user_email_index()
         await self.db["courier_deliveries"].create_index(
             [("courier_user_id", 1), ("status", 1), ("updated_at", -1)],
@@ -239,6 +240,32 @@ class Database:
             name="hailing_quotes_by_user_expiry",
         )
 
+    async def _prepare_unique_user_id_index(self) -> None:
+        """Refuse startup if persisted users do not have durable unique app IDs."""
+        users = [self._clean(item) async for item in self.db["users"].find({}, {"id": 1})]
+        missing_count = 0
+        groups: Dict[str, int] = {}
+        for user in users:
+            user_id = str(user.get("id") or "").strip()
+            if not user_id:
+                missing_count += 1
+                continue
+            groups[user_id] = groups.get(user_id, 0) + 1
+        duplicate_ids = sorted(user_id for user_id, count in groups.items() if count > 1)
+        if missing_count or duplicate_ids:
+            import hashlib
+
+            fingerprints = [hashlib.sha256(user_id.encode()).hexdigest()[:12] for user_id in duplicate_ids[:10]]
+            raise RuntimeError(
+                "User ID integrity must be resolved before startup: "
+                f"missing={missing_count}, duplicate_fingerprints={fingerprints}"
+            )
+        await self.db["users"].create_index(
+            [("id", 1)],
+            name="unique_user_app_id",
+            unique=True,
+        )
+
     async def _prepare_unique_user_email_index(self) -> None:
         """Backfill normalized emails only after proving the existing set is unique."""
         users = [self._clean(item) async for item in self.db["users"].find({"email": {"$type": "string"}})]
@@ -298,6 +325,13 @@ class Database:
         return None
 
     async def insert_one(self, collection: str, item: Dict[str, Any]) -> Dict[str, Any]:
+        if collection == "users":
+            user_id = str(item.get("id") or "").strip()
+            if not user_id:
+                raise ValueError("users.id is required.")
+            existing = await self.find_one("users", {"id": user_id})
+            if existing:
+                raise ValueError("users.id must be unique.")
         if self.db is not None:
             await self.db[collection].insert_one(item)
             return self._clean(item)

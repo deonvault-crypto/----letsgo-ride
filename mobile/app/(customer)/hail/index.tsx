@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AuthRequiredModal } from "../../../components/auth/AuthRequiredModal";
+import { RideClassVehicle } from "../../../components/hailing/RideClassVehicle";
 import { AppNotice } from "../../../components/ui/AppNotice";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
@@ -132,6 +133,7 @@ export default function HailingHomeScreen() {
                 onPress={() => { setSelectedClass(option.id); setQuote(null); }}
                 style={({ pressed }) => [styles.classPill, activeClass && styles.classPillActive, pressed && styles.pressed]}
               >
+                <RideClassVehicle rideClass={option.id} compact />
                 <Text style={[styles.classText, activeClass && styles.classTextActive]}>{option.label || option.id}</Text>
               </Pressable>
             );
@@ -203,7 +205,7 @@ const styles = StyleSheet.create({
   section: { gap: 10 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
   classGrid: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  classPill: { minHeight: 44, borderRadius: 999, paddingHorizontal: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center" },
+  classPill: { minHeight: 82, minWidth: 104, borderRadius: 24, paddingHorizontal: 14, paddingVertical: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center", gap: 3 },
   classPillActive: { backgroundColor: v2Theme.colors.ink, borderColor: v2Theme.colors.ink },
   classText: { color: v2Theme.colors.inkSecondary, fontSize: 12, fontWeight: "900" },
   classTextActive: { color: "#FFFFFF" },

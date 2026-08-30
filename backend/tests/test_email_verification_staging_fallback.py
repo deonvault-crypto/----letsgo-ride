@@ -68,6 +68,7 @@ class EmailVerificationStagingFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "MOCK_OTP": "123456",
                 "CORS_ORIGINS": "https://letsgoride.site",
                 "PUBLIC_API_BASE_URL": "https://letsgoride-v2-production.onrender.com",
+                "HAILING_ENABLED": "true",
             },
             clear=False,
         ):

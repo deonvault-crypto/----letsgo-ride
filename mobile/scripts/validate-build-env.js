@@ -33,6 +33,10 @@ if (profile === "production" && parsedApiUrl?.origin !== PRODUCTION_API_ORIGIN) 
   throw new Error(`Production builds must explicitly target ${PRODUCTION_API_ORIGIN}.`);
 }
 
+if (profile === "production" && apiBaseUrl.includes("staging")) {
+  throw new Error("Production builds must never bundle a staging API origin.");
+}
+
 if ((profile === "preview" || profile === "production") && platform === "android") {
   if (!googleMapsAndroidApiKey) {
     throw new Error("GOOGLE_MAPS_ANDROID_API_KEY is required for Android release builds.");

@@ -87,7 +87,7 @@ async def create_quote(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[st
             include_polyline=True,
         )
     except RoutingError as exc:
-        raise RuntimeError("Route and fare are temporarily unavailable.") from exc
+        raise RuntimeError("Unable to calculate this route right now. Please try again.") from exc
 
     fare = calculate_fare(
         city,
@@ -123,4 +123,3 @@ def public_quote(quote: Dict[str, Any]) -> Dict[str, Any]:
         "expires_at": quote.get("expires_at"),
         **fare,
     }
-
