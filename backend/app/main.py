@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import activity, admin, auth, conversations, courier, drivers, food, hailing, health, media, merchant, notifications, operations, public_tracking, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist, worker_finance
+from app.routers import activity, admin, auth, conversations, courier, drivers, food, hailing, health, media, merchant, notifications, operations, payments, public_tracking, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist, worker_finance
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
@@ -18,6 +18,7 @@ from app.services.product_hardening_storage_service import ensure_product_harden
 from app.services.ride_service import ride_lifecycle_sweeper, seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
+from app.services.stripe_payment_service import stripe_payment_reconciliation_sweeper
 from app.utils import api_success
 
 
@@ -34,6 +35,8 @@ ride_lifecycle_stop_event: asyncio.Event | None = None
 ride_lifecycle_task: asyncio.Task | None = None
 hailing_dispatch_stop_event: asyncio.Event | None = None
 hailing_dispatch_task: asyncio.Task | None = None
+stripe_payment_stop_event: asyncio.Event | None = None
+stripe_payment_task: asyncio.Task | None = None
 staging_routing_smoke_task: asyncio.Task | None = None
 staging_courier_dispatch_smoke_task: asyncio.Task | None = None
 
@@ -99,7 +102,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.on_event("startup")
 async def on_startup():
-    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     await database.connect()
     await ensure_product_hardening_indexes()
     await realtime_event_service.start()
@@ -118,6 +121,14 @@ async def on_startup():
         hailing_dispatch_stop_event = None
         hailing_dispatch_task = None
         logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")
+    if settings.stripe_configured:
+        stripe_payment_stop_event = asyncio.Event()
+        stripe_payment_task = asyncio.create_task(stripe_payment_reconciliation_sweeper(stripe_payment_stop_event))
+        logger.info("stripe_payment_runtime enabled=true account_id=%s", settings.stripe_account_id or "configured")
+    else:
+        stripe_payment_stop_event = None
+        stripe_payment_task = None
+        logger.info("stripe_payment_runtime enabled=false")
     logger.info(
         "routing_smoke_gate app_env=%s enabled=%s configured=%s provider=%s region=%s",
         settings.app_env,
@@ -141,7 +152,7 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     if ride_lifecycle_stop_event:
         ride_lifecycle_stop_event.set()
     if ride_lifecycle_task:
@@ -150,6 +161,10 @@ async def on_shutdown():
         hailing_dispatch_stop_event.set()
     if hailing_dispatch_task:
         hailing_dispatch_task.cancel()
+    if stripe_payment_stop_event:
+        stripe_payment_stop_event.set()
+    if stripe_payment_task:
+        stripe_payment_task.cancel()
     if staging_routing_smoke_task:
         staging_routing_smoke_task.cancel()
     if staging_courier_dispatch_smoke_task:
@@ -171,6 +186,7 @@ app.include_router(realtime.router)
 app.include_router(drivers.router)
 app.include_router(hailing.router)
 app.include_router(hailing.admin_router)
+app.include_router(payments.router)
 app.include_router(public_tracking.router)
 app.include_router(courier.router)
 app.include_router(food.router)
