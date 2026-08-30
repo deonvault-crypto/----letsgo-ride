@@ -18,6 +18,13 @@ export type HailingCoordinate = {
   longitude: number;
 };
 
+export type HailingLiveLocation = HailingCoordinate & {
+  heading?: number | null;
+  speed?: number | null;
+  accuracy?: number | null;
+  updated_at?: string | null;
+};
+
 export type HailingPlace = {
   formatted_address: string;
   latitude: number;
@@ -118,6 +125,7 @@ export type HailingParticipantSnapshot = {
   name?: string;
   phone?: string | null;
   rating?: number | null;
+  review_count?: number | null;
   vehicle?: string | null;
   plate?: string | null;
   profile_photo_url?: string | null;
@@ -149,6 +157,7 @@ export type HailingTrip = {
   driver?: HailingParticipantSnapshot | null;
   passenger?: HailingParticipantSnapshot | null;
   vehicle?: HailingVehicleSnapshot | null;
+  driver_location?: HailingLiveLocation | null;
   trip_pin?: string | null;
   search_expires_at?: string | null;
   created_at: string;
@@ -158,6 +167,12 @@ export type HailingTrip = {
   started_at?: string | null;
   completed_at?: string | null;
   cancelled_at?: string | null;
+};
+
+export type HailingTripShare = {
+  share_url: string;
+  expires_at: string;
+  status: HailingTripStatus;
 };
 
 export type HailingDriverStatus = {
