@@ -251,6 +251,43 @@ def _money(value: Any) -> float:
         return 0.0
 
 
+def _driver_trip_financials(trip: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply LetsGoRide's worker settlement policy to a completed Ride Now trip.
+
+    Cash is collected directly by the driver and belongs to the driver in full.
+    LetsGoRide commission is charged only on card-paid Ride Now trips. Historical
+    cash trips may still contain a quoted platform_commission in their fare snapshot;
+    that quoted value is intentionally ignored here so it can never become driver debt.
+    """
+
+    fare = trip.get("fare") or {}
+    gross = _money(fare.get("total_fare"))
+    payment_method = "card" if str(trip.get("payment_method") or "cash").lower() == "card" else "cash"
+
+    if payment_method == "card":
+        commission = min(gross, max(0.0, _money(fare.get("platform_commission"))))
+        worker_earnings = round(max(0.0, gross - commission), 2)
+        return {
+            "payment_method": payment_method,
+            "gross_usd": gross,
+            "platform_commission_usd": commission,
+            "worker_earnings_usd": worker_earnings,
+            "cash_collected_usd": 0.0,
+            "digital_earnings_usd": worker_earnings,
+            "settlement_state": "accrued",
+        }
+
+    return {
+        "payment_method": "cash",
+        "gross_usd": gross,
+        "platform_commission_usd": 0.0,
+        "worker_earnings_usd": gross,
+        "cash_collected_usd": gross,
+        "digital_earnings_usd": 0.0,
+        "settlement_state": "cash_collected_by_driver",
+    }
+
+
 async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
@@ -259,20 +296,15 @@ async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
     entries = []
     gross = commission = net = cash_collected = digital_earnings = 0.0
     for trip in trips:
-        fare = trip.get("fare") or {}
-        trip_gross = _money(fare.get("total_fare"))
-        trip_commission = _money(fare.get("platform_commission"))
-        trip_net = round(max(0.0, trip_gross - trip_commission), 2)
+        settlement = _driver_trip_financials(trip)
+        trip_gross = settlement["gross_usd"]
+        trip_commission = settlement["platform_commission_usd"]
+        trip_net = settlement["worker_earnings_usd"]
         gross += trip_gross
         commission += trip_commission
         net += trip_net
-        payment_method = str(trip.get("payment_method") or "cash").lower()
-        if payment_method == "cash":
-            cash_collected += trip_gross
-            settlement_state = "cash_collected_by_driver"
-        else:
-            digital_earnings += trip_net
-            settlement_state = "accrued"
+        cash_collected += settlement["cash_collected_usd"]
+        digital_earnings += settlement["digital_earnings_usd"]
         entries.append(
             {
                 "id": f"hailing:{trip['id']}",
@@ -282,8 +314,8 @@ async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
                 "gross_usd": trip_gross,
                 "platform_commission_usd": trip_commission,
                 "worker_earnings_usd": trip_net,
-                "payment_method": payment_method,
-                "settlement_state": settlement_state,
+                "payment_method": settlement["payment_method"],
+                "settlement_state": settlement["settlement_state"],
                 "occurred_at": trip.get("completed_at") or trip.get("updated_at"),
             }
         )
@@ -299,7 +331,7 @@ async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
         "net_earnings_usd": round(net, 2),
         "cash_collected_usd": round(cash_collected, 2),
         "digital_earnings_usd": round(digital_earnings, 2),
-        "amount_due_to_platform_usd": round(commission if cash_collected else 0.0, 2),
+        "amount_due_to_platform_usd": 0.0,
         "platform_commission_usd": round(commission, 2),
         "paid_out_usd": round(paid_out, 2),
         "ledger": entries[:100],
