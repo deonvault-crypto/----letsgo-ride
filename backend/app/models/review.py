@@ -1,6 +1,6 @@
 from typing import Dict, Literal, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 ReviewRole = Literal["driver", "passenger", "courier", "restaurant", "customer"]
@@ -57,3 +57,9 @@ class ReviewCreateBody(BaseModel):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    @model_validator(mode="after")
+    def safety_reports_only_target_people(self):
+        if self.transaction_type == "food_restaurant" and self.safety_report_requested:
+            raise ValueError("Safety follow-up is for reviews of people, not restaurant quality reviews.")
+        return self
