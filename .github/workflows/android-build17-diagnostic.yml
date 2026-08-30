@@ -32,28 +32,87 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Inspect Android Build 17
+      - name: Extract Android Build 17 Gradle failure
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$EXPO_TOKEN"
-          npx eas-cli@latest build:view 38f6bc42-d78c-40cb-835e-b076701e2aa2 --json > /tmp/eas-build.json
           python - <<'PY'
           import json
-          with open('/tmp/eas-build.json', encoding='utf-8') as handle:
-              build = json.load(handle)
-          safe = {
-              'id': build.get('id'),
-              'status': build.get('status'),
-              'platform': build.get('platform'),
-              'error': build.get('error'),
-              'buildProfile': build.get('buildProfile'),
-              'appVersion': build.get('appVersion'),
-              'appBuildVersion': build.get('appBuildVersion'),
-              'gitCommitHash': build.get('gitCommitHash'),
-              'logs': build.get('logs'),
+          import os
+          import re
+          import urllib.request
+
+          build_id = "38f6bc42-d78c-40cb-835e-b076701e2aa2"
+          query = """
+          query BuildById($buildId: ID!) {
+            builds {
+              byId(buildId: $buildId) {
+                id
+                status
+                error { errorCode message }
+                logFiles
+              }
+            }
           }
-          print(json.dumps(safe, indent=2, default=str))
+          """
+          body = json.dumps({"query": query, "variables": {"buildId": build_id}}).encode()
+          request = urllib.request.Request(
+              "https://api.expo.dev/graphql",
+              data=body,
+              headers={
+                  "Authorization": f"Bearer {os.environ['EXPO_TOKEN']}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              payload = json.load(response)
+          if payload.get("errors"):
+              raise SystemExit("Expo GraphQL returned an error while retrieving build logs")
+          build = (((payload.get("data") or {}).get("builds") or {}).get("byId") or {})
+          urls = build.get("logFiles") or []
+          print(json.dumps({
+              "id": build.get("id"),
+              "status": build.get("status"),
+              "error": build.get("error"),
+              "log_file_count": len(urls),
+          }, indent=2))
+          if not urls:
+              raise SystemExit("No EAS log files were returned for the failed build")
+
+          lines = []
+          for url in urls:
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  text = response.read().decode("utf-8", errors="replace")
+              lines.extend(text.splitlines())
+
+          markers = (
+              "FAILURE:",
+              "What went wrong:",
+              "Execution failed for task",
+              "A failure occurred while executing",
+              "Caused by:",
+              "error:",
+              "ERROR",
+              "R8:",
+              "Duplicate class",
+              "Could not resolve",
+              "Manifest merger failed",
+              "Resource shrinker",
+          )
+          indexes = [i for i, line in enumerate(lines) if any(marker.lower() in line.lower() for marker in markers)]
+          if not indexes:
+              print("No canonical Gradle error marker found. Last 160 log lines:")
+              selected = lines[-160:]
+          else:
+              start = max(0, min(indexes) - 12)
+              end = min(len(lines), max(indexes) + 45)
+              selected = lines[start:end]
+          # Strip any accidental signed URL/query-string material before emitting diagnostics.
+          for line in selected[-260:]:
+              line = re.sub(r"https?://\S+", "<url-redacted>", line)
+              print(line[:1200])
           PY
