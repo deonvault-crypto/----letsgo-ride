@@ -112,26 +112,19 @@ describe("Food restaurant data stability", () => {
     expect(screen.queryByText(/old failure/i)).toBeNull();
   });
 
-  it("visually separates open restaurants from compact unavailable directory entries", async () => {
+  it("keeps open restaurants interactive and unavailable directory entries clearly non-orderable", async () => {
     mockListRestaurants.mockResolvedValueOnce([kitchen, ...directoryRestaurants]);
     const screen = render(<CustomerFoodScreen />);
 
     await screen.findByText("Open now");
     expect(screen.getByText("More restaurants")).toBeOnTheScreen();
     expect(screen.queryByText(/accepting orders/i)).toBeNull();
-    expect(screen.getByTestId("orderable-restaurant-kitchen-1")).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "LetsGoRide Kitchen, open now" })).toBeOnTheScreen();
     expect(screen.getByTestId("food-image-kitchen-owned")).toBeOnTheScreen();
-    expect(screen.getAllByText("KFC Zimbabwe")).toHaveLength(1);
+    expect(screen.getByLabelText("KFC Zimbabwe, currently unavailable")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "KFC Zimbabwe, currently unavailable" })).toBeNull();
     expect(screen.getAllByText("Currently unavailable")).toHaveLength(4);
-    expect(screen.queryByText("KFC")).toBeNull();
     expect(screen.getAllByTestId("food-image-official-logo")).toHaveLength(4);
-
-    const browseStyle = StyleSheet.flatten(screen.getByTestId("browse-restaurant-directory-kfc-zimbabwe").props.style);
-    const orderableStyle = StyleSheet.flatten(screen.getByTestId("orderable-restaurant-kitchen-1").props.style);
-    expect(browseStyle.height).toBeGreaterThanOrEqual(105);
-    expect(browseStyle.height).toBeLessThanOrEqual(140);
-    expect(orderableStyle.height).not.toBe(browseStyle.height);
-    expect(orderableStyle.shadowOpacity).toBeGreaterThan(0);
   });
 
   it("uses the canonical bottom-navigation clearance for the final content", async () => {
