@@ -20,6 +20,7 @@ from app.services.ride_service import seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
 from app.services.stripe_reconciliation_service import stripe_payment_reconciliation_sweeper_bounded
+from app.services.worker_finance_index_service import ensure_worker_finance_indexes
 from app.utils import api_success
 
 
@@ -106,6 +107,7 @@ async def on_startup():
     global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     await database.connect()
     await ensure_product_hardening_indexes()
+    await ensure_worker_finance_indexes()
     await realtime_event_service.start()
     await ensure_admin_seed_user()
     if settings.enable_demo_seed:
