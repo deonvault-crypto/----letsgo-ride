@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - hardening/scale-production-prelaunch
+  pull_request:
+    branches:
+      - platform-v2-m1-m6
 
 permissions:
   contents: read
 
 concurrency:
-  group: scale-hardening-ci-${{ github.ref_name }}
+  group: scale-hardening-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -22,6 +25,8 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -44,6 +49,8 @@ jobs:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
