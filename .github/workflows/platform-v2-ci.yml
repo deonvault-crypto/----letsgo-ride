@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - platform-v2-m1-m6
   push:
     branches:
       - main
