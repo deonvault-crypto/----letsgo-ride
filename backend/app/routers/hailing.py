@@ -20,6 +20,7 @@ from app.models.hailing import (
 )
 from app.services.audit_service import write_audit_log
 from app.services.conversation_service import ensure_conversation_for_hailing_trip, enrich_conversation
+from app.services.driver_hailing_finance_service import driver_daily_stats
 from app.services.hailing_city_service import (
     enabled_ride_classes,
     list_service_areas,
@@ -39,7 +40,6 @@ from app.services.hailing_trip_service import (
     driver_go_offline,
     driver_go_online,
     driver_profile_for_user,
-    driver_stats,
     get_authorized_trip,
     mark_arrived,
     public_trip,
@@ -173,7 +173,7 @@ async def driver_status(user=Depends(get_current_user)):
         api_error(str(exc), 403)
     presence = await database.find_one("hailing_driver_presence", {"driver_id": driver["id"]})
     active = await active_trip_for_user(user)
-    stats = await driver_stats(user)
+    stats = await driver_daily_stats(str(driver["id"]))
     return api_success({
         "driver_id": driver["id"],
         "online": bool(presence and presence.get("status") != "offline"),
