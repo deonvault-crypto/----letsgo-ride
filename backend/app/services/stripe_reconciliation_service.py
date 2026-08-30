@@ -17,21 +17,25 @@ from app.utils import now_iso
 logger = logging.getLogger(__name__)
 STRIPE_RECONCILIATION_BATCH = 50
 STRIPE_RECONCILIATION_SECONDS = 15
+# Only states that can reasonably recover automatically belong in the hot
+# reconciliation queue. A terminal `failed` record represents malformed/missing
+# payment state (for example a missing PaymentIntent) and must be surfaced for
+# manual/support review instead of calling Stripe every 15 seconds forever.
 UNRESOLVED_PAYMENT_STATUSES = [
     None,
     "pending",
     "authorized",
     "capture_pending",
     "cancel_pending",
-    "failed",
 ]
 
 
 async def reconcile_hailing_card_payments_bounded() -> Dict[str, int]:
-    """Reconcile only unresolved terminal card rides in small indexed batches.
+    """Reconcile only recoverable terminal card rides in small indexed batches.
 
     Stripe webhooks remain primary. This is a restrained recovery path for missed
-    webhooks/provider hiccups, not a recurring scan of historical settled rides.
+    webhooks/provider hiccups, not a recurring scan of historical settled rides or
+    permanently failed/malformed payment records.
     """
     completed = await database.find_many(
         "hailing_trips",
