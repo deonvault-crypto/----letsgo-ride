@@ -1,0 +1,58 @@
+name: EAS TestFlight Release
+
+on:
+  push:
+    branches:
+      - testflight-driver-map-release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-testflight-release
+  cancel-in-progress: false
+
+jobs:
+  queue-testflight:
+    name: Queue iOS TestFlight build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is required for the TestFlight release workflow."
+            exit 1
+          fi
+
+      - name: Build and submit to TestFlight
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >-
+          npx eas-cli@latest build
+          --platform ios
+          --profile testflight
+          --auto-submit-with-profile production
+          --non-interactive
+          --no-wait
+          --message "Driver map-first realtime Ride Now"
