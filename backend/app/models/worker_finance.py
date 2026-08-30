@@ -49,8 +49,43 @@ class PayoutMethodCreateBody(BaseModel):
         return self
 
 
-class PayoutMethodUpdateBody(PayoutMethodCreateBody):
+class PayoutMethodUpdateBody(BaseModel):
+    """Partial payout method edit.
+
+    The method type is intentionally immutable. Secret destination fields are optional so
+    a worker can edit safe metadata without re-entering an EcoCash or bank account number.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_holder_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    mobile_number: Optional[str] = Field(default=None, min_length=7, max_length=32)
+    bank_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    account_number: Optional[str] = Field(default=None, min_length=4, max_length=64)
+    branch_name: Optional[str] = Field(default=None, max_length=120)
+    branch_code: Optional[str] = Field(default=None, max_length=40)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
     make_default: bool = False
+
+    @field_validator("account_holder_name", "mobile_number", "bank_name", "account_number", "branch_name", "branch_code", mode="before")
+    @classmethod
+    def strip_text(cls, value):
+        if value is None:
+            return None
+        cleaned = " ".join(str(value).strip().split())
+        return cleaned or None
+
+    @field_validator("currency")
+    @classmethod
+    def normalize_currency(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip().upper() if value else value
+
+    @model_validator(mode="after")
+    def require_a_change(self):
+        editable_fields = self.model_fields_set - {"make_default"}
+        if not editable_fields and not self.make_default:
+            raise ValueError("No payout method changes were provided.")
+        return self
 
 
 class PayoutMethodDefaultBody(BaseModel):
