@@ -77,6 +77,20 @@ describe("production release configuration", () => {
       enableMinifyInReleaseBuilds: true,
       enableShrinkResourcesInReleaseBuilds: true,
     });
+
+    const stripePushProvisioningWarnings = [
+      "com.stripe.android.pushProvisioning.PushProvisioningActivity$g",
+      "com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Args",
+      "com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Error",
+      "com.stripe.android.pushProvisioning.PushProvisioningActivityStarter",
+      "com.stripe.android.pushProvisioning.PushProvisioningEphemeralKeyProvider",
+    ];
+    const extraProguardRules = String(buildProperties[1].android.extraProguardRules || "");
+    for (const className of stripePushProvisioningWarnings) {
+      expect(extraProguardRules).toContain(`-dontwarn ${className}`);
+    }
+    expect(extraProguardRules).not.toContain("-ignorewarnings");
+    expect(extraProguardRules).not.toContain("-dontwarn com.stripe.android.**");
   });
 
   it("fails closed when protected Android Maps or Firebase build configuration is absent", () => {
