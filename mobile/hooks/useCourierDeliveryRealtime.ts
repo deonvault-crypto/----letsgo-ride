@@ -7,13 +7,17 @@ import { applyCourierDeliveryEvent, authoritativeDelivery } from "../utils/couri
 
 
 const PIN_VISIBLE = new Set<CourierStatus>(["PICKED_UP", "IN_TRANSIT", "ARRIVING", "DELIVERED"]);
+const TERMINAL_STATUSES = new Set<CourierStatus>(["DELIVERED", "CANCELLED", "FAILED"]);
+const CONNECTED_RECONCILIATION_MS = 15_000;
+const DISCONNECTED_RECONCILIATION_MS = 5_500;
+const MAX_DISCONNECTED_RECONCILIATION_MS = 30_000;
 
 export function useCourierDeliveryRealtime(
   deliveryId: string | undefined,
   options: { includeHandoffPin?: boolean } = {},
 ) {
   const { includeHandoffPin = false } = options;
-  const { reconciliationRevision, subscribe } = useRealtime();
+  const { connectionState, reconciliationRevision, subscribe } = useRealtime();
   const [delivery, setDelivery] = useState<CourierDelivery | null>(null);
   const [events, setEvents] = useState<CourierEvent[]>([]);
   const [handoff, setHandoff] = useState<CourierDeliveryPin | null>(null);
@@ -27,6 +31,13 @@ export function useCourierDeliveryRealtime(
   const opened = useRef(false);
   const pinRequested = useRef(false);
   const seenReconciliationRevision = useRef(reconciliationRevision);
+  const reconciliationFailures = useRef(0);
+  const reconciliationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearReconciliationTimer = useCallback(() => {
+    if (reconciliationTimer.current) clearTimeout(reconciliationTimer.current);
+    reconciliationTimer.current = null;
+  }, []);
 
   const acceptDelivery = useCallback((next: CourierDelivery) => {
     const accepted = authoritativeDelivery(deliveryRef.current, next);
@@ -46,11 +57,13 @@ export function useCourierDeliveryRealtime(
           getCourierEvents(deliveryId),
         ]);
         if (!mounted.current || deliveryIdRef.current !== deliveryId) return;
+        reconciliationFailures.current = 0;
         acceptDelivery(nextDelivery);
         setEvents(nextEvents);
         setError(null);
       } catch (err) {
         if (!mounted.current || deliveryIdRef.current !== deliveryId) return;
+        reconciliationFailures.current = Math.min(reconciliationFailures.current + 1, 4);
         if (showInitialError || !deliveryRef.current) {
           setError(err instanceof Error ? err.message : "Unable to load this delivery.");
         } else {
@@ -70,6 +83,8 @@ export function useCourierDeliveryRealtime(
     opened.current = false;
     deliveryRef.current = null;
     pinRequested.current = false;
+    reconciliationFailures.current = 0;
+    clearReconciliationTimer();
     setDelivery(null);
     setEvents([]);
     setHandoff(null);
@@ -80,8 +95,9 @@ export function useCourierDeliveryRealtime(
     }
     return () => {
       mounted.current = false;
+      clearReconciliationTimer();
     };
-  }, [deliveryId, reconcile]);
+  }, [clearReconciliationTimer, deliveryId, reconcile]);
 
   useEffect(() => subscribe((event) => {
     const current = deliveryRef.current;
@@ -104,6 +120,36 @@ export function useCourierDeliveryRealtime(
     seenReconciliationRevision.current = reconciliationRevision;
     if (opened.current) void reconcile(false);
   }, [reconcile, reconciliationRevision]);
+
+  // WebSocket events remain primary. While an active delivery exists, REST performs
+  // a slow safety reconciliation even when the socket says connected so a single
+  // lost event cannot freeze the courier/customer state. Network failures back off.
+  useEffect(() => {
+    clearReconciliationTimer();
+    const current = deliveryRef.current;
+    if (!deliveryId || !current || TERMINAL_STATUSES.has(current.status)) return undefined;
+
+    let cancelled = false;
+    const schedule = () => {
+      const failures = reconciliationFailures.current;
+      const connected = connectionState === "connected";
+      const base = connected
+        ? CONNECTED_RECONCILIATION_MS
+        : Math.min(MAX_DISCONNECTED_RECONCILIATION_MS, DISCONNECTED_RECONCILIATION_MS * (2 ** failures));
+      const jitterWindow = connected ? 5_000 : Math.max(1_500, Math.round(base * 0.2));
+      const delay = base + Math.floor(Math.random() * jitterWindow);
+      reconciliationTimer.current = setTimeout(async () => {
+        await reconcile(false);
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+
+    return () => {
+      cancelled = true;
+      clearReconciliationTimer();
+    };
+  }, [clearReconciliationTimer, connectionState, delivery?.id, delivery?.status, deliveryId, reconcile]);
 
   useEffect(() => {
     if (!includeHandoffPin || !deliveryId || !delivery || !PIN_VISIBLE.has(delivery.status) || pinRequested.current) return;
