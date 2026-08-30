@@ -42,8 +42,8 @@ if (
   fail("API 36 and release R8/resource shrinking must be explicitly pinned.");
 }
 
+const permissions = new Set(app.android.permissions || []);
 const forbiddenPermissions = [
-  "android.permission.ACCESS_BACKGROUND_LOCATION",
   "android.permission.READ_CONTACTS",
   "android.permission.WRITE_CONTACTS",
   "android.permission.READ_MEDIA_IMAGES",
@@ -52,7 +52,25 @@ const forbiddenPermissions = [
   "android.permission.SCHEDULE_EXACT_ALARM",
 ];
 for (const permission of forbiddenPermissions) {
-  if (app.android.permissions.includes(permission)) fail(`unnecessary permission declared: ${permission}.`);
+  if (permissions.has(permission)) fail(`unnecessary permission declared: ${permission}.`);
+}
+
+const backgroundLocationDeclared = permissions.has("android.permission.ACCESS_BACKGROUND_LOCATION");
+if (backgroundLocationDeclared) {
+  if (!pkg.dependencies["expo-task-manager"]) {
+    fail("background location requires expo-task-manager to be installed and locked.");
+  }
+  const locationPlugin = app.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "expo-location");
+  const locationConfig = locationPlugin?.[1];
+  if (
+    locationConfig?.isAndroidBackgroundLocationEnabled !== true
+    || locationConfig?.isAndroidForegroundServiceEnabled !== true
+  ) {
+    fail("background location must be explicitly enabled through the Expo Location plugin.");
+  }
+  if (!permissions.has("android.permission.FOREGROUND_SERVICE") || !permissions.has("android.permission.FOREGROUND_SERVICE_LOCATION")) {
+    fail("active-trip background location requires Android foreground-service location permissions.");
+  }
 }
 
 console.log(JSON.stringify({
@@ -62,4 +80,5 @@ console.log(JSON.stringify({
   targetSdk,
   minSdk,
   applicationId: app.android.package,
+  backgroundLocationDeclared,
 }));
