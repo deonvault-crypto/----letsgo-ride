@@ -1,122 +1,102 @@
 from __future__ import annotations
 
+import asyncio
+import os
+from collections import defaultdict
 from copy import deepcopy
-import logging
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ReturnDocument
+from pymongo import ASCENDING, DESCENDING, GEOSPHERE
+from pymongo.errors import DuplicateKeyError
 
-from app.config import get_settings
+from .config import settings
+
+try:
+    from motor.motor_asyncio import AsyncIOMotorClient
+except Exception:  # pragma: no cover
+    AsyncIOMotorClient = None
 
 
 COLLECTION_NAMES = [
     "users",
-    "drivers",
-    "vehicles",
-    "rides",
-    "ride_requests",
-    "trips",
-    "reports",
-    "reviews",
-    "support_messages",
-    "waitlist",
-    "passenger_interests",
+    "refresh_tokens",
+    "password_resets",
+    "email_verifications",
     "driver_applications",
-    "audit_logs",
-    "conversations",
-    "messages",
-    "app_notifications",
-    "device_push_tokens",
-    "notification_preferences",
-    "trip_events",
-    "verification_events",
-    "courier_deliveries",
-    "courier_events",
-    "courier_profiles",
-    "courier_location_snapshots",
-    "courier_online_sessions",
-    "delivery_handoffs",
-    "work_availability",
     "worker_applications",
+    "drivers",
+    "courier_profiles",
     "courier_shifts",
     "courier_shift_bookings",
+    "courier_online_sessions",
+    "courier_deliveries",
+    "courier_events",
+    "courier_location_snapshots",
     "restaurants",
-    "restaurant_categories",
-    "menu_categories",
-    "menu_items",
     "food_orders",
     "food_order_events",
+    "rides",
+    "ride_requests",
+    "notifications",
+    "conversations",
+    "messages",
+    "reports",
     "hailing_cities",
     "hailing_driver_presence",
-    "hailing_quotes",
     "hailing_trips",
     "hailing_dispatch_offers",
+    "hailing_quotes",
     "hailing_trip_events",
+    "audit_logs",
 ]
-
-PERSISTENT_DATABASE_ENVS = {"staging", "production"}
-
-
-logger = logging.getLogger(__name__)
 
 
 class Database:
-    def __init__(self) -> None:
-        self.client: Optional[AsyncIOMotorClient] = None
-        self.db: Any = None
-        self.status = "not_configured"
-        self.memory: Dict[str, List[Dict[str, Any]]] = {
-            name: [] for name in COLLECTION_NAMES
-        }
-
-    async def connect(self, *, ensure_indexes: bool = True) -> None:
-        settings = get_settings()
-        app_env = str(settings.app_env or "development").strip().lower()
-        requires_persistent_database = app_env in PERSISTENT_DATABASE_ENVS
-
-        if not settings.mongodb_uri:
-            self.status = "not_configured"
-            if requires_persistent_database:
-                logger.error(
-                    "MongoDB is not configured for %s; refusing to start with in-memory storage.",
-                    app_env,
-                )
-                raise RuntimeError(
-                    f"MongoDB is required when APP_ENV={app_env}; MONGODB_URI is not configured."
-                )
-            return
-
-        try:
-            self.client = AsyncIOMotorClient(settings.mongodb_uri)
-            self.db = self.client[settings.mongodb_db_name]
-            await self.client.admin.command("ping")
-            if ensure_indexes:
-                await self.ensure_indexes()
-            self.status = "connected"
-        except Exception as exc:
-            self.client = None
-            self.db = None
-            self.status = "unavailable"
-            if requires_persistent_database:
-                logger.error(
-                    "MongoDB connection failed for %s; refusing to start with in-memory storage. error_type=%s",
-                    app_env,
-                    exc.__class__.__name__,
-                )
-                raise RuntimeError(
-                    f"MongoDB is required when APP_ENV={app_env}, but the connection is unavailable."
-                ) from exc
-
-    def _requires_persistent_database(self) -> bool:
-        app_env = str(get_settings().app_env or "development").strip().lower()
-        return app_env in PERSISTENT_DATABASE_ENVS
+    def __init__(self):
+        self.client = None
+        self.db = None
+        self.memory: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self._memory_lock = asyncio.Lock()
 
     def _ensure_memory_allowed(self) -> None:
-        if self._requires_persistent_database():
-            raise RuntimeError(
-                "Persistent database is required in this environment; in-memory storage is disabled."
-            )
+        if settings.ALLOW_MEMORY_DB:
+            return
+        raise RuntimeError(
+            "MongoDB is unavailable and the in-memory database is disabled for this environment."
+        )
+
+    async def connect(self) -> None:
+        if self.db is not None:
+            return
+        if not settings.MONGODB_URI or AsyncIOMotorClient is None:
+            self._ensure_memory_allowed()
+            return
+        try:
+            self.client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=5000)
+            self.db = self.client[settings.DB_NAME]
+            await self.client.admin.command("ping")
+            await self.ensure_indexes()
+        except Exception:
+            if self.client is not None:
+                self.client.close()
+            self.client = None
+            self.db = None
+            self._ensure_memory_allowed()
+            raise
+
+    async def disconnect(self) -> None:
+        if self.client is not None:
+            self.client.close()
+        self.client = None
+        self.db = None
+
+    def _clean(self, doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if doc is None:
+            return None
+        result = dict(doc)
+        result.pop("_id", None)
+        return result
 
     async def ensure_indexes(self) -> None:
         """Create the small set of operational indexes required by live product queries."""
@@ -186,7 +166,7 @@ class Database:
         await self.db["courier_location_snapshots"].create_index(
             [("expires_at", 1)],
             expireAfterSeconds=0,
-            name="courier_location_snapshots_ttl",
+            name="courier_telemetry_ttl",
         )
         await self.db["drivers"].create_index(
             [("created_at", -1), ("id", 1)],
@@ -219,7 +199,7 @@ class Database:
             unique=True,
         )
         await self.db["hailing_driver_presence"].create_index(
-            [("location", "2dsphere")],
+            [("location", GEOSPHERE)],
             name="hailing_presence_location",
         )
         await self.db["hailing_driver_presence"].create_index(
@@ -327,29 +307,96 @@ class Database:
         groups: Dict[str, List[str]] = {}
         for user in users:
             normalized = str(user.get("email") or "").strip().lower()
-            if normalized:
-                groups.setdefault(normalized, []).append(str(user.get("id") or ""))
-        duplicates = {email: ids for email, ids in groups.items() if len(ids) > 1}
+            if not normalized:
+                continue
+            groups.setdefault(normalized, []).append(str(user.get("id") or ""))
+        duplicates = {
+            email: ids for email, ids in groups.items() if len(ids) > 1
+        }
         if duplicates:
-            fingerprints = [__import__("hashlib").sha256(email.encode()).hexdigest()[:12] for email in duplicates]
+            fingerprints = [
+                __import__("hashlib").sha256(email.encode()).hexdigest()[:12]
+                for email in duplicates.keys()
+            ]
             raise RuntimeError(f"Duplicate normalized user emails must be resolved before startup: {fingerprints}")
-        for normalized, user_ids in groups.items():
-            await self.db["users"].update_one({"id": user_ids[0]}, {"$set": {"normalized_email": normalized}})
+        for user in users:
+            normalized = str(user.get("email") or "").strip().lower()
+            if not normalized:
+                continue
+            if user.get("email_normalized") != normalized:
+                await self.db["users"].update_one(
+                    {"id": user.get("id")},
+                    {"$set": {"email_normalized": normalized}},
+                )
         await self.db["users"].create_index(
-            [("normalized_email", 1)],
+            [("email_normalized", 1)],
             name="unique_normalized_user_email",
             unique=True,
-            partialFilterExpression={"normalized_email": {"$type": "string"}},
+            partialFilterExpression={"email_normalized": {"$type": "string"}},
         )
 
-    async def close(self) -> None:
-        if self.client:
-            self.client.close()
+    def _memory_match_condition(self, actual: Any, expected: Any) -> bool:
+        if isinstance(expected, dict):
+            for operator, target in expected.items():
+                if operator == "$in":
+                    if actual not in target:
+                        return False
+                elif operator == "$nin":
+                    if actual in target:
+                        return False
+                elif operator == "$ne":
+                    if actual == target:
+                        return False
+                elif operator == "$exists":
+                    if bool(actual is not None) != bool(target):
+                        return False
+                elif operator == "$lt":
+                    if actual is None or not (actual < target):
+                        return False
+                elif operator == "$lte":
+                    if actual is None or not (actual <= target):
+                        return False
+                elif operator == "$gt":
+                    if actual is None or not (actual > target):
+                        return False
+                elif operator == "$gte":
+                    if actual is None or not (actual >= target):
+                        return False
+                elif operator == "$type":
+                    if target == "string" and not isinstance(actual, str):
+                        return False
+                    if target == "date" and not isinstance(actual, datetime):
+                        return False
+                else:
+                    return False
+            return True
+        return actual == expected
 
-    def _clean(self, item: Dict[str, Any]) -> Dict[str, Any]:
-        cleaned = dict(item)
-        cleaned.pop("_id", None)
-        return cleaned
+    def _matches(self, item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
+        if not filters:
+            return True
+        for key, expected in filters.items():
+            if key == "$or":
+                if not any(self._matches(item, clause) for clause in expected):
+                    return False
+                continue
+            if key == "$and":
+                if not all(self._matches(item, clause) for clause in expected):
+                    return False
+                continue
+            actual = item.get(key)
+            if not self._memory_match_condition(actual, expected):
+                return False
+        return True
+
+    async def find_one(self, collection: str, filters: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if self.db is not None:
+            return self._clean(await self.db[collection].find_one(filters))
+        self._ensure_memory_allowed()
+        for item in self.memory[collection]:
+            if self._matches(item, filters):
+                return deepcopy(item)
+        return None
 
     async def find_many(
         self,
@@ -388,40 +435,60 @@ class Database:
             rows = rows[: max(0, int(limit))]
         return rows
 
-    async def find_one(
-        self, collection: str, filters: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    async def count(self, collection: str, filters: Optional[Dict[str, Any]] = None) -> int:
+        filters = filters or {}
         if self.db is not None:
-            item = await self.db[collection].find_one(filters)
-            return self._clean(item) if item else None
+            return await self.db[collection].count_documents(filters)
+        self._ensure_memory_allowed()
+        return sum(1 for item in self.memory[collection] if self._matches(item, filters))
+
+    async def insert_one(self, collection: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        if self.db is not None:
+            try:
+                result = await self.db[collection].insert_one(deepcopy(data))
+                row = deepcopy(data)
+                row["_id"] = result.inserted_id
+                return self._clean(row)
+            except DuplicateKeyError as exc:
+                raise ValueError("A record with a unique value already exists.") from exc
 
         self._ensure_memory_allowed()
-        for item in self.memory[collection]:
-            if self._matches(item, filters):
-                return deepcopy(item)
-        return None
-
-    async def insert_one(self, collection: str, item: Dict[str, Any]) -> Dict[str, Any]:
-        if self.db is not None:
-            await self.db[collection].insert_one(item)
-            return self._clean(item)
-
-        self._ensure_memory_allowed()
-        self.memory[collection].append(deepcopy(item))
-        return deepcopy(item)
+        async with self._memory_lock:
+            if collection == "users":
+                user_id = str(data.get("id") or "").strip()
+                if not user_id:
+                    raise ValueError("User id is required.")
+                if any(str(item.get("id") or "") == user_id for item in self.memory[collection]):
+                    raise ValueError("User id must be unique.")
+            self.memory[collection].append(deepcopy(data))
+        return deepcopy(data)
 
     async def update_one(
-        self, collection: str, item_id: str, updates: Dict[str, Any]
+        self,
+        collection: str,
+        filters: Dict[str, Any],
+        updates: Dict[str, Any],
+        *,
+        upsert: bool = False,
     ) -> Optional[Dict[str, Any]]:
         if self.db is not None:
-            await self.db[collection].update_one({"id": item_id}, {"$set": updates})
-            return await self.find_one(collection, {"id": item_id})
+            update_doc = {"$set": deepcopy(updates)}
+            try:
+                await self.db[collection].update_one(filters, update_doc, upsert=upsert)
+            except DuplicateKeyError as exc:
+                raise ValueError("A record with a unique value already exists.") from exc
+            return self._clean(await self.db[collection].find_one(filters))
 
         self._ensure_memory_allowed()
-        for index, item in enumerate(self.memory[collection]):
-            if item.get("id") == item_id:
-                self.memory[collection][index] = {**item, **deepcopy(updates)}
-                return deepcopy(self.memory[collection][index])
+        async with self._memory_lock:
+            for item in self.memory[collection]:
+                if self._matches(item, filters):
+                    item.update(deepcopy(updates))
+                    return deepcopy(item)
+            if upsert:
+                candidate = {**deepcopy(filters), **deepcopy(updates)}
+                self.memory[collection].append(candidate)
+                return deepcopy(candidate)
         return None
 
     async def update_one_if(
@@ -430,161 +497,65 @@ class Database:
         filters: Dict[str, Any],
         updates: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        """Atomically update the first row that still matches all supplied filters."""
+        """Atomic compare-and-set used by state transitions and dispatch claims."""
         if self.db is not None:
-            item = await self.db[collection].find_one_and_update(
-                filters,
-                {"$set": updates},
-                return_document=ReturnDocument.AFTER,
-            )
-            return self._clean(item) if item else None
+            from pymongo import ReturnDocument
+
+            try:
+                doc = await self.db[collection].find_one_and_update(
+                    filters,
+                    {"$set": deepcopy(updates)},
+                    return_document=ReturnDocument.AFTER,
+                )
+            except DuplicateKeyError as exc:
+                raise ValueError("A record with a unique value already exists.") from exc
+            return self._clean(doc)
 
         self._ensure_memory_allowed()
-        for index, item in enumerate(self.memory[collection]):
-            if self._matches(item, filters):
-                self.memory[collection][index] = {**item, **deepcopy(updates)}
-                return deepcopy(self.memory[collection][index])
+        async with self._memory_lock:
+            for item in self.memory[collection]:
+                if self._matches(item, filters):
+                    item.update(deepcopy(updates))
+                    return deepcopy(item)
         return None
 
-    async def update_one_atomic(
-        self,
-        collection: str,
-        filters: Dict[str, Any],
-        updates: Dict[str, Any],
-        increments: Optional[Dict[str, int | float]] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """Atomically apply ``$set`` and ``$inc`` and return committed truth.
-
-        This is intentionally collection-agnostic so domain services do not need
-        raw Motor calls when a mutation also advances a monotonic resource version.
-        Missing numeric fields follow MongoDB ``$inc`` semantics and start at zero.
-        """
-        increments = increments or {}
+    async def delete_one(self, collection: str, filters: Dict[str, Any]) -> bool:
         if self.db is not None:
-            operation: Dict[str, Any] = {"$set": updates}
-            if increments:
-                operation["$inc"] = increments
-            item = await self.db[collection].find_one_and_update(
-                filters,
-                operation,
-                return_document=ReturnDocument.AFTER,
-            )
-            return self._clean(item) if item else None
-
+            result = await self.db[collection].delete_one(filters)
+            return bool(result.deleted_count)
         self._ensure_memory_allowed()
-        for index, item in enumerate(self.memory[collection]):
-            if self._matches(item, filters):
-                next_item = {**item, **deepcopy(updates)}
-                for field, amount in increments.items():
-                    current = next_item.get(field, 0)
-                    if not isinstance(current, (int, float)) or isinstance(current, bool):
-                        raise TypeError(f"Cannot increment non-numeric field {field}.")
-                    next_item[field] = current + amount
-                self.memory[collection][index] = next_item
-                return deepcopy(next_item)
-        return None
-
-    async def update_many(
-        self,
-        collection: str,
-        filters: Dict[str, Any],
-        updates: Dict[str, Any],
-    ) -> int:
-        """Apply one ``$set`` operation to every matching row and return its count."""
-        if self.db is not None:
-            result = await self.db[collection].update_many(filters, {"$set": updates})
-            return int(result.modified_count)
-
-        self._ensure_memory_allowed()
-        changed = 0
-        for index, item in enumerate(self.memory[collection]):
-            if self._matches(item, filters):
-                next_item = {**item, **deepcopy(updates)}
-                if next_item != item:
-                    self.memory[collection][index] = next_item
-                    changed += 1
-        return changed
-
-    async def delete_one(self, collection: str, item_id: str) -> bool:
-        if self.db is not None:
-            result = await self.db[collection].delete_one({"id": item_id})
-            return result.deleted_count > 0
-
-        self._ensure_memory_allowed()
-        before = len(self.memory[collection])
-        self.memory[collection] = [item for item in self.memory[collection] if item.get("id") != item_id]
-        return len(self.memory[collection]) < before
+        async with self._memory_lock:
+            for index, item in enumerate(self.memory[collection]):
+                if self._matches(item, filters):
+                    self.memory[collection].pop(index)
+                    return True
+        return False
 
     async def delete_many(self, collection: str, filters: Dict[str, Any]) -> int:
-        """Delete every matching row and return the number removed."""
         if self.db is not None:
             result = await self.db[collection].delete_many(filters)
             return int(result.deleted_count)
-
         self._ensure_memory_allowed()
-        kept: List[Dict[str, Any]] = []
-        deleted = 0
-        for item in self.memory[collection]:
-            if self._matches(item, filters):
-                deleted += 1
-            else:
-                kept.append(item)
-        self.memory[collection] = kept
-        return deleted
+        async with self._memory_lock:
+            kept = []
+            deleted = 0
+            for item in self.memory[collection]:
+                if self._matches(item, filters):
+                    deleted += 1
+                else:
+                    kept.append(item)
+            self.memory[collection] = kept
+            return deleted
 
-    async def replace_collection(self, collection: str, items: Iterable[Dict[str, Any]]) -> None:
-        clean_items = [deepcopy(item) for item in items]
+    async def replace_collection(self, collection: str, values: List[Dict[str, Any]]) -> None:
         if self.db is not None:
             await self.db[collection].delete_many({})
-            if clean_items:
-                await self.db[collection].insert_many(clean_items)
+            if values:
+                await self.db[collection].insert_many(deepcopy(values))
             return
         self._ensure_memory_allowed()
-        self.memory[collection] = clean_items
-
-    async def count(self, collection: str, filters: Optional[Dict[str, Any]] = None) -> int:
-        filters = filters or {}
-        if self.db is not None:
-            return await self.db[collection].count_documents(filters)
-        self._ensure_memory_allowed()
-        return sum(1 for item in self.memory[collection] if self._matches(item, filters))
-
-    @staticmethod
-    def _matches(item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
-        for key, expected in filters.items():
-            if key == "$or" and isinstance(expected, list):
-                if not any(Database._matches(item, option) for option in expected):
-                    return False
-                continue
-            if key == "$and" and isinstance(expected, list):
-                if not all(Database._matches(item, option) for option in expected):
-                    return False
-                continue
-            actual = item.get(key)
-            if isinstance(expected, dict):
-                for operator, value in expected.items():
-                    if operator == "$exists":
-                        exists = key in item
-                        if bool(value) != exists:
-                            return False
-                    if operator == "$in" and actual not in value:
-                        return False
-                    if operator == "$nin" and actual in value:
-                        return False
-                    if operator == "$ne" and actual == value:
-                        return False
-                    if operator == "$gte" and (actual is None or actual < value):
-                        return False
-                    if operator == "$gt" and (actual is None or actual <= value):
-                        return False
-                    if operator == "$lte" and (actual is None or actual > value):
-                        return False
-                    if operator == "$lt" and (actual is None or actual >= value):
-                        return False
-                continue
-            if actual != expected:
-                return False
-        return True
+        async with self._memory_lock:
+            self.memory[collection] = deepcopy(values)
 
 
 database = Database()
