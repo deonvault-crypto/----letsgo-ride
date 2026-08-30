@@ -112,7 +112,7 @@ export default function CustomerHomeScreen() {
             subtitle="Kitchens and dishes near you"
             eyebrow="EAT"
             icon="food-fork-drink"
-            image={require("../../assets/images/food-marketplace-owned-v1.png")}
+            image={require("../../assets/images/food-landing-editorial-owned-v1.jpg")}
             onPress={() => router.push("/(customer)/food" as never)}
           />
           <ServiceStoryCard
