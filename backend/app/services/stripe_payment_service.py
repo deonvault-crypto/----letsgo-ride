@@ -28,36 +28,39 @@ class StripePaymentError(RuntimeError):
 
 
 def _environment_mode(settings: Settings) -> str:
-    return "live" if settings.is_production else "test"
+    return "live" if bool(getattr(settings, "is_production", False)) else "test"
 
 
 def stripe_card_payments_available(settings: Optional[Settings] = None) -> bool:
     settings = settings or get_settings()
-    if not settings.stripe_card_payments_enabled:
+    if not bool(getattr(settings, "stripe_card_payments_enabled", False)):
         return False
-    secret_key = settings.stripe_secret_key
-    publishable_key = settings.stripe_publishable_key
+    secret_key = str(getattr(settings, "stripe_secret_key", "") or "")
+    publishable_key = str(getattr(settings, "stripe_publishable_key", "") or "")
     if not secret_key or not publishable_key:
         return False
-    if settings.is_production:
+    if bool(getattr(settings, "is_production", False)):
         return secret_key.startswith("sk_live_") and publishable_key.startswith("pk_live_")
     return secret_key.startswith("sk_test_") and publishable_key.startswith("pk_test_")
 
 
 def stripe_configuration_issue(settings: Optional[Settings] = None) -> Optional[str]:
     settings = settings or get_settings()
-    if not settings.stripe_card_payments_enabled:
+    if not bool(getattr(settings, "stripe_card_payments_enabled", False)):
         return "disabled"
-    if not settings.stripe_secret_key or not settings.stripe_publishable_key:
+    secret_key = str(getattr(settings, "stripe_secret_key", "") or "")
+    publishable_key = str(getattr(settings, "stripe_publishable_key", "") or "")
+    is_production = bool(getattr(settings, "is_production", False))
+    if not secret_key or not publishable_key:
         return "missing_keys"
-    if settings.is_production and not (
-        settings.stripe_secret_key.startswith("sk_live_")
-        and settings.stripe_publishable_key.startswith("pk_live_")
+    if is_production and not (
+        secret_key.startswith("sk_live_")
+        and publishable_key.startswith("pk_live_")
     ):
         return "production_requires_live_keys"
-    if not settings.is_production and not (
-        settings.stripe_secret_key.startswith("sk_test_")
-        and settings.stripe_publishable_key.startswith("pk_test_")
+    if not is_production and not (
+        secret_key.startswith("sk_test_")
+        and publishable_key.startswith("pk_test_")
     ):
         return "nonproduction_requires_test_keys"
     return None
