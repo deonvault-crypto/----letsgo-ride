@@ -4,18 +4,25 @@ import {
   HailingCoordinate,
   HailingDispatchOffer,
   HailingDriverStatus,
+  HailingPaymentMethod,
   HailingPlace,
   HailingQuote,
   HailingRideClass,
   HailingServiceArea,
   HailingServiceAreaResolution,
+  HailingStripeIntent,
   HailingTrip,
   HailingTripShare,
+  PaymentConfig,
 } from "../types/hailing.types";
 import type { Conversation } from "../types/conversation.types";
 
 export function getHailingConfig() {
   return requestData<HailingConfig>({ method: "GET", url: "/hailing/config" });
+}
+
+export function getPaymentConfig() {
+  return requestData<PaymentConfig>({ method: "GET", url: "/payments/config" });
 }
 
 export function resolveHailingServiceArea(location: HailingCoordinate) {
@@ -26,8 +33,19 @@ export function createHailingQuote(data: { pickup: HailingPlace; dropoff: Hailin
   return requestData<HailingQuote>({ method: "POST", url: "/hailing/quotes", data });
 }
 
-export function requestHailingTrip(data: { quote_id: string; payment_method?: "cash"; client_request_id?: string; verify_ride_with_pin?: boolean }) {
-  return requestData<HailingTrip>({ method: "POST", url: "/hailing/trips", data });
+export function createHailingStripePaymentIntent(data: { quote_id: string; client_request_id: string }) {
+  return requestData<HailingStripeIntent>({ method: "POST", url: "/payments/hailing/stripe/intent", data });
+}
+
+export function requestHailingTrip(data: {
+  quote_id: string;
+  payment_method?: HailingPaymentMethod;
+  client_request_id?: string;
+  verify_ride_with_pin?: boolean;
+  stripe_payment_intent_id?: string;
+}) {
+  const url = data.payment_method === "card" ? "/payments/hailing/stripe/trips" : "/hailing/trips";
+  return requestData<HailingTrip>({ method: "POST", url, data });
 }
 
 export function getActiveHailingTrip() {
