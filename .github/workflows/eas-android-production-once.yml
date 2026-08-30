@@ -1,4 +1,4 @@
-name: EAS Android Production Once
+name: EAS Android Failure Diagnostic
 
 on:
   push:
@@ -9,14 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: eas-android-production-14b124b4
+  group: eas-android-diagnostic-14b124b4
   cancel-in-progress: false
 
 jobs:
-  build-android-production:
-    name: Build Android production 14b124b4
+  inspect-failed-build:
+    name: Inspect failed EAS build 3ce0f3e1
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: mobile
@@ -26,28 +26,10 @@ jobs:
         with:
           ref: 14b124b4896c1481325fc8ebaf4fcab009431e83
 
-      - name: Verify exact source SHA
-        working-directory: .
-        shell: bash
-        run: |
-          set -euo pipefail
-          actual="$(git rev-parse HEAD)"
-          expected="14b124b4896c1481325fc8ebaf4fcab009431e83"
-          echo "Source SHA: $actual"
-          test "$actual" = "$expected"
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-
-      - name: Install dependencies reproducibly
-        run: npm ci
-
-      - name: Verify Android release policy
-        run: npm run verify:android
 
       - name: Verify Expo token
         env:
@@ -55,12 +37,65 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "EXPO_TOKEN repository secret is required."
-            exit 1
-          fi
+          test -n "$EXPO_TOKEN"
 
-      - name: Build production Android AAB on EAS
+      - name: Inspect EAS build metadata and Gradle logs
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli@latest build --platform android --profile production --non-interactive
+          BUILD_ID: 3ce0f3e1-861b-4bfb-ab19-0cfdaa6773b5
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx eas-cli@latest build:view "$BUILD_ID" --json > /tmp/eas-build.json
+          node <<'NODE'
+          const fs = require('fs');
+          const build = JSON.parse(fs.readFileSync('/tmp/eas-build.json', 'utf8'));
+          const summary = {
+            id: build.id,
+            status: build.status,
+            platform: build.platform,
+            appVersion: build.appVersion,
+            appBuildVersion: build.appBuildVersion,
+            sdkVersion: build.sdkVersion,
+            runtimeVersion: build.runtimeVersion,
+            gitCommitHash: build.gitCommitHash,
+            error: build.error,
+            createdAt: build.createdAt,
+            completedAt: build.completedAt,
+          };
+          console.log('EAS_BUILD_SUMMARY ' + JSON.stringify(summary));
+
+          const urls = [];
+          function walk(value, path = []) {
+            if (typeof value === 'string') {
+              const label = path.join('.').toLowerCase();
+              if (/^https?:\/\//.test(value) && label.includes('log')) urls.push(value);
+              return;
+            }
+            if (Array.isArray(value)) {
+              value.forEach((item, index) => walk(item, [...path, String(index)]));
+              return;
+            }
+            if (value && typeof value === 'object') {
+              Object.entries(value).forEach(([key, item]) => walk(item, [...path, key]));
+            }
+          }
+          walk(build);
+          fs.writeFileSync('/tmp/eas-log-urls.txt', [...new Set(urls)].join('\n'));
+          console.log(`Discovered ${new Set(urls).size} EAS log URL(s).`);
+          NODE
+
+          mkdir -p /tmp/eas-logs
+          index=0
+          while IFS= read -r url; do
+            [ -n "$url" ] || continue
+            curl --fail --silent --show-error --location "$url" -o "/tmp/eas-logs/log-${index}.txt" || true
+            index=$((index + 1))
+          done < /tmp/eas-log-urls.txt
+
+          echo "=== GRADLE FAILURE EXCERPTS ==="
+          if find /tmp/eas-logs -type f -size +0c | grep -q .; then
+            grep -RniE -B 12 -A 35 'FAILURE:|What went wrong|Execution failed for task|Could not resolve|Caused by:|Manifest merger failed|Duplicate class|AAPT|resource.*not found|google-services|R8|Kotlin|Gradle build daemon disappeared|error:' /tmp/eas-logs || true
+          else
+            echo "No downloadable log files were exposed by build:view JSON."
+          fi
