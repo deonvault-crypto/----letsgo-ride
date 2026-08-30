@@ -20,7 +20,12 @@ from app.services.hailing_dispatch_service import (
     reserve_candidate,
 )
 from app.services.hailing_fare_service import quote_expired
-from app.services.hailing_realtime_service import publish_hailing_admin_realtime, publish_hailing_trip_realtime, update_versioned_hailing_trip
+from app.services.hailing_realtime_service import (
+    publish_hailing_admin_realtime,
+    publish_hailing_driver_offer_realtime,
+    publish_hailing_trip_realtime,
+    update_versioned_hailing_trip,
+)
 from app.services.hailing_state import ACTIVE_DRIVER_STATUSES, ACTIVE_PASSENGER_STATUSES, FINAL_STATUSES, TRANSITIONS
 from app.services.notification_service import create_app_notification, notify_admins
 from app.utils import new_id, now_iso
@@ -148,6 +153,7 @@ async def _cancel_pending_dispatch_offers(trip_id: str) -> int:
         if not cancelled:
             continue
         changed += 1
+        await publish_hailing_driver_offer_realtime(cancelled, "hailing.offer.cancelled", version=2)
         if offer.get("driver_id"):
             await release_candidate_reservation(str(offer["driver_id"]), trip_id)
     return changed
@@ -369,11 +375,13 @@ async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]
                 },
             )
             if not updated_trip:
-                await database.update_one_if(
+                cancelled = await database.update_one_if(
                     "hailing_dispatch_offers",
                     {"id": offer["id"], "status": "pending"},
                     {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
                 )
+                if cancelled:
+                    await publish_hailing_driver_offer_realtime(cancelled, "hailing.offer.cancelled", version=2)
                 await release_candidate_reservation(str(candidate["driver_id"]), current["id"])
                 return None
             logger.info(
@@ -383,6 +391,20 @@ async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]
                 offer["driver_id"],
                 offer.get("ranking_method"),
                 offer.get("candidate_count"),
+            )
+            await publish_hailing_driver_offer_realtime(offer, "hailing.offer.created", version=1)
+            fare = current.get("fare") or {}
+            route = current.get("route") or {}
+            await create_app_notification(
+                user_id=str(offer["driver_user_id"]),
+                title="New Ride Now request",
+                body=f"${float(fare.get('total_fare') or 0):.2f} · {float(route.get('distance_km') or 0):.1f} km · {str(current.get('ride_class') or 'Ride').title()}",
+                notification_type="trip_updates",
+                data={
+                    "notification_target": "hailing_driver_offer",
+                    "hailing_offer_id": offer["id"],
+                    "hailing_trip_id": current["id"],
+                },
             )
             return offer
         return None
@@ -452,6 +474,7 @@ async def driver_go_offline(user: Dict[str, Any]) -> Dict[str, Any]:
             {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
         )
         if cancelled:
+            await publish_hailing_driver_offer_realtime(cancelled, "hailing.offer.cancelled", version=2)
             trip = await database.find_one("hailing_trips", {"id": offer.get("trip_id")})
             if trip and trip.get("status") == "SEARCHING":
                 await create_dispatch_offer(trip)
@@ -499,11 +522,13 @@ async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     if not offer or offer.get("status") != "pending":
         raise ValueError("Ride offer is no longer available.")
     if quote_expired({"expires_at": offer.get("expires_at")}):
-        await database.update_one_if(
+        expired_offer = await database.update_one_if(
             "hailing_dispatch_offers",
             {"id": offer["id"], "status": "pending"},
             {"status": "expired", "expired_at": now_iso(), "updated_at": now_iso()},
         )
+        if expired_offer:
+            await publish_hailing_driver_offer_realtime(expired_offer, "hailing.offer.expired", version=2)
         await release_candidate_reservation(driver["id"], offer["trip_id"])
         trip = await database.find_one("hailing_trips", {"id": offer["trip_id"]})
         if trip and trip.get("status") == "SEARCHING":
@@ -544,13 +569,16 @@ async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
         },
     )
     if not updated_trip:
-        await database.update_one_if(
+        cancelled_offer = await database.update_one_if(
             "hailing_dispatch_offers",
             {"id": offer["id"], "status": "accepted"},
             {"status": "cancelled", "cancelled_at": now_iso(), "updated_at": now_iso()},
         )
+        if cancelled_offer:
+            await publish_hailing_driver_offer_realtime(cancelled_offer, "hailing.offer.cancelled", version=3)
         await release_candidate_reservation(driver["id"], trip["id"])
         raise ValueError("Ride already accepted.")
+    await publish_hailing_driver_offer_realtime(accepted_offer, "hailing.offer.accepted", version=2)
     await _cancel_pending_dispatch_offers(trip["id"])
     transitioned = await release_candidate_reservation(driver["id"], trip["id"], next_status="en_route")
     if not transitioned:
@@ -585,6 +613,7 @@ async def decline_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     )
     if not updated:
         raise ValueError("Ride offer is no longer available.")
+    await publish_hailing_driver_offer_realtime(updated, "hailing.offer.declined", version=2)
     await release_candidate_reservation(driver["id"], offer["trip_id"])
     logger.info("offer_declined offer_id=%s trip_id=%s driver_id=%s", offer_id, offer.get("trip_id"), driver["id"])
     trip = await database.find_one("hailing_trips", {"id": offer["trip_id"]})
@@ -612,28 +641,27 @@ async def confirm_passenger_boarding(trip_id: str, user: Dict[str, Any]) -> Dict
     if trip.get("status") == "PASSENGER_CONFIRMED_BOARDING":
         return public_trip(trip, user)
     if trip.get("status") != "DRIVER_ARRIVED":
-        raise ValueError("You can confirm boarding after your driver has arrived.")
+        raise ValueError("You can prepare a safety PIN after your driver has arrived.")
     if not trip.get("driver_user_id"):
-        raise ValueError("A driver must be assigned before boarding can be confirmed.")
-    pin: Optional[str] = None
+        raise ValueError("A driver must be assigned before a safety PIN can be prepared.")
+    if not trip.get("verify_ride_with_pin"):
+        raise ValueError("This Ride Now trip does not require passenger boarding confirmation.")
+    pin, pin_record = _new_trip_pin_record()
     updates: Dict[str, Any] = {
         "passenger_boarding_confirmed_at": now_iso(),
         "passenger_boarding_confirmed_by_user_id": user["id"],
+        **pin_record,
     }
-    if trip.get("verify_ride_with_pin"):
-        pin, pin_record = _new_trip_pin_record()
-        updates.update(pin_record)
     updated = await transition_trip(trip, "PASSENGER_CONFIRMED_BOARDING", updates)
     await create_app_notification(
         user_id=trip["driver_user_id"],
-        title="Passenger confirmed",
-        body="Passenger is ready. You can start the trip.",
+        title="Safety PIN ready",
+        body="The passenger enabled Ride Now PIN verification. Verify the PIN before starting.",
         notification_type="trip_updates",
         data={"notification_target": "hailing_trip", "hailing_trip_id": trip_id},
     )
     response = public_trip(updated, user)
-    if pin:
-        response["trip_pin"] = pin
+    response["trip_pin"] = pin
     return response
 
 
@@ -645,7 +673,7 @@ async def regenerate_trip_pin(trip_id: str, user: Dict[str, Any]) -> Dict[str, A
     if not trip.get("verify_ride_with_pin"):
         raise ValueError("This Ride Now trip does not require a PIN.")
     if trip.get("status") != "PASSENGER_CONFIRMED_BOARDING":
-        raise ValueError("A new PIN can only be generated after boarding is confirmed.")
+        raise ValueError("A new PIN can only be generated after the safety PIN flow is started.")
     if trip.get("trip_pin_verified_at"):
         raise ValueError("The trip PIN has already been verified.")
     pin, pin_record = _new_trip_pin_record()
@@ -668,7 +696,7 @@ async def verify_trip_pin(trip_id: str, pin: str, user: Dict[str, Any]) -> Dict[
     if not trip.get("verify_ride_with_pin"):
         raise ValueError("This Ride Now trip does not require a PIN.")
     if trip.get("status") != "PASSENGER_CONFIRMED_BOARDING":
-        raise ValueError("Trip PIN can only be verified after passenger boarding is confirmed.")
+        raise ValueError("Trip PIN can only be verified after the passenger starts the safety PIN flow.")
     attempts = int(trip.get("trip_pin_attempts") or 0)
     if attempts >= 5:
         raise ValueError("Too many incorrect PIN attempts.")
@@ -699,10 +727,14 @@ async def start_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can start this trip.")
     await approved_driver_for_hailing(user, trip["city_id"], trip["ride_class"])
-    if trip.get("status") != "PASSENGER_CONFIRMED_BOARDING":
-        raise ValueError("Passenger must confirm boarding before the trip can start.")
-    if trip.get("verify_ride_with_pin") and not trip.get("trip_pin_verified_at"):
-        raise ValueError("Verify the passenger PIN before starting this trip.")
+    verify_with_pin = bool(trip.get("verify_ride_with_pin"))
+    if verify_with_pin:
+        if trip.get("status") != "PASSENGER_CONFIRMED_BOARDING":
+            raise ValueError("This ride uses safety PIN verification. Ask the passenger to prepare their PIN first.")
+        if not trip.get("trip_pin_verified_at"):
+            raise ValueError("Verify the passenger PIN before starting this trip.")
+    elif trip.get("status") not in {"DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING"}:
+        raise ValueError("Mark your arrival at the pickup point before starting this trip.")
     await _ensure_driver_near_pickup_for_start(trip)
     updated = await transition_trip(trip, "IN_PROGRESS", {"started_at": now_iso()})
     await database.update_one("hailing_driver_presence", f"hailing-presence-{trip['driver_id']}", {"status": "on_trip", "updated_at": now_iso()})
@@ -909,6 +941,7 @@ async def expire_pending_offers() -> int:
         if not expired:
             continue
         changed += 1
+        await publish_hailing_driver_offer_realtime(expired, "hailing.offer.expired", version=2)
         driver_id = offer.get("driver_id")
         if driver_id:
             await release_candidate_reservation(str(driver_id), str(offer.get("trip_id") or ""))
