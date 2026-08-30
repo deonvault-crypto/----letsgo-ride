@@ -1,4 +1,4 @@
-name: EAS Android Gradle Diagnostic
+name: EAS Android Gradle Log Decode
 
 on:
   push:
@@ -8,15 +8,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: eas-android-gradle-diagnostic-14b124b4
-  cancel-in-progress: false
-
 jobs:
-  inspect-gradle-failure:
-    name: Extract Gradle failure for 3ce0f3e1
+  decode-gradle-log:
+    name: Decode Gradle failure for 3ce0f3e1
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: mobile
@@ -26,21 +22,14 @@ jobs:
         with:
           ref: 14b124b4896c1481325fc8ebaf4fcab009431e83
 
-      - name: Verify Expo token
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$EXPO_TOKEN"
-
-      - name: Query Expo GraphQL and extract Gradle error
+      - name: Decode Expo build log
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           BUILD_ID: 3ce0f3e1-861b-4bfb-ab19-0cfdaa6773b5
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$EXPO_TOKEN"
 
           cat > /tmp/query.txt <<'GRAPHQL'
           query BuildById($buildId: ID!) {
@@ -48,24 +37,8 @@ jobs:
               byId(buildId: $buildId) {
                 id
                 status
-                platform
-                error {
-                  errorCode
-                  message
-                  docsUrl
-                }
                 logFiles
-                artifacts {
-                  buildUrl
-                  applicationArchiveUrl
-                  buildArtifactsUrl
-                }
-                sdkVersion
-                appVersion
-                appBuildVersion
-                gitCommitHash
-                createdAt
-                completedAt
+                error { errorCode message }
               }
             }
           }
@@ -73,49 +46,68 @@ jobs:
 
           jq -n --rawfile query /tmp/query.txt --arg buildId "$BUILD_ID" \
             '{query:$query, variables:{buildId:$buildId}}' > /tmp/request.json
-
           curl --fail --silent --show-error \
             -H "Authorization: Bearer $EXPO_TOKEN" \
             -H 'Content-Type: application/json' \
             --data @/tmp/request.json \
             https://api.expo.dev/graphql > /tmp/response.json
 
-          if jq -e '.errors and (.errors | length > 0)' /tmp/response.json >/dev/null; then
-            echo 'Expo GraphQL returned errors:'
-            jq '.errors | map({message, extensions})' /tmp/response.json
-            exit 1
-          fi
+          url="$(jq -r '.data.builds.byId.logFiles[0] // empty' /tmp/response.json)"
+          test -n "$url"
+          curl --fail --silent --show-error --location "$url" -o /tmp/eas-log.bin
 
-          jq '.data.builds.byId | {
-            id,
-            status,
-            platform,
-            error,
-            sdkVersion,
-            appVersion,
-            appBuildVersion,
-            gitCommitHash,
-            createdAt,
-            completedAt,
-            logFileCount: ((.logFiles // []) | length)
-          }' /tmp/response.json
+          echo '=== LOG FILE TYPE ==='
+          file /tmp/eas-log.bin
+          echo '=== LOG MAGIC BYTES ==='
+          xxd -l 24 /tmp/eas-log.bin
 
-          jq -r '.data.builds.byId.logFiles[]?' /tmp/response.json > /tmp/log-urls.txt
-          mkdir -p /tmp/eas-logs
-          index=0
-          while IFS= read -r url; do
-            [ -n "$url" ] || continue
-            curl --fail --silent --show-error --location "$url" -o "/tmp/eas-logs/log-${index}.txt"
-            index=$((index + 1))
-          done < /tmp/log-urls.txt
+          python - <<'PY'
+          from pathlib import Path
+          import gzip, io, json, zipfile
 
-          echo "Downloaded ${index} EAS log file(s)."
+          src = Path('/tmp/eas-log.bin').read_bytes()
+          out = b''
+          kind = 'raw'
+          try:
+              if src.startswith(b'\x1f\x8b'):
+                  out = gzip.decompress(src)
+                  kind = 'gzip'
+              elif src.startswith(b'PK\x03\x04'):
+                  kind = 'zip'
+                  with zipfile.ZipFile(io.BytesIO(src)) as zf:
+                      chunks = []
+                      for name in zf.namelist():
+                          if not name.endswith('/'):
+                              chunks.append(zf.read(name))
+                      out = b'\n'.join(chunks)
+              else:
+                  out = src
+          except Exception as exc:
+              print(f'DECODE_WARNING {exc!r}')
+              out = src
+
+          text = None
+          for encoding in ('utf-8', 'utf-16', 'latin-1'):
+              try:
+                  candidate = out.decode(encoding)
+                  if candidate:
+                      text = candidate
+                      break
+              except Exception:
+                  pass
+          if text is None:
+              text = out.decode('utf-8', errors='replace')
+
+          text = text.replace('\x00', '')
+          Path('/tmp/eas-log-decoded.txt').write_text(text, encoding='utf-8')
+          print(f'DECODE_KIND {kind}')
+          print(f'DECODED_CHARS {len(text)}')
+          PY
+
           echo '=== GRADLE FAILURE EXCERPTS ==='
-          if [ "$index" -eq 0 ]; then
-            echo 'No log files returned by Expo GraphQL.'
-            exit 1
-          fi
-
-          grep -RniE -B 20 -A 60 \
+          grep -niE -B 30 -A 90 \
             'FAILURE: Build failed|What went wrong|Execution failed for task|Could not resolve|Could not determine|Caused by:|Manifest merger failed|Duplicate class|AAPT2?|resource.*not found|google-services|R8|Kotlin compilation|Gradle build daemon disappeared|BUILD FAILED|error:' \
-            /tmp/eas-logs | tail -n 500 || true
+            /tmp/eas-log-decoded.txt | tail -n 700 || true
+
+          echo '=== FINAL 220 LOG LINES ==='
+          tail -n 220 /tmp/eas-log-decoded.txt
