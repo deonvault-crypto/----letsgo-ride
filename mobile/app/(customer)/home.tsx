@@ -29,6 +29,18 @@ export default function CustomerHomeScreen() {
     router.push("/(shared)/courier" as never);
   }
 
+  function openRideNow() {
+    if (!activeHailing || !activeHailingTrip) {
+      router.push("/(customer)/hail" as never);
+      return;
+    }
+    if (activeHailingTrip.status === "SEARCHING") {
+      router.push(`/(customer)/hail/searching?tripId=${encodeURIComponent(activeHailingTrip.id)}` as never);
+      return;
+    }
+    router.push(`/(customer)/hail/trip/${activeHailingTrip.id}` as never);
+  }
+
   function openDriverProfile(driverId: string | undefined, rideId: string) {
     if (!driverId) return;
     router.push(`/(shared)/driver-profile/${driverId}?rideId=${rideId}` as never);
@@ -42,7 +54,7 @@ export default function CustomerHomeScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={activeHailing ? "Open active Ride Now trip" : "Request a Ride Now"}
-          onPress={() => router.push(activeHailing ? `/(customer)/hail/trip/${activeHailingTrip.id}` as never : "/(customer)/hail" as never)}
+          onPress={openRideNow}
           style={({ pressed }) => [styles.rideNowCard, pressed && styles.pressed]}
         >
           <View style={styles.rideNowIcon}>
