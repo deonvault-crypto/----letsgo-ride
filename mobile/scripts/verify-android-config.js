@@ -24,11 +24,11 @@ const minSdk = catalogNumber(catalog, "minSdk");
 
 if (compileSdk < 36 || targetSdk < 36) fail(`API 36 is required, resolved compileSdk=${compileSdk}, targetSdk=${targetSdk}.`);
 if (app.android.package !== "com.letsgo.ride") fail("the existing Google Play package identity changed.");
-if (app.android.allowBackup !== true) fail("Android backup policy must be explicit.");
+if (app.android.allowBackup !== false) fail("Android backup must be disabled so sensitive session state cannot migrate between devices.");
 
 const secureStorePlugin = app.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "expo-secure-store");
-if (!secureStorePlugin || secureStorePlugin[1]?.configureAndroidBackup !== true) {
-  fail("Expo SecureStore backup exclusions must be explicitly generated.");
+if (!secureStorePlugin || secureStorePlugin[1]?.configureAndroidBackup !== false) {
+  fail("Expo SecureStore Android backup generation must stay disabled with app-level backup disabled.");
 }
 
 const buildPropertiesPlugin = app.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties");
@@ -50,6 +50,7 @@ const forbiddenPermissions = [
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.QUERY_ALL_PACKAGES",
   "android.permission.SCHEDULE_EXACT_ALARM",
+  "android.permission.USE_FINGERPRINT",
 ];
 for (const permission of forbiddenPermissions) {
   if (permissions.has(permission)) fail(`unnecessary permission declared: ${permission}.`);

@@ -32,6 +32,8 @@ from app.utils import new_id, now_iso
 
 
 logger = logging.getLogger(__name__)
+DISPATCH_SWEEP_BATCH_SIZE = 50
+EXPIRED_OFFER_SWEEP_BATCH_SIZE = 100
 
 
 def _hailing_enabled() -> bool:
@@ -266,6 +268,7 @@ async def create_trip_from_quote(payload: Dict[str, Any], user: Dict[str, Any]) 
         "verify_ride_with_pin": bool(payload.get("verify_ride_with_pin")),
         "search_started_at": timestamp,
         "search_expires_at": search_expires_at,
+        "next_dispatch_at": timestamp,
         "current_dispatch_radius_km": policy.initial_radius_km,
         "dispatch_attempt_count": 0,
         "dispatch_claim_token": None,
@@ -335,9 +338,16 @@ async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]
         radius = min(float(current.get("current_dispatch_radius_km") or policy.initial_radius_km), policy.maximum_radius_km)
         candidates = await ranked_dispatch_candidates(current, radius, policy)
         if not candidates:
+            next_dispatch_at = (
+                datetime.now(timezone.utc) + timedelta(seconds=policy.dispatch_sweeper_interval_seconds)
+            ).isoformat()
             await update_versioned_hailing_trip(
                 {"id": current["id"], "status": "SEARCHING"},
-                {"current_dispatch_radius_km": policy.next_radius(radius), "updated_at": now_iso()},
+                {
+                    "current_dispatch_radius_km": policy.next_radius(radius),
+                    "next_dispatch_at": next_dispatch_at,
+                    "updated_at": now_iso(),
+                },
             )
             return None
 
@@ -371,6 +381,7 @@ async def create_dispatch_offer(trip: Dict[str, Any]) -> Optional[Dict[str, Any]
                     "dispatch_attempt_count": int(current.get("dispatch_attempt_count") or 0) + 1,
                     "last_offer_id": offer["id"],
                     "last_offer_at": timestamp,
+                    "next_dispatch_at": expires_at,
                     "updated_at": timestamp,
                 },
             )
@@ -870,6 +881,7 @@ async def rematch_after_driver_cancellation(trip: Dict[str, Any], reason: Option
             "current_dispatch_radius_km": float(trip.get("current_dispatch_radius_km") or 2),
             "dispatch_claim_token": None,
             "dispatch_claim_expires_at": timestamp,
+            "next_dispatch_at": timestamp,
             "updated_at": timestamp,
         },
     )
@@ -926,8 +938,13 @@ async def record_safety_event(trip_id: str, payload: Dict[str, Any], user: Dict[
 async def expire_pending_offers() -> int:
     if not _hailing_enabled():
         return 0
-    pending = await database.find_many("hailing_dispatch_offers", {"status": "pending"})
     now = datetime.now(timezone.utc)
+    pending = await database.find_many(
+        "hailing_dispatch_offers",
+        {"status": "pending", "expires_at": {"$lte": now.isoformat()}},
+        sort=[("expires_at", 1), ("created_at", 1)],
+        limit=EXPIRED_OFFER_SWEEP_BATCH_SIZE,
+    )
     changed = 0
     for offer in pending:
         expires_at = parse_time(offer.get("expires_at"))
@@ -947,6 +964,10 @@ async def expire_pending_offers() -> int:
             await release_candidate_reservation(str(driver_id), str(offer.get("trip_id") or ""))
         trip = await database.find_one("hailing_trips", {"id": offer.get("trip_id")})
         if trip and trip.get("status") == "SEARCHING":
+            await update_versioned_hailing_trip(
+                {"id": trip["id"], "status": "SEARCHING"},
+                {"next_dispatch_at": now.isoformat(), "updated_at": now_iso()},
+            )
             await create_dispatch_offer(trip)
     return changed
 
@@ -954,10 +975,23 @@ async def expire_pending_offers() -> int:
 async def sweep_searching_trips() -> Dict[str, int]:
     if not _hailing_enabled():
         return {"checked": 0, "dispatched": 0, "timed_out": 0}
-    searching = await database.find_many("hailing_trips", {"status": "SEARCHING"})
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat()
+    searching = await database.find_many(
+        "hailing_trips",
+        {
+            "status": "SEARCHING",
+            "$or": [
+                {"search_expires_at": {"$lte": now_text}},
+                {"next_dispatch_at": {"$lte": now_text}},
+                {"next_dispatch_at": {"$exists": False}},
+            ],
+        },
+        sort=[("search_expires_at", 1), ("created_at", 1)],
+        limit=DISPATCH_SWEEP_BATCH_SIZE,
+    )
     dispatched = 0
     timed_out = 0
-    now = datetime.now(timezone.utc)
     for trip in searching:
         expires_at = parse_time(trip.get("search_expires_at"))
         if expires_at and expires_at <= now:
@@ -1012,14 +1046,21 @@ async def list_hailing_city_dispatch_settings() -> List[Dict[str, Any]]:
 
 async def driver_stats(user: Dict[str, Any]) -> Dict[str, Any]:
     driver = await driver_profile_for_user(user)
-    today = datetime.now(timezone.utc).date().isoformat()
-    trips = await database.find_many("hailing_trips", {"driver_id": driver["id"], "status": "COMPLETED"})
-    todays = [trip for trip in trips if str(trip.get("completed_at") or "").startswith(today)]
-    gross = sum(float((trip.get("fare") or {}).get("total_fare") or 0) for trip in todays)
-    commission = sum(float((trip.get("fare") or {}).get("platform_commission") or 0) for trip in todays)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    trips = await database.find_many(
+        "hailing_trips",
+        {
+            "driver_id": driver["id"],
+            "status": "COMPLETED",
+            "completed_at": {"$gte": today_start.isoformat()},
+        },
+        sort=[("completed_at", -1)],
+    )
+    gross = sum(float((trip.get("fare") or {}).get("total_fare") or 0) for trip in trips)
+    commission = sum(float((trip.get("fare") or {}).get("platform_commission") or 0) for trip in trips)
     return {
         "driver_id": driver["id"],
-        "today_ride_count": len(todays),
+        "today_ride_count": len(trips),
         "today_gross_fares": round(gross, 2),
         "today_platform_commission": round(commission, 2),
         "today_estimated_earnings": round(max(0, gross - commission), 2),

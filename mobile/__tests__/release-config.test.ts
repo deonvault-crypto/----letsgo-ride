@@ -55,6 +55,7 @@ describe("production release configuration", () => {
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_LOCATION",
     ]));
+    expect(appConfig.android.permissions).not.toContain("android.permission.USE_FINGERPRINT");
     expect(appConfig.android.blockedPermissions).toEqual(expect.arrayContaining([
       "android.permission.RECORD_AUDIO",
       "android.permission.READ_EXTERNAL_STORAGE",
@@ -66,9 +67,9 @@ describe("production release configuration", () => {
 
   it("pins API 36 through the installed Expo toolchain and explicitly protects Android restore", () => {
     expect(() => execFileSync(process.execPath, [resolve(__dirname, "../scripts/verify-android-config.js")], { stdio: "pipe" })).not.toThrow();
-    expect(appConfig.android.allowBackup).toBe(true);
+    expect(appConfig.android.allowBackup).toBe(false);
     const secureStore = appConfig.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-secure-store");
-    expect(secureStore[1].configureAndroidBackup).toBe(true);
+    expect(secureStore[1].configureAndroidBackup).toBe(false);
     const buildProperties = appConfig.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-build-properties");
     expect(buildProperties[1].android).toMatchObject({
       compileSdkVersion: 36,

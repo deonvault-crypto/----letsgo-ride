@@ -7,13 +7,16 @@ import { applyCourierDeliveryEvent, authoritativeDelivery } from "../utils/couri
 
 
 const PIN_VISIBLE = new Set<CourierStatus>(["PICKED_UP", "IN_TRANSIT", "ARRIVING", "DELIVERED"]);
+const RECOVERY_REFRESH_MS = 6500;
+const CONNECTED_RECONCILIATION_MS = 18000;
+const TERMINAL_STATUSES = new Set<CourierStatus>(["DELIVERED", "CANCELLED", "FAILED"]);
 
 export function useCourierDeliveryRealtime(
   deliveryId: string | undefined,
   options: { includeHandoffPin?: boolean } = {},
 ) {
   const { includeHandoffPin = false } = options;
-  const { reconciliationRevision, subscribe } = useRealtime();
+  const { connectionState, reconciliationRevision, subscribe } = useRealtime();
   const [delivery, setDelivery] = useState<CourierDelivery | null>(null);
   const [events, setEvents] = useState<CourierEvent[]>([]);
   const [handoff, setHandoff] = useState<CourierDeliveryPin | null>(null);
@@ -27,6 +30,12 @@ export function useCourierDeliveryRealtime(
   const opened = useRef(false);
   const pinRequested = useRef(false);
   const seenReconciliationRevision = useRef(reconciliationRevision);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
 
   const acceptDelivery = useCallback((next: CourierDelivery) => {
     const accepted = authoritativeDelivery(deliveryRef.current, next);
@@ -80,8 +89,9 @@ export function useCourierDeliveryRealtime(
     }
     return () => {
       mounted.current = false;
+      clearTimer();
     };
-  }, [deliveryId, reconcile]);
+  }, [clearTimer, deliveryId, reconcile]);
 
   useEffect(() => subscribe((event) => {
     const current = deliveryRef.current;
@@ -117,6 +127,24 @@ export function useCourierDeliveryRealtime(
         console.warn("courier_delivery_pin_fetch_failed", err);
       });
   }, [delivery?.status, deliveryId, includeHandoffPin]);
+
+  useEffect(() => {
+    clearTimer();
+    if (!deliveryId || !delivery || TERMINAL_STATUSES.has(delivery.status)) return undefined;
+    let cancelled = false;
+    const schedule = () => {
+      const delay = connectionState === "connected" ? CONNECTED_RECONCILIATION_MS : RECOVERY_REFRESH_MS;
+      timer.current = setTimeout(async () => {
+        await reconcile(false);
+        if (!cancelled) schedule();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      clearTimer();
+    };
+  }, [clearTimer, connectionState, delivery?.id, delivery?.status, deliveryId, reconcile]);
 
   const replaceEvents = useCallback((next: CourierEvent[]) => setEvents(next), []);
   const updateDeliveryLocally = useCallback((updater: (current: CourierDelivery | null) => CourierDelivery | null) => {

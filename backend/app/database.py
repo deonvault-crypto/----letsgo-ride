@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import logging
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
@@ -122,6 +122,7 @@ class Database:
         """Create the small set of operational indexes required by live product queries."""
         if self.db is None:
             return
+        await self._prepare_unique_user_id_index()
         await self._prepare_unique_user_email_index()
         await self.db["courier_deliveries"].create_index(
             [("courier_user_id", 1), ("status", 1), ("updated_at", -1)],
@@ -174,6 +175,14 @@ class Database:
             [("courier_user_id", 1), ("started_at", -1)],
             name="courier_online_time_by_user",
         )
+        await self.db["courier_events"].create_index(
+            [("delivery_id", 1), ("created_at", 1)],
+            name="courier_events_by_delivery_time",
+        )
+        await self.db["courier_location_snapshots"].create_index(
+            [("delivery_id", 1), ("recorded_at", 1)],
+            name="courier_location_snapshots_by_delivery_time",
+        )
         await self.db["rides"].create_index(
             [("user_id", 1), ("updated_at", -1)],
             name="driver_rides_workspace",
@@ -221,6 +230,18 @@ class Database:
             name="hailing_trips_by_city_status",
         )
         await self.db["hailing_trips"].create_index(
+            [("status", 1), ("search_expires_at", 1), ("created_at", 1)],
+            name="hailing_searching_due_work",
+        )
+        await self.db["hailing_trips"].create_index(
+            [("status", 1), ("next_dispatch_at", 1), ("created_at", 1)],
+            name="hailing_searching_next_dispatch",
+        )
+        await self.db["hailing_trips"].create_index(
+            [("driver_id", 1), ("status", 1), ("completed_at", -1)],
+            name="hailing_driver_completed_stats",
+        )
+        await self.db["hailing_trips"].create_index(
             [("passenger_user_id", 1), ("client_request_id", 1)],
             name="unique_hailing_trip_idempotency",
             unique=True,
@@ -234,13 +255,65 @@ class Database:
             [("driver_id", 1), ("status", 1), ("expires_at", 1)],
             name="hailing_pending_offer_by_driver",
         )
+        await self.db["hailing_dispatch_offers"].create_index(
+            [("status", 1), ("expires_at", 1)],
+            name="hailing_pending_offers_due_work",
+        )
         await self.db["hailing_quotes"].create_index(
             [("user_id", 1), ("expires_at", 1)],
             name="hailing_quotes_by_user_expiry",
         )
+        await self.db["hailing_trip_events"].create_index(
+            [("trip_id", 1), ("created_at", 1)],
+            name="hailing_trip_events_by_trip_time",
+        )
+
+    async def _index_names(self, collection: str) -> set[str]:
+        info = await self.db[collection].index_information()
+        return set(info.keys())
+
+    async def _prepare_unique_user_id_index(self) -> None:
+        """Ensure stable application user IDs are enforced without steady-state full scans."""
+        if "unique_user_app_id" in await self._index_names("users"):
+            return
+        missing = await self.db["users"].count_documents(
+            {
+                "$or": [
+                    {"id": {"$exists": False}},
+                    {"id": None},
+                    {"id": ""},
+                ]
+            }
+        )
+        if missing:
+            raise RuntimeError(
+                f"{missing} users are missing application IDs; run the user-id backfill before creating the unique index."
+            )
+        duplicates = await self.db["users"].aggregate(
+            [
+                {"$match": {"id": {"$type": "string"}}},
+                {"$group": {"_id": "$id", "count": {"$sum": 1}}},
+                {"$match": {"count": {"$gt": 1}}},
+                {"$limit": 10},
+            ]
+        ).to_list(length=10)
+        if duplicates:
+            fingerprints = [
+                __import__("hashlib").sha256(str(item.get("_id") or "").encode()).hexdigest()[:12]
+                for item in duplicates
+            ]
+            raise RuntimeError(f"Duplicate user application IDs must be resolved before startup: {fingerprints}")
+        await self.db["users"].create_index(
+            [("id", 1)],
+            name="unique_user_app_id",
+            unique=True,
+            partialFilterExpression={"id": {"$type": "string"}},
+        )
 
     async def _prepare_unique_user_email_index(self) -> None:
         """Backfill normalized emails only after proving the existing set is unique."""
+        if "unique_normalized_user_email" in await self._index_names("users"):
+            return
         users = [self._clean(item) async for item in self.db["users"].find({"email": {"$type": "string"}})]
         groups: Dict[str, List[str]] = {}
         for user in users:
@@ -270,11 +343,20 @@ class Database:
         return cleaned
 
     async def find_many(
-        self, collection: str, filters: Optional[Dict[str, Any]] = None
+        self,
+        collection: str,
+        filters: Optional[Dict[str, Any]] = None,
+        *,
+        sort: Optional[Sequence[Tuple[str, int]]] = None,
+        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         filters = filters or {}
         if self.db is not None:
             cursor = self.db[collection].find(filters)
+            if sort:
+                cursor = cursor.sort(list(sort))
+            if limit is not None:
+                cursor = cursor.limit(max(0, int(limit)))
             return [self._clean(item) async for item in cursor]
 
         self._ensure_memory_allowed()
@@ -282,6 +364,14 @@ class Database:
         for item in self.memory[collection]:
             if self._matches(item, filters):
                 rows.append(deepcopy(item))
+        if sort:
+            for field, direction in reversed(list(sort)):
+                rows.sort(
+                    key=lambda item: (item.get(field) is None, item.get(field)),
+                    reverse=int(direction) < 0,
+                )
+        if limit is not None:
+            rows = rows[: max(0, int(limit))]
         return rows
 
     async def find_one(
@@ -448,9 +538,21 @@ class Database:
     @staticmethod
     def _matches(item: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         for key, expected in filters.items():
+            if key == "$or" and isinstance(expected, list):
+                if not any(Database._matches(item, option) for option in expected):
+                    return False
+                continue
+            if key == "$and" and isinstance(expected, list):
+                if not all(Database._matches(item, option) for option in expected):
+                    return False
+                continue
             actual = item.get(key)
             if isinstance(expected, dict):
                 for operator, value in expected.items():
+                    if operator == "$exists":
+                        exists = key in item
+                        if bool(value) != exists:
+                            return False
                     if operator == "$in" and actual not in value:
                         return False
                     if operator == "$nin" and actual in value:
