@@ -1,0 +1,34 @@
+name: EAS Android Build Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/eas-android-17
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN missing"
+            exit 1
+          fi
+      - name: Inspect failed Android build 17
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build:view 38f6bc42-d78c-40cb-835e-b076701e2aa2 --json
