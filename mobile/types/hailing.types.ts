@@ -1,4 +1,5 @@
 export type HailingRideClass = "ECONOMY" | "COMFORT" | "XL";
+export type HailingPaymentMethod = "cash" | "card";
 
 export type HailingTripStatus =
   | "SEARCHING"
@@ -51,6 +52,21 @@ export type HailingConfig = {
   ride_classes: HailingRideClassConfig[];
   cash_enabled: boolean;
   digital_payments: string[];
+};
+
+export type PaymentConfig = {
+  card_enabled: boolean;
+  provider?: "stripe" | null;
+  currency: string;
+};
+
+export type HailingStripeIntent = {
+  payment_intent_id: string;
+  client_secret: string;
+  publishable_key: string;
+  status: string;
+  amount: number;
+  currency: string;
 };
 
 export type HailingServiceArea = {
@@ -146,8 +162,18 @@ export type HailingTrip = {
   passenger_user_id?: string;
   driver_user_id?: string | null;
   ride_class: HailingRideClass;
-  payment_method: "cash";
-  payment_status: "pending" | "cash_due" | "cash_collected" | "paid" | "failed" | "refunded";
+  payment_method: HailingPaymentMethod;
+  payment_status:
+    | "pending"
+    | "cash_due"
+    | "cash_collected"
+    | "authorized"
+    | "capture_pending"
+    | "cancel_pending"
+    | "cancelled"
+    | "paid"
+    | "failed"
+    | "refunded";
   verify_ride_with_pin?: boolean;
   trip_pin_verified_at?: string | null;
   pickup: HailingPlace;
