@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
@@ -13,14 +14,26 @@ import requests
 
 from app.config import get_settings
 from app.database import database
+from app.services.hailing_city_service import get_city
+from app.services.hailing_dispatch_service import dispatch_policy
 from app.services.hailing_fare_service import quote_expired
-from app.services.hailing_realtime_service import publish_hailing_trip_realtime, update_versioned_hailing_trip
-from app.utils import now_iso
+from app.services.hailing_realtime_service import (
+    publish_hailing_admin_realtime,
+    publish_hailing_trip_realtime,
+    update_versioned_hailing_trip,
+)
+from app.utils import new_id, now_iso
 
 
 logger = logging.getLogger(__name__)
 STRIPE_API_BASE = "https://api.stripe.com/v1"
 WEBHOOK_TOLERANCE_SECONDS = 300
+CARD_CANCEL_STATUSES = {
+    "CANCELLED_BY_PASSENGER",
+    "CANCELLED_BY_DRIVER",
+    "CANCELLED_BY_ADMIN",
+    "NO_DRIVER_FOUND",
+}
 
 
 def _settings():
@@ -185,6 +198,94 @@ async def verify_hailing_authorization(
     return intent
 
 
+async def create_authorized_hailing_trip(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    """Create/dispatch a card trip only after Stripe confirms the server-priced authorization."""
+    from app.services.hailing_trip_service import (
+        active_trip_for_user,
+        create_dispatch_offer,
+        public_trip,
+        record_trip_event,
+    )
+
+    existing = await active_trip_for_user(user)
+    if existing:
+        return public_trip(existing, user)
+
+    quote = await database.find_one("hailing_quotes", {"id": payload["quote_id"], "user_id": user["id"]})
+    if not quote or quote_expired(quote):
+        raise ValueError("This Ride Now quote has expired. Please request a new fare.")
+
+    client_request_id = str(payload.get("client_request_id") or "")
+    prior = await database.find_one(
+        "hailing_trips",
+        {"passenger_user_id": user["id"], "client_request_id": client_request_id},
+    )
+    if prior:
+        return public_trip(prior, user)
+
+    payment_intent_id = str(payload.get("stripe_payment_intent_id") or "")
+    intent = await verify_hailing_authorization(payment_intent_id, quote, user)
+    payment_status = "paid" if intent.get("status") == "succeeded" else "authorized"
+
+    timestamp = now_iso()
+    city = await get_city(quote["city_id"])
+    policy = dispatch_policy(city)
+    search_expires_at = (
+        datetime.now(timezone.utc) + timedelta(seconds=policy.search_timeout_seconds)
+    ).isoformat()
+    trip = {
+        "id": new_id(),
+        "quote_id": quote["id"],
+        "passenger_user_id": user["id"],
+        "passenger_snapshot": {
+            "user_id": user["id"],
+            "name": user.get("name") or "Passenger",
+            "rating": user.get("rating"),
+        },
+        "driver_user_id": None,
+        "driver_id": None,
+        "vehicle_id": None,
+        "city_id": quote["city_id"],
+        "ride_class": quote["fare"]["ride_class"],
+        "pickup": quote["pickup"],
+        "dropoff": quote["dropoff"],
+        "route": quote["route"],
+        "fare": quote["fare"],
+        "payment_method": "card",
+        "payment_status": payment_status,
+        "stripe_payment_intent_id": payment_intent_id,
+        "stripe_payment_status": intent.get("status"),
+        "stripe_amount_minor": int(intent.get("amount") or 0),
+        "stripe_currency": intent.get("currency"),
+        "status": "SEARCHING",
+        "verify_ride_with_pin": bool(payload.get("verify_ride_with_pin")),
+        "search_started_at": timestamp,
+        "search_expires_at": search_expires_at,
+        "current_dispatch_radius_km": policy.initial_radius_km,
+        "dispatch_attempt_count": 0,
+        "dispatch_claim_token": None,
+        "dispatch_claim_expires_at": timestamp,
+        "client_request_id": client_request_id,
+        "realtime_version": 1,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+    }
+    created = await database.insert_one("hailing_trips", trip)
+    logger.info(
+        "hailing_card_request_created trip_id=%s city_id=%s ride_class=%s payment_intent_id=%s",
+        created["id"],
+        created["city_id"],
+        created["ride_class"],
+        payment_intent_id,
+    )
+    await record_trip_event(created, "hailing_request_created", {"payment_method": "card"})
+    await publish_hailing_trip_realtime(created, "hailing.trip.created")
+    await publish_hailing_admin_realtime(created, "hailing.trip.created")
+    await create_dispatch_offer(created)
+    stored = await database.find_one("hailing_trips", {"id": created["id"]}) or created
+    return public_trip(stored, user)
+
+
 async def capture_hailing_trip_payment(trip: Dict[str, Any]) -> str:
     if trip.get("payment_method") != "card":
         return str(trip.get("payment_status") or "pending")
@@ -218,32 +319,92 @@ async def capture_hailing_trip_payment(trip: Dict[str, Any]) -> str:
         return "capture_pending"
 
 
-async def cancel_hailing_card_authorization(trip: Dict[str, Any], reason: str) -> None:
+async def cancel_hailing_card_authorization(trip: Dict[str, Any], reason: str) -> str:
     if trip.get("payment_method") != "card":
-        return
+        return str(trip.get("payment_status") or "pending")
     payment_intent_id = str(trip.get("stripe_payment_intent_id") or "")
     if not payment_intent_id:
-        return
+        return "failed"
     try:
         intent = await retrieve_payment_intent(payment_intent_id)
-        if intent.get("status") in {"requires_capture", "requires_payment_method", "requires_confirmation", "requires_action", "processing"}:
+        if intent.get("status") == "succeeded":
+            return "paid"
+        if intent.get("status") == "canceled":
+            return "cancelled"
+        if intent.get("status") in {
+            "requires_capture",
+            "requires_payment_method",
+            "requires_confirmation",
+            "requires_action",
+            "processing",
+        }:
             cancelled = await _stripe_request(
                 "POST",
                 f"/payment_intents/{payment_intent_id}/cancel",
                 data={"cancellation_reason": "requested_by_customer"},
                 idempotency_key=f"hail-cancel:{trip['id']}:{reason}",
             )
-            await database.update_one(
-                "hailing_trips",
-                trip["id"],
-                {"payment_status": "cancelled", "stripe_payment_status": cancelled.get("status"), "updated_at": now_iso()},
-            )
+            return "cancelled" if cancelled.get("status") == "canceled" else "cancel_pending"
+        return "cancel_pending"
     except Exception as exc:
         logger.warning(
             "hailing_card_cancel_deferred trip_id=%s error_type=%s",
             trip.get("id"),
             exc.__class__.__name__,
         )
+        return "cancel_pending"
+
+
+async def reconcile_hailing_card_payments() -> Dict[str, int]:
+    """Reconcile terminal trips so a processor hiccup never blocks the driver UI."""
+    trips = await database.find_many("hailing_trips", {"payment_method": "card"})
+    captured = 0
+    released = 0
+    deferred = 0
+    for trip in trips:
+        status = str(trip.get("status") or "")
+        payment_status = str(trip.get("payment_status") or "")
+        if status == "COMPLETED" and payment_status not in {"paid", "refunded"}:
+            next_payment_status = await capture_hailing_trip_payment(trip)
+            if next_payment_status == payment_status:
+                continue
+            updated = await update_versioned_hailing_trip(
+                {"id": trip["id"]},
+                {"payment_status": next_payment_status, "updated_at": now_iso()},
+            )
+            if updated:
+                await publish_hailing_trip_realtime(updated, "hailing.trip.payment_updated")
+            if next_payment_status == "paid":
+                captured += 1
+            else:
+                deferred += 1
+        elif status in CARD_CANCEL_STATUSES and payment_status not in {"cancelled", "paid", "refunded"}:
+            next_payment_status = await cancel_hailing_card_authorization(trip, status.lower())
+            if next_payment_status == payment_status:
+                continue
+            updated = await update_versioned_hailing_trip(
+                {"id": trip["id"]},
+                {"payment_status": next_payment_status, "updated_at": now_iso()},
+            )
+            if updated:
+                await publish_hailing_trip_realtime(updated, "hailing.trip.payment_updated")
+            if next_payment_status == "cancelled":
+                released += 1
+            else:
+                deferred += 1
+    return {"captured": captured, "released": released, "deferred": deferred}
+
+
+async def stripe_payment_reconciliation_sweeper(stop_event: asyncio.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            await reconcile_hailing_card_payments()
+        except Exception as exc:
+            logger.warning("stripe_payment_reconciliation_failed error_type=%s", exc.__class__.__name__)
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            continue
 
 
 def verify_webhook_signature(payload: bytes, signature_header: str, secret: str) -> None:
