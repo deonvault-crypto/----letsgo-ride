@@ -195,11 +195,20 @@ export default function WalletScreen() {
           </View>
         </View>
 
+        {wallet.worker_role === "driver" ? (
+          <View style={styles.driverPolicyCard}>
+            <View style={styles.driverPolicyIcon}><MaterialCommunityIcons name="cash-check" size={22} color="#111111" /></View>
+            <View style={styles.driverPolicyCopy}>
+              <Text style={styles.driverPolicyTitle}>Cash fares are 100% yours</Text>
+              <Text style={styles.driverPolicyBody}>When a passenger pays cash, you keep the full fare. LetsGoRide only takes its platform fee from successfully settled card rides.</Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.moneyGrid}>
-          <MoneyCard icon="cash-multiple" label="Cash collected" value={money(wallet.cash_collected_usd)} body="Cash collected directly on completed work." />
-          <MoneyCard icon="bank-transfer" label="Owed to LetsGoRide" value={money(wallet.amount_due_to_platform_usd)} body="Platform amount arising from completed cash work." />
-          <MoneyCard icon="credit-card-outline" label="Digital earnings" value={money(wallet.digital_earnings_usd)} body="Worker earnings recorded digitally before payouts." />
-          <MoneyCard icon="percent-outline" label="Platform commission" value={money(wallet.platform_commission_usd)} body="Commission recorded across completed work." />
+          <MoneyCard icon="cash-multiple" label={wallet.worker_role === "driver" ? "Cash kept by you" : "Cash collected"} value={money(wallet.cash_collected_usd)} body={wallet.worker_role === "driver" ? "Full cash fare kept directly by the driver." : "Cash collected directly on completed work."} />
+          <MoneyCard icon="credit-card-outline" label="Digital earnings" value={money(wallet.digital_earnings_usd)} body="Settled digital worker earnings before payouts." />
+          <MoneyCard icon="percent-outline" label={wallet.worker_role === "driver" ? "Card platform fee" : "Platform commission"} value={money(wallet.platform_commission_usd)} body={wallet.worker_role === "driver" ? "LetsGoRide fee from settled card rides only." : "Platform commission recorded across completed work."} />
         </View>
 
         <View style={styles.section}>
@@ -358,6 +367,11 @@ const styles = StyleSheet.create({
   metric: { flex: 1, gap: 2 },
   metricValue: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
   metricLabel: { color: "rgba(255,255,255,0.52)", fontSize: 9, fontWeight: "700" },
+  driverPolicyCard: { borderRadius: 20, backgroundColor: "#F2F7F2", borderWidth: StyleSheet.hairlineWidth, borderColor: "#D9E8DA", padding: 13, flexDirection: "row", alignItems: "center", gap: 10 },
+  driverPolicyIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  driverPolicyCopy: { flex: 1, gap: 3 },
+  driverPolicyTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  driverPolicyBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
   moneyGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
   moneyCard: { width: "48%", minHeight: 128, borderRadius: 20, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 13, gap: 5 },
   moneyLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" },
