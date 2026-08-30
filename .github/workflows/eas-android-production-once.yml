@@ -1,4 +1,4 @@
-name: EAS Android Gradle Log Decode
+name: EAS Android Production Build 2
 
 on:
   push:
@@ -8,82 +8,60 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: eas-android-production-8c6c7112
+  cancel-in-progress: false
+
 jobs:
-  decode-gradle-log:
-    name: Decode Gradle failure for 3ce0f3e1
+  build-android-production:
+    name: Build Android production 8c6c7112
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: mobile
     steps:
-      - name: Checkout frozen release candidate
+      - name: Checkout corrected release candidate
         uses: actions/checkout@v4
         with:
-          ref: 14b124b4896c1481325fc8ebaf4fcab009431e83
+          ref: 8c6c71123e126111757268c009e45cc45aba5328
 
-      - name: Decode Expo build log
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          BUILD_ID: 3ce0f3e1-861b-4bfb-ab19-0cfdaa6773b5
+      - name: Verify exact source SHA
+        working-directory: .
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$EXPO_TOKEN"
+          actual="$(git rev-parse HEAD)"
+          expected="8c6c71123e126111757268c009e45cc45aba5328"
+          echo "Source SHA: $actual"
+          test "$actual" = "$expected"
 
-          cat > /tmp/query.txt <<'GRAPHQL'
-          query BuildById($buildId: ID!) {
-            builds {
-              byId(buildId: $buildId) {
-                id
-                status
-                logFiles
-                error { errorCode message }
-              }
-            }
-          }
-          GRAPHQL
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
-          jq -n --rawfile query /tmp/query.txt --arg buildId "$BUILD_ID" \
-            '{query:$query, variables:{buildId:$buildId}}' > /tmp/request.json
-          curl --fail --silent --show-error \
-            -H "Authorization: Bearer $EXPO_TOKEN" \
-            -H 'Content-Type: application/json' \
-            --data @/tmp/request.json \
-            https://api.expo.dev/graphql > /tmp/response.json
+      - name: Install dependencies reproducibly
+        run: npm ci
 
-          url="$(jq -r '.data.builds.byId.logFiles[0] // empty' /tmp/response.json)"
-          test -n "$url"
-          curl --compressed --fail --silent --show-error --location "$url" -o /tmp/eas-log.txt
+      - name: Verify Android release policy
+        run: npm run verify:android
 
-          echo '=== LOG FILE TYPE ==='
-          file /tmp/eas-log.txt
-          echo '=== LOG MAGIC BYTES ==='
-          xxd -l 24 /tmp/eas-log.txt
+      - name: Verify Expo authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN repository secret is required."
+            exit 1
+          fi
+          npx eas-cli@latest whoami --non-interactive
 
-          python - <<'PY'
-          from pathlib import Path
-          raw = Path('/tmp/eas-log.txt').read_bytes()
-          text = None
-          for encoding in ('utf-8', 'utf-16', 'latin-1'):
-              try:
-                  candidate = raw.decode(encoding)
-                  if candidate:
-                      text = candidate
-                      break
-              except Exception:
-                  pass
-          if text is None:
-              text = raw.decode('utf-8', errors='replace')
-          text = text.replace('\x00', '')
-          Path('/tmp/eas-log-decoded.txt').write_text(text, encoding='utf-8')
-          print(f'DECODED_CHARS {len(text)}')
-          PY
-
-          echo '=== GRADLE FAILURE EXCERPTS ==='
-          grep -aniE -B 35 -A 100 \
-            'FAILURE: Build failed|What went wrong|Execution failed for task|Could not resolve|Could not determine|Caused by:|Manifest merger failed|Duplicate class|AAPT2?|resource.*not found|google-services|R8|Kotlin compilation|Gradle build daemon disappeared|BUILD FAILED|error:' \
-            /tmp/eas-log-decoded.txt | tail -n 800 || true
-
-          echo '=== FINAL 260 LOG LINES ==='
-          tail -n 260 /tmp/eas-log-decoded.txt
+      - name: Build production Android AAB on EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile production --non-interactive
