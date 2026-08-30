@@ -28,10 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout with parent
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -57,13 +55,13 @@ jobs:
           NODE
           npm audit --omit=dev || true
           cd ..
-          # The generated commit must restore the normal read-only CI workflow.
-          git checkout HEAD^ -- .github/workflows/platform-v2-ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add mobile/package.json mobile/package-lock.json .github/workflows/platform-v2-ci.yml
+          git add mobile/package.json mobile/package-lock.json
           git diff --cached --check
           git commit -m "Pin patched PostCSS for Expo 54"
+          # Publish package files only. The final connector-authored release commit
+          # restores the normal read-only workflow before advancing the release ref.
           git push --force origin HEAD:refs/heads/automation/postcss-8.5.26
 
   mobile:
