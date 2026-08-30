@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -9,16 +9,16 @@ import { BottomNav } from "../../../../components/layout/BottomNav";
 import { AppNotice } from "../../../../components/ui/AppNotice";
 import { Avatar } from "../../../../components/ui/Avatar";
 import { v2Theme } from "../../../../constants/v2Theme";
+import { useHailingTripRealtime } from "../../../../hooks/useHailing";
 import {
   cancelHailingTrip,
   confirmHailingBoarding,
-  getHailingTrip,
   openHailingConversation,
   regenerateHailingTripPin,
   sendHailingSafetyEvent,
   shareHailingTrip,
 } from "../../../../services/hailingService";
-import { HailingTrip, HailingTripStatus } from "../../../../types/hailing.types";
+import { HailingTripStatus } from "../../../../types/hailing.types";
 
 const RIDE_BLACK = "#111111";
 const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
@@ -30,7 +30,7 @@ function statusTitle(status?: HailingTripStatus) {
     case "DRIVER_ASSIGNED": return "Driver assigned";
     case "DRIVER_EN_ROUTE": return "Driver on the way";
     case "DRIVER_ARRIVED": return "Your driver is here";
-    case "PASSENGER_CONFIRMED_BOARDING": return "Ready to start";
+    case "PASSENGER_CONFIRMED_BOARDING": return "Safety PIN ready";
     case "IN_PROGRESS": return "Ride in progress";
     case "COMPLETED": return "Ride completed";
     case "CANCELLED_BY_PASSENGER": return "Ride cancelled";
@@ -41,12 +41,14 @@ function statusTitle(status?: HailingTripStatus) {
   }
 }
 
-function statusBody(status?: HailingTripStatus) {
+function statusBody(status?: HailingTripStatus, verifyWithPin = false) {
   switch (status) {
-    case "DRIVER_ASSIGNED": return "Your driver accepted the request. Live location will update as they approach.";
+    case "DRIVER_ASSIGNED": return "Your driver accepted the request. Their live position updates as they approach.";
     case "DRIVER_EN_ROUTE": return "Your driver is travelling to the pickup point.";
-    case "DRIVER_ARRIVED": return "Check the driver, vehicle colour and plate before getting in.";
-    case "PASSENGER_CONFIRMED_BOARDING": return "You confirmed you’re in the car. The driver can start the trip.";
+    case "DRIVER_ARRIVED": return verifyWithPin
+      ? "Check the driver, vehicle colour and plate. Use your optional safety PIN when you are ready to leave."
+      : "Check the driver, vehicle colour and plate before getting in. The driver can start once you are safely onboard.";
+    case "PASSENGER_CONFIRMED_BOARDING": return "Give the one-time safety PIN only to your assigned driver. The trip can start after verification.";
     case "IN_PROGRESS": return "Your trip is active. You can share this live status with someone you trust.";
     case "COMPLETED": return "Your trip is complete. Your receipt and rating are ready.";
     case "CANCELLED_BY_DRIVER": return "The driver could not continue. You can request another ride.";
@@ -62,39 +64,15 @@ export default function CustomerHailingTripScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string }>();
   const tripId = String(params.id || "");
-  const [trip, setTrip] = useState<HailingTrip | null>(null);
+  const { trip, loading, error, reload, setTrip, realtimeState } = useHailingTripRealtime(tripId, Boolean(tripId));
   const [tripPin, setTripPin] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!tripId) return;
-    try {
-      setRefreshing(true);
-      const next = await getHailingTrip(tripId);
-      if (next.status === "SEARCHING") {
-        router.replace(`/(customer)/hail/searching?tripId=${encodeURIComponent(next.id)}` as never);
-        return;
-      }
-      setTrip(next);
-      if (!next.verify_ride_with_pin || next.trip_pin_verified_at || TERMINAL.has(next.status) || next.status === "IN_PROGRESS") setTripPin(null);
-      setNotice(null);
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Unable to restore this ride.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [router, tripId]);
-
-  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (!trip || TERMINAL.has(trip.status)) return undefined;
-    const timer = setTimeout(() => void load(), 4500);
-    return () => clearTimeout(timer);
-  }, [load, trip?.id, trip?.status, trip?.updated_at]);
+    if (trip?.status === "SEARCHING") router.replace(`/(customer)/hail/searching?tripId=${encodeURIComponent(trip.id)}` as never);
+    if (trip && (!trip.verify_ride_with_pin || trip.trip_pin_verified_at || TERMINAL.has(trip.status) || trip.status === "IN_PROGRESS")) setTripPin(null);
+  }, [router, trip?.id, trip?.status, trip?.trip_pin_verified_at, trip?.verify_ride_with_pin]);
 
   async function perform(name: string, action: () => Promise<void>) {
     try {
@@ -127,13 +105,13 @@ export default function CustomerHailingTripScreen() {
     });
   }
 
-  function confirmBoarding() {
-    if (!trip) return;
+  function prepareSafetyPin() {
+    if (!trip?.verify_ride_with_pin || trip.status !== "DRIVER_ARRIVED") return;
     void perform("boarding", async () => {
       const next = await confirmHailingBoarding(trip.id);
       setTrip(next);
       if (next.trip_pin) setTripPin(next.trip_pin);
-      setNotice(next.verify_ride_with_pin ? "Tell this one-time PIN only to your assigned driver." : "Boarding confirmed. Waiting for the driver to start the trip.");
+      setNotice("Tell this one-time PIN only to your assigned driver.");
     });
   }
 
@@ -173,6 +151,7 @@ export default function CustomerHailingTripScreen() {
   const vehicleDescription = [vehicleName || trip?.vehicle?.vehicle, vehicleMeta].filter(Boolean).join(" · ") || "Vehicle details appear after matching";
   const awaitingPin = Boolean(trip?.status === "PASSENGER_CONFIRMED_BOARDING" && trip.verify_ride_with_pin && !trip.trip_pin_verified_at);
   const canCancel = Boolean(trip && ["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING"].includes(trip.status));
+  const live = realtimeState === "connected";
 
   return (
     <SafeAreaView edges={[]} style={styles.root}>
@@ -198,15 +177,17 @@ export default function CustomerHailingTripScreen() {
             <View style={styles.flex}>
               <Text style={styles.eyebrow}>RIDE NOW</Text>
               <Text style={styles.title}>{loading && !trip ? "Restoring your ride…" : statusTitle(trip?.status)}</Text>
-              <Text style={styles.body}>{statusBody(trip?.status)}</Text>
+              <Text style={styles.body}>{statusBody(trip?.status, Boolean(trip?.verify_ride_with_pin))}</Text>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Refresh ride" hitSlop={6} disabled={refreshing} onPress={() => void load()} style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}>
-              <MaterialCommunityIcons name="refresh" size={19} color={RIDE_BLACK} />
-            </Pressable>
+            <View accessibilityLabel={live ? "Ride updates connected" : "Ride updates reconnecting"} style={styles.liveBadge}>
+              <View style={[styles.liveDot, !live && styles.liveDotSyncing]} />
+              <Text style={styles.liveText}>{live ? "LIVE" : "SYNC"}</Text>
+            </View>
           </View>
 
           {loading && !trip ? <View style={styles.skeleton}><View style={styles.skeletonWide} /><View style={styles.skeletonShort} /></View> : null}
-          {notice ? <AppNotice message={notice} actionLabel="Refresh" onAction={() => void load()} onDismiss={() => setNotice(null)} /> : null}
+          {notice ? <AppNotice message={notice} actionLabel="Reconnect" onAction={() => void reload()} onDismiss={() => setNotice(null)} /> : null}
+          {error ? <AppNotice message={error} actionLabel="Reconnect" onAction={() => void reload()} /> : null}
 
           {trip?.driver && !TERMINAL.has(trip.status) ? (
             <View style={styles.driverCard}>
@@ -237,9 +218,9 @@ export default function CustomerHailingTripScreen() {
             </Pressable>
           ) : null}
 
-          {trip?.status === "DRIVER_ARRIVED" ? (
-            <Pressable accessibilityRole="button" disabled={busyAction === "boarding"} onPress={confirmBoarding} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
-              <Text style={styles.primaryActionText}>{busyAction === "boarding" ? "Confirming you’re in the car…" : "I’m in the car"}</Text><MaterialCommunityIcons name="arrow-right" size={19} color="#FFFFFF" />
+          {trip?.status === "DRIVER_ARRIVED" && trip.verify_ride_with_pin ? (
+            <Pressable accessibilityRole="button" disabled={busyAction === "boarding"} onPress={prepareSafetyPin} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+              <Text style={styles.primaryActionText}>{busyAction === "boarding" ? "Preparing safety PIN…" : "Use safety PIN"}</Text><MaterialCommunityIcons name="shield-key-outline" size={19} color="#FFFFFF" />
             </Pressable>
           ) : null}
 
@@ -299,7 +280,10 @@ const styles = StyleSheet.create({
   eyebrow: { color: RIDE_BLACK, fontSize: 9, fontWeight: "900", letterSpacing: 1.3 },
   title: { color: v2Theme.colors.ink, fontSize: 25, lineHeight: 29, fontWeight: "900", letterSpacing: -0.7, marginTop: 1 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 10.5, lineHeight: 16, marginTop: 3 },
-  refresh: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F0F0EE", alignItems: "center", justifyContent: "center" },
+  liveBadge: { minWidth: 50, minHeight: 34, borderRadius: 17, backgroundColor: "#F0F0EE", paddingHorizontal: 9, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.brand },
+  liveDotSyncing: { backgroundColor: "#D39A24" },
+  liveText: { color: RIDE_BLACK, fontSize: 8, fontWeight: "900", letterSpacing: 0.6 },
   skeleton: { borderRadius: 18, backgroundColor: "#F6F5F2", padding: 14, gap: 9 },
   skeletonWide: { height: 13, width: "75%", borderRadius: 7, backgroundColor: "#E3E2DE" },
   skeletonShort: { height: 10, width: "48%", borderRadius: 5, backgroundColor: "#E9E8E4" },
