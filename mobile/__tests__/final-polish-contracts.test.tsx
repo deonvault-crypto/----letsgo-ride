@@ -10,19 +10,20 @@ function source(...segments: string[]) {
 }
 
 describe("final 1-13 polish contracts", () => {
-  it("renders owned vehicle art for every Ride Now class without stock car glyphs", () => {
+  it("renders owned decorative vehicle art for every Ride Now class without stock car glyphs", () => {
     const screen = render(<>
       <RideClassCar rideClass="ECONOMY" />
       <RideClassCar rideClass="COMFORT" />
       <RideClassCar rideClass="XL" />
     </>);
+    const hidden = { includeHiddenElements: true };
 
-    expect(screen.getByTestId("ride-class-car-economy")).toBeOnTheScreen();
-    expect(screen.getByTestId("ride-class-car-comfort")).toBeOnTheScreen();
-    expect(screen.getByTestId("ride-class-car-xl")).toBeOnTheScreen();
-    expect(screen.queryByText("car-side")).toBeNull();
-    expect(screen.queryByText("car-estate")).toBeNull();
-    expect(screen.queryByText("van-passenger")).toBeNull();
+    expect(screen.getByTestId("ride-class-car-economy", hidden)).toBeOnTheScreen();
+    expect(screen.getByTestId("ride-class-car-comfort", hidden)).toBeOnTheScreen();
+    expect(screen.getByTestId("ride-class-car-xl", hidden)).toBeOnTheScreen();
+    expect(screen.queryByText("car-side", hidden)).toBeNull();
+    expect(screen.queryByText("car-estate", hidden)).toBeNull();
+    expect(screen.queryByText("van-passenger", hidden)).toBeNull();
   });
 
   it("keeps contextual button copy visible while work is in progress", () => {
