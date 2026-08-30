@@ -736,6 +736,100 @@ button { color: inherit; }
 .partner-path a:hover::after,
 .partner-path a:focus-visible::after { transform: scaleX(1); }
 
+.sponsor-ledger {
+  display: grid;
+  grid-template-columns: minmax(250px, .62fr) minmax(0, 1.38fr);
+  gap: clamp(36px, 7vw, 104px);
+  align-items: start;
+  margin-top: clamp(72px, 11vw, 145px);
+  padding-top: clamp(34px, 5vw, 62px);
+  border-top: 1px solid var(--line);
+}
+
+.sponsor-intro {
+  position: sticky;
+  top: 126px;
+}
+
+.sponsor-intro h3 {
+  max-width: 420px;
+  margin: 15px 0 0;
+  font-size: clamp(2.2rem, 4.3vw, 4.8rem);
+  letter-spacing: -.075em;
+  line-height: .92;
+}
+
+.sponsor-intro p:not(.section-kicker) {
+  max-width: 390px;
+  margin-top: 24px;
+  color: var(--muted);
+}
+
+.sponsor-logos {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(180px, .86fr);
+  gap: 1px;
+  overflow: hidden;
+  border-block: 1px solid var(--line);
+  background: var(--line);
+}
+
+.sponsor-logo {
+  position: relative;
+  min-height: clamp(160px, 18vw, 245px);
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: clamp(22px, 3.4vw, 42px);
+  isolation: isolate;
+}
+
+.sponsor-logo::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  bottom: 22px;
+  left: 0;
+  width: 3px;
+  background: var(--green-deep);
+}
+
+.sponsor-logo:nth-child(2)::before,
+.sponsor-logo:nth-child(4)::before { background: var(--orange); }
+
+.sponsor-logo-dark {
+  background: #0b0c0b;
+  color: rgba(255,255,255,.66);
+}
+
+.sponsor-logo-light {
+  background: #fffdf8;
+  color: #626862;
+}
+
+.sponsor-logo img {
+  display: block;
+  width: auto;
+  max-width: min(84%, 360px);
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.sponsor-logo-square img {
+  max-height: 150px;
+}
+
+.sponsor-logo figcaption {
+  position: absolute;
+  right: 18px;
+  bottom: 15px;
+  margin: 0;
+  font-size: .68rem;
+  font-weight: 850;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
 /* Trust */
 .trust { background: var(--surface); }
 .trust-layout { display: grid; grid-template-columns: minmax(340px, .8fr) minmax(500px, 1.2fr); gap: clamp(70px, 11vw, 170px); align-items: start; }
@@ -1029,6 +1123,12 @@ button { color: inherit; }
   .partner-courier,
   .partner-merchant { min-height: 300px; margin-top: 0; padding-top: 12px; }
   .partner-path p { min-height: 0; }
+  .sponsor-ledger { grid-template-columns: 1fr; margin-top: 78px; }
+  .sponsor-intro { position: static; }
+  .sponsor-logos { grid-template-columns: 1fr; }
+  .sponsor-logo { min-height: 174px; }
+  .sponsor-logo img { max-width: 78%; max-height: 105px; }
+  .sponsor-logo-square img { max-height: 132px; }
   .trust-principles article,
   .trust-principles article:nth-child(2),
   .trust-principles article:nth-child(3) { margin-left: 0; }
