@@ -152,6 +152,23 @@ async def _driver_totals(user_id: str) -> Dict[str, float]:
     }
 
 
+async def _lifetime_paid_out(user_id: str) -> float:
+    """Return the exact lifetime paid amount while payout-history UI remains bounded."""
+
+    filters = {"user_id": user_id, "worker_role": "driver", "status": "paid"}
+    if database.db is None:
+        rows = await database.find_many("worker_payouts", filters)
+        return _money(sum(_money(item.get("amount_usd")) for item in rows))
+
+    rows = await database.db["worker_payouts"].aggregate(
+        [
+            {"$match": filters},
+            {"$group": {"_id": None, "amount": {"$sum": {"$ifNull": ["$amount_usd", 0]}}}},
+        ]
+    ).to_list(length=1)
+    return _money((rows[0] if rows else {}).get("amount"))
+
+
 async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
@@ -188,7 +205,7 @@ async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
         sort=[("created_at", -1)],
         limit=DRIVER_PAYOUT_HISTORY_LIMIT,
     )
-    paid_out = _money(sum(_money(item.get("amount_usd")) for item in payouts))
+    paid_out = await _lifetime_paid_out(str(user["id"]))
     available = _money(max(0.0, totals["digital"] - paid_out))
     return {
         "currency": "USD",
