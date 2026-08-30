@@ -1,0 +1,59 @@
+name: Android Build 17 Diagnostic
+
+on:
+  push:
+    branches:
+      - release/2.0.2-final-consolidation
+    paths:
+      - .github/workflows/android-build17-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Inspect failed EAS Android build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Inspect Android Build 17
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN"
+          npx eas-cli@latest build:view 38f6bc42-d78c-40cb-835e-b076701e2aa2 --json > /tmp/eas-build.json
+          python - <<'PY'
+          import json
+          with open('/tmp/eas-build.json', encoding='utf-8') as handle:
+              build = json.load(handle)
+          safe = {
+              'id': build.get('id'),
+              'status': build.get('status'),
+              'platform': build.get('platform'),
+              'error': build.get('error'),
+              'buildProfile': build.get('buildProfile'),
+              'appVersion': build.get('appVersion'),
+              'appBuildVersion': build.get('appBuildVersion'),
+              'gitCommitHash': build.get('gitCommitHash'),
+              'logs': build.get('logs'),
+          }
+          print(json.dumps(safe, indent=2, default=str))
+          PY
