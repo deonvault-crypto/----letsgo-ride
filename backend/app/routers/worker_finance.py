@@ -25,6 +25,11 @@ from app.utils import api_error, api_success
 router = APIRouter(prefix="/worker/finance", tags=["worker-finance"])
 
 
+def _payout_method_value_error(exc: ValueError) -> None:
+    message = str(exc)
+    api_error(message, 404 if message == "Payout method not found." else 400)
+
+
 @router.get("/wallet")
 async def wallet(user=Depends(get_current_user)):
     try:
@@ -62,7 +67,7 @@ async def payout_method_update(method_id: str, payload: PayoutMethodUpdateBody, 
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
-        api_error(str(exc), 404)
+        _payout_method_value_error(exc)
     except RuntimeError as exc:
         api_error(str(exc), 503)
 
@@ -74,7 +79,7 @@ async def payout_method_default(payload: PayoutMethodDefaultBody, user=Depends(g
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
-        api_error(str(exc), 404)
+        _payout_method_value_error(exc)
     except RuntimeError as exc:
         api_error(str(exc), 503)
 
@@ -86,4 +91,4 @@ async def payout_method_delete(method_id: str, user=Depends(get_current_user)):
     except PermissionError as exc:
         api_error(str(exc), 403)
     except ValueError as exc:
-        api_error(str(exc), 404)
+        _payout_method_value_error(exc)
