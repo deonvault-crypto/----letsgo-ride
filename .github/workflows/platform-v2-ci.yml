@@ -14,7 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: platform-v2-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  # Keep push and PR runs in separate lanes. The platform PR's jobs are skipped
+  # below, while the exact staging-branch push remains the authoritative run.
+  group: platform-v2-ci-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
