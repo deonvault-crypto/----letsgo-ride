@@ -3,6 +3,7 @@ import { resolve } from "path";
 
 const appConfig = require("../app.json").expo;
 const easConfig = require("../eas.json");
+const packageConfig = require("../package.json");
 const validator = resolve(__dirname, "../scripts/validate-build-env.js");
 
 function validate(profile: string, apiBaseUrl: string, platform = "ios", androidCredentials = true) {
@@ -37,12 +38,23 @@ describe("production release configuration", () => {
     expect(validate("production", "https://letsgoride-v2-production.onrender.com/private")).toThrow();
   });
 
-  it("does not declare unused microphone, background-location, or broad storage access", () => {
+  it("allows the complete active-trip background-location stack while blocking unrelated sensitive access", () => {
     const imagePicker = appConfig.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-image-picker");
     const location = appConfig.plugins.find((plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-location");
+
     expect(imagePicker[1].microphonePermission).toBe(false);
-    expect(location[1].isIosBackgroundLocationEnabled).toBe(false);
-    expect(location[1].isAndroidBackgroundLocationEnabled).toBe(false);
+    expect(packageConfig.dependencies["expo-task-manager"]).toBe("~14.0.9");
+    expect(location[1]).toMatchObject({
+      isIosBackgroundLocationEnabled: true,
+      isAndroidBackgroundLocationEnabled: true,
+      isAndroidForegroundServiceEnabled: true,
+    });
+    expect(appConfig.ios.infoPlist.NSLocationAlwaysAndWhenInUseUsageDescription).toMatch(/active Ride Now trip/i);
+    expect(appConfig.android.permissions).toEqual(expect.arrayContaining([
+      "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_LOCATION",
+    ]));
     expect(appConfig.android.blockedPermissions).toEqual(expect.arrayContaining([
       "android.permission.RECORD_AUDIO",
       "android.permission.READ_EXTERNAL_STORAGE",
