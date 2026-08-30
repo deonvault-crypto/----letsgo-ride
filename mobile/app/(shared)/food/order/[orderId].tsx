@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { AppButton } from "../../../../components/ui/AppButton";
 import { Screen } from "../../../../components/ui/Screen";
 import { v2Theme } from "../../../../constants/v2Theme";
 import { useFoodOrderRealtime } from "../../../../hooks/useFoodOrderRealtime";
@@ -62,6 +63,24 @@ export default function FoodOrderScreen() {
             </View>
             <Text style={styles.heroBody}>{customerMessage(order)}</Text>
           </View>
+
+          {order.status === "DELIVERED" ? (
+            <View style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewIcon}><MaterialCommunityIcons name="star-outline" size={24} color="#111111" /></View>
+                <View style={styles.flexCopy}>
+                  <Text style={styles.reviewTitle}>How was your order?</Text>
+                  <Text style={styles.reviewBody}>Rate the restaurant and your courier separately, so each score reflects the right part of the experience.</Text>
+                </View>
+              </View>
+              <AppButton
+                title="Rate your order"
+                variant="secondary"
+                icon={<MaterialCommunityIcons name="star-check-outline" size={20} color="#111111" />}
+                onPress={() => router.push({ pathname: "/(shared)/review", params: { transactionId: order.id } } as never)}
+              />
+            </View>
+          ) : null}
 
           {order.status === "CANCELLED" || order.status === "REJECTED" ? (
             <View style={styles.finalAlert}>
@@ -262,6 +281,7 @@ const styles = StyleSheet.create({
   errorCard: { minHeight: 64, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.dangerSoft, padding: 13, flexDirection: "row", alignItems: "center", gap: 10 }, errorTitle: { color: v2Theme.colors.danger, fontSize: 12, fontWeight: "900" }, errorBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, retry: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" },
   stateCard: { minHeight: 68, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.brandSofter, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 }, stateTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
   heroCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 18, gap: 12 }, heroTop: { flexDirection: "row", alignItems: "center", gap: 11 }, heroIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" }, heroEyebrow: { color: "#8FE6AE", fontSize: 8, fontWeight: "900", letterSpacing: 1 }, heroTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" }, heroBody: { color: "rgba(255,255,255,0.7)", fontSize: 11, lineHeight: 17 }, statusPill: { borderRadius: 999, backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 8, paddingVertical: 6 }, statusPillDone: { backgroundColor: "#E9F8EF" }, statusText: { color: "#FFFFFF", fontSize: 7, fontWeight: "900" }, statusTextDone: { color: v2Theme.colors.brandStrong },
+  reviewCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: "#F4F1EA", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 15, gap: 13 }, reviewHeader: { flexDirection: "row", alignItems: "center", gap: 11 }, reviewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }, reviewTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, reviewBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   finalAlert: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.dangerSoft, padding: 14, flexDirection: "row", gap: 10, alignItems: "center" }, finalAlertTitle: { color: v2Theme.colors.danger, fontSize: 13, fontWeight: "900" }, finalAlertBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   parallelCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 12 }, parallelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, parallelTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" }, parallelSub: { color: v2Theme.colors.inkSecondary, fontSize: 9, marginTop: 2 }, livePill: { borderRadius: 999, backgroundColor: v2Theme.colors.brandSofter, paddingHorizontal: 8, paddingVertical: 5, flexDirection: "row", alignItems: "center", gap: 5 }, liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.success }, liveText: { color: v2Theme.colors.brandStrong, fontSize: 7, fontWeight: "900" },
   trackRow: { flexDirection: "row", gap: 9 }, trackCard: { flex: 1, minHeight: 150, borderRadius: 18, backgroundColor: v2Theme.colors.surfaceMuted, padding: 12, gap: 6 }, trackCardDone: { backgroundColor: v2Theme.colors.brandSofter }, trackIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, trackIconDone: { backgroundColor: v2Theme.colors.brand }, trackEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 7, fontWeight: "900", letterSpacing: 0.8 }, trackTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" }, trackBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
