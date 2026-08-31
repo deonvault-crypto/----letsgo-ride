@@ -16,9 +16,10 @@ describe("Build 34 release recovery contract", () => {
     expect(hook).toContain('event.resource_type === "hailing_offer" || event.resource_type === "hailing_trip"');
   });
 
-  it("restores active jobs once at cold start", () => {
+  it("restores passenger, driver and courier active jobs once at cold start", () => {
     const layout = readMobile("app/_layout.tsx");
     expect(layout).toContain("function ActiveJobRecoveryRouter()");
+    expect(layout).toContain('["passenger", "driver", "courier"]');
     expect(layout).toContain("getActiveHailingTrip");
     expect(layout).toContain("getHailingDriverStatus");
     expect(layout).toContain("getActiveCourierDelivery");
