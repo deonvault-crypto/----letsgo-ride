@@ -8,6 +8,7 @@ on:
       - scripts/apply_weekly_driver_settlement.py
       - scripts/align_weekly_settlement_validation.py
       - scripts/align_stripe_hailing_test_rollout_flag.py
+      - scripts/align_admin_settlement_navigation.py
       - .github/workflows/weekly-driver-settlement-apply-once.yml
   workflow_dispatch:
 
@@ -45,10 +46,11 @@ jobs:
       - name: Apply settlement product patch
         run: python scripts/apply_weekly_driver_settlement.py
 
-      - name: Align database and finance tests
+      - name: Align validation contracts
         run: |
           python scripts/align_weekly_settlement_validation.py
           python scripts/align_stripe_hailing_test_rollout_flag.py
+          python scripts/align_admin_settlement_navigation.py
 
       - name: Setup Python
         uses: actions/setup-python@v5
