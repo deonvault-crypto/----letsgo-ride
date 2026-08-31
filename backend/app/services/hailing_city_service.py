@@ -145,6 +145,10 @@ ZIMBABWE_SERVICE_AREAS = [
 ]
 
 
+def nationwide_city_ids() -> List[str]:
+    return [f"zw-{slug}" for _, slug, _, _, _, _ in ZIMBABWE_SERVICE_AREAS]
+
+
 def point(latitude: float, longitude: float) -> Dict[str, float]:
     return {"latitude": float(latitude), "longitude": float(longitude)}
 
@@ -255,6 +259,21 @@ async def seed_zimbabwe_service_areas() -> None:
             await database.update_one("hailing_cities", existing["id"], {**updates, "updated_at": now_iso()})
             continue
         await database.insert_one("hailing_cities", desired)
+
+    # The original city list was a launch rollout gate. Once Ride Now becomes a
+    # Zimbabwe-wide product, migrate only already-enabled Drivers to every seeded
+    # Zimbabwe area. Verification, class approval and account standing stay intact.
+    all_city_ids = nationwide_city_ids()
+    enabled_drivers = await database.find_many("drivers", {"hailing_enabled": True})
+    for driver in enabled_drivers:
+        current_ids = [str(value) for value in (driver.get("approved_hailing_city_ids") or [])]
+        if set(current_ids) == set(all_city_ids):
+            continue
+        await database.update_one(
+            "drivers",
+            driver["id"],
+            {"approved_hailing_city_ids": all_city_ids, "updated_at": now_iso()},
+        )
 
 
 async def list_service_areas(include_disabled: bool = False) -> List[Dict[str, Any]]:
