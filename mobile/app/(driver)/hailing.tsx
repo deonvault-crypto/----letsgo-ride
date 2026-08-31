@@ -30,7 +30,9 @@ export default function DriverHailingScreen() {
   const online = Boolean(status?.online);
   const activeTrip = status?.active_trip;
   const live = realtimeState === "connected";
-  const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim());
+  const photoApproved = user?.profile_photo_verified === true;
+  const photoPending = user?.profile_photo_review_status === "pending";
+  const photoRejected = user?.profile_photo_review_status === "rejected";
 
   useHailingDriverLocationSync({
     enabled: online && !activeTrip,
@@ -54,8 +56,12 @@ export default function DriverHailingScreen() {
   }, [activeTrip?.id, router]);
 
   async function goOnline() {
-    if (!hasProfilePhoto) {
-      setNotice("Add a clear profile photo before going online for Ride Now.");
+    if (!photoApproved) {
+      setNotice(photoPending
+        ? "Your Driver profile photo is still waiting for Admin approval."
+        : photoRejected
+          ? "Replace the rejected Driver profile photo before going online for Ride Now."
+          : "Add a clear, Admin-approved profile photo before going online for Ride Now.");
       return;
     }
     try {
@@ -182,18 +188,22 @@ export default function DriverHailingScreen() {
               <Text style={styles.offlineText}>{busy ? "Going offline…" : "Go offline"}</Text>
             </Pressable>
           </>
-        ) : !hasProfilePhoto ? (
+        ) : !photoApproved ? (
           <>
             <Text style={styles.eyebrow}>RIDE NOW DRIVER</Text>
-            <Text style={styles.title}>Add your profile photo</Text>
-            <Text style={styles.body}>A clear Driver profile photo is required before new Ride Now work can be enabled.</Text>
+            <Text style={styles.title}>{photoPending ? "Photo under review" : photoRejected ? "Replace your profile photo" : "Add your profile photo"}</Text>
+            <Text style={styles.body}>{photoPending
+              ? "Your submitted Driver photo must be approved before new Ride Now work can be enabled."
+              : photoRejected
+                ? "Your previous photo was not approved. Upload a clear photo of yourself before going online."
+                : "A clear, Admin-approved Driver profile photo is required before new Ride Now work can be enabled."}</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Add required Driver profile photo"
+              accessibilityLabel={photoRejected ? "Replace rejected Driver profile photo" : "Add required Driver profile photo"}
               onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: { product: "driver" } } as never)}
               style={({ pressed }) => [styles.onlineButton, pressed && styles.pressed]}
             >
-              <Text style={styles.onlineText}>Add profile photo</Text>
+              <Text style={styles.onlineText}>{photoRejected ? "Replace profile photo" : photoPending ? "Review profile photo" : "Add profile photo"}</Text>
             </Pressable>
           </>
         ) : (
