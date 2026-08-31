@@ -154,7 +154,7 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(trip_a["id"], trip_b["id"])
 
-    async def test_driver_online_requires_explicit_hailing_city_and_class_approval(self):
+    async def test_driver_online_requires_verification_admin_and_class_approval_nationwide(self):
         unverified_user = await database.insert_one("users", {"id": "driver-b", "role": "driver"})
         await database.insert_one(
             "drivers",
@@ -210,17 +210,19 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
                 "approved_hailing_classes": ["ECONOMY"],
             },
         )
-        with self.assertRaisesRegex(PermissionError, "this city"):
-            await driver_go_online(
-                {"city_id": "zw-harare", "ride_class": "ECONOMY", "location": {"latitude": -17.8248, "longitude": 31.053}},
-                no_city_user,
-            )
+        no_city_online = await driver_go_online(
+            {"city_id": "zw-harare", "ride_class": "ECONOMY", "location": {"latitude": -17.8248, "longitude": 31.053}},
+            no_city_user,
+        )
+        self.assertEqual(no_city_online["status"], "available")
 
-        with self.assertRaisesRegex(PermissionError, "this city"):
-            await driver_go_online(
-                {"city_id": "zw-bulawayo", "ride_class": "ECONOMY", "location": {"latitude": -20.15, "longitude": 28.58}},
-                self.driver_user,
-            )
+        nationwide = await driver_go_online(
+            {"city_id": "zw-bulawayo", "ride_class": "ECONOMY", "location": {"latitude": -20.15, "longitude": 28.58}},
+            self.driver_user,
+        )
+        self.assertEqual(nationwide["status"], "available")
+        self.assertEqual(nationwide["city_id"], "zw-bulawayo")
+
         with self.assertRaisesRegex(PermissionError, "class"):
             await driver_go_online(
                 {"city_id": "zw-harare", "ride_class": "COMFORT", "location": {"latitude": -17.8248, "longitude": 31.053}},
