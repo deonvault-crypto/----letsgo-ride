@@ -15,8 +15,8 @@ async def get_optional_current_user(
     return await find_user_by_token(token)
 
 
-async def _enforce_worker_photo_for_new_work(request: Request, user: Dict[str, Any]) -> None:
-    if user.get("profile_photo_verified") is True:
+async def _enforce_worker_photo_for_new_work(request: Optional[Request], user: Dict[str, Any]) -> None:
+    if request is None or user.get("profile_photo_verified") is True:
         return
 
     path = request.url.path.rstrip("/")
@@ -35,8 +35,8 @@ async def _enforce_worker_photo_for_new_work(request: Request, user: Dict[str, A
 
 
 async def get_current_user(
-    request: Request,
     authorization: str = Header(default=""),
+    request: Request = None,
 ) -> Dict[str, Any]:
     user = await get_optional_current_user(authorization)
     if not user:
@@ -46,10 +46,10 @@ async def get_current_user(
 
 
 async def get_admin_user(
-    request: Request,
     authorization: str = Header(default=""),
+    request: Request = None,
 ) -> Dict[str, Any]:
-    user = await get_current_user(request, authorization)
+    user = await get_current_user(authorization, request)
     if user.get("role") != "admin":
         api_error("Admin access is required.", 403)
     return user
