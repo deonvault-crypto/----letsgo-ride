@@ -23,7 +23,9 @@ export default function DriverAccountScreen() {
   const { driver } = useDriver();
   const [application, setApplication] = useState<WorkerApplication | null>(null);
   const verified = Boolean(driver?.verified || driver?.verification_status === "approved");
-  const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim());
+  const photoApproved = user?.profile_photo_verified === true;
+  const photoPending = user?.profile_photo_review_status === "pending";
+  const photoRejected = user?.profile_photo_review_status === "rejected";
   const productParam = { product: "driver" };
 
   useFocusEffect(useCallback(() => {
@@ -40,6 +42,19 @@ export default function DriverAccountScreen() {
   const serviceArea = application?.service_area || String(driver?.city || user?.city || "Not added");
   const vehicle = String(driver?.vehicle || "Not added");
   const rating = driver?.rating ? Number(driver.rating).toFixed(1) : "New";
+  const photoState = photoApproved
+    ? "Profile photo approved"
+    : photoPending
+      ? "Profile photo awaiting review"
+      : photoRejected
+        ? "Profile photo needs replacement"
+        : "Profile photo required";
+  const photoCardTitle = photoPending ? "Photo under review" : photoRejected ? "Replace your profile photo" : "Add your profile photo";
+  const photoCardBody = photoPending
+    ? "Your submitted photo is waiting for Admin review. New Driver work stays locked until it is approved."
+    : photoRejected
+      ? (user?.profile_photo_rejection_reason || "That photo could not be approved. Upload a clear photo of yourself to continue.")
+      : "A clear, Admin-approved profile photo is required before a Driver can go online for new work.";
   const requestAccountChange = () => router.push({
     pathname: "/(shared)/support",
     params: { ...productParam, subject: "Account details change" },
@@ -48,18 +63,19 @@ export default function DriverAccountScreen() {
     pathname: "/(shared)/edit-profile",
     params: productParam,
   } as never);
+  const openVerification = () => router.push({ pathname: "/(shared)/verification", params: productParam } as never);
 
   return (
     <Screen title="Driver account" navRole="driver" showNotifications>
       <View style={styles.profileCard}>
-        <Avatar name={displayName} imageUri={user?.profile_photo_url} size={76} tone="neutral" />
+        <Avatar name={displayName} imageUri={user?.profile_photo_url || user?.profile_photo_pending_url} size={76} tone="neutral" />
         <View style={styles.profileCopy}>
           <View style={styles.nameLine}>
             <Text numberOfLines={1} style={styles.name}>{displayName}</Text>
             <VerifiedBadge verified={verified} size="medium" />
           </View>
           <Text numberOfLines={1} style={styles.meta}>Driver · {serviceArea}</Text>
-          <Text style={styles.photoState}>{hasProfilePhoto ? "Profile photo added" : "Profile photo required"}</Text>
+          <Text style={styles.photoState}>{photoState}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -71,19 +87,19 @@ export default function DriverAccountScreen() {
         </Pressable>
       </View>
 
-      {!hasProfilePhoto ? (
+      {!photoApproved ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Add required Driver profile photo"
+          accessibilityLabel={photoPending ? "Replace pending Driver profile photo" : "Add required Driver profile photo"}
           onPress={openProfile}
           style={({ pressed }) => [styles.requiredCard, pressed && styles.pressed]}
         >
           <View style={styles.requiredIcon}>
-            <MaterialCommunityIcons name="camera-plus-outline" size={23} color={DRIVER_BLACK} />
+            <MaterialCommunityIcons name={photoPending ? "clock-outline" : photoRejected ? "camera-alert-outline" : "camera-plus-outline"} size={23} color={DRIVER_BLACK} />
           </View>
           <View style={styles.flex}>
-            <Text style={styles.requiredTitle}>Add your profile photo</Text>
-            <Text style={styles.requiredBody}>A clear profile photo is required before a Driver can go online for new work.</Text>
+            <Text style={styles.requiredTitle}>{photoCardTitle}</Text>
+            <Text style={styles.requiredBody}>{photoCardBody}</Text>
           </View>
           <MaterialCommunityIcons name="arrow-right" size={20} color={DRIVER_BLACK} />
         </Pressable>
@@ -101,33 +117,47 @@ export default function DriverAccountScreen() {
           icon="shield-account-outline"
           title="Verification required"
           subtitle="Complete identity, licence, vehicle and selfie review before driving."
-          onPress={() => router.push({ pathname: "/(shared)/verification", params: productParam } as never)}
+          onPress={openVerification}
         />
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Driver profile</Text>
+        <Text style={styles.sectionTitle}>Driver tools</Text>
         <View style={styles.sectionRows}>
           <ListTile
             tone="neutral"
             icon="account-circle-outline"
             title="Profile & photo"
-            subtitle={hasProfilePhoto ? "Photo and verified identity details" : "Profile photo required"}
+            subtitle={photoState}
             onPress={openProfile}
           />
           <ListTile
             tone="neutral"
-            icon="car-cog"
-            title="Vehicle & documents"
-            subtitle={verified ? "Approved Driver records" : "Review verification requirements"}
-            onPress={() => router.push({ pathname: "/(shared)/verification", params: productParam } as never)}
+            icon="clock-outline"
+            title="Trips & activity"
+            subtitle="Current trips, requests and completed work"
+            onPress={() => router.push("/(driver)/trips" as never)}
           />
           <ListTile
             tone="neutral"
             icon="wallet-outline"
-            title="Wallet & settlement"
+            title="Earnings & settlement"
             subtitle="Weekly Driver balance and payment history"
             onPress={() => router.push("/(shared)/wallet" as never)}
+          />
+          <ListTile
+            tone="neutral"
+            icon="car-cog"
+            title="Vehicle"
+            subtitle={vehicle === "Not added" ? "Add or review your Driver vehicle" : vehicle}
+            onPress={openVerification}
+          />
+          <ListTile
+            tone="neutral"
+            icon="file-document-check-outline"
+            title="Documents"
+            subtitle={verified ? "Identity and Driver records approved" : "Review verification requirements"}
+            onPress={openVerification}
           />
           <ListTile
             tone="neutral"
