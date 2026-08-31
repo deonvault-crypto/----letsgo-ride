@@ -1,0 +1,90 @@
+name: Weekly Driver Fee Validate Once
+
+on:
+  push:
+    branches:
+      - fix-driver-weekly-fee-production
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix-driver-weekly-fee-production
+          fetch-depth: 0
+
+      - name: Apply integration patch
+        run: python scripts/apply_weekly_driver_fee_patch.py
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Compile backend
+        working-directory: backend
+        run: python -m compileall app
+
+      - name: Run weekly settlement regression tests
+        working-directory: backend
+        env:
+          APP_ENV: test
+          PYTHONPATH: .
+        run: pytest -q tests/test_driver_weekly_fee_settlement.py
+
+      - name: Run full backend suite
+        working-directory: backend
+        env:
+          APP_ENV: test
+          PYTHONPATH: .
+        run: pytest -q
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: TypeScript
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Weekly settlement UI contract
+        working-directory: mobile
+        run: npm test -- --runInBand __tests__/driver-weekly-settlement-ui.test.ts
+
+      - name: Full mobile regression
+        working-directory: mobile
+        run: npm test -- --runInBand
+
+      - name: Android release config
+        working-directory: mobile
+        run: npm run verify:android
+
+      - name: Finalize validated product patch
+        run: |
+          rm -f scripts/apply_weekly_driver_fee_patch.py
+          rm -f .github/workflows/weekly-driver-fee-validate-once.yml
+          git config user.name "letsgoride-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No integration changes to commit"
+          else
+            git commit -m "Implement weekly postpaid driver fee settlement"
+            git push origin HEAD:fix-driver-weekly-fee-production
+          fi
