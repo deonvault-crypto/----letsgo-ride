@@ -150,14 +150,14 @@ export default function DriverAccountScreen() {
             icon="car-cog"
             title="Vehicle"
             subtitle={vehicle === "Not added" ? "Add or review your Driver vehicle" : vehicle}
-            onPress={openVerification}
+            onPress={() => router.push("/(driver)/vehicle" as never)}
           />
           <ListTile
             tone="neutral"
             icon="file-document-check-outline"
             title="Documents"
             subtitle={verified ? "Identity and Driver records approved" : "Review verification requirements"}
-            onPress={openVerification}
+            onPress={() => router.push("/(driver)/documents" as never)}
           />
           <ListTile
             tone="neutral"
