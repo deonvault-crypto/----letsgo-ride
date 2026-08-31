@@ -183,7 +183,7 @@ export default function DriverHailingTripScreen() {
               <Text style={styles.metaDot}>•</Text>
               <Text style={styles.meta}>{trip.ride_class}</Text>
               <Text style={styles.metaDot}>•</Text>
-              <Text style={styles.meta}>Cash</Text>
+              <Text style={styles.meta}>{trip.payment_method === "card" ? "Card" : "Cash"}</Text>
             </View>
 
             {(trip.status === "DRIVER_ASSIGNED" || trip.status === "DRIVER_EN_ROUTE") ? (

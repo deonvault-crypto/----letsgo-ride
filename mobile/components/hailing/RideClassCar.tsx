@@ -152,6 +152,13 @@ export function RideClassCar({ rideClass, disabled = false }: RideClassCarProps)
       </LinearGradient>
 
       <View style={[styles.lowerTrim, { left: car.bodyLeft + 8, width: car.bodyWidth - 16, bottom: car.bodyBottom + 5 }]} />
+      <View style={[styles.frontFascia, { left: car.bodyLeft + car.bodyWidth - 13, bottom: car.bodyBottom + 4 }]}><View style={styles.grille} /></View>
+      <View style={[styles.rearBumper, { left: car.bodyLeft + 1, bottom: car.bodyBottom + 3 }]} />
+      <View style={[styles.mirror, styles.mirrorRear, { left: car.roofLeft - 4, bottom: car.roofBottom + 4 }]} />
+      <View style={[styles.mirror, styles.mirrorFront, { left: car.roofLeft + car.roofWidth - 1, bottom: car.roofBottom + 4 }]} />
+      {isComfort ? <View style={[styles.chromeLine, { left: car.bodyLeft + 13, width: car.bodyWidth - 27, bottom: car.bodyBottom + 8 }]} /> : null}
+      {isXl ? <><View style={[styles.roofRail, { left: car.roofLeft + 6, width: car.roofWidth - 12, bottom: car.roofBottom + car.roofHeight + 1 }]} /><View style={[styles.xlQuarterGlass, { left: car.windowLeft + 3, bottom: car.roofBottom + 5 }]} /></> : null}
+      <View style={[styles.brandAccent, { left: car.bodyLeft + car.bodyWidth - 22, bottom: car.bodyBottom + 7 }]} />
       <Wheel left={car.rearWheelLeft} />
       <Wheel left={car.frontWheelLeft} />
     </View>
@@ -264,6 +271,16 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: "rgba(212,216,219,0.55)",
   },
+  frontFascia: { position: "absolute", width: 12, height: 12, borderTopRightRadius: 7, borderBottomRightRadius: 6, backgroundColor: "rgba(7,8,9,0.72)", borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: "rgba(255,255,255,0.18)", justifyContent: "center", alignItems: "center" },
+  grille: { width: 7, height: 5, borderRadius: 2, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(218,223,226,0.55)", backgroundColor: "rgba(0,0,0,0.42)" },
+  rearBumper: { position: "absolute", width: 8, height: 4, borderRadius: 2, backgroundColor: "rgba(9,10,11,0.75)" },
+  mirror: { position: "absolute", width: 8, height: 4, borderRadius: 3, backgroundColor: "#25292D", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.2)" },
+  mirrorRear: { transform: [{ rotate: "-9deg" }] },
+  mirrorFront: { transform: [{ rotate: "8deg" }] },
+  chromeLine: { position: "absolute", height: StyleSheet.hairlineWidth, backgroundColor: "rgba(225,230,233,0.62)" },
+  roofRail: { position: "absolute", height: 2, borderRadius: 2, backgroundColor: "rgba(205,211,215,0.46)" },
+  xlQuarterGlass: { position: "absolute", width: 11, height: 8, borderRadius: 3, backgroundColor: "rgba(130,151,162,0.7)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.38)" },
+  brandAccent: { position: "absolute", width: 7, height: 2, borderRadius: 2, backgroundColor: "#54C779", opacity: 0.72 },
   wheel: {
     position: "absolute",
     bottom: 3,
