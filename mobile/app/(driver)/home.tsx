@@ -38,19 +38,32 @@ export default function DriverHomeScreen() {
   const pendingRequests = requests.filter((request) => request.status === "pending");
   const online = Boolean(hailingStatus?.online);
   const activeHailingTrip = Boolean(hailingStatus?.active_trip?.id);
-  const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim());
-  const photoBlocksNewWork = !hasProfilePhoto && !online && !hailingOffer && !activeHailingTrip;
+  const photoApproved = user?.profile_photo_verified === true;
+  const photoPending = user?.profile_photo_review_status === "pending";
+  const photoRejected = user?.profile_photo_review_status === "rejected";
+  // Never interrupt active work. Approval is required only before a new online session.
+  const photoBlocksNewWork = !photoApproved && !online && !hailingOffer && !activeHailingTrip;
   const dockBottom = v2Theme.control.navHeight + Math.max(insets.bottom, 10) + 18;
 
+  const photoBlockTitle = photoPending
+    ? "Photo awaiting review"
+    : photoRejected
+      ? "Profile photo needs replacement"
+      : "Profile photo approval required";
+  const photoBlockBody = photoPending
+    ? "Your photo is with Admin for review. Ride Now unlocks after approval."
+    : photoRejected
+      ? "Upload a clear photo of yourself before going online for new Ride Now requests."
+      : "Add a clear profile photo and have it approved before going online for new Ride Now requests.";
   const rideNowTitle = photoBlocksNewWork
-    ? "Profile photo required"
+    ? photoBlockTitle
     : hailingOffer
       ? "New local ride request"
       : online
         ? "You’re online"
         : "Go online for local rides";
   const rideNowBody = photoBlocksNewWork
-    ? "Add a clear profile photo before going online for new Ride Now requests."
+    ? photoBlockBody
     : hailingOffer
       ? "Open the request to review pickup, destination and fare."
       : online
@@ -115,15 +128,15 @@ export default function DriverHomeScreen() {
       <View pointerEvents="box-none" style={[styles.dock, { bottom: dockBottom }]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={photoBlocksNewWork ? "Add required Driver profile photo" : "Open Ride Now driver workspace"}
+          accessibilityLabel={photoBlocksNewWork ? "Complete required Driver profile photo approval" : "Open Ride Now driver workspace"}
           onPress={openRideNow}
           style={({ pressed }) => [styles.rideNowCard, pressed && styles.primaryPressed]}
         >
           <View style={[styles.rideNowIcon, photoBlocksNewWork && styles.rideNowIconRequired, hailingOffer && styles.rideNowIconAlert]}>
             <MaterialCommunityIcons
-              name={photoBlocksNewWork ? "camera-plus-outline" : hailingOffer ? "car-clock" : online ? "car-connected" : "car-arrow-right"}
+              name={photoBlocksNewWork ? (photoPending ? "clock-outline" : photoRejected ? "camera-alert-outline" : "camera-plus-outline") : hailingOffer ? "car-clock" : online ? "car-connected" : "car-arrow-right"}
               size={24}
-              color={photoBlocksNewWork ? DRIVER_BLACK : "#FFFFFF"}
+              color={hailingOffer ? "#FFFFFF" : DRIVER_BLACK}
             />
           </View>
           <View style={styles.flex}>
@@ -279,7 +292,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.inkTertiary },
-  liveDotOnline: { backgroundColor: v2Theme.colors.brand },
+  liveDotOnline: { backgroundColor: DRIVER_BLACK },
   mapIdentityLabel: { color: DRIVER_BLACK, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
   mapIdentityDivider: { width: StyleSheet.hairlineWidth, height: 16, backgroundColor: v2Theme.colors.lineStrong, marginHorizontal: 2 },
   mapIdentityCity: { flexShrink: 1, color: DRIVER_BLACK, fontSize: 10, fontWeight: "800" },
@@ -303,14 +316,14 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 17,
-    backgroundColor: v2Theme.colors.brand,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
   rideNowIconRequired: { backgroundColor: "#FFFFFF" },
   rideNowIconAlert: { backgroundColor: "#D9792B" },
   rideNowEyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  rideNowEyebrow: { color: "#8FE6AE", fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
+  rideNowEyebrow: { color: "rgba(255,255,255,0.72)", fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
   requestDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#FFB36B" },
   rideNowTitle: { color: "#FFFFFF", fontSize: 18, lineHeight: 22, fontWeight: "900", letterSpacing: -0.45 },
   rideNowBody: { color: "rgba(255,255,255,0.64)", fontSize: 9, lineHeight: 14, marginTop: 2 },
@@ -336,7 +349,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   intercityHeading: { flexDirection: "row", alignItems: "center", gap: 10 },
-  intercityEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
+  intercityEyebrow: { color: DRIVER_BLACK, fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
   intercityTitle: { color: DRIVER_BLACK, fontSize: 16, fontWeight: "900", marginTop: 1 },
   postButton: {
     minHeight: 42,
