@@ -284,7 +284,7 @@ export default function HailingHomeScreen() {
                       onPress={() => chooseClass(option)}
                       style={({ pressed }) => [styles.classCard, selected && styles.classCardSelected, optionDisabled && styles.classCardDisabled, pressed && styles.pressed]}
                     >
-                      <RideClassCar rideClass={option.id} disabled={optionDisabled} />
+                      <RideClassCar rideClass={option.id} disabled={optionDisabled} selected={selected} />
                       <Text style={[styles.className, selected && styles.classNameSelected]}>{option.label || option.id}</Text>
                       <Text style={[styles.classPrice, selected && styles.classPriceSelected]}>{price}</Text>
                     </Pressable>
@@ -414,11 +414,11 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, marginLeft: 36, backgroundColor: v2Theme.colors.lineStrong },
   classSection: { gap: 7 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  classRail: { gap: 8, paddingRight: 4 },
-  classCard: { width: 108, minHeight: 100, borderRadius: 18, backgroundColor: "#F6F6F4", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 8, alignItems: "center", justifyContent: "center" },
-  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
+  classRail: { gap: 7, paddingRight: 4 },
+  classCard: { width: 110, minHeight: 114, borderRadius: 19, backgroundColor: "#F6F6F4", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, paddingHorizontal: 6, paddingTop: 8, paddingBottom: 10, alignItems: "center", justifyContent: "center" },
+  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: "rgba(84,199,121,0.30)", shadowColor: "#54C779", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   classCardDisabled: { opacity: 0.58 },
-  className: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900", marginTop: -1 },
+  className: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900", marginTop: -2 },
   classNameSelected: { color: "#FFFFFF" },
   classPrice: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "800", marginTop: 2 },
   classPriceSelected: { color: "rgba(255,255,255,0.68)" },
