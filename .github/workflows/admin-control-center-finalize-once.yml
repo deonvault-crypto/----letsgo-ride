@@ -1,9 +1,9 @@
-name: Admin Control Center Finalize Once
+name: Build 39 Final Cleanup Once
 
 on:
   push:
     branches:
-      - fix/admin-control-center-production
+      - final/build39-cleanup
     paths:
       - .github/workflows/admin-control-center-finalize-once.yml
 
@@ -11,511 +11,932 @@ permissions:
   contents: write
 
 jobs:
-  finalize-admin:
+  finalize-build39:
     runs-on: ubuntu-latest
-    env:
-      PYTHONPATH: ${{ github.workspace }}/backend
+    timeout-minutes: 12
     steps:
-      - name: Checkout admin recovery branch
+      - name: Checkout final cleanup branch
         uses: actions/checkout@v4
         with:
-          ref: fix/admin-control-center-production
+          ref: final/build39-cleanup
           fetch-depth: 0
 
-      - name: Apply admin sync, local mutation, and scale fixes
+      - name: Apply final production cleanup
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
 
-          # --- Backend admin status semantics + cheap live overview ---
-          admin = Path('backend/app/routers/admin.py')
-          text = admin.read_text()
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  if new in text:
+                      return
+                  raise SystemExit(f"Patch marker not found in {path}: {old[:120]!r}")
+              file.write_text(text.replace(old, new, 1))
 
-          marker = 'router = APIRouter(prefix="/admin", tags=["admin"])\nlogger = logging.getLogger(__name__)\n'
-          addition = '''router = APIRouter(prefix="/admin", tags=["admin"])
-          logger = logging.getLogger(__name__)
+          # #5 — Customer Ride is Ride Now only. No customer-facing intercity doorway.
+          replace_once(
+              "mobile/app/(shared)/services.tsx",
+              '<ServiceStoryCard title="Ride" subtitle="Search local journeys and planned city-to-city trips" eyebrow="GO SOMEWHERE" icon="car-outline" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push("/(customer)/search" as never)} />',
+              '<ServiceStoryCard title="Ride" subtitle="Request a nearby ride with live driver matching" eyebrow="RIDE NOW" icon="car-outline" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push("/(shared)/location-picker?kind=dropoff&flow=hailing&focus=1" as never)} />',
+          )
+          replace_once(
+              "mobile/app/(shared)/services.tsx",
+              '  eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.25 },',
+              '  eyebrow: { color: v2Theme.colors.inkTertiary, fontSize: 11, fontWeight: "900", letterSpacing: 1.25 },',
+          )
 
-          VERIFIED_DRIVER_VERIFICATION_STATUSES = {"approved", "verified", "active"}
-          PENDING_DRIVER_VERIFICATION_STATUSES = {
-              "pending",
-              "pending_uploads",
-              "pending_auto_check",
-              "needs_review",
-              "needs_resubmission",
+          # #10 — Verification is identity + licence + live selfie. Legacy vehicle docs stay
+          # accepted for Build 38 compatibility, but are not required or advertised.
+          verification = Path("backend/app/services/verification_service.py")
+          text = verification.read_text()
+          old = '''REQUIRED_DOCUMENTS = [
+              "selfie",
+              "identity_document",
+              "driver_license",
+              "vehicle_registration_or_logbook",
+              "vehicle_photo_optional",
+          ]
+          '''
+          new = '''REQUIRED_DOCUMENTS = [
+              "selfie",
+              "identity_document",
+              "driver_license",
+          ]
+          LEGACY_OPTIONAL_DOCUMENT_TYPES = {
+              "vehicle_registration_or_logbook",
+              "vehicle_photo_optional",
+          }
+          SUPPORTED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS) | LEGACY_OPTIONAL_DOCUMENT_TYPES
+          '''
+          if old not in text:
+              raise SystemExit("verification required-document block not found")
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              'REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS) - {"vehicle_photo_optional"}',
+              'REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS)',
+              1,
+          )
+          text = text.replace(
+              'return normalized if normalized in REQUIRED_DOCUMENTS else None',
+              'return normalized if normalized in SUPPORTED_DOCUMENT_TYPES else None',
+              1,
+          )
+          verification.write_text(text)
+
+          mobile_verification = Path("mobile/app/(shared)/verification.tsx")
+          text = mobile_verification.read_text()
+          text = text.replace(
+              '''const manualDocumentTypes: VerificationDocumentType[] = [
+            "selfie",
+            "identity_document",
+            "driver_license",
+            "vehicle_registration_or_logbook",
+            "vehicle_photo_optional",
+          ];''',
+              '''const manualDocumentTypes: VerificationDocumentType[] = [
+            "selfie",
+            "identity_document",
+            "driver_license",
+          ];''',
+              1,
+          )
+          for line in [
+              '  vehicle_registration_or_logbook: "Registration or logbook",\n',
+              '  vehicle_photo_optional: "Vehicle photo",\n',
+              '  vehicle_registration_or_logbook: "Capture the vehicle registration or logbook details.",\n',
+              '  vehicle_photo_optional: "Take a clear exterior photo of the vehicle passengers will see.",\n',
+              '  vehicle_registration_or_logbook: "Scan registration/logbook",\n',
+              '  vehicle_photo_optional: "Take vehicle photo",\n',
+          ]:
+              text = text.replace(line, "")
+          text = text.replace(
+              '  const requiredCaptureDocuments = requiredDocuments.filter((item) => item !== "vehicle_photo_optional");',
+              '  const requiredCaptureDocuments = requiredDocuments;',
+              1,
+          )
+          text = text.replace(
+              "Complete a camera-based identity check before posting public rides.",
+              "Complete a camera-based identity and licence check before driving with Ride Now.",
+              1,
+          )
+          text = text.replace(
+              "LetsGoRide uses live capture for your selfie, identity document, driver licence, and vehicle record. If automated checks need help, the same captured documents move to manual review.",
+              "LetsGoRide uses live capture for your selfie, identity document and driver licence. If automated checks need help, the same captured documents move to manual review.",
+              1,
+          )
+          text = text.replace(
+              "Use the camera for each check. Make sure names, faces, licence numbers, and vehicle details are sharp and readable.",
+              "Use the camera for each check. Make sure names, faces and licence numbers are sharp and readable.",
+              1,
+          )
+          text = text.replace(
+              '''I consent to LetsGoRide reviewing my identity and vehicle
+                documents for driver verification, safety, and fraud
+                prevention.''',
+              '''I consent to LetsGoRide reviewing my identity documents and driver licence
+                for driver verification, safety, and fraud prevention.''',
+              1,
+          )
+          mobile_verification.write_text(text)
+
+          # #11 — one canonical all-three-class launch policy, including persisted city metadata.
+          hailing_city = Path("backend/app/services/hailing_city_service.py")
+          text = hailing_city.read_text()
+          text = text.replace("PRICING_VERSION = 2", 'PRICING_VERSION = 3\nLAUNCH_RIDE_CLASSES = ("ECONOMY", "COMFORT", "XL")', 1)
+          start = text.index("DEFAULT_CITY_PRICING = {")
+          end = text.index("\n}\n\nDEFAULT_DISPATCH_SETTINGS", start) + 2
+          default_block = text[start:end].replace('"enabled": False', '"enabled": True')
+          text = text[:start] + default_block + text[end:]
+          old_enabled = '''def enabled_ride_classes(city: Dict[str, Any]) -> List[str]:
+              pricing = city.get("pricing") or {}
+              return [
+                  ride_class
+                  for ride_class in ("ECONOMY", "COMFORT", "XL")
+                  if bool((pricing.get(ride_class) or {}).get("enabled"))
+              ]
+          '''
+          new_enabled = '''def enabled_ride_classes(city: Dict[str, Any]) -> List[str]:
+              _ = city
+              return list(LAUNCH_RIDE_CLASSES)
+          '''
+          if old_enabled not in text:
+              raise SystemExit("enabled_ride_classes marker not found")
+          text = text.replace(old_enabled, new_enabled, 1)
+          old_migrate = '''        if all(current.get(field) == value for field, value in legacy.items()):
+                      migrated[ride_class] = dict(DEFAULT_CITY_PRICING[ride_class])
+                      changed = True
+          '''
+          new_migrate = '''        if all(current.get(field) == value for field, value in legacy.items()):
+                      migrated[ride_class] = dict(DEFAULT_CITY_PRICING[ride_class])
+                      changed = True
+                      continue
+                  sanitized = dict(current)
+                  if sanitized.get("enabled") is not True:
+                      sanitized["enabled"] = True
+                      migrated[ride_class] = sanitized
+                      changed = True
+          '''
+          if old_migrate not in text:
+              raise SystemExit("legacy pricing migration marker not found")
+          text = text.replace(old_migrate, new_migrate, 1)
+          old_update = '''        if key in data:
+                      value = data.pop(key)
+                      pricing[field] = bool(value) if field == "enabled" else float(value)
+              return pricing
+          '''
+          new_update = '''        if key in data:
+                      value = data.pop(key)
+                      if field != "enabled":
+                          pricing[field] = float(value)
+              pricing["enabled"] = True
+              return pricing
+          '''
+          if old_update not in text:
+              raise SystemExit("pricing update marker not found")
+          text = text.replace(old_update, new_update, 1)
+          hailing_city.write_text(text)
+
+          # #12 — premium, subtle, Reduce-Motion-aware driver-search animation.
+          Path("mobile/app/(customer)/hail/searching.tsx").write_text(r'''import { MaterialCommunityIcons } from "@expo/vector-icons";
+          import { useLocalSearchParams, useRouter } from "expo-router";
+          import { useEffect, useMemo, useRef, useState } from "react";
+          import { AccessibilityInfo, Animated, Easing, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+          import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+          import { HailingMapBackdrop } from "../../../components/hailing/HailingMapBackdrop";
+          import { BottomNav } from "../../../components/layout/BottomNav";
+          import { AppNotice } from "../../../components/ui/AppNotice";
+          import { v2Theme } from "../../../constants/v2Theme";
+          import { useActiveHailingTrip } from "../../../hooks/useHailing";
+          import { cancelHailingTrip } from "../../../services/hailingService";
+
+          const RIDE_BLACK = "#111111";
+          const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
+
+          function DriverSearchRadar({ active }: { active: boolean }) {
+            const [reduceMotion, setReduceMotion] = useState(false);
+            const pulseOne = useRef(new Animated.Value(0)).current;
+            const pulseTwo = useRef(new Animated.Value(0)).current;
+            const pulseThree = useRef(new Animated.Value(0)).current;
+            const carLift = useRef(new Animated.Value(0)).current;
+
+            useEffect(() => {
+              let mounted = true;
+              AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+                if (mounted) setReduceMotion(enabled);
+              }).catch(() => undefined);
+              const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
+              return () => {
+                mounted = false;
+                subscription.remove();
+              };
+            }, []);
+
+            useEffect(() => {
+              pulseOne.stopAnimation();
+              pulseTwo.stopAnimation();
+              pulseThree.stopAnimation();
+              carLift.stopAnimation();
+              if (!active || reduceMotion) {
+                pulseOne.setValue(0.34);
+                pulseTwo.setValue(0.2);
+                pulseThree.setValue(0.08);
+                carLift.setValue(0);
+                return;
+              }
+
+              const pulse = (value: Animated.Value, delay: number) => Animated.loop(
+                Animated.sequence([
+                  Animated.delay(delay),
+                  Animated.timing(value, { toValue: 1, duration: 1450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+                  Animated.timing(value, { toValue: 0, duration: 1, useNativeDriver: true }),
+                  Animated.delay(Math.max(0, 900 - delay)),
+                ]),
+              );
+              const lift = Animated.loop(Animated.sequence([
+                Animated.timing(carLift, { toValue: -2, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+                Animated.timing(carLift, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+              ]));
+              const animations = [pulse(pulseOne, 0), pulse(pulseTwo, 320), pulse(pulseThree, 640), lift];
+              animations.forEach((animation) => animation.start());
+              return () => animations.forEach((animation) => animation.stop());
+            }, [active, carLift, pulseOne, pulseThree, pulseTwo, reduceMotion]);
+
+            const ringStyle = (value: Animated.Value, baseScale: number) => ({
+              opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0] }),
+              transform: [{ scale: value.interpolate({ inputRange: [0, 1], outputRange: [baseScale, baseScale + 0.58] }) }],
+            });
+
+            return (
+              <View accessibilityLabel="Searching nearby for an approved driver" style={styles.radar}>
+                <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseThree, 0.72)]} />
+                <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseTwo, 0.58)]} />
+                <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseOne, 0.44)]} />
+                <Animated.View style={[styles.radarCar, { transform: [{ translateY: carLift }] }]}>
+                  <MaterialCommunityIcons name="car" size={25} color="#FFFFFF" />
+                </Animated.View>
+              </View>
+            );
           }
 
+          export default function HailingSearchingScreen() {
+            const router = useRouter();
+            const insets = useSafeAreaInsets();
+            const params = useLocalSearchParams<{ tripId?: string }>();
+            const { trip, loading, error, reload, setTrip, realtimeState } = useActiveHailingTrip(true);
+            const [elapsedSeconds, setElapsedSeconds] = useState(0);
+            const [cancelling, setCancelling] = useState(false);
 
-          def _is_verified_driver_verification(status: Optional[str]) -> bool:
-              return str(status or "").strip().lower() in VERIFIED_DRIVER_VERIFICATION_STATUSES
+            useEffect(() => {
+              if (!trip || trip.status !== "SEARCHING") return undefined;
+              const start = trip.created_at ? new Date(trip.created_at).getTime() : Date.now();
+              const update = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+              update();
+              const timer = setInterval(update, 1000);
+              return () => clearInterval(timer);
+            }, [trip?.created_at, trip?.id, trip?.status]);
 
+            useEffect(() => {
+              if (loading || !trip || trip.status === "SEARCHING" || trip.status === "NO_DRIVER_FOUND") return;
+              router.replace(`/(customer)/hail/trip/${trip.id}` as never);
+            }, [loading, router, trip?.id, trip?.status]);
 
-          def _is_pending_driver_verification(status: Optional[str]) -> bool:
-              return str(status or "").strip().lower() in PENDING_DRIVER_VERIFICATION_STATUSES
-          '''
-          if marker in text:
-              text = text.replace(marker, addition, 1)
-          elif 'VERIFIED_DRIVER_VERIFICATION_STATUSES' not in text:
-              raise SystemExit('admin router insertion marker not found')
-
-          old_tone = '''def _status_tone(status: Optional[str]) -> str:
-              if status in {"verified", "confirmed", "resolved", "active", "open"}:
-                  return "success"
-              if status in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
-                  return "danger"
-              if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed"}:
-                  return "warning"
-              return "neutral"
-          '''
-          new_tone = '''def _status_tone(status: Optional[str]) -> str:
-              normalized = str(status or "").strip().lower()
-              if _is_verified_driver_verification(normalized) or normalized in {"confirmed", "resolved", "open", "completed"}:
-                  return "success"
-              if normalized in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
-                  return "danger"
-              if _is_pending_driver_verification(normalized) or normalized in {"submitted", "received", "in_review", "declined", "closed"}:
-                  return "warning"
-              return "neutral"
-          '''
-          if old_tone in text:
-              text = text.replace(old_tone, new_tone, 1)
-
-          start = text.index('@router.get("/overview")')
-          end = text.index('@router.get("/users")', start)
-          new_overview = '''@router.get("/overview")
-          async def overview(admin=Depends(get_admin_user)):
-              verified_filter = {
-                  "$or": [
-                      {"verification_status": {"$in": sorted(VERIFIED_DRIVER_VERIFICATION_STATUSES)}},
-                      {
-                          "verification_status": {"$exists": False},
-                          "verified": True,
-                          "status": {"$in": ["approved", "active"]},
-                      },
-                  ]
+            async function cancel() {
+              const id = trip?.id || params.tripId;
+              if (!id) {
+                router.replace("/(customer)/hail" as never);
+                return;
               }
-              pending_filter = {
-                  "verification_status": {"$in": sorted(PENDING_DRIVER_VERIFICATION_STATUSES)}
+              try {
+                setCancelling(true);
+                const next = await cancelHailingTrip(id, "Passenger cancelled while searching");
+                setTrip(next);
+                router.replace(`/(customer)/hail/trip/${next.id}` as never);
+              } catch {
+                void reload();
+              } finally {
+                setCancelling(false);
               }
-              active_ride_statuses = [
-                  "SCHEDULED", "BOARDING", "IN_PROGRESS", "OPEN", "DEPARTED",
-                  "scheduled", "boarding", "in_progress", "open", "departed",
-              ]
+            }
 
-              (
-                  user_count,
-                  ride_count,
-                  request_count,
-                  verified_driver_count,
-                  pending_verification_count,
-                  active_ride_count,
-                  pending_request_count,
-                  confirmed_booking_count,
-                  support_count,
-                  open_support_count,
-                  report_count,
-                  open_report_count,
-                  unread_notification_count,
-                  recent_requests,
-                  recent_drivers,
-                  recent_support,
-                  recent_reports,
-              ) = await asyncio.gather(
-                  database.count("users"),
-                  database.count("rides", {"is_demo": {"$ne": True}}),
-                  database.count("ride_requests"),
-                  database.count("drivers", verified_filter),
-                  database.count("drivers", pending_filter),
-                  database.count("rides", {"is_demo": {"$ne": True}, "status": {"$in": active_ride_statuses}}),
-                  database.count("ride_requests", {"status": "pending"}),
-                  database.count("ride_requests", {"status": "confirmed"}),
-                  database.count("support_messages"),
-                  database.count("support_messages", {"status": {"$nin": ["resolved", "closed"]}}),
-                  database.count("reports"),
-                  database.count("reports", {"status": {"$nin": ["resolved", "dismissed"]}}),
-                  database.count("app_notifications", {"user_id": admin["id"], "read": {"$ne": True}}),
-                  database.find_many("ride_requests", sort=[("updated_at", -1)], limit=8),
-                  database.find_many("drivers", sort=[("updated_at", -1)], limit=8),
-                  database.find_many("support_messages", sort=[("updated_at", -1)], limit=6),
-                  database.find_many("reports", sort=[("updated_at", -1)], limit=6),
-              )
+            const noDriver = trip?.status === "NO_DRIVER_FOUND";
+            const live = realtimeState === "connected";
+            const searchCopy = useMemo(() => {
+              if (loading && !trip) return { eyebrow: "RESTORING RIDE", title: "Restoring your ride request…", body: "Checking the server for your active Ride Now request." };
+              if (elapsedSeconds < 15) return { eyebrow: "MATCHING YOU", title: "Finding nearby drivers…", body: "Checking approved drivers closest to your pickup." };
+              if (elapsedSeconds < 45) return { eyebrow: "EXPANDING SEARCH", title: "Checking more nearby drivers…", body: "We’re widening the search while keeping your request active." };
+              return { eyebrow: "STILL SEARCHING", title: "Searching across nearby areas…", body: "Your request is still active. You can leave this screen — we’ll notify you when a driver accepts." };
+            }, [elapsedSeconds, loading, trip]);
 
-              activities = []
-              for request in recent_requests:
-                  activities.append(
-                      _activity_item(
-                          kind="ride_request",
-                          title=f"{request.get('passenger_name') or 'Passenger'} - {_request_route(request)}",
-                          subtitle=f"{request.get('seats', 1)} seat request",
-                          status=request.get("status"),
-                          target_type="ride_request",
-                          target_id=request.get("id", ""),
-                          created_at=request.get("created_at") or request.get("updated_at"),
-                      )
-                  )
-              for driver in recent_drivers:
-                  verification_status = public_verification_status(driver)
-                  if _is_pending_driver_verification(verification_status) or _is_verified_driver_verification(verification_status) or verification_status == "rejected":
-                      activities.append(
-                          _activity_item(
-                              kind="verification",
-                              title=f"{driver.get('name') or 'Driver'} verification",
-                              subtitle=f"{len(manual_verification_documents(driver.get('documents', [])))} documents submitted",
-                              status=verification_status,
-                              target_type="driver",
-                              target_id=driver.get("id", ""),
-                              created_at=driver.get("verification_submitted_at") or driver.get("updated_at") or driver.get("created_at"),
-                          )
-                      )
-              for message in recent_support:
-                  activities.append(
-                      _activity_item(
-                          kind="support",
-                          title=message.get("subject") or "Support case",
-                          subtitle=message.get("user_name") or message.get("user_email") or "User",
-                          status=message.get("status"),
-                          target_type="support_message",
-                          target_id=message.get("id", ""),
-                          created_at=message.get("created_at") or message.get("updated_at"),
-                      )
-                  )
-              for report in recent_reports:
-                  activities.append(
-                      _activity_item(
-                          kind="safety_report",
-                          title=report.get("report_type") or "Safety report",
-                          subtitle=report.get("user_name") or report.get("user_email") or "User",
-                          status=report.get("status"),
-                          target_type="report",
-                          target_id=report.get("id", ""),
-                          created_at=report.get("created_at") or report.get("updated_at"),
-                      )
-                  )
+            return (
+              <SafeAreaView edges={[]} style={styles.root}>
+                <StatusBar barStyle="dark-content" />
+                <HailingMapBackdrop pickup={trip?.pickup} dropoff={trip?.dropoff} route={trip?.route} bottomPadding={374} />
 
-              return api_success(
-                  {
-                      "users": user_count,
-                      "total_users": user_count,
-                      "verified_drivers": verified_driver_count,
-                      "pending_verifications": pending_verification_count,
-                      "pending_driver_verifications": pending_verification_count,
-                      "rides": ride_count,
-                      "active_rides": active_ride_count,
-                      "requests": request_count,
-                      "pending_ride_requests": pending_request_count,
-                      "confirmed_bookings": confirmed_booking_count,
-                      "support_messages": support_count,
-                      "open_support_cases": open_support_count,
-                      "safety_reports": report_count,
-                      "open_safety_reports": open_report_count,
-                      "unread_admin_notifications": unread_notification_count,
-                      "recent_activity": _sort_recent(activities, 12),
-                  }
-              )
+                <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Back to Home" hitSlop={8} onPress={() => router.replace("/(customer)/home" as never)} style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}>
+                    <MaterialCommunityIcons name="chevron-left" size={27} color={RIDE_BLACK} />
+                  </Pressable>
+                  {trip ? <View style={styles.tripPill}><Text style={styles.tripPillText}>{trip.route.distance_km.toFixed(1)} km · ${trip.fare.total_fare.toFixed(2)}</Text></View> : <View style={styles.tripPill}><Text style={styles.tripPillText}>RIDE NOW</Text></View>}
+                  <View accessibilityLabel={live ? "Ride updates connected" : "Ride updates reconnecting"} style={styles.liveButton}>
+                    <View style={[styles.liveDot, !live && styles.liveDotSyncing]} />
+                    <MaterialCommunityIcons name="access-point" size={18} color={RIDE_BLACK} />
+                  </View>
+                </View>
 
+                <View style={styles.sheet}>
+                  <View style={styles.handle} />
+                  <View style={styles.content}>
+                    {!noDriver ? <DriverSearchRadar active={!loading && trip?.status === "SEARCHING"} /> : null}
+                    <View style={styles.statusRow}>
+                      <View style={[styles.statusIcon, noDriver && styles.statusIconWarning]}>
+                        <MaterialCommunityIcons name={noDriver ? "car-off" : "crosshairs-gps"} size={22} color={noDriver ? v2Theme.colors.warning : RIDE_BLACK} />
+                      </View>
+                      <View style={styles.flex}>
+                        <Text style={styles.eyebrow}>{noDriver ? "NO MATCH YET" : searchCopy.eyebrow}</Text>
+                        <Text style={styles.title}>{noDriver ? "No drivers nearby" : searchCopy.title}</Text>
+                      </View>
+                    </View>
 
-          '''
-          text = text[:start] + new_overview + text[end:]
+                    <Text style={styles.body}>{noDriver ? "No approved driver accepted in time. Try again in a moment or choose another available ride class." : searchCopy.body}</Text>
 
-          old_filter = '''        if verification and verification_status != verification:
-                      continue
-          '''
-          new_filter = '''        if verification:
-                      requested_verification = str(verification).strip().lower()
-                      if requested_verification in VERIFIED_DRIVER_VERIFICATION_STATUSES:
-                          if not _is_verified_driver_verification(verification_status):
-                              continue
-                      elif requested_verification in PENDING_DRIVER_VERIFICATION_STATUSES:
-                          if not _is_pending_driver_verification(verification_status):
-                              continue
-                      elif verification_status != requested_verification:
-                          continue
-          '''
-          if old_filter in text:
-              text = text.replace(old_filter, new_filter, 1)
-          admin.write_text(text)
+                    {!noDriver && trip ? (
+                      <View accessibilityLabel={`Driver search active for ${elapsedSeconds} seconds`} style={styles.progressTrack}>
+                        <View style={[styles.progressSegment, elapsedSeconds >= 0 && styles.progressSegmentActive]} />
+                        <View style={[styles.progressSegment, elapsedSeconds >= 15 && styles.progressSegmentActive]} />
+                        <View style={[styles.progressSegment, elapsedSeconds >= 45 && styles.progressSegmentActive]} />
+                      </View>
+                    ) : null}
 
-          # --- Indexes for the exact live-control query shapes ---
-          db = Path('backend/app/database.py')
-          db_text = db.read_text()
-          index_marker = '''        await self.db["ride_requests"].create_index(
-                      [("user_id", 1), ("updated_at", -1)],
-                      name="ride_requests_by_passenger",
-                  )
-          '''
-          index_addition = index_marker + '''        await self.db["drivers"].create_index(
-                      [("verification_status", 1), ("updated_at", -1)],
-                      name="admin_driver_verification_queue",
-                  )
-                  await self.db["rides"].create_index(
-                      [("status", 1), ("is_demo", 1), ("updated_at", -1)],
-                      name="admin_rides_by_status",
-                  )
-                  await self.db["ride_requests"].create_index(
-                      [("status", 1), ("updated_at", -1)],
-                      name="admin_requests_by_status",
-                  )
-                  await self.db["support_messages"].create_index(
-                      [("status", 1), ("updated_at", -1)],
-                      name="admin_support_by_status",
-                  )
-                  await self.db["reports"].create_index(
-                      [("status", 1), ("updated_at", -1)],
-                      name="admin_reports_by_status",
-                  )
-                  await self.db["app_notifications"].create_index(
-                      [("user_id", 1), ("read", 1), ("created_at", -1)],
-                      name="admin_notifications_unread",
-                  )
-          '''
-          if 'admin_driver_verification_queue' not in db_text:
-              if index_marker not in db_text:
-                  raise SystemExit('database admin index insertion marker not found')
-              db_text = db_text.replace(index_marker, index_addition, 1)
-          db.write_text(db_text)
+                    {trip ? (
+                      <View style={styles.routeSummary}>
+                        <View style={styles.routeDot} /><Text numberOfLines={1} style={styles.routeText}>{trip.pickup.formatted_address}</Text>
+                        <MaterialCommunityIcons name="arrow-right" size={15} color={v2Theme.colors.inkTertiary} />
+                        <View style={styles.routeSquare} /><Text numberOfLines={1} style={styles.routeText}>{trip.dropoff.formatted_address}</Text>
+                      </View>
+                    ) : null}
 
-          # --- Mobile route now uses the new control center ---
-          Path('mobile/app/(admin)/dashboard.tsx').write_text(
-              'export { default } from "../../components/admin/AdminControlCenter";\n'
-          )
+                    {error ? <AppNotice message={error} actionLabel="Reconnect" onAction={() => void reload()} /> : null}
 
-          # --- Mutations update local rows immediately, then reconcile only cheap counters ---
-          control = Path('mobile/components/admin/AdminControlCenter.tsx')
-          c = control.read_text()
-          c = c.replace(
-              '''      await reasonAction.onConfirm(reason.trim());
-                    setReasonAction(null);
-                    setReason("");
-                    await refreshAfterMutation();
-          ''',
-              '''      await reasonAction.onConfirm(reason.trim());
-                    setReasonAction(null);
-                    setReason("");
-                    await loadCore();
-          ''',
-          )
-          c = c.replace(
-              '''                await updateAdminSupportStatus(id, status);
-                          await refreshAfterMutation();
-          ''',
-              '''                const updated = await updateAdminSupportStatus(id, status);
-                          setSupport((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-                          await loadCore();
-          ''',
-          )
-          c = c.replace(
-              '''                await updateAdminReportStatus(id, status);
-                          await refreshAfterMutation();
-          ''',
-              '''                const updated = await updateAdminReportStatus(id, status);
-                          setReports((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-                          await loadCore();
-          ''',
-          )
-          c = c.replace(
-              '''                  await updateAdminRequestStatus(request.id, "cancelled_by_admin", actionReason);
-          ''',
-              '''                  const updated = await updateAdminRequestStatus(request.id, "cancelled_by_admin", actionReason);
-                            setRequests((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-          ''',
-          )
-          c = c.replace(
-              '''                  await updateAdminUserStatus(user.id, "suspended", actionReason);
-          ''',
-              '''                  const updated = await updateAdminUserStatus(user.id, "suspended", actionReason);
-                            setUsers((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
-          ''',
-          )
-          c = c.replace(
-              '''                await updateAdminUserStatus(user.id, "active");
-                          await refreshAfterMutation();
-          ''',
-              '''                const updated = await updateAdminUserStatus(user.id, "active");
-                          setUsers((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
-                          await loadCore();
-          ''',
-          )
-          c = c.replace(
-              '''                await updateAdminRideStatus(ride.id, "closed");
-                          await refreshAfterMutation();
-          ''',
-              '''                const updated = await updateAdminRideStatus(ride.id, "closed");
-                          setRides((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-                          await loadCore();
-          ''',
-          )
-          c = c.replace(
-              '''                await updateAdminRideStatus(ride.id, "open");
-                          await refreshAfterMutation();
-          ''',
-              '''                const updated = await updateAdminRideStatus(ride.id, "open");
-                          setRides((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-                          await loadCore();
-          ''',
-          )
-          c = c.replace(
-              '''                  await updateAdminRideStatus(ride.id, "cancelled", actionReason);
-          ''',
-              '''                  const updated = await updateAdminRideStatus(ride.id, "cancelled", actionReason);
-                            setRides((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-          ''',
-          )
-          control.write_text(c)
+                    {noDriver ? (
+                      <Pressable accessibilityRole="button" onPress={() => router.replace("/(customer)/hail" as never)} style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
+                        <Text style={styles.primaryText}>Try another ride</Text><MaterialCommunityIcons name="arrow-right" size={19} color="#FFFFFF" />
+                      </Pressable>
+                    ) : (
+                      <Pressable accessibilityRole="button" accessibilityLabel="Cancel Ride Now request" disabled={cancelling} onPress={() => void cancel()} style={({ pressed }) => [styles.cancel, cancelling && styles.cancelBusy, pressed && styles.pressed]}>
+                        <Text style={styles.cancelText}>{cancelling ? "Cancelling your request…" : "Cancel request"}</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
 
-          # Keep the old sanitation contract, but point it at the implementation file.
-          polling = Path('mobile/__tests__/polling-sanitation.test.ts')
-          p = polling.read_text()
-          p = p.replace(
-              '    const admin = read("app/(admin)/dashboard.tsx");\n',
-              '    const admin = read("components/admin/AdminControlCenter.tsx");\n',
-          )
-          polling.write_text(p)
+                <BottomNav role="customer" activeTone="neutral" />
+              </SafeAreaView>
+            );
+          }
 
-          # Backend regression contracts.
-          Path('backend/tests/test_admin_verification_status_semantics.py').write_text('''import inspect
-          import pytest
-
-          from app.routers import admin as admin_router
-          from app.routers.admin import (
-              _is_pending_driver_verification,
-              _is_verified_driver_verification,
-              _status_tone,
-          )
-
-
-          @pytest.mark.parametrize("status", ["approved", "verified", "active"])
-          def test_admin_counts_current_approved_driver_statuses(status):
-              assert _is_verified_driver_verification(status) is True
-              assert _status_tone(status) == "success"
-
-
-          @pytest.mark.parametrize(
-              "status",
-              ["pending", "pending_uploads", "pending_auto_check", "needs_review", "needs_resubmission"],
-          )
-          def test_admin_counts_all_actionable_verification_statuses(status):
-              assert _is_pending_driver_verification(status) is True
-              assert _status_tone(status) == "warning"
-
-
-          def test_rejected_verification_is_not_counted_as_pending_or_approved():
-              assert _is_pending_driver_verification("rejected") is False
-              assert _is_verified_driver_verification("rejected") is False
-              assert _status_tone("rejected") == "danger"
-
-
-          def test_live_admin_overview_uses_counts_and_bounded_recent_tails():
-              source = inspect.getsource(admin_router.overview)
-              assert 'database.count("users")' in source
-              assert 'database.count("drivers", verified_filter)' in source
-              assert 'limit=8' in source
-              assert 'limit=6' in source
-              assert 'database.find_many("users")' not in source
-              assert 'apply_ride_lifecycle' not in source
+          const styles = StyleSheet.create({
+            root: { flex: 1, backgroundColor: "#ECECE8" },
+            topBar: { position: "absolute", left: 16, right: 16, zIndex: 30, elevation: 30, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+            topButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.97)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.10)", alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOpacity: 0.10, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+            liveButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.97)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.10)", alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOpacity: 0.10, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+            liveDot: { position: "absolute", top: 10, right: 10, width: 7, height: 7, borderRadius: 4, backgroundColor: RIDE_BLACK },
+            liveDotSyncing: { backgroundColor: "#D39A24" },
+            tripPill: { minHeight: 36, maxWidth: 220, paddingHorizontal: 13, borderRadius: 18, backgroundColor: "rgba(17,17,17,0.94)", alignItems: "center", justifyContent: "center" },
+            tripPillText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
+            sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+            handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
+            content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 12 },
+            radar: { height: 106, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+            radarRing: { position: "absolute", width: 94, height: 94, borderRadius: 47, borderWidth: 1, borderColor: "rgba(17,17,17,0.46)" },
+            radarCar: { width: 48, height: 48, borderRadius: 24, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 6 },
+            statusRow: { flexDirection: "row", alignItems: "center", gap: 11 },
+            statusIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: "#F0F0EE", alignItems: "center", justifyContent: "center" },
+            statusIconWarning: { backgroundColor: v2Theme.colors.warningSoft },
+            eyebrow: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 1.1 },
+            title: { color: v2Theme.colors.ink, fontSize: 22, lineHeight: 26, fontWeight: "900", letterSpacing: -0.55, marginTop: 1 },
+            body: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 17 },
+            progressTrack: { flexDirection: "row", gap: 5 },
+            progressSegment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: "#DDDDDA" },
+            progressSegmentActive: { backgroundColor: RIDE_BLACK },
+            routeSummary: { minHeight: 40, borderRadius: 14, backgroundColor: "#F7F7F5", paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 7 },
+            routeDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: RIDE_BLACK },
+            routeSquare: { width: 9, height: 9, borderRadius: 2, backgroundColor: RIDE_BLACK },
+            routeText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "700" },
+            primary: { minHeight: 52, borderRadius: 18, backgroundColor: RIDE_BLACK, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+            primaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+            cancel: { minHeight: 50, borderRadius: 18, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center" },
+            cancelBusy: { backgroundColor: "#2B2B2B" },
+            cancelText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
+            flex: { flex: 1 },
+            pressed: { opacity: 0.72, transform: [{ scale: 0.995 }] },
+          });
           ''')
 
-          # Mobile control-center contract extends the original test suite.
-          Path('mobile/__tests__/admin-control-center-wiring.test.ts').write_text('''import fs from "fs";
+          # #13 — Zimbabwe-first autocomplete/geocoding: stronger local fallback plus
+          # an explicit Zimbabwe address hint and coordinate guard.
+          routing = Path("backend/app/services/routing_service.py")
+          text = routing.read_text()
+          discovery_start = text.index("_ZIMBABWE_DISCOVERY = [")
+          discovery_end = text.index("\n]\n\n\nclass RoutingError", discovery_start) + 2
+          discovery = '''_ZIMBABWE_DISCOVERY = [
+              ("Harare", "Harare, Zimbabwe", -17.824858, 31.053028),
+              ("Bulawayo", "Bulawayo, Zimbabwe", -20.149812, 28.585388),
+              ("Chitungwiza", "Chitungwiza, Zimbabwe", -18.0127, 31.0756),
+              ("Mutare", "Mutare, Zimbabwe", -18.9707, 32.6709),
+              ("Gweru", "Gweru, Zimbabwe", -19.4513, 29.8152),
+              ("Kwekwe", "Kwekwe, Zimbabwe", -18.9281, 29.8149),
+              ("Kadoma", "Kadoma, Zimbabwe", -18.3333, 29.9167),
+              ("Masvingo", "Masvingo, Zimbabwe", -20.0744, 30.8328),
+              ("Chinhoyi", "Chinhoyi, Zimbabwe", -17.3667, 30.2000),
+              ("Marondera", "Marondera, Zimbabwe", -18.1853, 31.5519),
+              ("Victoria Falls", "Victoria Falls, Zimbabwe", -17.9243, 25.8560),
+              ("Hwange", "Hwange, Zimbabwe", -18.3645, 26.4988),
+              ("Kariba", "Kariba, Zimbabwe", -16.5167, 28.8000),
+              ("Bindura", "Bindura, Zimbabwe", -17.3019, 31.3306),
+              ("Beitbridge", "Beitbridge, Zimbabwe", -22.2167, 30.0000),
+              ("Zvishavane", "Zvishavane, Zimbabwe", -20.3267, 30.0665),
+              ("Redcliff", "Redcliff, Zimbabwe", -19.0333, 29.7833),
+              ("Rusape", "Rusape, Zimbabwe", -18.5278, 32.1284),
+              ("Chegutu", "Chegutu, Zimbabwe", -18.1302, 30.1407),
+              ("Norton", "Norton, Zimbabwe", -17.8833, 30.7000),
+              ("Gwanda", "Gwanda, Zimbabwe", -20.9333, 29.0000),
+              ("Plumtree", "Plumtree, Zimbabwe", -20.4833, 27.8167),
+              ("Shurugwi", "Shurugwi, Zimbabwe", -19.6702, 30.0059),
+              ("Chipinge", "Chipinge, Zimbabwe", -20.1883, 32.6236),
+              ("Chiredzi", "Chiredzi, Zimbabwe", -21.0500, 31.6667),
+              ("Karoi", "Karoi, Zimbabwe", -16.8167, 29.6833),
+              ("Gokwe", "Gokwe, Zimbabwe", -18.2167, 28.9333),
+              ("Lupane", "Lupane, Zimbabwe", -18.9315, 27.8069),
+              ("Triangle", "Triangle, Zimbabwe", -21.0333, 31.4500),
+              ("Mvurwi", "Mvurwi, Zimbabwe", -17.0333, 30.8500),
+              ("Joina City", "Joina City, Jason Moyo Avenue, Harare, Zimbabwe", -17.8313, 31.0477),
+              ("Sam Levy’s Village", "Sam Levy’s Village, Borrowdale, Harare, Zimbabwe", -17.7622, 31.0902),
+              ("Robert Gabriel Mugabe International Airport", "Harare Airport, Zimbabwe", -17.9318, 31.0928),
+              ("Joshua Mqabuko Nkomo International Airport", "Bulawayo Airport, Zimbabwe", -20.0174, 28.6179),
+          ]'''
+          text = text[:discovery_start] + discovery + text[discovery_end:]
+          helper_marker = '''class RoutingNoResultError(RoutingError):
+              pass
+
+          def _curated_suggestions(query: str) -> List[Dict[str, Any]]:
+          '''
+          helper_replacement = '''class RoutingNoResultError(RoutingError):
+              pass
+
+
+          def _zimbabwe_geocode_query(address: str, region_code: str) -> str:
+              clean = " ".join(address.strip().split())
+              if region_code.strip().upper() == "ZW" and "zimbabwe" not in clean.lower():
+                  return f"{clean}, Zimbabwe"
+              return clean
+
+
+          def _coordinate_in_region(latitude: float, longitude: float, region_code: str) -> bool:
+              if region_code.strip().upper() != "ZW":
+                  return True
+              return -23.2 <= latitude <= -15.3 and 25.0 <= longitude <= 33.3
+
+
+          def _curated_suggestions(query: str) -> List[Dict[str, Any]]:
+          '''
+          if helper_marker not in text:
+              raise SystemExit("routing helper marker not found")
+          text = text.replace(helper_marker, helper_replacement, 1)
+          text = text.replace(
+              '    url = GOOGLE_GEOCODE_URL.format(address=quote(clean_address, safe=""))',
+              '    provider_address = _zimbabwe_geocode_query(clean_address, region_code)\n    url = GOOGLE_GEOCODE_URL.format(address=quote(provider_address, safe=""))',
+              1,
+          )
+          coordinate_marker = '''    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+              raise RoutingNoResultError("The routing provider did not return coordinates for that address.")
+
+              return {
+          '''
+          coordinate_replacement = '''    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+              raise RoutingNoResultError("The routing provider did not return coordinates for that address.")
+              if not _coordinate_in_region(float(latitude), float(longitude), region_code):
+                  raise RoutingNoResultError("No Zimbabwe location was found for that address.")
+
+              return {
+          '''
+          if coordinate_marker not in text:
+              raise SystemExit("geocode coordinate marker not found")
+          text = text.replace(coordinate_marker, coordinate_replacement, 1)
+          text = text.replace(
+              '''    body = {
+                  "input": clean_query,
+                  "regionCode": region_code,
+                  "includedRegionCodes": [region_code.lower()],
+              }''',
+              '''    body = {
+                  "input": clean_query,
+                  "regionCode": region_code,
+                  "includedRegionCodes": [region_code.lower()],
+                  "languageCode": "en",
+              }''',
+              1,
+          )
+          text = text.replace(
+              'async def resolve_place(place_id: str) -> Dict[str, Any]:\n    api_key, _, timeout = _google_config()',
+              'async def resolve_place(place_id: str) -> Dict[str, Any]:\n    api_key, region_code, timeout = _google_config()',
+              1,
+          )
+          resolve_marker = '''    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+              raise RoutingNoResultError("That place does not have usable map coordinates.")
+              display_name = payload.get("displayName") or {}
+          '''
+          resolve_replacement = '''    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+              raise RoutingNoResultError("That place does not have usable map coordinates.")
+              if not _coordinate_in_region(float(latitude), float(longitude), region_code):
+                  raise RoutingNoResultError("That place is outside Zimbabwe.")
+              display_name = payload.get("displayName") or {}
+          '''
+          if resolve_marker not in text:
+              raise SystemExit("place coordinate marker not found")
+          text = text.replace(resolve_marker, resolve_replacement, 1)
+          routing.write_text(text)
+
+          # #3 — wire the existing backend profile-photo moderation queue into Admin.
+          admin_service = Path("mobile/services/adminService.ts")
+          text = admin_service.read_text()
+          type_marker = '''export type AdminListResponse<T> = {
+            count: number;
+            items: T[];
+          };
+          '''
+          type_addition = type_marker + '''
+          export type AdminProfilePhotoReviewItem = {
+            user_id: string;
+            name?: string;
+            email?: string;
+            role: "driver" | "courier";
+            city?: string;
+            candidate_url: string;
+            current_approved_url?: string | null;
+            profile_photo_verified: boolean;
+            review_status: "pending" | "approved" | "rejected";
+            rejection_reason?: string | null;
+            submitted_at?: string | null;
+            is_replacement: boolean;
+          };
+          '''
+          if "AdminProfilePhotoReviewItem" not in text:
+              if type_marker not in text:
+                  raise SystemExit("admin service type marker not found")
+              text = text.replace(type_marker, type_addition, 1)
+          service_marker = '''export async function listAdminVerifications(status?: VerificationStatus, search?: string) {
+          '''
+          service_addition = '''export async function listAdminProfilePhotos(status: "pending" | "approved" | "rejected" = "pending") {
+            return requestData<AdminListResponse<AdminProfilePhotoReviewItem>>({
+              method: "GET",
+              url: "/admin/profile-photos",
+              params: { status },
+            });
+          }
+
+          export async function updateAdminProfilePhotoStatus(userId: string, status: "approved" | "rejected", reason?: string) {
+            return requestData<{
+              user_id: string;
+              role: "driver" | "courier";
+              profile_photo_url?: string | null;
+              profile_photo_verified: boolean;
+              review_status: "approved" | "rejected";
+              rejection_reason?: string | null;
+            }>({
+              method: "PATCH",
+              url: `/admin/profile-photos/${userId}`,
+              data: { status, reason },
+            });
+          }
+
+          export async function listAdminVerifications(status?: VerificationStatus, search?: string) {
+          '''
+          if "listAdminProfilePhotos" not in text:
+              if service_marker not in text:
+                  raise SystemExit("admin service function marker not found")
+              text = text.replace(service_marker, service_addition, 1)
+          admin_service.write_text(text)
+
+          control = Path("mobile/components/admin/AdminControlCenter.tsx")
+          text = control.read_text()
+          text = text.replace(
+              'import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";',
+              'import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";',
+              1,
+          )
+          text = text.replace(
+              '''  AdminSupportMessage,
+            AdminUser,
+            getAdminOverview,''',
+              '''  AdminSupportMessage,
+            AdminProfilePhotoReviewItem,
+            AdminUser,
+            getAdminOverview,''',
+              1,
+          )
+          text = text.replace(
+              '''  listAdminReports,
+            listAdminRequests,''',
+              '''  listAdminProfilePhotos,
+            listAdminReports,
+            listAdminRequests,''',
+              1,
+          )
+          text = text.replace(
+              '''  updateAdminReportStatus,
+            updateAdminRequestStatus,''',
+              '''  updateAdminProfilePhotoStatus,
+            updateAdminReportStatus,
+            updateAdminRequestStatus,''',
+              1,
+          )
+          text = text.replace(
+              '  "notification",\n]);',
+              '  "notification",\n  "profile_photo",\n]);',
+              1,
+          )
+          text = text.replace(
+              'type AdminSection = "overview" | "verifications" | "support" | "safety" | "bookings" | "users" | "rides" | "audit";',
+              'type AdminSection = "overview" | "profile_photos" | "verifications" | "support" | "safety" | "bookings" | "users" | "rides" | "audit";',
+              1,
+          )
+          text = text.replace(
+              '  const [verifications, setVerifications] = useState<AdminVerificationListItem[]>([]);',
+              '  const [verifications, setVerifications] = useState<AdminVerificationListItem[]>([]);\n  const [profilePhotos, setProfilePhotos] = useState<AdminProfilePhotoReviewItem[]>([]);',
+              1,
+          )
+          text = text.replace(
+              'request = Promise.all([getAdminOverview(), listAdminVerifications()])\n      .then(([overviewData, verificationData]) => {',
+              'request = Promise.all([getAdminOverview(), listAdminVerifications(), listAdminProfilePhotos("pending")])\n      .then(([overviewData, verificationData, profilePhotoData]) => {',
+              1,
+          )
+          text = text.replace(
+              '        setVerifications(verificationData.items);',
+              '        setVerifications(verificationData.items);\n        setProfilePhotos(profilePhotoData.items);',
+              1,
+          )
+          text = text.replace(
+              '    if (section === "overview" || section === "verifications") return Promise.resolve();',
+              '    if (section === "overview" || section === "profile_photos" || section === "verifications") return Promise.resolve();',
+              1,
+          )
+          searched_marker = '''  const searchedVerifications = useMemo(
+              () => filterSearch(verifications, search, ["name", "email", "phone", "city", "verification_status"]),
+              [search, verifications],
+            );
+          '''
+          searched_addition = searched_marker + '''  const searchedProfilePhotos = useMemo(
+              () => filterSearch(profilePhotos, search, ["name", "email", "role", "city", "review_status"]),
+              [profilePhotos, search],
+            );
+          '''
+          if searched_marker not in text:
+              raise SystemExit("admin searched verification marker not found")
+          text = text.replace(searched_marker, searched_addition, 1)
+          text = text.replace(
+              '''          pendingVerifications={pendingVerifications.length}
+                    onOpen={switchSection}''',
+              '''          pendingVerifications={pendingVerifications.length}
+                    pendingProfilePhotos={profilePhotos.length}
+                    onOpen={switchSection}''',
+              1,
+          )
+          verification_render = '''          {active === "verifications" ? (
+                      <VerificationList items={searchedVerifications} onReview={(driverId) => router.push(`/(admin)/verification/${driverId}` as never)} />
+                    ) : null}
+          '''
+          photo_render = '''          {active === "profile_photos" ? (
+                      <ProfilePhotoList
+                        items={searchedProfilePhotos}
+                        onApprove={async (item) => {
+                          await updateAdminProfilePhotoStatus(item.user_id, "approved");
+                          setProfilePhotos((current) => current.filter((candidate) => candidate.user_id !== item.user_id));
+                          await loadCore();
+                        }}
+                        onReject={(item) => setReasonAction({
+                          title: "Reject profile photo",
+                          message: `Ask ${item.name || "this worker"} to upload another clear profile photo?`,
+                          reasonLabel: "Reason for rejection",
+                          confirmLabel: "Reject photo",
+                          onConfirm: async (actionReason) => {
+                            await updateAdminProfilePhotoStatus(item.user_id, "rejected", actionReason);
+                            setProfilePhotos((current) => current.filter((candidate) => candidate.user_id !== item.user_id));
+                          },
+                        })}
+                      />
+                    ) : null}
+
+          ''' + verification_render
+          if verification_render not in text:
+              raise SystemExit("admin verification render marker not found")
+          text = text.replace(verification_render, photo_render, 1)
+          text = text.replace(
+              '''  pendingVerifications,
+            onOpen,''',
+              '''  pendingVerifications,
+            pendingProfilePhotos,
+            onOpen,''',
+              1,
+          )
+          text = text.replace(
+              '''  pendingVerifications: number;
+            onOpen: (section: AdminSection) => void;''',
+              '''  pendingVerifications: number;
+            pendingProfilePhotos: number;
+            onOpen: (section: AdminSection) => void;''',
+              1,
+          )
+          text = text.replace(
+              '<Metric value={pendingVerifications} label="Pending checks" urgent={pendingVerifications > 0} />',
+              '<Metric value={pendingVerifications + pendingProfilePhotos} label="Pending checks" urgent={pendingVerifications + pendingProfilePhotos > 0} />',
+              1,
+          )
+          text = text.replace(
+              '<AttentionRow icon="shield-account-outline" title="Driver verification" subtitle="Review identity and vehicle documents" count={pendingVerifications} onPress={() => onOpen("verifications")} />',
+              '<AttentionRow icon="account-box-outline" title="Profile photos" subtitle="Approve Driver and Courier profile photos" count={pendingProfilePhotos} onPress={() => onOpen("profile_photos")} />\n        <AttentionRow icon="shield-account-outline" title="Driver verification" subtitle="Review identity documents and driver licences" count={pendingVerifications} onPress={() => onOpen("verifications")} />',
+              1,
+          )
+          profile_component_marker = '''function VerificationList({ items, onReview }: { items: AdminVerificationListItem[]; onReview: (driverId: string) => void }) {
+          '''
+          profile_component = '''function ProfilePhotoList({ items, onApprove, onReject }: { items: AdminProfilePhotoReviewItem[]; onApprove: (item: AdminProfilePhotoReviewItem) => Promise<void>; onReject: (item: AdminProfilePhotoReviewItem) => void }) {
+            if (!items.length) return <EmptyState title="No profile photos waiting" body="New Driver and Courier profile photos will appear here automatically." />;
+            return (
+              <View style={styles.list}>
+                {items.map((item) => (
+                  <View key={item.user_id} style={styles.recordCard}>
+                    <View style={styles.recordTopRow}>
+                      <StatusBadge label={item.is_replacement ? "Replacement" : "New photo"} tone="warning" />
+                      <Text style={styles.roleText}>{formatStatus(item.role)}</Text>
+                    </View>
+                    <Image source={{ uri: item.candidate_url }} style={styles.profilePhotoPreview} resizeMode="cover" />
+                    <Text style={styles.recordTitle}>{item.name || "Worker"}</Text>
+                    <Text style={styles.muted}>{item.email || item.city || "No contact on file"}</Text>
+                    {item.current_approved_url ? <Text style={styles.muted}>Existing approved photo stays live until this replacement is approved.</Text> : null}
+                    <View style={styles.actionRow}>
+                      <AppButton title="Approve photo" onPress={() => void onApprove(item)} style={styles.flexButton} />
+                      <AppButton title="Reject" variant="danger" onPress={() => onReject(item)} style={styles.flexButton} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          }
+
+          function VerificationList({ items, onReview }: { items: AdminVerificationListItem[]; onReview: (driverId: string) => void }) {
+          '''
+          if profile_component_marker not in text:
+              raise SystemExit("admin profile component marker not found")
+          text = text.replace(profile_component_marker, profile_component, 1)
+          text = text.replace(
+              '    overview: "Operations",\n    verifications: "Driver verification",',
+              '    overview: "Operations",\n    profile_photos: "Profile photo approvals",\n    verifications: "Driver verification",',
+              1,
+          )
+          text = text.replace(
+              '  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#4ADE80" },',
+              '  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" },',
+              1,
+          )
+          text = text.replace(
+              '  heroEyebrow: { color: "#86EFAC", fontWeight: "900", fontSize: 11, letterSpacing: 1.8 },',
+              '  heroEyebrow: { color: "#D1D5DB", fontWeight: "900", fontSize: 11, letterSpacing: 1.8 },',
+              1,
+          )
+          text = text.replace(
+              '  sectionEyebrow: { color: colors.primaryGreen, fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },',
+              '  sectionEyebrow: { color: colors.mutedText, fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },',
+              1,
+          )
+          text = text.replace(
+              '  recordTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },',
+              '  profilePhotoPreview: { width: "100%", height: 260, borderRadius: 20, backgroundColor: colors.mutedSurface },\n  recordTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },',
+              1,
+          )
+          control.write_text(text)
+
+          # Make the standalone Admin verification route consistent with the Control Center.
+          admin_verifications = Path("mobile/app/(admin)/verifications.tsx")
+          text = admin_verifications.read_text()
+          text = text.replace("Review manual driver identity and vehicle submissions.", "Review Driver identity documents and driver licences.", 1)
+          text = text.replace('backgroundColor: "rgba(17,139,68,0.12)",\n    borderColor: "rgba(17,139,68,0.36)"', 'backgroundColor: "rgba(17,17,17,0.07)",\n    borderColor: "rgba(17,17,17,0.24)"', 1)
+          text = text.replace('color: colors.primaryGreen,', 'color: colors.charcoal,', 1)
+          admin_verifications.write_text(text)
+
+          # Structural monochrome selected state for shared bottom navigation.
+          bottom_nav = Path("mobile/components/layout/BottomNav.tsx")
+          text = bottom_nav.read_text()
+          text = text.replace(
+              '  const neutralActive = role === "driver" || activeTone === "neutral";',
+              '  const neutralActive = true;\n  void activeTone;',
+              1,
+          )
+          bottom_nav.write_text(text)
+
+          # Regression guards for the exact cleanup contract.
+          Path("backend/tests/test_build39_final_cleanup.py").write_text('''from app.services.hailing_city_service import DEFAULT_CITY_PRICING, enabled_ride_classes
+          from app.services.verification_service import REQUIRED_DOCUMENTS, REQUIRED_DOCUMENT_TYPES, _normalize_document_type
+
+
+          def test_driver_verification_no_longer_requires_vehicle_registration():
+              assert REQUIRED_DOCUMENTS == ["selfie", "identity_document", "driver_license"]
+              assert REQUIRED_DOCUMENT_TYPES == {"selfie", "identity_document", "driver_license"}
+              assert _normalize_document_type("vehicle_registration_or_logbook") == "vehicle_registration_or_logbook"
+
+
+          def test_all_launch_ride_classes_have_one_enabled_source_of_truth():
+              assert all(DEFAULT_CITY_PRICING[ride_class]["enabled"] is True for ride_class in ("ECONOMY", "COMFORT", "XL"))
+              assert enabled_ride_classes({"pricing": {"ECONOMY": {"enabled": True}, "COMFORT": {"enabled": False}, "XL": {"enabled": False}}}) == ["ECONOMY", "COMFORT", "XL"]
+          ''')
+
+          Path("mobile/__tests__/build39-final-cleanup.test.ts").write_text('''import fs from "fs";
           import path from "path";
 
-          describe("admin control center recovery", () => {
-            const root = path.resolve(__dirname, "..");
-            const source = fs.readFileSync(path.join(root, "components/admin/AdminControlCenter.tsx"), "utf8");
-            const route = fs.readFileSync(path.join(root, "app/(admin)/dashboard.tsx"), "utf8");
+          const root = path.resolve(__dirname, "..");
+          const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
 
-            it("uses the new operations control center route", () => {
-              expect(route).toContain("AdminControlCenter");
-              expect(source).toContain("Needs attention");
-              expect(source).toContain("Platform controls");
+          describe("Build 39 final cleanup contract", () => {
+            it("routes the customer Ride service only into Ride Now", () => {
+              const source = read("app/(shared)/services.tsx");
+              expect(source).toContain("flow=hailing");
+              expect(source).not.toContain("/(customer)/search");
+              expect(source).not.toContain("city-to-city");
             });
 
-            it("keeps admin data reconciled while the control center is open", () => {
-              expect(source).toContain("useRealtime");
-              expect(source).toContain("ADMIN_CONNECTED_RECONCILIATION_MS = 15000");
-              expect(source).toContain("ADMIN_RECOVERY_RECONCILIATION_MS = 8000");
-              expect(source).toContain("setTimeout");
-              expect(source).not.toContain("setInterval");
-              expect(source).toContain("reconciliationRevision");
+            it("keeps driver verification to identity, licence and selfie", () => {
+              const source = read("app/(shared)/verification.tsx");
+              expect(source).not.toContain("vehicle_registration_or_logbook");
+              expect(source).not.toContain("vehicle record");
+              expect(source).toContain("driver_license");
             });
 
-            it("guards verification metrics against stale backend status semantics", () => {
-              expect(source).toContain('"approved", "verified", "active"');
-              expect(source).toContain('"pending_uploads"');
-              expect(source).toContain('pending_driver_verifications: pendingCount');
+            it("ships the Reduce-Motion-aware driver search radar", () => {
+              const source = read("app/(customer)/hail/searching.tsx");
+              expect(source).toContain("DriverSearchRadar");
+              expect(source).toContain("AccessibilityInfo");
+              expect(source).toContain("activeTone=\"neutral\"");
             });
 
-            it("applies mutation responses locally instead of reloading entire sections", () => {
-              expect(source).toContain("setSupport((current)");
-              expect(source).toContain("setReports((current)");
-              expect(source).toContain("setUsers((current)");
-              expect(source).toContain("setRequests((current)");
-              expect(source).toContain("setRides((current)");
+            it("wires profile-photo approval into the Admin Control Center", () => {
+              const source = read("components/admin/AdminControlCenter.tsx");
+              expect(source).toContain("listAdminProfilePhotos");
+              expect(source).toContain("ProfilePhotoList");
+              expect(source).toContain("Approve photo");
+            });
+
+            it("ships an RGBA/RGB-alpha Comfort asset", () => {
+              const png = fs.readFileSync(path.join(root, "assets/images/hailing/comfort-executive.png"));
+              expect([4, 6]).toContain(png.readUInt8(25));
+              expect(png.length).toBeLessThan(100_000);
             });
           });
           ''')
           PY
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
-
-      - name: Compile backend
-        working-directory: backend
-        run: python -m compileall app
-
-      - name: Run admin backend contracts
-        working-directory: backend
-        run: python -m pytest -q tests/test_admin_verification_status_semantics.py
-
-      - name: Run backend regression suite
-        working-directory: backend
-        run: python -m pytest -q
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-
-      - name: Install mobile dependencies
-        working-directory: mobile
-        run: npm ci
-
-      - name: Typecheck mobile
-        working-directory: mobile
-        run: npm run typecheck
-
-      - name: Run mobile regression suite
-        working-directory: mobile
-        run: npm test -- --runInBand
-
-      - name: Verify Android release config
-        working-directory: mobile
-        run: npm run verify:android
-
-      - name: Commit validated admin recovery
+      - name: Replace Comfort with transparent production asset
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "letsgoride-release-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add \
-            backend/app/routers/admin.py \
-            backend/app/database.py \
-            backend/tests/test_admin_verification_status_semantics.py \
-            mobile/app/'(admin)'/dashboard.tsx \
-            mobile/components/admin/AdminControlCenter.tsx \
-            mobile/__tests__/polling-sanitation.test.ts \
-            mobile/__tests__/admin-control-center-wiring.test.ts
+          git fetch --no-tags origin fix/product-polish-batch-production
+          git show FETCH_HEAD:mobile/assets/images/hailing/comfort-executive.png > mobile/assets/images/hailing/comfort-executive.png
+          test "$(wc -c < mobile/assets/images/hailing/comfort-executive.png)" -lt 100000
+
+      - name: Restore one-time workflow and run static guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show HEAD^:.github/workflows/admin-control-center-finalize-once.yml > .github/workflows/admin-control-center-finalize-once.yml
+          python -m compileall -q backend/app backend/tests
+          python - <<'PY'
+          from pathlib import Path
+          services = Path('mobile/app/(shared)/services.tsx').read_text()
+          verification = Path('mobile/app/(shared)/verification.tsx').read_text()
+          backend_verification = Path('backend/app/services/verification_service.py').read_text()
+          city = Path('backend/app/services/hailing_city_service.py').read_text()
+          routing = Path('backend/app/services/routing_service.py').read_text()
+          admin = Path('mobile/components/admin/AdminControlCenter.tsx').read_text()
+          search = Path('mobile/app/(customer)/hail/searching.tsx').read_text()
+          assert '/(customer)/search' not in services and 'flow=hailing' in services
+          assert 'vehicle_registration_or_logbook' not in verification
+          assert 'REQUIRED_DOCUMENTS = [\n    "selfie",\n    "identity_document",\n    "driver_license",\n]' in backend_verification
+          assert city.count('"enabled": True') >= 4
+          assert '_zimbabwe_geocode_query' in routing and 'Beitbridge' in routing and 'Chitungwiza' in routing
+          assert 'ProfilePhotoList' in admin and 'listAdminProfilePhotos' in admin
+          assert 'DriverSearchRadar' in search and 'AccessibilityInfo' in search
+          PY
+          git diff --check
+
+      - name: Commit final cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "deonvault-crypto"
+          git config user.email "deonvault@gmail.com"
+          git add .
           git diff --cached --check
-          git commit -m "Fix live admin control center sync and operations UI"
-          git push origin HEAD:fix/admin-control-center-production
+          git commit -m "Build39: finish production cleanup"
+          git push origin HEAD:final/build39-cleanup
