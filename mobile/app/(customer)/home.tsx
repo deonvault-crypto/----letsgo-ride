@@ -19,8 +19,6 @@ import { BrandLogo } from "../../components/layout/BrandLogo";
 import { v2Theme } from "../../constants/v2Theme";
 import { useNotifications } from "../../contexts/NotificationContext";
 import { useActiveHailingTrip, useHailingConfig } from "../../hooks/useHailing";
-import { useRides } from "../../hooks/useRides";
-import { isRideBookable } from "../../utils/tripLifecycle";
 
 type CanvasMode = "ride" | "food" | "courier";
 
@@ -74,7 +72,6 @@ export default function CustomerHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { unreadCount } = useNotifications();
-  const { rides, loading } = useRides();
   const { config: hailingConfig } = useHailingConfig();
   const { trip: activeHailingTrip } = useActiveHailingTrip(false);
   const [mode, setMode] = useState<CanvasMode>("ride");
@@ -91,7 +88,6 @@ export default function CustomerHomeScreen() {
   const activeHailing = Boolean(
     activeHailingTrip && !TERMINAL_HAILING.has(activeHailingTrip.status),
   );
-  const upcomingRideCount = rides.filter((ride) => isRideBookable(ride)).length;
   const meta = MODE_META[mode];
 
   useEffect(() => {
@@ -220,10 +216,6 @@ export default function CustomerHomeScreen() {
   }
 
   function openContextAction() {
-    if (mode === "ride") {
-      router.push("/(shared)/services" as never);
-      return;
-    }
     if (mode === "food") {
       router.push("/(customer)/food" as never);
       return;
@@ -360,33 +352,17 @@ export default function CustomerHomeScreen() {
           >
             <View style={styles.contextIcon}>
               <MaterialCommunityIcons
-                name={
-                  mode === "ride"
-                    ? "road-variant"
-                    : mode === "food"
-                      ? "storefront-outline"
-                      : "map-marker-path"
-                }
+                name={mode === "food" ? "storefront-outline" : "map-marker-path"}
                 size={19}
                 color={v2Theme.colors.inkSecondary}
               />
             </View>
             <View style={styles.contextCopy}>
               <Text style={styles.contextTitle}>
-                {mode === "ride"
-                  ? "Intercity / Scheduled"
-                  : mode === "food"
-                    ? "Explore nearby food"
-                    : "Start a delivery"}
+                {mode === "food" ? "Explore nearby food" : "Start a delivery"}
               </Text>
               <Text numberOfLines={1} style={styles.contextBody}>
-                {mode === "ride"
-                  ? loading
-                    ? "Checking available trips…"
-                    : `${upcomingRideCount} bookable ${upcomingRideCount === 1 ? "ride" : "rides"} available`
-                  : mode === "food"
-                    ? "Restaurants, kitchens and dishes"
-                    : "Parcels with live tracking"}
+                {mode === "food" ? "Restaurants, kitchens and dishes" : "Parcels with live tracking"}
               </Text>
             </View>
             <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
