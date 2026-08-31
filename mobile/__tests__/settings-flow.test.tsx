@@ -14,6 +14,7 @@ import { passengerUser } from "./fixtures";
 const mockCurrentUser = passengerUser;
 
 jest.mock("expo-router", () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
   usePathname: () => "/settings",
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = require("react");
