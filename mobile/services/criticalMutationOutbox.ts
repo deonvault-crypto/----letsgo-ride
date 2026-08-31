@@ -157,3 +157,8 @@ export async function flushCriticalMutationOutbox() {
   });
   return flushPromise;
 }
+
+export async function clearCriticalMutationOutbox() {
+  flushPromise = null;
+  await SecureStore.deleteItemAsync(OUTBOX_KEY).catch(() => undefined);
+}
