@@ -2,6 +2,8 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { colors } from "../../constants/colors";
 
+const WORDMARK_GREEN = "#118B44";
+
 export function BrandLogo({ size = "regular" }: { size?: "small" | "regular" | "large" }) {
   return (
     <View style={styles.wrap}>
@@ -13,24 +15,10 @@ export function BrandLogo({ size = "regular" }: { size?: "small" | "regular" | "
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    alignSelf: "flex-start",
-  },
-  text: {
-    color: colors.whiteText,
-    fontWeight: "900",
-    letterSpacing: 0,
-  },
-  small: {
-    fontSize: 20,
-  },
-  regular: {
-    fontSize: 28,
-  },
-  large: {
-    fontSize: 34,
-  },
-  green: {
-    color: colors.primaryGreen,
-  },
+  wrap: { alignSelf: "flex-start" },
+  text: { color: colors.whiteText, fontWeight: "900", letterSpacing: 0 },
+  small: { fontSize: 20 },
+  regular: { fontSize: 28 },
+  large: { fontSize: 34 },
+  green: { color: WORDMARK_GREEN },
 });
