@@ -5,6 +5,8 @@ describe("Alpha M fluid canvas surfaces", () => {
   const root = path.resolve(__dirname, "..");
   const home = fs.readFileSync(path.join(root, "app/(customer)/home.tsx"), "utf8");
   const customerAccount = fs.readFileSync(path.join(root, "app/(shared)/account.tsx"), "utf8");
+  const settings = fs.readFileSync(path.join(root, "app/(shared)/settings.tsx"), "utf8");
+  const editProfile = fs.readFileSync(path.join(root, "app/(shared)/edit-profile.tsx"), "utf8");
   const driverHome = fs.readFileSync(path.join(root, "app/(driver)/home.tsx"), "utf8");
   const driverAccount = fs.readFileSync(path.join(root, "app/(driver)/account.tsx"), "utf8");
   const driverTrips = fs.readFileSync(path.join(root, "app/(driver)/trips.tsx"), "utf8");
@@ -100,6 +102,30 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(nav).toContain('activeTone?: "brand" | "neutral"');
     expect(brandLogo).toContain('Lets<Text style={styles.green}>Go</Text>Ride');
     expect(brandLogo).toContain("color: colors.primaryGreen");
+  });
+
+  it("channels Account sections without repeating root content in nested pages", () => {
+    expect(customerAccount).toContain("Quick access");
+    expect(customerAccount).toContain('label="Inbox"');
+    expect(customerAccount).toContain('label="Wallet"');
+    expect(customerAccount).not.toContain('label="Help"');
+    expect(customerAccount).not.toContain('label="Safety"');
+    expect(customerAccount).toContain('subtitle="Notifications and device security"');
+
+    expect(settings).toContain('<Screen title="Settings" showBack');
+    expect(settings).toContain('showNotifications={false}');
+    expect(settings).toContain('<Section title="Notifications"');
+    expect(settings).toContain('<Section title="Security">');
+    expect(settings).not.toContain("AccountComplianceSections");
+    expect(settings).not.toContain('title="Account details"');
+    expect(settings).not.toContain("Legal & support");
+    expect(settings).not.toContain("Delete Account");
+    expect(settings).not.toContain("Sign Out");
+    expect(settings).not.toContain("navRole=");
+
+    expect(editProfile).toContain('showNotifications={false}');
+    expect(editProfile).toContain("fallbackRoute={accountFallback as never}");
+    expect(editProfile).not.toContain("navRole=");
   });
 
   it("keeps Driver home a live mobility cockpit instead of a dashboard grid", () => {
