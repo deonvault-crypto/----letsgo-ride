@@ -293,6 +293,12 @@ async def _staging_external_service_area() -> Optional[Dict[str, Any]]:
 
 
 async def resolve_service_area(latitude: float, longitude: float) -> Dict[str, Any]:
+    """Resolve every Zimbabwe pickup to its nearest local pricing/admin profile.
+
+    Service radii remain useful metadata, but they no longer create invisible product
+    walls between Zimbabwe towns. Dispatch remains separately bounded to nearby
+    Drivers, so nationwide availability never means nationwide Driver fan-out.
+    """
     settings = get_settings()
     if not is_in_zimbabwe(latitude, longitude):
         staging_area = await _staging_external_service_area()
@@ -308,14 +314,15 @@ async def resolve_service_area(latitude: float, longitude: float) -> Dict[str, A
     if not ranked:
         return {"supported": False, "enabled": False, "reason": "no_service_areas", "service_area": None, "ride_classes": []}
     distance, city = ranked[0]
-    within_radius = distance <= float(city.get("service_radius_km") or 0)
-    enabled = bool(settings.hailing_enabled and within_radius and city.get("enabled") and city.get("ride_hailing_enabled"))
+    within_local_radius = distance <= float(city.get("service_radius_km") or 0)
+    enabled = bool(settings.hailing_enabled and city.get("enabled") and city.get("ride_hailing_enabled"))
     classes = enabled_ride_classes(city) if enabled else []
     return {
-        "supported": bool(within_radius),
+        "supported": True,
         "enabled": enabled,
-        "reason": "enabled" if enabled else ("outside_service_radius" if not within_radius else "disabled"),
+        "reason": "enabled" if enabled and within_local_radius else ("zimbabwe_nationwide" if enabled else "disabled"),
         "distance_to_center_km": round(distance, 3),
+        "within_local_service_radius": within_local_radius,
         "service_area": public_city(city),
         "ride_classes": classes,
     }
