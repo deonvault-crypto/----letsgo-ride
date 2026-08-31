@@ -151,8 +151,9 @@ describe("Alpha M fluid canvas surfaces", () => {
   it("keeps Driver account simple, monochrome and identity-first", () => {
     expect(driverAccount).toContain('<Screen title="Driver account" navRole="driver" showNotifications>');
     expect(driverAccount).toContain("Profile & photo");
-    expect(driverAccount).toContain("Vehicle & documents");
-    expect(driverAccount).toContain("Wallet & settlement");
+    expect(driverAccount).toContain('title="Earnings"');
+    expect(driverAccount).toContain('title="Vehicle"');
+    expect(driverAccount).toContain('title="Documents"');
     expect(driverAccount).toContain('title="Settings"');
     expect(driverAccount).toContain("AccountDetailsSummary");
     expect(driverAccount).toContain("onRequestChange={requestAccountChange}");
@@ -162,21 +163,24 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(driverAccount).not.toContain("shield-check");
     expect(driverAccount).not.toContain("HailingMapBackdrop");
     expect(driverAccount).not.toContain("DRIVER TOOLS");
-    expect(driverAccount).not.toContain("Earnings & payouts");
+    expect(driverAccount).not.toContain("Earnings & settlement");
+    expect(driverAccount).not.toContain("Wallet & settlement");
     expect(driverAccount).not.toContain("v2Theme.colors.brand");
     expect(driverAccount).not.toContain("v2Theme.colors.brandStrong");
     expect(driverAccount).not.toContain("v2Theme.colors.brandSofter");
   });
 
-  it("requires a profile photo before Driver and Courier start new work", () => {
-    expect(driverHome).toContain("const photoBlocksNewWork = !hasProfilePhoto");
-    expect(driverHome).toContain("Profile photo required");
-    expect(driverHailing).toContain("const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim())");
-    expect(driverHailing).toContain("Add a clear profile photo before going online for Ride Now.");
-    expect(driverHailing).toContain("Add profile photo");
-    expect(courierHome).toContain("const photoRequired = Boolean(profile && approved && !hasProfilePhoto && !profile.online)");
+  it("requires an Admin-approved profile photo before Driver and Courier start new work", () => {
+    expect(driverHome).toContain("const photoApproved = user?.profile_photo_verified === true");
+    expect(driverHome).toContain("const photoBlocksNewWork = !photoApproved");
+    expect(driverHome).toContain("Profile photo approval required");
+    expect(driverHailing).toContain("const photoApproved = user?.profile_photo_verified === true");
+    expect(driverHailing).toContain("Admin-approved profile photo before going online for Ride Now");
+    expect(driverHailing).not.toContain("const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim())");
+    expect(courierHome).toContain("const photoApproved = user?.profile_photo_verified === true");
+    expect(courierHome).toContain("const photoRequired = Boolean(profile && approved && !photoApproved && !profile.online)");
     expect(courierHome).toContain("Add required Courier profile photo");
-    expect(courierHome).toContain("Add a clear profile photo before going online for new deliveries.");
+    expect(courierHome).toContain("Admin-approved Courier profile photo");
   });
 
   it("keeps Driver trips route-first instead of generic dashboard cards", () => {
