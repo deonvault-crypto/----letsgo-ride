@@ -12,7 +12,7 @@ class DriverHailingFinanceTests(unittest.IsolatedAsyncioTestCase):
         database.db = None
         await database.replace_collection("hailing_trips", [])
 
-    async def test_cash_is_full_driver_earnings_and_only_settled_card_pays_platform_fee(self):
+    async def test_direct_cash_accrues_weekly_fee_and_settled_legacy_card_is_accounted(self):
         rows = [
             {
                 "id": "cash",
@@ -61,8 +61,8 @@ class DriverHailingFinanceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(stats["today_ride_count"], 3)
         self.assertEqual(stats["today_gross_fares"], 30.0)
-        self.assertEqual(stats["today_platform_commission"], 0.30)
-        self.assertEqual(stats["today_estimated_earnings"], 19.70)
+        self.assertEqual(stats["today_platform_commission"], 0.60)
+        self.assertEqual(stats["today_estimated_earnings"], 19.40)
 
     async def test_card_failure_is_not_reported_as_driver_earnings(self):
         await database.insert_one(

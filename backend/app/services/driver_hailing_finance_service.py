@@ -39,8 +39,9 @@ def _trip_recognized_finance(trip: Dict[str, Any]) -> Dict[str, float]:
     payment_method = str(trip.get("payment_method") or "cash").strip().lower()
     payment_status = str(trip.get("payment_status") or "").strip().lower()
 
-    if payment_method == "cash":
-        return {"gross": gross, "commission": 0.0, "earnings": gross}
+    if payment_method in {"cash", "direct"}:
+        commission = min(gross, _money(fare.get("platform_commission")))
+        return {"gross": gross, "commission": commission, "earnings": _money(max(0.0, gross - commission))}
 
     if payment_status not in CARD_SETTLED_STATUSES:
         return {"gross": gross, "commission": 0.0, "earnings": 0.0}
@@ -102,13 +103,10 @@ async def driver_daily_stats(driver_id: str, *, now: datetime | None = None) -> 
                 "ride_count": {"$sum": 1},
                 "gross": {"$sum": "$gross"},
                 "cash_earnings": {
-                    "$sum": {
-                        "$cond": [
-                            {"$eq": ["$payment_method", "cash"]},
-                            "$gross",
-                            0,
-                        ]
-                    }
+                    "$sum": {"$cond": [{"$in": ["$payment_method", ["cash", "direct"]]}, "$gross", 0]}
+                },
+                "cash_commission": {
+                    "$sum": {"$cond": [{"$in": ["$payment_method", ["cash", "direct"]]}, "$quoted_commission", 0]}
                 },
                 "settled_card_gross": {
                     "$sum": {
@@ -146,8 +144,11 @@ async def driver_daily_stats(driver_id: str, *, now: datetime | None = None) -> 
     gross = _money(row.get("gross"))
     cash_earnings = _money(row.get("cash_earnings"))
     settled_card_gross = _money(row.get("settled_card_gross"))
-    commission = _money(min(settled_card_gross, _money(row.get("settled_card_commission"))))
-    card_earnings = _money(max(0.0, settled_card_gross - commission))
+    cash_commission = _money(min(cash_earnings, _money(row.get("cash_commission"))))
+    card_commission = _money(min(settled_card_gross, _money(row.get("settled_card_commission"))))
+    commission = _money(cash_commission + card_commission)
+    cash_earnings = _money(max(0.0, cash_earnings - cash_commission))
+    card_earnings = _money(max(0.0, settled_card_gross - card_commission))
     return {
         "today_ride_count": int(row.get("ride_count") or 0),
         "today_gross_fares": gross,

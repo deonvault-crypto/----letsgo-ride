@@ -21,6 +21,7 @@ from app.services.staging_courier_dispatch_smoke_service import run_staging_cour
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
 from app.services.stripe_reconciliation_service import stripe_payment_reconciliation_sweeper_bounded
 from app.services.worker_finance_index_service import ensure_worker_finance_indexes
+from app.services.driver_fee_settlement_service import driver_fee_settlement_sweeper
 from app.utils import api_success
 
 
@@ -39,6 +40,8 @@ hailing_dispatch_stop_event: asyncio.Event | None = None
 hailing_dispatch_task: asyncio.Task | None = None
 stripe_payment_stop_event: asyncio.Event | None = None
 stripe_payment_task: asyncio.Task | None = None
+driver_fee_settlement_stop_event: asyncio.Event | None = None
+driver_fee_settlement_task: asyncio.Task | None = None
 staging_routing_smoke_task: asyncio.Task | None = None
 staging_courier_dispatch_smoke_task: asyncio.Task | None = None
 
@@ -104,7 +107,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.on_event("startup")
 async def on_startup():
-    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, driver_fee_settlement_stop_event, driver_fee_settlement_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     await database.connect()
     await ensure_product_hardening_indexes()
     await ensure_worker_finance_indexes()
@@ -121,10 +124,14 @@ async def on_startup():
         # Preserve the Codex-hardened/native Ride Now dispatch worker. It already
         # uses next_dispatch_at and bounded indexed due-work queries.
         hailing_dispatch_task = asyncio.create_task(hailing_dispatch_sweeper(hailing_dispatch_stop_event))
-        logger.info("hailing_runtime enabled=true bounded_dispatch=true")
+        driver_fee_settlement_stop_event = asyncio.Event()
+        driver_fee_settlement_task = asyncio.create_task(driver_fee_settlement_sweeper(driver_fee_settlement_stop_event))
+        logger.info("hailing_runtime enabled=true bounded_dispatch=true weekly_driver_settlement=true")
     else:
         hailing_dispatch_stop_event = None
         hailing_dispatch_task = None
+        driver_fee_settlement_stop_event = None
+        driver_fee_settlement_task = None
         logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")
     if settings.stripe_configured:
         stripe_payment_stop_event = asyncio.Event()
@@ -162,7 +169,7 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
+    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, driver_fee_settlement_stop_event, driver_fee_settlement_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task
     if ride_lifecycle_stop_event:
         ride_lifecycle_stop_event.set()
     if ride_lifecycle_task:
@@ -175,6 +182,10 @@ async def on_shutdown():
         stripe_payment_stop_event.set()
     if stripe_payment_task:
         stripe_payment_task.cancel()
+    if driver_fee_settlement_stop_event:
+        driver_fee_settlement_stop_event.set()
+    if driver_fee_settlement_task:
+        driver_fee_settlement_task.cancel()
     if staging_routing_smoke_task:
         staging_routing_smoke_task.cancel()
     if staging_courier_dispatch_smoke_task:

@@ -19,12 +19,12 @@ def _money(value: Any) -> float:
 
 
 def _trip_finance(trip: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply the LetsGoRide launch economics to an immutable trip fare snapshot.
+    """Apply immutable trip economics without confusing cash custody with net earnings.
 
-    Cash is collected directly by the driver and belongs to the driver in full.
-    LetsGoRide only recognizes its configured platform percentage on settled card
-    payments. The fare snapshot remains the source of truth for historical card
-    economics so later pricing changes cannot rewrite completed-trip accounting.
+    Passenger cash/direct payment is physically collected by the driver immediately.
+    The configured fare snapshot still records LetsGoRide's service fee, which is not
+    due until the weekly postpaid statement is issued. Historical settled card rides
+    remain readable for backwards-compatible accounting but are not part of new statements.
     """
 
     fare = trip.get("fare") or {}
@@ -32,17 +32,17 @@ def _trip_finance(trip: Dict[str, Any]) -> Dict[str, Any]:
     payment_method = str(trip.get("payment_method") or "cash").strip().lower()
     payment_status = str(trip.get("payment_status") or "").strip().lower()
 
-    if payment_method == "cash":
+    quoted_commission = min(gross, _money(fare.get("platform_commission")))
+    if payment_method in {"cash", "direct"}:
         return {
             "gross": gross,
-            "commission": 0.0,
-            "worker_earnings": gross,
-            "payment_method": "cash",
-            "settlement_state": "cash_kept_by_driver",
+            "commission": quoted_commission,
+            "worker_earnings": _money(max(0.0, gross - quoted_commission)),
+            "payment_method": payment_method,
+            "settlement_state": "weekly_fee_accruing",
             "recognized": True,
         }
 
-    quoted_commission = min(gross, _money(fare.get("platform_commission")))
     worker_earnings = _money(max(0.0, gross - quoted_commission))
     settled = payment_status in CARD_SETTLED_STATUSES
     if settled:
@@ -73,8 +73,9 @@ async def _driver_totals(user_id: str) -> Dict[str, float]:
         for trip in rows:
             finance = _trip_finance(trip)
             gross += finance["gross"]
-            if finance["payment_method"] == "cash":
+            if finance["payment_method"] in {"cash", "direct"}:
                 cash += finance["gross"]
+                commission += finance["commission"]
                 net += finance["worker_earnings"]
             elif finance["recognized"]:
                 digital += finance["worker_earnings"]
@@ -103,14 +104,17 @@ async def _driver_totals(user_id: str) -> Dict[str, float]:
                 "_id": None,
                 "gross": {"$sum": "$gross"},
                 "cash": {
-                    "$sum": {"$cond": [{"$eq": ["$payment_method", "cash"]}, "$gross", 0]}
+                    "$sum": {"$cond": [{"$in": ["$payment_method", ["cash", "direct"]]}, "$gross", 0]}
+                },
+                "cash_commission": {
+                    "$sum": {"$cond": [{"$in": ["$payment_method", ["cash", "direct"]]}, "$quoted_commission", 0]}
                 },
                 "settled_card_gross": {
                     "$sum": {
                         "$cond": [
                             {
                                 "$and": [
-                                    {"$ne": ["$payment_method", "cash"]},
+                                    {"$not": [{"$in": ["$payment_method", ["cash", "direct"]]}]},
                                     {"$eq": ["$payment_status", "paid"]},
                                 ]
                             },
@@ -124,7 +128,7 @@ async def _driver_totals(user_id: str) -> Dict[str, float]:
                         "$cond": [
                             {
                                 "$and": [
-                                    {"$ne": ["$payment_method", "cash"]},
+                                    {"$not": [{"$in": ["$payment_method", ["cash", "direct"]]}]},
                                     {"$eq": ["$payment_status", "paid"]},
                                 ]
                             },
@@ -141,11 +145,13 @@ async def _driver_totals(user_id: str) -> Dict[str, float]:
     gross = _money(row.get("gross"))
     cash = _money(row.get("cash"))
     card_gross = _money(row.get("settled_card_gross"))
-    commission = _money(min(card_gross, _money(row.get("settled_card_commission"))))
-    digital = _money(max(0.0, card_gross - commission))
+    cash_commission = _money(min(cash, _money(row.get("cash_commission"))))
+    card_commission = _money(min(card_gross, _money(row.get("settled_card_commission"))))
+    commission = _money(cash_commission + card_commission)
+    digital = _money(max(0.0, card_gross - card_commission))
     return {
         "gross": gross,
-        "net": _money(cash + digital),
+        "net": _money(max(0.0, cash - cash_commission) + digital),
         "cash": cash,
         "digital": digital,
         "commission": commission,
@@ -191,7 +197,7 @@ async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
                 "source_id": trip["id"],
                 "label": f"Ride Now · {(trip.get('dropoff') or {}).get('formatted_address') or 'completed trip'}",
                 "gross_usd": finance["gross"],
-                "platform_commission_usd": finance["commission"] if finance["payment_method"] != "cash" else 0.0,
+                "platform_commission_usd": finance["commission"],
                 "worker_earnings_usd": finance["worker_earnings"],
                 "payment_method": finance["payment_method"],
                 "settlement_state": finance["settlement_state"],
@@ -231,7 +237,20 @@ async def _driver_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
 async def wallet_summary(user: Dict[str, Any]) -> Dict[str, Any]:
     role = str(user.get("role") or "").strip().lower()
     if role == "driver":
-        return await _driver_wallet(user)
+        from app.services.driver_fee_settlement_service import driver_settlement_wallet
+        base = await _driver_wallet(user)
+        settlement = await driver_settlement_wallet(str(user["id"]))
+        current_week = settlement.get("current_week") or {}
+        weekly_fee = _money(current_week.get("platform_fee_accrued_usd"))
+        return {
+            **base,
+            **settlement,
+            "platform_commission_usd": weekly_fee,
+            "amount_due_to_platform_usd": _money(settlement.get("amount_due_to_platform_usd")),
+            "settlement_integrated": bool(settlement.get("settlement_payment_enabled")),
+            "cash_policy": "passenger_pays_driver_directly",
+            "platform_fee_policy": "weekly_postpaid",
+        }
     # Courier economics are a separate product contract. Preserve them until that
     # contract is intentionally changed rather than silently applying driver rules.
     return await legacy_wallet_summary(user)

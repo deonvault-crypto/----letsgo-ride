@@ -28,6 +28,7 @@ from app.services.hailing_realtime_service import (
 )
 from app.services.hailing_state import ACTIVE_DRIVER_STATUSES, ACTIVE_PASSENGER_STATUSES, FINAL_STATUSES, TRANSITIONS
 from app.services.notification_service import create_app_notification, notify_admins
+from app.services.driver_fee_settlement_service import assert_driver_settlement_clear
 from app.utils import new_id, now_iso
 
 
@@ -432,6 +433,7 @@ async def eligible_drivers(trip: Dict[str, Any], radius_km: float, stale_seconds
 
 async def driver_go_online(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     _require_hailing_enabled()
+    await assert_driver_settlement_clear(str(user["id"]))
     driver = await approved_driver_for_hailing(user, payload["city_id"], payload["ride_class"])
     city = await get_city(payload["city_id"])
     if not city or not city.get("enabled") or not city.get("ride_hailing_enabled"):
@@ -526,6 +528,7 @@ async def current_driver_offer(user: Dict[str, Any]) -> Optional[Dict[str, Any]]
 async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     _require_hailing_enabled()
     driver = await driver_profile_for_user(user)
+    await assert_driver_settlement_clear(str(user["id"]))
     active = await active_trip_for_user(user)
     if active:
         raise ValueError("Complete your active Ride Now trip before accepting another ride.")

@@ -11,7 +11,7 @@ class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
         database.db = None
         database.memory.setdefault("worker_payout_methods", [])
         database.memory.setdefault("worker_payouts", [])
-        for collection in ("drivers", "hailing_trips", "worker_payout_methods", "worker_payouts"):
+        for collection in ("drivers", "hailing_trips", "worker_payout_methods", "worker_payouts", "driver_fee_statements"):
             await database.replace_collection(collection, [])
         self.user = {"id": "driver-user", "role": "driver"}
         await database.insert_one(
@@ -19,7 +19,7 @@ class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
             {"id": "driver-1", "user_id": self.user["id"], "verified": True},
         )
 
-    def test_cash_trip_never_creates_platform_commission(self):
+    def test_cash_trip_records_weekly_postpaid_platform_fee(self):
         finance = _trip_finance(
             {
                 "payment_method": "cash",
@@ -28,11 +28,11 @@ class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
             }
         )
         self.assertEqual(finance["gross"], 7.50)
-        self.assertEqual(finance["commission"], 0.0)
-        self.assertEqual(finance["worker_earnings"], 7.50)
-        self.assertEqual(finance["settlement_state"], "cash_kept_by_driver")
+        self.assertEqual(finance["commission"], 0.23)
+        self.assertEqual(finance["worker_earnings"], 7.27)
+        self.assertEqual(finance["settlement_state"], "weekly_fee_accruing")
 
-    async def test_wallet_keeps_all_cash_and_only_charges_settled_card(self):
+    async def test_wallet_tracks_direct_cash_and_weekly_postpaid_fee(self):
         await database.insert_one(
             "hailing_trips",
             {
@@ -77,14 +77,16 @@ class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(wallet["platform_commission_usd"], 0.30)
         self.assertEqual(wallet["amount_due_to_platform_usd"], 0.0)
         self.assertEqual(wallet["available_balance_usd"], 9.70)
-        self.assertEqual(wallet["net_earnings_usd"], 19.70)
-        self.assertEqual(wallet["cash_policy"], "driver_keeps_100_percent")
-        self.assertEqual(wallet["platform_fee_policy"], "card_only")
+        self.assertEqual(wallet["net_earnings_usd"], 19.40)
+        self.assertEqual(wallet["cash_policy"], "passenger_pays_driver_directly")
+        self.assertEqual(wallet["platform_fee_policy"], "weekly_postpaid")
+        self.assertEqual(wallet["settlement_required"], False)
 
         cash_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "cash-trip")
         pending_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "card-pending")
-        self.assertEqual(cash_entry["platform_commission_usd"], 0.0)
-        self.assertEqual(cash_entry["worker_earnings_usd"], 10.00)
+        self.assertEqual(cash_entry["platform_commission_usd"], 0.30)
+        self.assertEqual(cash_entry["worker_earnings_usd"], 9.70)
+        self.assertEqual(cash_entry["settlement_state"], "weekly_fee_accruing")
         self.assertEqual(pending_entry["settlement_state"], "payment_pending")
 
     async def test_paid_out_total_is_lifetime_exact_while_history_is_bounded(self):

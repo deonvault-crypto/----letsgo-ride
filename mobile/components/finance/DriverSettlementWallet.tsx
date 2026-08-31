@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   historyBorder: { borderTopWidth: 1, borderTopColor: "#EEE9E1" },
   historyIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: "#F3F1EC", alignItems: "center", justifyContent: "center" },
   historyIconPaid: { backgroundColor: "#E9F7ED" },
-  historyTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "850" },
+  historyTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "800" },
   historyMeta: { color: v2Theme.colors.inkSecondary, fontSize: 11, marginTop: 4 },
   historyAmount: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
   rideAmounts: { alignItems: "flex-end" },

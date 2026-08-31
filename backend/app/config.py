@@ -33,6 +33,7 @@ class Settings:
         self.public_api_base_url = configured_public_api_base_url or "https://letsgoride-backend.onrender.com"
         self.public_site_base_url = self._get_env_first("PUBLIC_SITE_BASE_URL") or "https://letsgoride.site"
         self.payout_data_encryption_key = self._get_env_first("PAYOUT_DATA_ENCRYPTION_KEY")
+        self.driver_fee_grace_days = max(1, int(os.getenv("DRIVER_FEE_GRACE_DAYS", "2")))
         self.realtime_redis_url = self._get_env_first("REALTIME_REDIS_URL", "REDIS_URL")
         self.rate_limit_redis_url = self._get_env_first("RATE_LIMIT_REDIS_URL", "REALTIME_REDIS_URL", "REDIS_URL")
         self.session_lifetime_days = max(1, int(os.getenv("SESSION_LIFETIME_DAYS", "30")))

@@ -13,6 +13,7 @@ import {
   updateWorkerPayoutMethod,
 } from "../../services/workerFinanceService";
 import { PayoutMethodType, WorkerPayoutMethod, WorkerWallet } from "../../types/workerFinance.types";
+import { DriverSettlementWallet } from "../../components/finance/DriverSettlementWallet";
 
 export default function WalletScreen() {
   const [wallet, setWallet] = useState<WorkerWallet | null>(null);
@@ -171,7 +172,10 @@ export default function WalletScreen() {
     );
   }
 
-  const roleLabel = wallet?.worker_role === "courier" ? "Courier" : "Driver";
+  if (wallet?.worker_role === "driver") {
+    return <DriverSettlementWallet wallet={wallet} refreshing={refreshing} onRefresh={refresh} onReload={load} />;
+  }
+  const roleLabel = "Courier";
   return (
     <Screen showBack fallbackRoute="/(shared)/account" title="Wallet" showNotifications={false} refreshing={refreshing} onRefresh={wallet ? refresh : undefined}>
       {loading && !wallet ? <WalletSkeleton /> : null}
@@ -195,20 +199,10 @@ export default function WalletScreen() {
           </View>
         </View>
 
-        {wallet.worker_role === "driver" ? (
-          <View style={styles.driverPolicyCard}>
-            <View style={styles.driverPolicyIcon}><MaterialCommunityIcons name="cash-check" size={22} color="#111111" /></View>
-            <View style={styles.driverPolicyCopy}>
-              <Text style={styles.driverPolicyTitle}>Cash fares are 100% yours</Text>
-              <Text style={styles.driverPolicyBody}>When a passenger pays cash, you keep the full fare. LetsGoRide only takes its platform fee from successfully settled card rides.</Text>
-            </View>
-          </View>
-        ) : null}
-
         <View style={styles.moneyGrid}>
-          <MoneyCard icon="cash-multiple" label={wallet.worker_role === "driver" ? "Cash kept by you" : "Cash collected"} value={money(wallet.cash_collected_usd)} body={wallet.worker_role === "driver" ? "Full cash fare kept directly by the driver." : "Cash collected directly on completed work."} />
+          <MoneyCard icon="cash-multiple" label="Cash collected" value={money(wallet.cash_collected_usd)} body="Cash collected directly on completed work." />
           <MoneyCard icon="credit-card-outline" label="Digital earnings" value={money(wallet.digital_earnings_usd)} body="Settled digital worker earnings before payouts." />
-          <MoneyCard icon="percent-outline" label={wallet.worker_role === "driver" ? "Card platform fee" : "Platform commission"} value={money(wallet.platform_commission_usd)} body={wallet.worker_role === "driver" ? "LetsGoRide fee from settled card rides only." : "Platform commission recorded across completed work."} />
+          <MoneyCard icon="percent-outline" label="Platform commission" value={money(wallet.platform_commission_usd)} body="Platform commission recorded across completed work." />
         </View>
 
         <View style={styles.section}>
