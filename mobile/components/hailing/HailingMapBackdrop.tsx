@@ -240,6 +240,7 @@ export function HailingMapBackdrop({
   }, [bottomPadding, deviceLocation, focusCoordinates, mapReady, showCurrentLocation]);
 
   const deviceCoordinate = deviceLocation ? coordinateFor(deviceLocation) : null;
+  const deviceHeading = typeof deviceLocation?.heading === "number" ? deviceLocation.heading : null;
   const accuracyRadius = deviceLocation?.accuracy
     ? Math.max(18, Math.min(deviceLocation.accuracy, 300))
     : 24;
@@ -300,11 +301,11 @@ export function HailingMapBackdrop({
               <View style={styles.locationHalo}>
                 <View style={styles.locationPuck}>
                   <MaterialCommunityIcons
-                    name={typeof deviceLocation.heading === "number" ? "navigation-variant" : "circle"}
-                    size={typeof deviceLocation.heading === "number" ? 14 : 7}
+                    name={deviceHeading !== null ? "navigation-variant" : "circle"}
+                    size={deviceHeading !== null ? 14 : 7}
                     color="#FFFFFF"
-                    style={typeof deviceLocation.heading === "number"
-                      ? { transform: [{ rotate: `${deviceLocation.heading}deg` }] }
+                    style={deviceHeading !== null
+                      ? { transform: [{ rotate: `${deviceHeading}deg` }] }
                       : undefined}
                   />
                 </View>
