@@ -1,4 +1,5 @@
 import { requestData } from "./api";
+import { executeCriticalMutation } from "./criticalMutationOutbox";
 import {
   HailingConfig,
   HailingCoordinate,
@@ -101,11 +102,31 @@ export function declineHailingOffer(id: string, reason?: string) {
 }
 
 export function markHailingDriverArrived(id: string) {
-  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/arrived` });
+  const encoded = encodeURIComponent(id);
+  const url = `/hailing/trips/${encoded}/arrived`;
+  return executeCriticalMutation(
+    {
+      dedupeKey: `hailing-arrived:${id}`,
+      url,
+      checkUrl: `/hailing/trips/${encoded}`,
+      successStatuses: ["DRIVER_ARRIVED", "PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS", "COMPLETED"],
+    },
+    () => requestData<HailingTrip>({ method: "POST", url }),
+  );
 }
 
 export function confirmHailingBoarding(id: string) {
-  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/confirm-boarding` });
+  const encoded = encodeURIComponent(id);
+  const url = `/hailing/trips/${encoded}/confirm-boarding`;
+  return executeCriticalMutation(
+    {
+      dedupeKey: `hailing-boarding:${id}`,
+      url,
+      checkUrl: `/hailing/trips/${encoded}`,
+      successStatuses: ["PASSENGER_CONFIRMED_BOARDING", "IN_PROGRESS", "COMPLETED"],
+    },
+    () => requestData<HailingTrip>({ method: "POST", url }),
+  );
 }
 
 export function verifyHailingTripPin(id: string, pin: string) {
@@ -117,11 +138,31 @@ export function regenerateHailingTripPin(id: string) {
 }
 
 export function startHailingTrip(id: string) {
-  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/start` });
+  const encoded = encodeURIComponent(id);
+  const url = `/hailing/trips/${encoded}/start`;
+  return executeCriticalMutation(
+    {
+      dedupeKey: `hailing-start:${id}`,
+      url,
+      checkUrl: `/hailing/trips/${encoded}`,
+      successStatuses: ["IN_PROGRESS", "COMPLETED"],
+    },
+    () => requestData<HailingTrip>({ method: "POST", url }),
+  );
 }
 
 export function completeHailingTrip(id: string) {
-  return requestData<HailingTrip>({ method: "POST", url: `/hailing/trips/${encodeURIComponent(id)}/complete` });
+  const encoded = encodeURIComponent(id);
+  const url = `/hailing/trips/${encoded}/complete`;
+  return executeCriticalMutation(
+    {
+      dedupeKey: `hailing-complete:${id}`,
+      url,
+      checkUrl: `/hailing/trips/${encoded}`,
+      successStatuses: ["COMPLETED"],
+    },
+    () => requestData<HailingTrip>({ method: "POST", url }),
+  );
 }
 
 export function sendHailingSafetyEvent(id: string, data: { kind?: string; message: string }) {
