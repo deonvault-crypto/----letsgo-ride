@@ -1,8 +1,25 @@
 import { requestData } from "./api";
-import { PayoutMethodInput, PayoutMethodUpdateInput, WorkerPayoutMethod, WorkerWallet } from "../types/workerFinance.types";
+import {
+  DriverFeePaymentIntent,
+  PayoutMethodInput,
+  PayoutMethodUpdateInput,
+  WorkerPayoutMethod,
+  WorkerWallet,
+} from "../types/workerFinance.types";
 
 export function getWorkerWallet() {
   return requestData<WorkerWallet>({ method: "GET", url: "/worker/finance/wallet" });
+}
+
+export function createDriverFeeSettlementIntent() {
+  return requestData<DriverFeePaymentIntent>({ method: "POST", url: "/payments/driver-fees/stripe/intent" });
+}
+
+export function confirmDriverFeeSettlement() {
+  return requestData<{ settled: boolean; statement?: unknown; stripe_status?: string }>({
+    method: "POST",
+    url: "/payments/driver-fees/stripe/confirm",
+  });
 }
 
 export function listWorkerPayoutMethods() {
