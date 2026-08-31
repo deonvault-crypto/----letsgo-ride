@@ -75,8 +75,13 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "default",
-          "color": "#118B44"
+          "defaultChannel": "general_v1",
+          "color": "#118B44",
+          "sounds": [
+            "./assets/sounds/letsgoride_notification.wav",
+            "./assets/sounds/letsgoride_ride_request.wav",
+            "./assets/sounds/letsgoride_courier_request.wav"
+          ]
         }
       ],
       [
