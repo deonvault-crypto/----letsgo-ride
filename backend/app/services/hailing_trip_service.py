@@ -193,9 +193,10 @@ async def driver_profile_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
 
 async def approved_driver_for_hailing(user: Dict[str, Any], city_id: str, ride_class: str) -> Dict[str, Any]:
     driver = await driver_profile_for_user(user)
-    approved_cities = driver.get("approved_hailing_city_ids") or []
-    if city_id not in approved_cities:
-        raise PermissionError("Admin approval is required before driving Ride Now in this city.")
+    # Ride Now approval is nationwide. city_id remains on presence/trip records for
+    # pricing, reporting and local Admin controls, but it is no longer an authorization
+    # boundary. Physical proximity and approved Ride class determine eligibility.
+    _ = city_id
     approved_classes = driver.get("approved_hailing_classes") or []
     if ride_class not in approved_classes:
         raise PermissionError("This vehicle is not approved for that Ride Now class.")
