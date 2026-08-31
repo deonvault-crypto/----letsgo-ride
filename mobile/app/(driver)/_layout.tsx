@@ -4,6 +4,10 @@ import { DriverBackgroundLocationPrompt } from "../../components/hailing/DriverB
 import { HailingDriverLocationSync } from "../../components/hailing/HailingDriverLocationSync";
 import { DriverWorkspaceProvider } from "../../contexts/DriverWorkspaceContext";
 
+export const unstable_settings = {
+  initialRouteName: "home",
+};
+
 export default function DriverLayout() {
   return (
     <DriverWorkspaceProvider>
