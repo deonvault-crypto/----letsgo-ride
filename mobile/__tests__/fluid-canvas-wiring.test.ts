@@ -7,11 +7,15 @@ describe("Alpha M fluid canvas surfaces", () => {
   const customerAccount = fs.readFileSync(path.join(root, "app/(shared)/account.tsx"), "utf8");
   const settings = fs.readFileSync(path.join(root, "app/(shared)/settings.tsx"), "utf8");
   const editProfile = fs.readFileSync(path.join(root, "app/(shared)/edit-profile.tsx"), "utf8");
+  const driverIndex = fs.readFileSync(path.join(root, "app/(driver)/index.tsx"), "utf8");
+  const driverLayout = fs.readFileSync(path.join(root, "app/(driver)/_layout.tsx"), "utf8");
   const driverHome = fs.readFileSync(path.join(root, "app/(driver)/home.tsx"), "utf8");
+  const driverHailing = fs.readFileSync(path.join(root, "app/(driver)/hailing.tsx"), "utf8");
   const driverAccount = fs.readFileSync(path.join(root, "app/(driver)/account.tsx"), "utf8");
   const driverTrips = fs.readFileSync(path.join(root, "app/(driver)/trips.tsx"), "utf8");
   const driverPostTrip = fs.readFileSync(path.join(root, "app/(driver)/post-trip.tsx"), "utf8");
   const driverCalendar = fs.readFileSync(path.join(root, "app/(driver)/availability.tsx"), "utf8");
+  const courierHome = fs.readFileSync(path.join(root, "app/(courier)/home.tsx"), "utf8");
   const mapBackdrop = fs.readFileSync(path.join(root, "components/hailing/HailingMapBackdrop.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(root, "components/layout/BottomNav.tsx"), "utf8");
   const brandLogo = fs.readFileSync(path.join(root, "components/layout/BrandLogo.tsx"), "utf8");
@@ -128,25 +132,51 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(editProfile).not.toContain("navRole=");
   });
 
+  it("always resolves Driver group entry to Driver home", () => {
+    expect(driverIndex).toContain('<Redirect href="/(driver)/home" />');
+    expect(driverLayout).toContain('initialRouteName: "home"');
+    expect(driverLayout).toContain('<Stack.Screen name="home"');
+  });
+
   it("keeps Driver home a live mobility cockpit instead of a dashboard grid", () => {
     expect(driverHome).toContain("HailingMapBackdrop");
-    expect(driverHome).toContain("const rideNowTitle = hailingOffer");
-    expect(driverHome).toContain('router.push("/(driver)/hailing"');
+    expect(driverHome).toContain("const rideNowTitle = photoBlocksNewWork");
+    expect(driverHome).toContain('router.push("/(driver)/hailing" as never)');
     expect(driverHome).toContain('style={styles.intercityTitle}>Share a route</Text>');
     expect(driverHome).toContain('<BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)} />');
     expect(driverHome).not.toContain("styles.metrics");
     expect(driverHome).not.toContain("Plan intercity rides. Manage passengers.");
   });
 
-  it("keeps Driver account identity-first and relegates money to a utility", () => {
-    expect(driverAccount).toContain("HailingMapBackdrop");
-    expect(driverAccount).toContain("DRIVER PROFILE");
-    expect(driverAccount).toContain("DRIVER TOOLS");
+  it("keeps Driver account simple, monochrome and identity-first", () => {
+    expect(driverAccount).toContain('<Screen title="Driver account" navRole="driver" showNotifications>');
+    expect(driverAccount).toContain("Profile & photo");
+    expect(driverAccount).toContain("Vehicle & documents");
     expect(driverAccount).toContain("Wallet & settlement");
+    expect(driverAccount).toContain('title="Settings"');
     expect(driverAccount).toContain("AccountDetailsSummary");
     expect(driverAccount).toContain("onRequestChange={requestAccountChange}");
-    expect(driverAccount).toContain('<BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)} />');
+    expect(driverAccount).toContain("VerifiedBadge");
+    expect(driverAccount).toContain("!verified ? (");
+    expect(driverAccount).not.toContain("Driver verified");
+    expect(driverAccount).not.toContain("shield-check");
+    expect(driverAccount).not.toContain("HailingMapBackdrop");
+    expect(driverAccount).not.toContain("DRIVER TOOLS");
     expect(driverAccount).not.toContain("Earnings & payouts");
+    expect(driverAccount).not.toContain("v2Theme.colors.brand");
+    expect(driverAccount).not.toContain("v2Theme.colors.brandStrong");
+    expect(driverAccount).not.toContain("v2Theme.colors.brandSofter");
+  });
+
+  it("requires a profile photo before Driver and Courier start new work", () => {
+    expect(driverHome).toContain("const photoBlocksNewWork = !hasProfilePhoto");
+    expect(driverHome).toContain("Profile photo required");
+    expect(driverHailing).toContain("const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim())");
+    expect(driverHailing).toContain("Add a clear profile photo before going online for Ride Now.");
+    expect(driverHailing).toContain("Add profile photo");
+    expect(courierHome).toContain("const photoRequired = Boolean(profile && approved && !hasProfilePhoto && !profile.online)");
+    expect(courierHome).toContain("Add required Courier profile photo");
+    expect(courierHome).toContain("Add a clear profile photo before going online for new deliveries.");
   });
 
   it("keeps Driver trips route-first instead of generic dashboard cards", () => {
