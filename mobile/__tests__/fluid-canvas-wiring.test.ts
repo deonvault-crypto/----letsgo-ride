@@ -22,6 +22,14 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(home).toContain('title: "Send a package"');
   });
 
+  it("keeps Ride home focused on Ride Now and leaves intercity to Services", () => {
+    expect(home).toContain('{mode !== "ride" ? (');
+    expect(home).toContain('router.push("/(shared)/services" as never)');
+    expect(home).toContain('"Ride Now unavailable"');
+    expect(home).toContain('"Open Services for other travel options"');
+    expect(home).not.toContain('? "SCHEDULED RIDES"');
+  });
+
   it("uses real device location instead of a decorative Harare pointer", () => {
     expect(home).toContain("showCurrentLocation");
     expect(home).toContain("promptForLocation");
