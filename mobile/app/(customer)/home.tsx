@@ -254,7 +254,12 @@ export default function CustomerHomeScreen() {
     <SafeAreaView edges={[]} style={styles.root}>
       <StatusBar barStyle="dark-content" />
 
-      <HailingMapBackdrop bottomPadding={330} />
+      <HailingMapBackdrop
+        bottomPadding={330}
+        showCurrentLocation
+        promptForLocation
+        showLocateControl
+      />
       <Animated.View
         pointerEvents="none"
         style={[
@@ -282,13 +287,6 @@ export default function CustomerHomeScreen() {
             </View>
           ) : null}
         </Pressable>
-      </View>
-
-      <View pointerEvents="none" style={styles.cityMarker}>
-        <View style={styles.cityDotOuter}>
-          <View style={styles.cityDotInner} />
-        </View>
-        <Text style={styles.cityName}>Harare</Text>
       </View>
 
       <View pointerEvents="box-none" style={[styles.canvasDock, { bottom: SHEET_BOTTOM + Math.max(insets.bottom, 0) }]}>
@@ -469,44 +467,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 8,
     fontWeight: "900",
-  },
-  cityMarker: {
-    position: "absolute",
-    zIndex: 4,
-    top: "31%",
-    alignSelf: "center",
-    alignItems: "center",
-    gap: 7,
-  },
-  cityDotOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 3,
-    borderColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.16,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  cityDotInner: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#111111",
-  },
-  cityName: {
-    color: "#111111",
-    fontSize: 23,
-    lineHeight: 27,
-    fontWeight: "900",
-    letterSpacing: -0.8,
-    textShadowColor: "rgba(255,255,255,0.88)",
-    textShadowRadius: 8,
   },
   canvasDock: {
     position: "absolute",
