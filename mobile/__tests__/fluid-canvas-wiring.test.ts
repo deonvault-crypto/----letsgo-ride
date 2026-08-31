@@ -54,10 +54,10 @@ describe("Alpha M fluid canvas surfaces", () => {
 
   it("keeps Driver home a live mobility cockpit instead of a dashboard grid", () => {
     expect(driverHome).toContain("HailingMapBackdrop");
-    expect(driverHome).toContain('const rideNowTitle = hailingOffer');
+    expect(driverHome).toContain("const rideNowTitle = hailingOffer");
     expect(driverHome).toContain('router.push("/(driver)/hailing"');
-    expect(driverHome).toContain('Text style={styles.intercityTitle}>Share a route</Text>');
-    expect(driverHome).toContain('BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)}');
+    expect(driverHome).toContain('style={styles.intercityTitle}>Share a route</Text>');
+    expect(driverHome).toContain('<BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)} />');
     expect(driverHome).not.toContain("styles.metrics");
     expect(driverHome).not.toContain("Plan intercity rides. Manage passengers.");
   });
@@ -69,7 +69,7 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(driverAccount).toContain("Wallet & settlement");
     expect(driverAccount).toContain("AccountDetailsSummary");
     expect(driverAccount).toContain("onRequestChange={requestAccountChange}");
-    expect(driverAccount).toContain('BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)}');
+    expect(driverAccount).toContain('<BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)} />');
     expect(driverAccount).not.toContain("Earnings & payouts");
   });
 });
