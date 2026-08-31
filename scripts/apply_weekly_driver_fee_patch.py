@@ -266,11 +266,39 @@ replace_once(
 replace_once(
     "mobile/app/(shared)/wallet.tsx",
     '  const roleLabel = wallet?.worker_role === "courier" ? "Courier" : "Driver";\n  return (\n',
-    '  const roleLabel = wallet?.worker_role === "courier" ? "Courier" : "Driver";\n'
     '  if (wallet?.worker_role === "driver") {\n'
     '    return <DriverSettlementWallet wallet={wallet} refreshing={refreshing} onRefresh={refresh} onReload={load} />;\n'
     '  }\n'
+    '  const roleLabel = "Courier";\n'
     '  return (\n',
+)
+replace_once(
+    "mobile/app/(shared)/wallet.tsx",
+    '        {wallet.worker_role === "driver" ? (\n'
+    '          <View style={styles.driverPolicyCard}>\n'
+    '            <View style={styles.driverPolicyIcon}><MaterialCommunityIcons name="cash-check" size={22} color="#111111" /></View>\n'
+    '            <View style={styles.driverPolicyCopy}>\n'
+    '              <Text style={styles.driverPolicyTitle}>Cash fares are 100% yours</Text>\n'
+    '              <Text style={styles.driverPolicyBody}>When a passenger pays cash, you keep the full fare. LetsGoRide only takes its platform fee from successfully settled card rides.</Text>\n'
+    '            </View>\n'
+    '          </View>\n'
+    '        ) : null}\n\n',
+    '',
+)
+replace_once(
+    "mobile/app/(shared)/wallet.tsx",
+    '          <MoneyCard icon="cash-multiple" label={wallet.worker_role === "driver" ? "Cash kept by you" : "Cash collected"} value={money(wallet.cash_collected_usd)} body={wallet.worker_role === "driver" ? "Full cash fare kept directly by the driver." : "Cash collected directly on completed work."} />\n',
+    '          <MoneyCard icon="cash-multiple" label="Cash collected" value={money(wallet.cash_collected_usd)} body="Cash collected directly on completed work." />\n',
+)
+replace_once(
+    "mobile/app/(shared)/wallet.tsx",
+    '          <MoneyCard icon="percent-outline" label={wallet.worker_role === "driver" ? "Card platform fee" : "Platform commission"} value={money(wallet.platform_commission_usd)} body={wallet.worker_role === "driver" ? "LetsGoRide fee from settled card rides only." : "Platform commission recorded across completed work."} />\n',
+    '          <MoneyCard icon="percent-outline" label="Platform commission" value={money(wallet.platform_commission_usd)} body="Platform commission recorded across completed work." />\n',
+)
+replace_once(
+    "mobile/components/finance/DriverSettlementWallet.tsx",
+    '  historyTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "850" },\n',
+    '  historyTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "800" },\n',
 )
 
 # Retire regression assertions for the explicitly superseded card-only/cash-free policy.
