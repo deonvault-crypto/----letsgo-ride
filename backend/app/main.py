@@ -21,6 +21,7 @@ from app.services.ride_service import seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
 from app.services.stripe_reconciliation_service import stripe_payment_reconciliation_sweeper_bounded
+from app.services.stripe_runtime_guard import ensure_stripe_runtime_binding
 from app.services.worker_finance_index_service import ensure_worker_finance_indexes
 from app.utils import api_success
 
@@ -113,6 +114,10 @@ async def on_startup():
     await ensure_worker_finance_indexes()
     await realtime_event_service.start()
     await ensure_admin_seed_user()
+    if settings.stripe_configured:
+        # Production must prove that the configured live secret belongs to the
+        # approved LetsGoRide Stripe account before any money-moving worker starts.
+        await ensure_stripe_runtime_binding()
     driver_settlement_stop_event = asyncio.Event()
     driver_settlement_task = asyncio.create_task(driver_settlement_sweeper(driver_settlement_stop_event))
     if settings.enable_demo_seed:
@@ -218,4 +223,3 @@ app.include_router(reports.router)
 app.include_router(support.router)
 app.include_router(verification.router)
 app.include_router(admin.router)
-app.include_router(waitlist.router)
