@@ -134,7 +134,7 @@ export default function DriverHomeScreen() {
         >
           <View style={[styles.rideNowIcon, photoBlocksNewWork && styles.rideNowIconRequired, hailingOffer && styles.rideNowIconAlert]}>
             <MaterialCommunityIcons
-              name={photoBlocksNewWork ? (photoPending ? "clock-outline" : photoRejected ? "camera-alert-outline" : "camera-plus-outline") : hailingOffer ? "car-clock" : online ? "car-connected" : "car-arrow-right"}
+              name={photoBlocksNewWork ? (photoPending ? "clock-outline" : photoRejected ? "alert-circle-outline" : "camera-plus-outline") : hailingOffer ? "car-clock" : online ? "car-connected" : "car-arrow-right"}
               size={24}
               color={hailingOffer ? "#FFFFFF" : DRIVER_BLACK}
             />
