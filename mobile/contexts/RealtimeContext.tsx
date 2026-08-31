@@ -2,7 +2,7 @@ import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, 
 import { AppState } from "react-native";
 import { usePathname } from "expo-router";
 
-import { flushCriticalMutationOutbox } from "../services/criticalMutationOutbox";
+import { clearCriticalMutationOutbox, flushCriticalMutationOutbox } from "../services/criticalMutationOutbox";
 import { realtimeService } from "../services/realtimeService";
 import { onSessionCleared } from "../services/sessionLifecycle";
 import { RealtimeConnectionState, RealtimeEventEnvelope } from "../types/realtime.types";
@@ -41,7 +41,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => realtimeService.onAuthenticationFailure(() => {
     void invalidateSession();
   }), [invalidateSession]);
-  useEffect(() => onSessionCleared(() => realtimeService.stop(true)), []);
+  useEffect(() => onSessionCleared(() => {
+    realtimeService.stop(true);
+    void clearCriticalMutationOutbox();
+  }), []);
 
   useEffect(() => {
     if (loading || isBootstrapPath) return undefined;
