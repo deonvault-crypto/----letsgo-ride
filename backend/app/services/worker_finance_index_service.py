@@ -8,10 +8,9 @@ async def ensure_worker_finance_indexes() -> None:
 
     if database.db is None:
         return
-    await database.db["worker_payouts"].create_index(
-        [("user_id", 1), ("worker_role", 1), ("status", 1), ("created_at", -1)],
-        name="worker_payouts_by_user_status_time",
-    )
+    # worker_payouts history indexing is owned by product_hardening_storage_service.
+    # Do not recreate the same key pattern under a second name: MongoDB correctly
+    # rejects equivalent indexes with different names during production startup.
     await database.db["worker_payout_methods"].create_index(
         [("user_id", 1), ("worker_role", 1), ("status", 1), ("is_default", -1), ("created_at", 1)],
         name="worker_payout_methods_by_user",
