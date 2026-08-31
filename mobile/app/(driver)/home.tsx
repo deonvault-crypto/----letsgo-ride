@@ -37,18 +37,33 @@ export default function DriverHomeScreen() {
   );
   const pendingRequests = requests.filter((request) => request.status === "pending");
   const online = Boolean(hailingStatus?.online);
+  const activeHailingTrip = Boolean(hailingStatus?.active_trip?.id);
+  const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim());
+  const photoBlocksNewWork = !hasProfilePhoto && !online && !hailingOffer && !activeHailingTrip;
   const dockBottom = v2Theme.control.navHeight + Math.max(insets.bottom, 10) + 18;
 
-  const rideNowTitle = hailingOffer
-    ? "New local ride request"
-    : online
-      ? "You’re online"
-      : "Go online for local rides";
-  const rideNowBody = hailingOffer
-    ? "Open the request to review pickup, destination and fare."
-    : online
-      ? "Live dispatch is listening for nearby passenger requests."
-      : "Open Ride Now when you’re ready to start accepting nearby trips.";
+  const rideNowTitle = photoBlocksNewWork
+    ? "Profile photo required"
+    : hailingOffer
+      ? "New local ride request"
+      : online
+        ? "You’re online"
+        : "Go online for local rides";
+  const rideNowBody = photoBlocksNewWork
+    ? "Add a clear profile photo before going online for new Ride Now requests."
+    : hailingOffer
+      ? "Open the request to review pickup, destination and fare."
+      : online
+        ? "Live dispatch is listening for nearby passenger requests."
+        : "Open Ride Now when you’re ready to start accepting nearby trips.";
+
+  function openRideNow() {
+    if (photoBlocksNewWork) {
+      router.push({ pathname: "/(shared)/edit-profile", params: { product: "driver" } } as never);
+      return;
+    }
+    router.push("/(driver)/hailing" as never);
+  }
 
   return (
     <SafeAreaView edges={[]} style={styles.root}>
@@ -100,15 +115,15 @@ export default function DriverHomeScreen() {
       <View pointerEvents="box-none" style={[styles.dock, { bottom: dockBottom }]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open Ride Now driver workspace"
-          onPress={() => router.push("/(driver)/hailing" as never)}
+          accessibilityLabel={photoBlocksNewWork ? "Add required Driver profile photo" : "Open Ride Now driver workspace"}
+          onPress={openRideNow}
           style={({ pressed }) => [styles.rideNowCard, pressed && styles.primaryPressed]}
         >
-          <View style={[styles.rideNowIcon, hailingOffer && styles.rideNowIconAlert]}>
+          <View style={[styles.rideNowIcon, photoBlocksNewWork && styles.rideNowIconRequired, hailingOffer && styles.rideNowIconAlert]}>
             <MaterialCommunityIcons
-              name={hailingOffer ? "car-clock" : online ? "car-connected" : "car-arrow-right"}
+              name={photoBlocksNewWork ? "camera-plus-outline" : hailingOffer ? "car-clock" : online ? "car-connected" : "car-arrow-right"}
               size={24}
-              color="#FFFFFF"
+              color={photoBlocksNewWork ? DRIVER_BLACK : "#FFFFFF"}
             />
           </View>
           <View style={styles.flex}>
@@ -292,6 +307,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  rideNowIconRequired: { backgroundColor: "#FFFFFF" },
   rideNowIconAlert: { backgroundColor: "#D9792B" },
   rideNowEyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   rideNowEyebrow: { color: "#8FE6AE", fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
