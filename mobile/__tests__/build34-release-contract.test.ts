@@ -30,11 +30,15 @@ describe("Build 34 release recovery contract", () => {
     expect(readMobile("app/(driver)/hailing/trip/[id].tsx")).toContain('trip.payment_method === "card" ? "Card" : "Cash"');
   });
 
-  it("keeps cash driver economics at 100 percent and platform fee card-only", () => {
+  it("uses weekly postpaid driver service fees without upfront funding", () => {
     const wallet = readRepo("backend/app/services/worker_wallet_service.py");
-    expect(wallet).toContain('"cash_policy": "driver_keeps_100_percent"');
-    expect(wallet).toContain('"platform_fee_policy": "card_only"');
-    expect(wallet).toContain('"amount_due_to_platform_usd": 0.0');
+    const settlement = readRepo("backend/app/services/driver_weekly_settlement_service.py");
+    expect(wallet).toContain('"cash_policy": "driver_collects_fare_directly"');
+    expect(wallet).toContain('"platform_fee_policy": "weekly_postpaid"');
+    expect(wallet).toContain('"amount_due_to_platform_usd": settlement["amount_due_usd"]');
+    expect(settlement).toContain('if str(trip.get("status") or "") != "COMPLETED"');
+    expect(settlement).toContain('fare.get("platform_commission")');
+    expect(settlement).toContain('ride_now_blocked');
   });
 
   it("registers courier background tracking only around active deliveries", () => {

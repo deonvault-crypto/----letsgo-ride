@@ -26,6 +26,7 @@ from app.services.stripe_payment_service import (
 STRIPE_SETTINGS = SimpleNamespace(
     stripe_configured=True,
     stripe_enabled=True,
+    passenger_card_payments_enabled=True,
     stripe_secret_key="sk_test_example",
     stripe_publishable_key="pk_test_example",
     stripe_webhook_secret="whsec_example",

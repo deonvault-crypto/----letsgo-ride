@@ -53,6 +53,9 @@ COLLECTION_NAMES = [
     "hailing_trips",
     "hailing_dispatch_offers",
     "hailing_trip_events",
+    "driver_fee_ledger",
+    "driver_fee_statements",
+    "driver_settlement_payments",
 ]
 
 PERSISTENT_DATABASE_ENVS = {"staging", "production"}

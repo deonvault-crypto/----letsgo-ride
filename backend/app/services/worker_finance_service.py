@@ -306,5 +306,8 @@ async def _courier_wallet(user: Dict[str, Any]) -> Dict[str, Any]:
 async def wallet_summary(user: Dict[str, Any]) -> Dict[str, Any]:
     role = _worker_role(user)
     summary = await (_driver_wallet(user) if role == "driver" else _courier_wallet(user))
-    summary["payout_methods"] = await list_payout_methods(user)
+    if role == "courier":
+        summary["payout_methods"] = await list_payout_methods(user)
+    else:
+        summary.setdefault("payout_methods", [])
     return summary

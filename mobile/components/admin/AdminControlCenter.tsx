@@ -301,6 +301,7 @@ export default function AdminControlCenter() {
           onOpen={switchSection}
           onOpenWorkforce={() => router.push("/(admin)/workforce" as never)}
           onOpenHailing={() => router.push("/(admin)/hailing" as never)}
+          onOpenSettlements={() => router.push("/(admin)/settlements" as never)}
           onLogout={() => logoutToGuest(router)}
         />
       ) : null}
@@ -412,6 +413,7 @@ function Overview({
   onOpen,
   onOpenWorkforce,
   onOpenHailing,
+  onOpenSettlements,
   onLogout,
 }: {
   overview: AdminOverview;
@@ -419,6 +421,7 @@ function Overview({
   onOpen: (section: AdminSection) => void;
   onOpenWorkforce: () => void;
   onOpenHailing: () => void;
+  onOpenSettlements: () => void;
   onLogout: () => void;
 }) {
   return (
@@ -452,6 +455,7 @@ function Overview({
           <ManageCard icon="car-outline" title="Rides" subtitle="Scheduled operations" onPress={() => onOpen("rides")} />
           <ManageCard icon="car-connected" title="Ride Now" subtitle="Cities & eligibility" onPress={onOpenHailing} />
           <ManageCard icon="calendar-account-outline" title="Workforce" subtitle="Workers & shifts" onPress={onOpenWorkforce} />
+          <ManageCard icon="cash-sync" title="Settlements" subtitle="Weekly driver fees" onPress={onOpenSettlements} />
           <ManageCard icon="clipboard-text-clock-outline" title="Audit log" subtitle="Admin history" onPress={() => onOpen("audit")} />
           <ManageCard icon="logout" title="Sign out" subtitle="End admin session" onPress={onLogout} danger />
         </View>

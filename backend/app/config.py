@@ -55,6 +55,11 @@ class Settings:
         self.stripe_webhook_secret = self._get_env_first("STRIPE_WEBHOOK_SECRET")
         self.stripe_currency = (os.getenv("STRIPE_CURRENCY", "usd").strip().lower() or "usd")
         self.stripe_timeout_seconds = self._parse_float(os.getenv("STRIPE_TIMEOUT_SECONDS", "10"), 10.0)
+        # Stripe is used for driver weekly settlements in the Zimbabwe launch model.
+        # Passenger card rides stay fail-closed until deliberately enabled later.
+        self.passenger_card_payments_enabled = self._parse_bool(os.getenv("PASSENGER_CARD_PAYMENTS_ENABLED", "false"))
+        self.driver_settlement_grace_hours = max(1, int(os.getenv("DRIVER_SETTLEMENT_GRACE_HOURS", "48")))
+        self.driver_settlement_sweep_seconds = max(300, int(os.getenv("DRIVER_SETTLEMENT_SWEEP_SECONDS", "900")))
         if self.stripe_enabled:
             self._validate_stripe_environment()
 

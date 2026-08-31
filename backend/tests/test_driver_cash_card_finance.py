@@ -1,124 +1,195 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from app.database import database
-from app.services.worker_wallet_service import DRIVER_PAYOUT_HISTORY_LIMIT, _trip_finance, wallet_summary
+from app.services.driver_weekly_settlement_service import (
+    FEE_LEDGER_COLLECTION,
+    PAYMENT_COLLECTION,
+    STATEMENT_COLLECTION,
+    _create_or_update_statement,
+    apply_settlement_intent,
+    enforce_driver_settlement_standing,
+    prepare_settlement_payment,
+    record_completed_ride_fee,
+    settlement_summary,
+    weekly_period_for,
+)
+from app.services.worker_wallet_service import wallet_summary
 
 
-class DriverCashCardFinanceTests(unittest.IsolatedAsyncioTestCase):
+class DriverWeeklyPostpaidFinanceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         database.db = None
-        database.memory.setdefault("worker_payout_methods", [])
-        database.memory.setdefault("worker_payouts", [])
-        for collection in ("drivers", "hailing_trips", "worker_payout_methods", "worker_payouts"):
+        for collection in (
+            "users",
+            "drivers",
+            "hailing_trips",
+            "app_notifications",
+            FEE_LEDGER_COLLECTION,
+            STATEMENT_COLLECTION,
+            PAYMENT_COLLECTION,
+        ):
+            database.memory.setdefault(collection, [])
             await database.replace_collection(collection, [])
-        self.user = {"id": "driver-user", "role": "driver"}
+        self.user = {
+            "id": "driver-user",
+            "role": "driver",
+            "name": "Test Driver",
+            "email": "driver@example.com",
+        }
+        await database.insert_one("users", self.user)
         await database.insert_one(
             "drivers",
             {"id": "driver-1", "user_id": self.user["id"], "verified": True},
         )
 
-    def test_cash_trip_never_creates_platform_commission(self):
-        finance = _trip_finance(
-            {
-                "payment_method": "cash",
-                "payment_status": "cash_collected",
-                "fare": {"total_fare": 7.50, "platform_commission": 0.23},
-            }
-        )
-        self.assertEqual(finance["gross"], 7.50)
-        self.assertEqual(finance["commission"], 0.0)
-        self.assertEqual(finance["worker_earnings"], 7.50)
-        self.assertEqual(finance["settlement_state"], "cash_kept_by_driver")
-
-    async def test_wallet_keeps_all_cash_and_only_charges_settled_card(self):
-        await database.insert_one(
-            "hailing_trips",
-            {
-                "id": "cash-trip",
-                "driver_user_id": self.user["id"],
-                "status": "COMPLETED",
-                "payment_method": "cash",
-                "payment_status": "cash_collected",
-                "fare": {"total_fare": 10.00, "platform_commission": 0.30},
-                "created_at": "2026-08-30T10:00:00+00:00",
+    def completed_cash_trip(
+        self,
+        trip_id: str,
+        *,
+        fare: float,
+        fee: float,
+        completed_at: str,
+    ):
+        return {
+            "id": trip_id,
+            "driver_id": "driver-1",
+            "driver_user_id": self.user["id"],
+            "status": "COMPLETED",
+            "payment_method": "cash",
+            "payment_status": "cash_collected",
+            "fare": {
+                "total_fare": fare,
+                "platform_commission": fee,
+                "platform_commission_percent": round((fee / fare) * 100, 2),
             },
-        )
-        await database.insert_one(
-            "hailing_trips",
-            {
-                "id": "card-paid",
-                "driver_user_id": self.user["id"],
-                "status": "COMPLETED",
-                "payment_method": "card",
-                "payment_status": "paid",
-                "fare": {"total_fare": 10.00, "platform_commission": 0.30},
-                "created_at": "2026-08-30T11:00:00+00:00",
-            },
-        )
-        await database.insert_one(
-            "hailing_trips",
-            {
-                "id": "card-pending",
-                "driver_user_id": self.user["id"],
-                "status": "COMPLETED",
-                "payment_method": "card",
-                "payment_status": "capture_pending",
-                "fare": {"total_fare": 10.00, "platform_commission": 0.30},
-                "created_at": "2026-08-30T12:00:00+00:00",
-            },
-        )
+            "completed_at": completed_at,
+            "created_at": completed_at,
+        }
 
-        wallet = await wallet_summary(self.user)
-
-        self.assertEqual(wallet["cash_collected_usd"], 10.00)
-        self.assertEqual(wallet["digital_earnings_usd"], 9.70)
-        self.assertEqual(wallet["platform_commission_usd"], 0.30)
-        self.assertEqual(wallet["amount_due_to_platform_usd"], 0.0)
-        self.assertEqual(wallet["available_balance_usd"], 9.70)
-        self.assertEqual(wallet["net_earnings_usd"], 19.70)
-        self.assertEqual(wallet["cash_policy"], "driver_keeps_100_percent")
-        self.assertEqual(wallet["platform_fee_policy"], "card_only")
-
-        cash_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "cash-trip")
-        pending_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "card-pending")
-        self.assertEqual(cash_entry["platform_commission_usd"], 0.0)
-        self.assertEqual(cash_entry["worker_earnings_usd"], 10.00)
-        self.assertEqual(pending_entry["settlement_state"], "payment_pending")
-
-    async def test_paid_out_total_is_lifetime_exact_while_history_is_bounded(self):
-        await database.insert_one(
-            "hailing_trips",
-            {
-                "id": "card-paid-large",
-                "driver_user_id": self.user["id"],
-                "status": "COMPLETED",
-                "payment_method": "card",
-                "payment_status": "paid",
-                "fare": {"total_fare": 200.00, "platform_commission": 6.00},
-                "created_at": "2026-08-30T11:00:00+00:00",
-            },
+    async def test_completed_cash_trip_accrues_exact_snapshot_fee_once(self):
+        trip = self.completed_cash_trip(
+            "cash-trip",
+            fare=10.00,
+            fee=0.60,
+            completed_at="2026-08-20T12:00:00+00:00",
         )
-        payout_count = DRIVER_PAYOUT_HISTORY_LIMIT + 10
-        for index in range(payout_count):
-            await database.insert_one(
-                "worker_payouts",
-                {
-                    "id": f"payout-{index:03d}",
-                    "user_id": self.user["id"],
-                    "worker_role": "driver",
-                    "status": "paid",
-                    "amount_usd": 1.00,
-                    "created_at": f"2026-08-30T12:{index:02d}:00+00:00",
-                },
+        first = await record_completed_ride_fee(trip)
+        second = await record_completed_ride_fee(trip)
+        self.assertEqual(first["fee_usd"], 0.60)
+        self.assertEqual(first["gross_fare_usd"], 10.00)
+        self.assertEqual(second["id"], first["id"])
+        self.assertEqual(await database.count(FEE_LEDGER_COLLECTION, {}), 1)
+
+    async def test_weekly_statement_is_exact_sum_and_wallet_does_no_manual_math(self):
+        trips = [
+            self.completed_cash_trip(
+                "ride-a",
+                fare=10.00,
+                fee=0.60,
+                completed_at="2026-08-20T12:00:00+00:00",
+            ),
+            self.completed_cash_trip(
+                "ride-b",
+                fare=7.50,
+                fee=0.45,
+                completed_at="2026-08-21T12:00:00+00:00",
+            ),
+        ]
+        for trip in trips:
+            await database.insert_one("hailing_trips", trip)
+            await record_completed_ride_fee(trip)
+        start, end = weekly_period_for(
+            datetime(2026, 8, 20, 12, tzinfo=timezone.utc)
+        )
+        with patch(
+            "app.services.driver_weekly_settlement_service._notify_statement",
+            new=AsyncMock(),
+        ):
+            statement = await _create_or_update_statement(
+                self.user["id"], start, end
             )
+        self.assertIsNotNone(statement)
+        self.assertEqual(statement["ride_count"], 2)
+        self.assertEqual(statement["gross_fares_usd"], 17.50)
+        self.assertEqual(statement["amount_due_usd"], 1.05)
 
         wallet = await wallet_summary(self.user)
+        self.assertEqual(wallet["cash_collected_usd"], 17.50)
+        self.assertEqual(wallet["platform_commission_usd"], 1.05)
+        self.assertEqual(wallet["amount_due_to_platform_usd"], 1.05)
+        self.assertEqual(wallet["platform_fee_policy"], "weekly_postpaid")
+        self.assertTrue(wallet["driver_settlement"]["can_settle"])
 
-        self.assertEqual(wallet["paid_out_usd"], float(payout_count))
-        self.assertEqual(len(wallet["payout_history"]), DRIVER_PAYOUT_HISTORY_LIMIT)
-        self.assertEqual(wallet["available_balance_usd"], 194.00 - payout_count)
+    async def test_only_overdue_statement_blocks_new_ride_now_work(self):
+        trip = self.completed_cash_trip(
+            "old-ride",
+            fare=20.00,
+            fee=1.20,
+            completed_at="2026-08-10T12:00:00+00:00",
+        )
+        await record_completed_ride_fee(trip)
+        start, end = weekly_period_for(
+            datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
+        )
+        with patch(
+            "app.services.driver_weekly_settlement_service._notify_statement",
+            new=AsyncMock(),
+        ):
+            await _create_or_update_statement(self.user["id"], start, end)
+            with self.assertRaises(PermissionError):
+                await enforce_driver_settlement_standing(self.user)
+
+    async def test_successful_stripe_settlement_clears_exact_statement(self):
+        trip = self.completed_cash_trip(
+            "settle-ride",
+            fare=25.00,
+            fee=1.50,
+            completed_at="2026-08-10T12:00:00+00:00",
+        )
+        await record_completed_ride_fee(trip)
+        start, end = weekly_period_for(
+            datetime(2026, 8, 10, 12, tzinfo=timezone.utc)
+        )
+        with patch(
+            "app.services.driver_weekly_settlement_service._notify_statement",
+            new=AsyncMock(),
+        ):
+            statement = await _create_or_update_statement(
+                self.user["id"], start, end
+            )
+        payment = await prepare_settlement_payment(self.user)
+        self.assertEqual(payment["amount_usd"], 1.50)
+        self.assertEqual(payment["statement_ids"], [statement["id"]])
+
+        intent = {
+            "id": "pi_weekly_test",
+            "amount": 150,
+            "currency": "usd",
+            "status": "succeeded",
+            "metadata": {
+                "product": "driver_weekly_settlement",
+                "settlement_payment_id": payment["id"],
+                "user_id": self.user["id"],
+            },
+        }
+        result = await apply_settlement_intent(
+            intent,
+            event_id="evt_weekly_test",
+            event_type="payment_intent.succeeded",
+        )
+        self.assertEqual(result["payment"]["status"], "paid")
+        paid_statement = await database.find_one(
+            STATEMENT_COLLECTION, {"id": statement["id"]}
+        )
+        self.assertEqual(paid_statement["status"], "paid")
+        summary = await settlement_summary(self.user)
+        self.assertEqual(summary["amount_due_usd"], 0.0)
+        self.assertFalse(summary["can_settle"])
+        self.assertFalse(summary["ride_now_blocked"])
 
 
 if __name__ == "__main__":

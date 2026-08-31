@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.auth import get_current_user
 from app.database import database
@@ -19,6 +19,9 @@ from app.services.worker_finance_service import (
     update_payout_method,
 )
 from app.services.worker_wallet_service import wallet_summary
+from app.services.driver_settlement_payment_service import create_driver_settlement_intent, confirm_driver_settlement_intent
+from app.services.driver_weekly_settlement_service import admin_settlement_dashboard
+from app.services.rate_limit_service import RateLimit, rate_limit_service
 from app.utils import api_error, api_success
 
 
@@ -92,3 +95,39 @@ async def payout_method_delete(method_id: str, user=Depends(get_current_user)):
         api_error(str(exc), 403)
     except ValueError as exc:
         _payout_method_value_error(exc)
+
+
+@router.post("/driver/settlements/intent")
+async def driver_settlement_intent(request: Request, user=Depends(get_current_user)):
+    await rate_limit_service.enforce(request, "driver-weekly-settlement", RateLimit(6, 300), identity=str(user.get("id") or ""))
+    try:
+        return api_success(await create_driver_settlement_intent(user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+    except RuntimeError as exc:
+        api_error(str(exc), 502)
+
+
+@router.post("/driver/settlements/confirm/{payment_intent_id}")
+async def driver_settlement_confirm(payment_intent_id: str, request: Request, user=Depends(get_current_user)):
+    await rate_limit_service.enforce(request, "driver-weekly-settlement-confirm", RateLimit(10, 300), identity=str(user.get("id") or ""))
+    try:
+        return api_success(await confirm_driver_settlement_intent(payment_intent_id, user))
+    except PermissionError as exc:
+        api_error(str(exc), 403)
+    except ValueError as exc:
+        api_error(str(exc), 400)
+    except RuntimeError as exc:
+        api_error(str(exc), 502)
+
+
+admin_router = APIRouter(prefix="/admin/finance", tags=["admin-finance"])
+
+
+@admin_router.get("/driver-settlements")
+async def admin_driver_settlements(user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        api_error("Admin access required.", 403)
+    return api_success(await admin_settlement_dashboard())

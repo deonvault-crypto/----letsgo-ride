@@ -24,7 +24,8 @@ async def payment_config():
     settings = get_settings()
     return api_success(
         {
-            "card_enabled": bool(settings.stripe_configured),
+            "card_enabled": bool(settings.stripe_configured and settings.passenger_card_payments_enabled),
+            "driver_settlement_enabled": bool(settings.stripe_configured),
             "provider": "stripe" if settings.stripe_configured else None,
             "currency": settings.stripe_currency.upper() if settings.stripe_configured else "USD",
         }

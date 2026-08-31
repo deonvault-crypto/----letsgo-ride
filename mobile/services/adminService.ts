@@ -232,3 +232,29 @@ export async function getAdminDocumentUrl(driverId: string, documentId: string) 
   });
   return `${API_BASE_URL}${result.url}`;
 }
+
+
+export type AdminDriverSettlement = {
+  id: string;
+  driver_user_id: string;
+  driver_id: string;
+  driver_name: string;
+  driver_email?: string | null;
+  period_start: string;
+  period_end: string;
+  ride_count: number;
+  gross_fares_usd: number;
+  amount_due_usd: number;
+  status: "due" | "overdue" | "paid";
+  due_at?: string | null;
+  paid_at?: string | null;
+};
+
+export type AdminDriverSettlementDashboard = {
+  summary: { outstanding_usd: number; collected_usd: number; overdue_count: number; statement_count: number };
+  items: AdminDriverSettlement[];
+};
+
+export async function getAdminDriverSettlements() {
+  return requestData<AdminDriverSettlementDashboard>({ method: "GET", url: "/admin/finance/driver-settlements" });
+}
