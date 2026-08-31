@@ -9,12 +9,122 @@ def replace_once(path: str, old: str, new: str) -> None:
     p.write_text(text.replace(old, new, 1))
 
 
+# The new durable statement collection must exist in the in-memory test/development backend too.
+replace_once(
+    "backend/app/database.py",
+    '    "hailing_trip_events",\n]',
+    '    "hailing_trip_events",\n    "driver_fee_statements",\n]',
+)
+
 # Configurable two-day grace period after the Day-7 statement.
 replace_once(
     "backend/app/config.py",
     '        self.payout_data_encryption_key = self._get_env_first("PAYOUT_DATA_ENCRYPTION_KEY")\n',
     '        self.payout_data_encryption_key = self._get_env_first("PAYOUT_DATA_ENCRYPTION_KEY")\n'
     '        self.driver_fee_grace_days = max(1, int(os.getenv("DRIVER_FEE_GRACE_DAYS", "2")))\n',
+)
+
+# Driver trip ledger: passenger pays the gross cash fare directly, while the immutable
+# fare snapshot records the LetsGoRide fee that becomes payable only in the weekly statement.
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '    """Apply the LetsGoRide launch economics to an immutable trip fare snapshot.\n\n'
+    '    Cash is collected directly by the driver and belongs to the driver in full.\n'
+    '    LetsGoRide only recognizes its configured platform percentage on settled card\n'
+    '    payments. The fare snapshot remains the source of truth for historical card\n'
+    '    economics so later pricing changes cannot rewrite completed-trip accounting.\n'
+    '    """\n',
+    '    """Apply immutable trip economics without confusing cash custody with net earnings.\n\n'
+    '    Passenger cash/direct payment is physically collected by the driver immediately.\n'
+    '    The configured fare snapshot still records LetsGoRide\'s service fee, which is not\n'
+    '    due until the weekly postpaid statement is issued. Historical settled card rides\n'
+    '    remain readable for backwards-compatible accounting but are not part of new statements.\n'
+    '    """\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '    if payment_method == "cash":\n'
+    '        return {\n'
+    '            "gross": gross,\n'
+    '            "commission": 0.0,\n'
+    '            "worker_earnings": gross,\n'
+    '            "payment_method": "cash",\n'
+    '            "settlement_state": "cash_kept_by_driver",\n'
+    '            "recognized": True,\n'
+    '        }\n\n'
+    '    quoted_commission = min(gross, _money(fare.get("platform_commission")))\n',
+    '    quoted_commission = min(gross, _money(fare.get("platform_commission")))\n'
+    '    if payment_method in {"cash", "direct"}:\n'
+    '        return {\n'
+    '            "gross": gross,\n'
+    '            "commission": quoted_commission,\n'
+    '            "worker_earnings": _money(max(0.0, gross - quoted_commission)),\n'
+    '            "payment_method": payment_method,\n'
+    '            "settlement_state": "weekly_fee_accruing",\n'
+    '            "recognized": True,\n'
+    '        }\n\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '            if finance["payment_method"] == "cash":\n'
+    '                cash += finance["gross"]\n'
+    '                net += finance["worker_earnings"]\n'
+    '            elif finance["recognized"]:\n',
+    '            if finance["payment_method"] in {"cash", "direct"}:\n'
+    '                cash += finance["gross"]\n'
+    '                commission += finance["commission"]\n'
+    '                net += finance["worker_earnings"]\n'
+    '            elif finance["recognized"]:\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '                "cash": {\n'
+    '                    "$sum": {"$cond": [{"$eq": ["$payment_method", "cash"]}, "$gross", 0]}\n'
+    '                },\n',
+    '                "cash": {\n'
+    '                    "$sum": {"$cond": [{"$in": ["$payment_method", ["cash", "direct"]]}, "$gross", 0]}\n'
+    '                },\n'
+    '                "cash_commission": {\n'
+    '                    "$sum": {"$cond": [{"$in": ["$payment_method", ["cash", "direct"]]}, "$quoted_commission", 0]}\n'
+    '                },\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '                                    {"$ne": ["$payment_method", "cash"]},\n',
+    '                                    {"$not": [{"$in": ["$payment_method", ["cash", "direct"]]}]},\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '                                    {"$ne": ["$payment_method", "cash"]},\n',
+    '                                    {"$not": [{"$in": ["$payment_method", ["cash", "direct"]]}]},\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '    commission = _money(min(card_gross, _money(row.get("settled_card_commission"))))\n'
+    '    digital = _money(max(0.0, card_gross - commission))\n'
+    '    return {\n'
+    '        "gross": gross,\n'
+    '        "net": _money(cash + digital),\n'
+    '        "cash": cash,\n'
+    '        "digital": digital,\n'
+    '        "commission": commission,\n'
+    '    }\n',
+    '    cash_commission = _money(min(cash, _money(row.get("cash_commission"))))\n'
+    '    card_commission = _money(min(card_gross, _money(row.get("settled_card_commission"))))\n'
+    '    commission = _money(cash_commission + card_commission)\n'
+    '    digital = _money(max(0.0, card_gross - card_commission))\n'
+    '    return {\n'
+    '        "gross": gross,\n'
+    '        "net": _money(max(0.0, cash - cash_commission) + digital),\n'
+    '        "cash": cash,\n'
+    '        "digital": digital,\n'
+    '        "commission": commission,\n'
+    '    }\n',
+)
+replace_once(
+    "backend/app/services/worker_wallet_service.py",
+    '                "platform_commission_usd": finance["commission"] if finance["payment_method"] != "cash" else 0.0,\n',
+    '                "platform_commission_usd": finance["commission"],\n',
 )
 
 # Driver wallet: overlay the new postpaid settlement truth on the existing bounded ledger.
@@ -130,7 +240,6 @@ replace_once(
     '        driver_fee_settlement_task = None\n'
     '        logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")\n',
 )
-# second matching global is shutdown
 replace_once(
     "backend/app/main.py",
     '    global ride_lifecycle_stop_event, ride_lifecycle_task, hailing_dispatch_stop_event, hailing_dispatch_task, stripe_payment_stop_event, stripe_payment_task, staging_routing_smoke_task, staging_courier_dispatch_smoke_task\n',
@@ -162,6 +271,60 @@ replace_once(
     '    return <DriverSettlementWallet wallet={wallet} refreshing={refreshing} onRefresh={refresh} onReload={load} />;\n'
     '  }\n'
     '  return (\n',
+)
+
+# Retire regression assertions for the explicitly superseded card-only/cash-free policy.
+replace_once(
+    "backend/tests/test_driver_cash_card_finance.py",
+    '        for collection in ("drivers", "hailing_trips", "worker_payout_methods", "worker_payouts"):\n',
+    '        for collection in ("drivers", "hailing_trips", "worker_payout_methods", "worker_payouts", "driver_fee_statements"):\n',
+)
+replace_once(
+    "backend/tests/test_driver_cash_card_finance.py",
+    '    def test_cash_trip_never_creates_platform_commission(self):\n',
+    '    def test_cash_trip_records_weekly_postpaid_platform_fee(self):\n',
+)
+replace_once(
+    "backend/tests/test_driver_cash_card_finance.py",
+    '        self.assertEqual(finance["commission"], 0.0)\n        self.assertEqual(finance["worker_earnings"], 7.50)\n        self.assertEqual(finance["settlement_state"], "cash_kept_by_driver")\n',
+    '        self.assertEqual(finance["commission"], 0.23)\n'
+    '        self.assertEqual(finance["worker_earnings"], 7.27)\n'
+    '        self.assertEqual(finance["settlement_state"], "weekly_fee_accruing")\n',
+)
+replace_once(
+    "backend/tests/test_driver_cash_card_finance.py",
+    '    async def test_wallet_keeps_all_cash_and_only_charges_settled_card(self):\n',
+    '    async def test_wallet_tracks_direct_cash_and_weekly_postpaid_fee(self):\n',
+)
+replace_once(
+    "backend/tests/test_driver_cash_card_finance.py",
+    '        self.assertEqual(wallet["net_earnings_usd"], 19.70)\n'
+    '        self.assertEqual(wallet["cash_policy"], "driver_keeps_100_percent")\n'
+    '        self.assertEqual(wallet["platform_fee_policy"], "card_only")\n\n'
+    '        cash_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "cash-trip")\n'
+    '        pending_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "card-pending")\n'
+    '        self.assertEqual(cash_entry["platform_commission_usd"], 0.0)\n'
+    '        self.assertEqual(cash_entry["worker_earnings_usd"], 10.00)\n',
+    '        self.assertEqual(wallet["net_earnings_usd"], 19.40)\n'
+    '        self.assertEqual(wallet["cash_policy"], "passenger_pays_driver_directly")\n'
+    '        self.assertEqual(wallet["platform_fee_policy"], "weekly_postpaid")\n'
+    '        self.assertEqual(wallet["settlement_required"], False)\n\n'
+    '        cash_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "cash-trip")\n'
+    '        pending_entry = next(entry for entry in wallet["ledger"] if entry["source_id"] == "card-pending")\n'
+    '        self.assertEqual(cash_entry["platform_commission_usd"], 0.30)\n'
+    '        self.assertEqual(cash_entry["worker_earnings_usd"], 9.70)\n'
+    '        self.assertEqual(cash_entry["settlement_state"], "weekly_fee_accruing")\n',
+)
+replace_once(
+    "backend/tests/test_driver_hailing_finance.py",
+    '    async def test_cash_is_full_driver_earnings_and_only_settled_card_pays_platform_fee(self):\n',
+    '    async def test_direct_cash_accrues_weekly_fee_and_settled_legacy_card_is_accounted(self):\n',
+)
+replace_once(
+    "backend/tests/test_driver_hailing_finance.py",
+    '        self.assertEqual(stats["today_platform_commission"], 0.30)\n        self.assertEqual(stats["today_estimated_earnings"], 19.70)\n',
+    '        self.assertEqual(stats["today_platform_commission"], 0.60)\n'
+    '        self.assertEqual(stats["today_estimated_earnings"], 19.40)\n',
 )
 
 print("weekly driver fee patch applied")
