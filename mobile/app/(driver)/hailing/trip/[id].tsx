@@ -9,6 +9,7 @@ import { AppNotice } from "../../../../components/ui/AppNotice";
 import { v2Theme } from "../../../../constants/v2Theme";
 import { useHailingTripRealtime } from "../../../../hooks/useHailing";
 import { useHailingDriverLocationSync } from "../../../../hooks/useHailingDriverLocationSync";
+import { useLiveDriverNavigationRoute } from "../../../../hooks/useLiveDriverNavigationRoute";
 import {
   cancelHailingTrip,
   completeHailingTrip,
@@ -27,6 +28,7 @@ const TERMINAL = new Set<HailingTripStatus>([
   "CANCELLED_BY_ADMIN",
   "NO_DRIVER_FOUND",
 ]);
+const NAVIGATION_STATUSES = new Set<HailingTripStatus>(["DRIVER_ASSIGNED", "DRIVER_EN_ROUTE", "IN_PROGRESS"]);
 
 function statusTitle(status?: HailingTripStatus) {
   switch (status) {
@@ -47,10 +49,10 @@ function statusTitle(status?: HailingTripStatus) {
 function statusHint(status?: HailingTripStatus) {
   switch (status) {
     case "DRIVER_ASSIGNED":
-    case "DRIVER_EN_ROUTE": return "Follow the map to the pickup point.";
+    case "DRIVER_EN_ROUTE": return "Follow the live route to the pickup point.";
     case "DRIVER_ARRIVED": return "Start when the passenger is safely in the vehicle.";
     case "PASSENGER_CONFIRMED_BOARDING": return "Complete the optional safety check, then start the trip.";
-    case "IN_PROGRESS": return "Follow the route to the destination.";
+    case "IN_PROGRESS": return "Follow the live route to the destination.";
     case "COMPLETED": return "Fare recorded. You’re ready for the next ride.";
     default: return "Trip status updates live.";
   }
@@ -74,6 +76,19 @@ export default function DriverHailingTripScreen() {
     onError: (locationError) => {
       if (/permission|location access/i.test(locationError.message)) setNotice(locationError.message);
     },
+  });
+
+  const navigationTarget = trip?.status === "IN_PROGRESS" ? trip.dropoff : trip?.pickup;
+  const navigationPhase = trip?.status === "IN_PROGRESS" ? "destination" : "pickup";
+  const navigationOrigin = currentLocation || trip?.driver_location || null;
+  const navigationActive = Boolean(trip && NAVIGATION_STATUSES.has(trip.status));
+  const liveNavigation = useLiveDriverNavigationRoute({
+    enabled: navigationActive,
+    currentLocation: navigationOrigin,
+    target: navigationTarget || null,
+    targetKey: navigationTarget
+      ? `${navigationPhase}:${navigationTarget.latitude.toFixed(5)},${navigationTarget.longitude.toFixed(5)}`
+      : navigationPhase,
   });
 
   async function mutate(name: string, action: () => Promise<HailingTrip>, fallback: string) {
@@ -125,6 +140,9 @@ export default function DriverHailingTripScreen() {
     ),
   );
   const live = realtimeState === "connected";
+  const navigationSummary = liveNavigation.distanceKm != null && liveNavigation.etaMinutes != null
+    ? `${liveNavigation.distanceKm.toFixed(1)} km · ~${liveNavigation.etaMinutes} min to ${navigationPhase}`
+    : null;
 
   return (
     <SafeAreaView edges={[]} style={styles.root}>
@@ -132,8 +150,8 @@ export default function DriverHailingTripScreen() {
       <HailingMapBackdrop
         pickup={trip?.pickup}
         dropoff={trip?.dropoff}
-        route={trip?.route}
-        driverLocation={currentLocation || trip?.driver_location}
+        route={liveNavigation.route || trip?.route}
+        driverLocation={navigationOrigin}
         bottomPadding={390}
       />
 
@@ -169,6 +187,19 @@ export default function DriverHailingTripScreen() {
 
         {trip ? (
           <>
+            {navigationActive ? (
+              <View style={styles.navigationStrip}>
+                <View style={styles.navigationIcon}>
+                  <MaterialCommunityIcons name="navigation-variant" size={17} color={RIDE_BLACK} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.navigationEyebrow}>{navigationPhase === "pickup" ? "LIVE ROUTE TO PICKUP" : "LIVE ROUTE TO DESTINATION"}</Text>
+                  <Text style={styles.navigationValue}>{navigationSummary || (liveNavigation.refreshing ? "Calculating road route…" : "Waiting for live position…")}</Text>
+                </View>
+                {liveNavigation.refreshing && navigationSummary ? <Text style={styles.navigationRefreshing}>Updating</Text> : null}
+              </View>
+            ) : null}
+
             <View style={styles.passengerRow}>
               <View style={styles.passengerAvatar}><Text style={styles.passengerInitial}>{(trip.passenger?.name || "P").slice(0, 1).toUpperCase()}</Text></View>
               <View style={styles.flex}>
@@ -179,7 +210,7 @@ export default function DriverHailingTripScreen() {
             </View>
 
             <View style={styles.metaRow}>
-              <Text style={styles.meta}>{trip.route.distance_km.toFixed(1)} km</Text>
+              <Text style={styles.meta}>{trip.route.distance_km.toFixed(1)} km quoted trip</Text>
               <Text style={styles.metaDot}>•</Text>
               <Text style={styles.meta}>{trip.ride_class}</Text>
               <Text style={styles.metaDot}>•</Text>
@@ -259,6 +290,11 @@ const styles = StyleSheet.create({
   title: { color: RIDE_BLACK, fontSize: 25, lineHeight: 29, fontWeight: "900", letterSpacing: -0.7, marginTop: 2 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 17, marginTop: 3 },
   navigateButton: { width: 48, height: 48, borderRadius: 17, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center" },
+  navigationStrip: { minHeight: 58, borderRadius: 18, backgroundColor: "rgba(17,17,17,0.055)", paddingHorizontal: 11, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 9 },
+  navigationIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  navigationEyebrow: { color: v2Theme.colors.inkTertiary, fontSize: 7, fontWeight: "900", letterSpacing: 0.85 },
+  navigationValue: { color: RIDE_BLACK, fontSize: 12, fontWeight: "900", marginTop: 2 },
+  navigationRefreshing: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" },
   passengerRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11 },
   passengerAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: v2Theme.colors.brandSofter, alignItems: "center", justifyContent: "center" },
   passengerInitial: { color: v2Theme.colors.brandStrong, fontSize: 16, fontWeight: "900" },
