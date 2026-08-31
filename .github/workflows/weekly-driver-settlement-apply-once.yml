@@ -1,0 +1,91 @@
+name: Weekly Driver Settlement Apply Once
+
+on:
+  push:
+    branches:
+      - fix/product-polish-batch-production
+    paths:
+      - scripts/apply_weekly_driver_settlement.py
+      - .github/workflows/weekly-driver-settlement-apply-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-driver-settlement-apply-once
+  cancel-in-progress: false
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/product-polish-batch-production
+          fetch-depth: 0
+
+      - name: Apply settlement patch
+        run: python scripts/apply_weekly_driver_settlement.py
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Backend compile and import
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+          APP_ENV: test
+        run: |
+          python -m compileall app
+          python -c 'import app.main'
+
+      - name: Backend tests
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+          APP_ENV: test
+        run: pytest -q
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Mobile typecheck
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Mobile tests
+        working-directory: mobile
+        run: npm test -- --runInBand
+
+      - name: Android release config verification
+        working-directory: mobile
+        run: npm run verify:android
+
+      - name: Commit validated product changes
+        run: |
+          if git diff --quiet; then
+            echo 'No product changes to commit.'
+            exit 0
+          fi
+          git config user.name 'deonvault-crypto'
+          git config user.email 'deonvault@gmail.com'
+          git add backend mobile
+          git commit -m 'Add weekly postpaid driver settlement with Stripe'
+          git push origin HEAD:fix/product-polish-batch-production
