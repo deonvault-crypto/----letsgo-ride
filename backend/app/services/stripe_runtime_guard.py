@@ -27,6 +27,16 @@ def _validate_local_config(settings: Any) -> None:
         raise RuntimeError("Production Stripe currency must be USD.")
 
 
+def stripe_runtime_ready() -> bool:
+    settings = get_settings()
+    if not settings.stripe_configured:
+        return True
+    if not settings.is_production:
+        return True
+    expected_account_id = str(settings.stripe_account_id or "").strip()
+    return bool(expected_account_id and _verified_account_id == expected_account_id)
+
+
 async def ensure_stripe_runtime_binding() -> str | None:
     """Fail closed when production Stripe credentials do not belong to the approved account.
 
