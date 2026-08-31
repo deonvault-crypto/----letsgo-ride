@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HailingMapBackdrop } from "../../components/hailing/HailingMapBackdrop";
@@ -10,6 +10,12 @@ import { v2Theme } from "../../constants/v2Theme";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useHailingDriverWorkspace } from "../../hooks/useHailing";
 import { useHailingDriverLocationSync } from "../../hooks/useHailingDriverLocationSync";
+import {
+  getDriverBackgroundLocationPermissionState,
+  requestDriverBackgroundLocationPermission,
+  startDriverBackgroundAvailabilityTracking,
+  stopDriverBackgroundAvailabilityTracking,
+} from "../../services/hailingBackgroundLocation";
 import { acceptHailingOffer, declineHailingOffer, goHailingDriverOffline, goHailingDriverOnline, resolveHailingServiceArea } from "../../services/hailingService";
 import { getCurrentDeviceLocation } from "../../services/locationService";
 import { HailingCoordinate, HailingRideClass } from "../../types/hailing.types";
@@ -55,6 +61,53 @@ export default function DriverHailingScreen() {
     router.replace(`/(driver)/hailing/trip/${activeTrip.id}` as never);
   }, [activeTrip?.id, router]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    if (!online) {
+      void stopDriverBackgroundAvailabilityTracking();
+      return;
+    }
+    if (activeTrip?.id) return;
+    void getDriverBackgroundLocationPermissionState().then((permission) => {
+      if (permission.enabled) void startDriverBackgroundAvailabilityTracking();
+    });
+  }, [activeTrip?.id, online]);
+
+  function offerBackgroundAvailability() {
+    if (Platform.OS !== "android") return;
+    void getDriverBackgroundLocationPermissionState().then((permission) => {
+      if (permission.enabled) {
+        void startDriverBackgroundAvailabilityTracking();
+        return;
+      }
+      Alert.alert(
+        "Stay available in the background",
+        "While you choose to stay Online, LetsGoRide can use your location in the background so nearby Ride Now requests can still reach you when another app is open or your screen is off. A persistent Android notification stays visible, and tracking stops when you go Offline.",
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+            onPress: () => setNotice("Background availability is off. Keep LetsGoRide open to stay available for nearby requests."),
+          },
+          {
+            text: "Continue",
+            onPress: () => void (async () => {
+              const requested = await requestDriverBackgroundLocationPermission();
+              if (!requested.enabled) {
+                setNotice(requested.requiresSettings
+                  ? "Background location is blocked in Android settings. Keep LetsGoRide open while Online, or enable location access in Settings."
+                  : "Background availability was not enabled. Keep LetsGoRide open while Online to stay available.");
+                return;
+              }
+              await startDriverBackgroundAvailabilityTracking();
+              setNotice("Background availability is on while you stay Online.");
+            })(),
+          },
+        ],
+      );
+    });
+  }
+
   async function goOnline() {
     if (!photoApproved) {
       setNotice(photoPending
@@ -79,6 +132,7 @@ export default function DriverHailingScreen() {
       await goHailingDriverOnline({ city_id: city.id, ride_class: rideClass, location: point });
       setCityName(city.name);
       await reload();
+      offerBackgroundAvailability();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to go online.");
     } finally {
@@ -91,6 +145,7 @@ export default function DriverHailingScreen() {
       setBusy(true);
       setNotice(null);
       await goHailingDriverOffline();
+      await stopDriverBackgroundAvailabilityTracking();
       await reload();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to go offline.");
