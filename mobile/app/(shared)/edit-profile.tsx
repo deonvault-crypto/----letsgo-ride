@@ -41,6 +41,7 @@ export default function EditProfileScreen() {
   const [isError, setIsError] = useState(false);
   const role = record?.role || user?.role;
   const isCustomer = role === "passenger";
+  const isWorker = role === "driver" || role === "courier";
   const product = role === "driver" || role === "courier" || role === "merchant" ? role : undefined;
   const accountFallback = role === "driver"
     ? "/(driver)/account"
@@ -58,7 +59,7 @@ export default function EditProfileScreen() {
     setProfileCity(nextUser.city || "");
     setBio(nextUser.bio || "");
     setTravelPreferences(nextUser.travel_preferences || "");
-    setProfilePhotoUrl(nextUser.profile_photo_url || "");
+    setProfilePhotoUrl(nextUser.profile_photo_url || nextUser.profile_photo_pending_url || "");
   }
 
   useEffect(() => {
@@ -133,7 +134,11 @@ export default function EditProfileScreen() {
         mimeType: asset.mimeType || "image/jpeg",
       });
       fillFormFromUser(updated);
-      setMessage("Profile photo saved");
+      if ((updated.role === "driver" || updated.role === "courier") && updated.profile_photo_review_status === "pending") {
+        setMessage("Photo submitted for Admin review. It will not unlock new work until approved.");
+      } else {
+        setMessage("Profile photo saved");
+      }
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : "Unable to update profile photo.");
@@ -151,6 +156,13 @@ export default function EditProfileScreen() {
 
   const displayName = displayNameOrFallback(application?.full_name || record?.name);
   const verified = isIdentityVerified(record);
+  const workerPhotoState = record?.profile_photo_verified === true
+    ? "Profile photo approved"
+    : record?.profile_photo_review_status === "pending"
+      ? "Profile photo awaiting Admin review"
+      : record?.profile_photo_review_status === "rejected"
+        ? "Profile photo needs replacement"
+        : "Profile photo required";
   const summaryRows = [
     { label: "Full legal name", value: application?.full_name || record?.name || "Not added" },
     { label: "Email", value: record?.email || "Not added" },
@@ -173,12 +185,13 @@ export default function EditProfileScreen() {
               <VerifiedBadge verified={verified} />
             </View>
             <Text style={styles.body}>{isCustomer ? "Customer profile" : `${product === "merchant" ? "Merchant" : product === "driver" ? "Driver" : "Courier"} profile`}</Text>
+            {isWorker ? <Text style={styles.workerPhotoState}>{workerPhotoState}</Text> : null}
           </View>
         </View>
-        <AppButton title="Update profile photo" variant="secondary" onPress={chooseProfilePhoto} loading={saving} />
+        <AppButton title={isWorker ? "Submit profile photo" : "Update profile photo"} variant="secondary" onPress={chooseProfilePhoto} loading={saving} />
       </View>
 
-      {message ? <Text accessibilityRole="alert" style={[styles.message, isError && styles.error]}>{message}</Text> : null}
+      {message ? <Text accessibilityRole="alert" style={[styles.message, isWorker && !isError && styles.workerMessage, isError && styles.error]}>{message}</Text> : null}
       {contactNotice ? <Text style={styles.contactNotice}>{contactNotice}</Text> : null}
       {record?.pending_email ? (
         <AppButton
@@ -228,6 +241,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 17 },
   nameRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, flexWrap: "wrap" },
   body: { color: colors.mutedText, lineHeight: 21 },
+  workerPhotoState: { color: "#111111", fontSize: 11, lineHeight: 16, fontWeight: "900" },
   card: { backgroundColor: colors.card, borderRadius: 26, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.md },
   helperText: { color: colors.mutedText, fontSize: 12, lineHeight: 18, fontWeight: "700" },
   readOnlyField: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.elevated, padding: spacing.md, gap: 5 },
@@ -235,6 +249,7 @@ const styles = StyleSheet.create({
   readOnlyValue: { color: colors.whiteText, fontWeight: "900" },
   actions: { gap: spacing.sm },
   message: { borderRadius: 16, backgroundColor: "#EAF6EE", padding: 11, color: colors.primaryGreen, fontWeight: "900" },
+  workerMessage: { backgroundColor: "#F0EFEA", color: "#111111" },
   contactNotice: { borderRadius: 16, backgroundColor: "#FFF6E5", padding: 11, color: "#8B5B08", fontSize: 11, lineHeight: 17, fontWeight: "800" },
   error: { backgroundColor: "#FFF0F0", color: colors.danger },
 });
