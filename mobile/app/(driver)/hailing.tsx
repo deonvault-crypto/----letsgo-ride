@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { HailingMapBackdrop } from "../../components/hailing/HailingMapBackdrop";
 import { AppNotice } from "../../components/ui/AppNotice";
 import { v2Theme } from "../../constants/v2Theme";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useHailingDriverWorkspace } from "../../hooks/useHailing";
 import { useHailingDriverLocationSync } from "../../hooks/useHailingDriverLocationSync";
 import { acceptHailingOffer, declineHailingOffer, goHailingDriverOffline, goHailingDriverOnline, resolveHailingServiceArea } from "../../services/hailingService";
@@ -18,6 +19,7 @@ const RIDE_BLACK = "#111111";
 export default function DriverHailingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useCurrentUser();
   const { status, offer, loading, error, reload, setOffer, realtimeState } = useHailingDriverWorkspace(true);
   const [rideClass, setRideClass] = useState<HailingRideClass>("ECONOMY");
   const [currentLocation, setCurrentLocation] = useState<HailingCoordinate | null>(null);
@@ -28,6 +30,7 @@ export default function DriverHailingScreen() {
   const online = Boolean(status?.online);
   const activeTrip = status?.active_trip;
   const live = realtimeState === "connected";
+  const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim());
 
   useHailingDriverLocationSync({
     enabled: online && !activeTrip,
@@ -51,6 +54,10 @@ export default function DriverHailingScreen() {
   }, [activeTrip?.id, router]);
 
   async function goOnline() {
+    if (!hasProfilePhoto) {
+      setNotice("Add a clear profile photo before going online for Ride Now.");
+      return;
+    }
     try {
       setBusy(true);
       setNotice(null);
@@ -173,6 +180,20 @@ export default function DriverHailingScreen() {
             </View>
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => void goOffline()} style={({ pressed }) => [styles.offlineButton, busy && styles.disabled, pressed && styles.pressed]}>
               <Text style={styles.offlineText}>{busy ? "Going offline…" : "Go offline"}</Text>
+            </Pressable>
+          </>
+        ) : !hasProfilePhoto ? (
+          <>
+            <Text style={styles.eyebrow}>RIDE NOW DRIVER</Text>
+            <Text style={styles.title}>Add your profile photo</Text>
+            <Text style={styles.body}>A clear Driver profile photo is required before new Ride Now work can be enabled.</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add required Driver profile photo"
+              onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: { product: "driver" } } as never)}
+              style={({ pressed }) => [styles.onlineButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.onlineText}>Add profile photo</Text>
             </Pressable>
           </>
         ) : (
