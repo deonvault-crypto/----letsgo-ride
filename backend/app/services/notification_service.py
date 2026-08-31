@@ -11,6 +11,12 @@ from app.utils import new_id, now_iso
 
 logger = logging.getLogger(__name__)
 EXPO_PUSH_ENDPOINT = "https://exp.host/--/api/v2/push/send"
+GENERAL_CHANNEL_ID = "general_v1"
+RIDE_REQUEST_CHANNEL_ID = "ride_requests_v1"
+COURIER_REQUEST_CHANNEL_ID = "courier_requests_v1"
+GENERAL_SOUND = "letsgoride_notification.wav"
+RIDE_REQUEST_SOUND = "letsgoride_ride_request.wav"
+COURIER_REQUEST_SOUND = "letsgoride_courier_request.wav"
 
 DEFAULT_PREFERENCES = {
     "trip_updates": True,
@@ -53,6 +59,16 @@ def _push_allowed(notification_type: str, preferences: Dict[str, Any]) -> bool:
     if preference_key == "safety_alerts":
         return bool(preferences.get(preference_key, True))
     return bool(preferences.get(preference_key, DEFAULT_PREFERENCES.get(preference_key, True)))
+
+
+def _push_delivery_profile(notification: Dict[str, Any]) -> Dict[str, str]:
+    data = notification.get("data") if isinstance(notification.get("data"), dict) else {}
+    target = str(data.get("notification_target") or "")
+    if target == "hailing_driver_offer":
+        return {"channel_id": RIDE_REQUEST_CHANNEL_ID, "sound": RIDE_REQUEST_SOUND}
+    if target in {"courier_offer", "courier_delivery_offer"}:
+        return {"channel_id": COURIER_REQUEST_CHANNEL_ID, "sound": COURIER_REQUEST_SOUND}
+    return {"channel_id": GENERAL_CHANNEL_ID, "sound": GENERAL_SOUND}
 
 
 def _extract_expo_token(token_doc: Dict[str, Any]) -> Optional[str]:
@@ -194,15 +210,16 @@ async def _send_push_for_notification(notification: Dict[str, Any]) -> Dict[str,
         )
         return {"delivered_push": False, "push_status": "no_active_tokens"}
 
+    push_profile = _push_delivery_profile(notification)
     payloads = [
         {
             "to": token["expo_push_token"],
             "title": notification.get("title") or "LetsGoRide",
             "body": notification.get("body") or "You have a new update.",
             "data": notification.get("data", {}),
-            "sound": "default",
+            "sound": push_profile["sound"],
             "priority": "high",
-            "channelId": "default",
+            "channelId": push_profile["channel_id"],
         }
         for token in tokens
     ]
