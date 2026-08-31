@@ -9,6 +9,7 @@ from app.services.driver_weekly_settlement_service import (
     prepare_settlement_payment,
 )
 from app.services.stripe_payment_service import _intent_client_payload, _settings, _stripe_request, retrieve_payment_intent
+from app.services.stripe_runtime_guard import ensure_stripe_runtime_binding
 from app.utils import now_iso
 
 
@@ -16,6 +17,7 @@ SETTLEMENT_CURRENCY = "usd"
 
 
 async def create_driver_settlement_intent(user: Dict[str, Any]) -> Dict[str, Any]:
+    await ensure_stripe_runtime_binding()
     settings = _settings()
     if str(settings.stripe_currency or "").strip().lower() != SETTLEMENT_CURRENCY:
         raise RuntimeError("Driver weekly settlements require Stripe USD currency configuration.")
@@ -62,6 +64,7 @@ async def create_driver_settlement_intent(user: Dict[str, Any]) -> Dict[str, Any
 
 
 async def confirm_driver_settlement_intent(payment_intent_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    await ensure_stripe_runtime_binding()
     payment = await database.find_one(
         PAYMENT_COLLECTION,
         {"driver_user_id": user.get("id"), "stripe_payment_intent_id": payment_intent_id},
