@@ -1,307 +1,604 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useRef, useState } from "react";
+import {
+  Animated,
+  PanResponder,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { RideCard } from "../../components/cards/RideCard";
-import { ServiceSwitcher, CustomerService } from "../../components/platform/ServiceSwitcher";
-import { ServiceStoryCard } from "../../components/platform/ServiceStoryCard";
-import { EmptyState } from "../../components/states/EmptyState";
-import { AppNotice } from "../../components/ui/AppNotice";
-import { PopularRouteChips } from "../../components/ui/PopularRouteChips";
-import { Screen } from "../../components/ui/Screen";
+import { HailingMapBackdrop } from "../../components/hailing/HailingMapBackdrop";
+import { BottomNav } from "../../components/layout/BottomNav";
+import { BrandLogo } from "../../components/layout/BrandLogo";
 import { v2Theme } from "../../constants/v2Theme";
+import { useNotifications } from "../../contexts/NotificationContext";
 import { useActiveHailingTrip, useHailingConfig } from "../../hooks/useHailing";
 import { useRides } from "../../hooks/useRides";
 import { isRideBookable } from "../../utils/tripLifecycle";
 
+type CanvasMode = "ride" | "food" | "courier";
+
+type ModeMeta = {
+  label: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  mapTint: string;
+};
+
+const MODE_ORDER: CanvasMode[] = ["ride", "food", "courier"];
+const SHEET_BOTTOM = v2Theme.control.navHeight + 24;
+const TERMINAL_HAILING = new Set([
+  "COMPLETED",
+  "CANCELLED_BY_PASSENGER",
+  "CANCELLED_BY_DRIVER",
+  "CANCELLED_BY_ADMIN",
+  "NO_DRIVER_FOUND",
+]);
+
+const MODE_META: Record<CanvasMode, ModeMeta> = {
+  ride: {
+    label: "Ride",
+    eyebrow: "RIDE NOW",
+    title: "Where to?",
+    body: "Pickup → destination",
+    icon: "magnify",
+    mapTint: "rgba(17,17,17,0.015)",
+  },
+  food: {
+    label: "Food",
+    eyebrow: "FOOD",
+    title: "Search cuisines",
+    body: "Restaurants, kitchens and dishes near you",
+    icon: "silverware-fork-knife",
+    mapTint: "rgba(242,153,74,0.12)",
+  },
+  courier: {
+    label: "Courier",
+    eyebrow: "COURIER",
+    title: "Send a package",
+    body: "Pickup, destination and live tracking",
+    icon: "package-variant-closed",
+    mapTint: "rgba(22,163,74,0.07)",
+  },
+};
+
 export default function CustomerHomeScreen() {
   const router = useRouter();
-  const { rides, loading, refreshing, error, reload } = useRides();
+  const insets = useSafeAreaInsets();
+  const { unreadCount } = useNotifications();
+  const { rides, loading } = useRides();
   const { config: hailingConfig } = useHailingConfig();
   const { trip: activeHailingTrip } = useActiveHailingTrip(false);
-  const upcomingRides = rides.filter((ride) => isRideBookable(ride));
-  const hailingEnabled = hailingConfig?.enabled !== false;
-  const activeHailing = activeHailingTrip && !["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"].includes(activeHailingTrip.status);
+  const [mode, setMode] = useState<CanvasMode>("ride");
+  const [hasSwiped, setHasSwiped] = useState(false);
+  const modeRef = useRef<CanvasMode>("ride");
+  const dragX = useRef(new Animated.Value(0)).current;
 
-  function chooseService(service: CustomerService) {
-    if (service === "ride") return;
-    if (service === "food") return router.push("/(customer)/food" as never);
-    router.push("/(shared)/courier" as never);
+  modeRef.current = mode;
+
+  const hailingEnabled = hailingConfig?.enabled !== false;
+  const activeHailing = Boolean(
+    activeHailingTrip && !TERMINAL_HAILING.has(activeHailingTrip.status),
+  );
+  const upcomingRideCount = rides.filter((ride) => isRideBookable(ride)).length;
+  const meta = MODE_META[mode];
+
+  function animateBack() {
+    Animated.spring(dragX, {
+      toValue: 0,
+      useNativeDriver: true,
+      speed: 24,
+      bounciness: 4,
+    }).start();
   }
 
+  function selectMode(next: CanvasMode) {
+    if (next === modeRef.current) {
+      animateBack();
+      return;
+    }
+    modeRef.current = next;
+    setMode(next);
+    setHasSwiped(true);
+    dragX.setValue(next === "food" ? 18 : next === "courier" ? 24 : -18);
+    animateBack();
+  }
+
+  function shiftMode(direction: -1 | 1) {
+    const index = MODE_ORDER.indexOf(modeRef.current);
+    const nextIndex = Math.max(0, Math.min(MODE_ORDER.length - 1, index + direction));
+    selectMode(MODE_ORDER[nextIndex]);
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+      onPanResponderMove: (_, gesture) => {
+        dragX.setValue(Math.max(-72, Math.min(72, gesture.dx * 0.42)));
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx < -46) shiftMode(1);
+        else if (gesture.dx > 46) shiftMode(-1);
+        else animateBack();
+      },
+      onPanResponderTerminate: animateBack,
+    }),
+  ).current;
+
   function openRideNow() {
+    if (!hailingEnabled) {
+      router.push("/(customer)/search" as never);
+      return;
+    }
     if (!activeHailing || !activeHailingTrip) {
       router.push("/(customer)/hail" as never);
       return;
     }
     if (activeHailingTrip.status === "SEARCHING") {
-      router.push(`/(customer)/hail/searching?tripId=${encodeURIComponent(activeHailingTrip.id)}` as never);
+      router.push(
+        `/(customer)/hail/searching?tripId=${encodeURIComponent(activeHailingTrip.id)}` as never,
+      );
       return;
     }
     router.push(`/(customer)/hail/trip/${activeHailingTrip.id}` as never);
   }
 
-  function openDriverProfile(driverId: string | undefined, rideId: string) {
-    if (!driverId) return;
-    router.push(`/(shared)/driver-profile/${driverId}?rideId=${rideId}` as never);
+  function openPrimaryAction() {
+    if (mode === "ride") {
+      openRideNow();
+      return;
+    }
+    if (mode === "food") {
+      router.push("/(customer)/food" as never);
+      return;
+    }
+    router.push("/(shared)/courier" as never);
   }
 
-  return (
-    <Screen navRole="customer" refreshing={refreshing && !loading} onRefresh={reload}>
-      <ServiceSwitcher value="ride" onChange={chooseService} />
+  function openContextAction() {
+    if (mode === "ride") {
+      router.push("/(customer)/search" as never);
+      return;
+    }
+    if (mode === "food") {
+      router.push("/(customer)/food" as never);
+      return;
+    }
+    router.push("/(shared)/courier" as never);
+  }
 
-      {hailingEnabled ? (
+  const primaryEyebrow =
+    mode === "ride" && activeHailing
+      ? "ACTIVE RIDE"
+      : mode === "ride" && !hailingEnabled
+        ? "SCHEDULED RIDES"
+        : meta.eyebrow;
+  const primaryTitle =
+    mode === "ride" && activeHailing
+      ? "Continue your ride"
+      : mode === "ride" && !hailingEnabled
+        ? "Find a ride"
+        : meta.title;
+  const primaryBody =
+    mode === "ride" && activeHailing && activeHailingTrip
+      ? activeHailingTrip.status.replaceAll("_", " ")
+      : mode === "ride" && !hailingEnabled
+        ? "Routes, dates and available seats"
+        : meta.body;
+
+  return (
+    <SafeAreaView edges={[]} style={styles.root}>
+      <StatusBar barStyle="dark-content" />
+
+      <HailingMapBackdrop bottomPadding={330} />
+      <View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, styles.mapMood, { backgroundColor: meta.mapTint }]}
+      />
+
+      <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
+        <View style={styles.brandCapsule}>
+          <BrandLogo size="small" />
+        </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={activeHailing ? "Open active Ride Now trip" : "Request a Ride Now"}
-          onPress={openRideNow}
-          style={({ pressed }) => [styles.rideNowCard, pressed && styles.pressed]}
+          accessibilityLabel="Notifications"
+          hitSlop={8}
+          onPress={() => router.push("/(shared)/notifications" as never)}
+          style={({ pressed }) => [styles.bellButton, pressed && styles.pressed]}
         >
-          <View style={styles.rideNowIcon}>
-            <MaterialCommunityIcons name={activeHailing ? "car-clock" : "magnify"} size={25} color={v2Theme.colors.brandStrong} />
+          <MaterialCommunityIcons name="bell-outline" size={21} color="#111111" />
+          {unreadCount ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      </View>
+
+      <View pointerEvents="none" style={styles.cityMarker}>
+        <View style={styles.cityDotOuter}>
+          <View style={styles.cityDotInner} />
+        </View>
+        <Text style={styles.cityName}>Harare</Text>
+      </View>
+
+      <View pointerEvents="box-none" style={[styles.canvasDock, { bottom: SHEET_BOTTOM + Math.max(insets.bottom, 0) }]}>
+        <Animated.View
+          {...panResponder.panHandlers}
+          style={[
+            styles.primaryCardWrap,
+            {
+              transform: [
+                { translateX: dragX },
+                {
+                  scale: dragX.interpolate({
+                    inputRange: [-72, 0, 72],
+                    outputRange: [0.985, 1, 0.985],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={primaryTitle}
+            accessibilityHint={`Opens ${meta.label} service`}
+            onPress={openPrimaryAction}
+            style={({ pressed }) => [styles.primaryCard, pressed && styles.primaryPressed]}
+          >
+            <View style={[styles.primaryIcon, mode === "food" && styles.foodIcon, mode === "courier" && styles.courierIcon]}>
+              <MaterialCommunityIcons
+                name={mode === "ride" && activeHailing ? "car-clock" : meta.icon}
+                size={22}
+                color="#111111"
+              />
+            </View>
+            <View style={styles.primaryCopy}>
+              <Text style={styles.primaryEyebrow}>{primaryEyebrow}</Text>
+              <Text numberOfLines={1} style={styles.primaryTitle}>{primaryTitle}</Text>
+              <Text numberOfLines={1} style={styles.primaryBody}>{primaryBody}</Text>
+            </View>
+            <View style={styles.primaryArrow}>
+              <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+            </View>
+          </Pressable>
+        </Animated.View>
+
+        <View style={styles.modeRail}>
+          <Text style={styles.modeHint}>{hasSwiped ? meta.label : "Swipe services"}</Text>
+          <View style={styles.modeDots}>
+            {MODE_ORDER.map((item) => {
+              const active = item === mode;
+              return (
+                <Pressable
+                  key={item}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Switch to ${MODE_META[item].label}`}
+                  accessibilityState={{ selected: active }}
+                  hitSlop={8}
+                  onPress={() => selectMode(item)}
+                  style={[styles.modeDotHit, active && styles.modeDotHitActive]}
+                >
+                  <View style={[styles.modeDot, active && styles.modeDotActive]} />
+                </Pressable>
+              );
+            })}
           </View>
-          <View style={styles.rideNowCopy}>
-            <Text style={styles.rideNowEyebrow}>{activeHailing ? "ACTIVE RIDE" : "RIDE NOW"}</Text>
-            <Text style={styles.rideNowTitle}>{activeHailing ? "Continue your ride" : "Where to?"}</Text>
-            <Text numberOfLines={1} style={styles.rideNowBody}>
-              {activeHailing ? activeHailingTrip.status.replaceAll("_", " ") : "Pickup → destination"}
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={openContextAction}
+          style={({ pressed }) => [styles.contextCard, pressed && styles.pressed]}
+        >
+          <View style={styles.contextIcon}>
+            <MaterialCommunityIcons
+              name={
+                mode === "ride"
+                  ? "road-variant"
+                  : mode === "food"
+                    ? "storefront-outline"
+                    : "map-marker-path"
+              }
+              size={19}
+              color={v2Theme.colors.inkSecondary}
+            />
+          </View>
+          <View style={styles.contextCopy}>
+            <Text style={styles.contextTitle}>
+              {mode === "ride"
+                ? "Intercity / Scheduled"
+                : mode === "food"
+                  ? "Explore nearby food"
+                  : "Start a delivery"}
+            </Text>
+            <Text numberOfLines={1} style={styles.contextBody}>
+              {mode === "ride"
+                ? loading
+                  ? "Checking available trips…"
+                  : `${upcomingRideCount} bookable ${upcomingRideCount === 1 ? "ride" : "rides"} available`
+                : mode === "food"
+                  ? "Restaurants, kitchens and dishes"
+                  : "Parcels with live tracking"}
             </Text>
           </View>
-          <View style={styles.rideNowArrow}>
-            <MaterialCommunityIcons name="arrow-right" size={21} color="#FFFFFF" />
-          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
         </Pressable>
-      ) : null}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Search intercity and scheduled rides"
-        onPress={() => router.push("/(customer)/search" as never)}
-        style={({ pressed }) => [styles.intercityCard, pressed && styles.pressed]}
-      >
-        <View style={styles.intercityIcon}>
-          <MaterialCommunityIcons name="road-variant" size={21} color={v2Theme.colors.inkSecondary} />
-        </View>
-        <View style={styles.intercityCopy}>
-          <Text style={styles.intercityTitle}>Intercity / Scheduled</Text>
-          <Text style={styles.intercitySubtitle}>Routes, dates and available seats</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={21} color={v2Theme.colors.inkTertiary} />
-      </Pressable>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeadingRow}>
-          <Text style={styles.sectionTitle}>For you</Text>
-          <Pressable onPress={() => router.push("/(shared)/services" as never)} hitSlop={8}>
-            <Text style={styles.textAction}>See all</Text>
-          </Pressable>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRail}>
-          <ServiceStoryCard
-            compact
-            title="Ride Now"
-            subtitle="Local private rides"
-            eyebrow="GO"
-            icon="car-arrow-right"
-            image={require("../../assets/images/ride-harare-owned-v2.jpg")}
-            onPress={() => router.push(hailingEnabled ? "/(customer)/hail" as never : "/(customer)/search" as never)}
-          />
-          <ServiceStoryCard
-            compact
-            title="Food"
-            subtitle="Kitchens and dishes near you"
-            eyebrow="EAT"
-            icon="food-fork-drink"
-            image={require("../../assets/images/food-landing-editorial-owned-v1.jpg")}
-            onPress={() => router.push("/(customer)/food" as never)}
-          />
-          <ServiceStoryCard
-            compact
-            title="Courier"
-            subtitle="Parcels with live tracking"
-            eyebrow="SEND"
-            icon="package-variant-closed"
-            image={require("../../assets/images/courier-handoff-owned-v2.jpg")}
-            onPress={() => router.push("/(shared)/courier" as never)}
-          />
-        </ScrollView>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Popular routes</Text>
-        <PopularRouteChips onSelect={(origin, destination) => router.push({ pathname: "/(customer)/results", params: { origin, destination, seats: "1" } } as never)} />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeadingRow}>
-          <View style={styles.headingCopy}>
-            <Text style={styles.sectionTitle}>Upcoming rides</Text>
-            <Text style={styles.sectionCaption}>Verified trips available to reserve</Text>
-          </View>
-          <Pressable onPress={() => router.push("/(customer)/search" as never)} hitSlop={8}>
-            <Text style={styles.textAction}>Search</Text>
-          </Pressable>
-        </View>
-        {loading ? (
-          <View testID="upcoming-rides-skeleton" style={styles.rideSkeleton}>
-            <View style={styles.skeletonLineWide} />
-            <View style={styles.skeletonLine} />
-          </View>
-        ) : null}
-        {error ? <AppNotice message={error} actionLabel="Retry" onAction={reload} /> : null}
-        {!loading && !error && upcomingRides.length === 0 ? (
-          <EmptyState title="No rides nearby yet" body="New trips will appear here when drivers post them." icon="car-clock" />
-        ) : null}
-        {!loading && upcomingRides.slice(0, 3).map((ride) => (
-          <RideCard
-            key={ride.id}
-            ride={ride}
-            onPress={() => router.push(`/(customer)/ride/${ride.id}` as never)}
-            onDriverPress={() => openDriverProfile(ride.driver_id, ride.id)}
-          />
-        ))}
-      </View>
-    </Screen>
+      <BottomNav role="customer" />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  rideNowCard: {
-    minHeight: 94,
-    borderRadius: 24,
-    backgroundColor: v2Theme.colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: v2Theme.colors.lineStrong,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  root: {
+    flex: 1,
+    backgroundColor: "#F1EEE8",
+  },
+  mapMood: {
+    zIndex: 1,
+  },
+  topBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    zIndex: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "space-between",
   },
-  rideNowIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: v2Theme.colors.brandSoft,
+  brandCapsule: {
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(17,17,17,0.10)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
+  },
+  bellButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(17,17,17,0.10)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
   },
-  rideNowCopy: {
-    flex: 1,
-    gap: 2,
+  badge: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    minWidth: 17,
+    height: 17,
+    paddingHorizontal: 3,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: v2Theme.colors.danger,
   },
-  rideNowEyebrow: {
-    color: v2Theme.colors.brandStrong,
-    fontSize: 9,
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 8,
     fontWeight: "900",
-    letterSpacing: 1.1,
   },
-  rideNowTitle: {
-    color: v2Theme.colors.ink,
+  cityMarker: {
+    position: "absolute",
+    zIndex: 4,
+    top: "31%",
+    alignSelf: "center",
+    alignItems: "center",
+    gap: 7,
+  },
+  cityDotOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 3,
+    borderColor: "#111111",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOpacity: 0.16,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  cityDotInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#111111",
+  },
+  cityName: {
+    color: "#111111",
     fontSize: 23,
     lineHeight: 27,
     fontWeight: "900",
-    letterSpacing: -0.65,
+    letterSpacing: -0.8,
+    textShadowColor: "rgba(255,255,255,0.88)",
+    textShadowRadius: 8,
   },
-  rideNowBody: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 11,
-    lineHeight: 15,
+  canvasDock: {
+    position: "absolute",
+    zIndex: 10,
+    left: 14,
+    right: 14,
+    gap: 8,
   },
-  rideNowArrow: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    backgroundColor: v2Theme.colors.ink,
-    alignItems: "center",
-    justifyContent: "center",
+  primaryCardWrap: {
+    borderRadius: 26,
   },
-  intercityCard: {
-    minHeight: 68,
-    borderRadius: 20,
-    backgroundColor: v2Theme.colors.surfaceMuted,
+  primaryCard: {
+    minHeight: 88,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.97)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(17,17,17,0.10)",
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 11,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 11,
+    shadowColor: "#000000",
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
   },
-  intercityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    backgroundColor: v2Theme.colors.surface,
+  primaryPressed: {
+    transform: [{ scale: 0.992 }],
+    opacity: 0.94,
+  },
+  primaryIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#EAF8EE",
     alignItems: "center",
     justifyContent: "center",
   },
-  intercityCopy: {
+  foodIcon: {
+    backgroundColor: "#FFF0DE",
+  },
+  courierIcon: {
+    backgroundColor: "#E9F7EE",
+  },
+  primaryCopy: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
-  intercityTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: 13,
+  primaryEyebrow: {
+    color: v2Theme.colors.brandStrong,
+    fontSize: 8,
+    lineHeight: 11,
     fontWeight: "900",
+    letterSpacing: 1.05,
   },
-  intercitySubtitle: {
+  primaryTitle: {
+    color: "#111111",
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: "900",
+    letterSpacing: -0.7,
+  },
+  primaryBody: {
     color: v2Theme.colors.inkSecondary,
     fontSize: 10,
     lineHeight: 14,
   },
-  section: {
-    gap: v2Theme.spacing.md,
-  },
-  sectionHeadingRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: v2Theme.spacing.md,
-  },
-  headingCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  sectionTitle: {
-    color: v2Theme.colors.ink,
-    fontSize: v2Theme.type.section,
-    fontWeight: "900",
-    letterSpacing: -0.5,
-  },
-  sectionCaption: {
-    color: v2Theme.colors.inkSecondary,
-    fontSize: 12,
-  },
-  textAction: {
-    color: v2Theme.colors.brandStrong,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  storyRail: {
-    gap: 10,
-    paddingRight: 4,
-  },
-  rideSkeleton: {
-    minHeight: 92,
-    borderRadius: v2Theme.radius.xl,
-    backgroundColor: v2Theme.colors.surfaceMuted,
-    padding: v2Theme.spacing.lg,
-    gap: 12,
+  primaryArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#111111",
+    alignItems: "center",
     justifyContent: "center",
   },
-  skeletonLineWide: {
-    height: 14,
-    width: "68%",
-    borderRadius: 7,
-    backgroundColor: v2Theme.colors.lineStrong,
+  modeRail: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  skeletonLine: {
-    height: 11,
-    width: "42%",
-    borderRadius: 6,
-    backgroundColor: v2Theme.colors.line,
+  modeHint: {
+    color: "rgba(17,17,17,0.62)",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  modeDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  modeDotHit: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modeDotHitActive: {
+    width: 30,
+  },
+  modeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(17,17,17,0.24)",
+  },
+  modeDotActive: {
+    width: 16,
+    backgroundColor: "#111111",
+  },
+  contextCard: {
+    minHeight: 60,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.91)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(17,17,17,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    shadowColor: "#000000",
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 5,
+  },
+  contextIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(17,17,17,0.08)",
+  },
+  contextCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  contextTitle: {
+    color: "#111111",
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "900",
+  },
+  contextBody: {
+    color: v2Theme.colors.inkSecondary,
+    fontSize: 9,
+    lineHeight: 13,
   },
   pressed: {
     opacity: 0.72,
-    transform: [{ scale: 0.994 }],
+    transform: [{ scale: 0.99 }],
   },
 });
