@@ -30,24 +30,24 @@ async def liveness_check():
 
 @router.get("/ready")
 async def readiness_check():
-    """Traffic is ready only when persistence, realtime and money-moving guards are healthy."""
+    """Core traffic depends on Mongo + realtime, while Stripe degrades independently."""
     settings = get_settings()
     database_ready = database.status == "connected"
     realtime_required = bool(str(settings.realtime_redis_url or "").strip())
     realtime_ready = not realtime_required or realtime_event_service.transport.available
     payments_ready = stripe_runtime_ready()
-    ready = database_ready and realtime_ready and payments_ready
+    core_ready = database_ready and realtime_ready
     payload = {
-        "success": ready,
+        "success": core_ready,
         "data": {
             "service": "LetsGoRide API",
-            "status": "ready" if ready else "degraded",
+            "status": "ready" if core_ready else "degraded",
             "database_status": database.status,
             "realtime_status": "ready" if realtime_ready else "degraded",
             "payments_status": "ready" if payments_ready else "degraded",
         },
     }
-    return JSONResponse(status_code=200 if ready else 503, content=payload)
+    return JSONResponse(status_code=200 if core_ready else 503, content=payload)
 
 
 @router.get("/email-config")
