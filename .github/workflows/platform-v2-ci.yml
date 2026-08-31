@@ -135,8 +135,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install runtime and test dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install 'pytest>=8,<9' 'pytest-asyncio>=0.24,<1'
 
       - name: Compile Python package
         run: python -m compileall -q app scripts tests
@@ -149,7 +151,7 @@ jobs:
       - name: Platform V2 service tests
         env:
           ENABLE_DEMO_SEED: "false"
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        run: python -m pytest tests -q
 
   production-smoke:
     name: Production API and legal surface smoke
@@ -180,6 +182,8 @@ jobs:
           assert ready.get('success') is True, ready
           assert ready.get('data', {}).get('status') == 'ready', ready
           assert ready.get('data', {}).get('database_status') == 'connected', ready
+          assert ready.get('data', {}).get('realtime_status') == 'ready', ready
+          assert ready.get('data', {}).get('payments_status') == 'ready', ready
           PY
 
       - name: Verify production Resend and Google routing configuration
