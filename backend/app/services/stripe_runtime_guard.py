@@ -15,6 +15,18 @@ _verified_account_id: str | None = None
 _verify_lock = asyncio.Lock()
 
 
+class StripeRuntimeError(RuntimeError):
+    pass
+
+
+class StripeAccountConfigurationError(StripeRuntimeError):
+    """Unsafe permanent configuration: core production must refuse to start."""
+
+
+class StripeVerificationUnavailable(StripeRuntimeError):
+    """Temporary provider/network degradation: money paths close, core app stays alive."""
+
+
 def _validate_local_config(settings: Any) -> None:
     if not settings.stripe_configured:
         return
@@ -22,9 +34,9 @@ def _validate_local_config(settings: Any) -> None:
         return
     expected_account_id = str(settings.stripe_account_id or "").strip()
     if not expected_account_id.startswith("acct_"):
-        raise RuntimeError("Production Stripe account identity is not configured.")
+        raise StripeAccountConfigurationError("Production Stripe account identity is not configured.")
     if str(settings.stripe_currency or "").strip().lower() != "usd":
-        raise RuntimeError("Production Stripe currency must be USD.")
+        raise StripeAccountConfigurationError("Production Stripe currency must be USD.")
 
 
 def stripe_runtime_ready() -> bool:
@@ -38,11 +50,11 @@ def stripe_runtime_ready() -> bool:
 
 
 async def ensure_stripe_runtime_binding() -> str | None:
-    """Fail closed when production Stripe credentials do not belong to the approved account.
+    """Prove the production live secret belongs to the approved LetsGoRide account.
 
-    The result is cached for the lifetime of the process because Render environment
-    variables are immutable inside a running process. A new secret therefore always
-    requires a restart and a fresh account-identity check.
+    Unsafe identity/config mismatches are permanent startup errors. A temporary
+    Stripe/network outage only disables payment operations until verification can
+    succeed; it must not take cash rides, Courier, Admin, or the whole API offline.
     """
 
     global _verified_account_id
@@ -75,21 +87,25 @@ async def ensure_stripe_runtime_binding() -> str | None:
             response = await asyncio.to_thread(fetch_account)
         except requests.RequestException as exc:
             logger.error("stripe_account_verification_unavailable error_type=%s", exc.__class__.__name__)
-            raise RuntimeError("Stripe account verification is temporarily unavailable.") from exc
+            raise StripeVerificationUnavailable("Stripe account verification is temporarily unavailable.") from exc
 
         try:
             payload = response.json()
         except ValueError as exc:
-            raise RuntimeError("Stripe account verification returned an invalid response.") from exc
+            raise StripeVerificationUnavailable("Stripe account verification returned an invalid response.") from exc
+
+        if response.status_code >= 500:
+            logger.error("stripe_account_verification_provider_error status=%s", response.status_code)
+            raise StripeVerificationUnavailable("Stripe account verification is temporarily unavailable.")
 
         if response.status_code >= 400:
             error = payload.get("error") if isinstance(payload, dict) else None
-            logger.error(
-                "stripe_account_verification_failed status=%s type=%s",
+            logger.critical(
+                "stripe_account_verification_rejected status=%s type=%s",
                 response.status_code,
                 str((error or {}).get("type") or "unknown")[:80],
             )
-            raise RuntimeError("Stripe account verification failed.")
+            raise StripeAccountConfigurationError("Stripe rejected the configured production credentials.")
 
         actual_account_id = str(payload.get("id") or "") if isinstance(payload, dict) else ""
         if actual_account_id != expected_account_id:
@@ -98,10 +114,10 @@ async def ensure_stripe_runtime_binding() -> str | None:
                 expected_account_id,
                 actual_account_id or "missing",
             )
-            raise RuntimeError("Configured Stripe secret does not belong to the approved LetsGoRide account.")
+            raise StripeAccountConfigurationError("Configured Stripe secret does not belong to the approved LetsGoRide account.")
 
         if settings.is_production and payload.get("charges_enabled") is not True:
-            raise RuntimeError("LetsGoRide production Stripe charges are not enabled.")
+            raise StripeAccountConfigurationError("LetsGoRide production Stripe charges are not enabled.")
 
         _verified_account_id = actual_account_id
         logger.info("stripe_account_verified account_id=%s currency=%s", actual_account_id, str(settings.stripe_currency).lower())
