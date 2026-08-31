@@ -140,7 +140,7 @@ export default function CustomerHomeScreen() {
       return;
     }
     if (!activeHailing || !activeHailingTrip) {
-      router.push("/(customer)/hail" as never);
+      router.push("/(shared)/location-picker?kind=dropoff&flow=hailing&focus=1" as never);
       return;
     }
     if (activeHailingTrip.status === "SEARCHING") {
