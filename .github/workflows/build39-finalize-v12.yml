@@ -1,0 +1,160 @@
+name: Build 39 Guarded Finalization V12
+
+on:
+  push:
+    branches:
+      - final/build39-cleanup
+    paths:
+      - .github/workflows/build39-finalize-v12.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: final/build39-cleanup
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Apply complete Build39 patch set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/scripts/build39_patch_fix.py
+          python .github/scripts/build39_final_cleanup.py
+          python .github/scripts/build39_additional_fixes.py
+          python .github/scripts/build39_integrity_fix.py
+          python .github/scripts/build39_mobile_type_fix.py
+          python .github/scripts/build39_jest_fix.py
+          python .github/scripts/build39_residual_test_fix.py
+
+      - name: Install exact validated Comfort asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e 24038a8900d83209dd01ba938aab7d560b0c122b^{commit}
+          git show 24038a8900d83209dd01ba938aab7d560b0c122b:mobile/assets/images/hailing/ride-comfort.png > mobile/assets/images/hailing/ride-comfort.png
+          node <<'NODE'
+          const fs = require('fs');
+          const buf = fs.readFileSync('mobile/assets/images/hailing/ride-comfort.png');
+          const sig = Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);
+          if (!buf.subarray(0, 8).equals(sig)) throw new Error('Comfort asset is not PNG');
+          if (buf.readUInt32BE(16) !== 320 || buf.readUInt32BE(20) !== 180) throw new Error('Comfort asset dimensions changed');
+          if (!buf.includes(Buffer.from('tRNS'))) throw new Error('Comfort asset is not transparent');
+          if (buf.length > 100000) throw new Error('Comfort asset is too large');
+          NODE
+
+      - name: Remove temporary Build39 machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 9ac86c2b8cfc097ddac97a0c7e5a3e6a159fcc0e:.github/workflows/admin-control-center-finalize-once.yml > .github/workflows/admin-control-center-finalize-once.yml
+          rm -f .github/scripts/build39_final_cleanup.py
+          rm -f .github/scripts/build39_patch_fix.py
+          rm -f .github/scripts/build39_additional_fixes.py
+          rm -f .github/scripts/build39_integrity_fix.py
+          rm -f .github/scripts/build39_mobile_type_fix.py
+          rm -f .github/scripts/build39_jest_fix.py
+          rm -f .github/scripts/build39_residual_test_fix.py
+          rm -f .github/diagnostics/build39-v8-mobile-error.log .github/diagnostics/build39-v8-mobile-green.log
+          rmdir .github/diagnostics 2>/dev/null || true
+          rm -f .github/workflows/build39-finalize-v2.yml
+          rm -f .github/workflows/build39-finalize-v3.yml
+          rm -f .github/workflows/build39-finalize-v4.yml
+          rm -f .github/workflows/build39-finalize-v5.yml
+          rm -f .github/workflows/build39-finalize-v6.yml
+          rm -f .github/workflows/build39-finalize-v7.yml
+          rm -f .github/workflows/build39-mobile-diagnostic-v8.yml
+          rm -f .github/workflows/build39-finalize-v9.yml
+          rm -f .github/workflows/build39-finalize-v10.yml
+          rm -f .github/workflows/build39-finalize-v11.yml
+          rm -f .github/workflows/build39-finalize-v12.yml
+          git diff --check
+          leaked="$(find .github -type f \( -name 'build39_*.py' -o -name 'build39-finalize-*.yml' -o -name 'build39-mobile-diagnostic-*.yml' -o -path '.github/diagnostics/build39-*' \) -print -quit 2>/dev/null || true)"
+          if [ -n "$leaked" ]; then
+            echo "Temporary Build39 file remains in candidate workspace: $leaked" >&2
+            exit 1
+          fi
+
+      - name: Validate backend completely
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q -r backend/requirements.txt
+          python -m pip install --disable-pip-version-check -q 'pytest>=8,<9' 'pytest-asyncio>=0.24,<1'
+          python -m compileall -q backend/app backend/scripts backend/tests
+          cd backend
+          ENABLE_DEMO_SEED=false python -c "from app.main import app; assert app.title == 'LetsGoRide API'"
+          ENABLE_DEMO_SEED=false python -m pytest tests -q
+
+      - name: Install mobile dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm ci --no-audit --no-fund
+
+      - name: Reject critical mobile dependency vulnerabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm audit --audit-level=critical
+
+      - name: Typecheck mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm run typecheck
+
+      - name: Run complete mobile Jest suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm test -- --runInBand
+
+      - name: Verify Android production configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm run verify:android
+
+      - name: Commit only the fully green application tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "deonvault-crypto"
+          git config user.email "deonvault@gmail.com"
+          git add -A
+          git diff --cached --check
+          test -n "$(git diff --cached --name-only)"
+          leaked_staged="$(git diff --cached --diff-filter=ACMR --name-only | grep -E '^\.github/(scripts/build39_|diagnostics/build39-|workflows/build39-(finalize|mobile-diagnostic))' || true)"
+          if [ -n "$leaked_staged" ]; then
+            echo "Temporary Build39 machinery would remain in candidate tree:" >&2
+            echo "$leaked_staged" >&2
+            exit 1
+          fi
+          git commit -m "Build39: finish production cleanup"
+          git push origin HEAD:final/build39-cleanup
