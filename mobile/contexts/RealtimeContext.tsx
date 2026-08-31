@@ -2,6 +2,7 @@ import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, 
 import { AppState } from "react-native";
 import { usePathname } from "expo-router";
 
+import { flushCriticalMutationOutbox } from "../services/criticalMutationOutbox";
 import { realtimeService } from "../services/realtimeService";
 import { onSessionCleared } from "../services/sessionLifecycle";
 import { RealtimeConnectionState, RealtimeEventEnvelope } from "../types/realtime.types";
@@ -35,6 +36,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => realtimeService.onStateChange(setConnectionState), []);
   useEffect(() => realtimeService.onReconciliationNeeded(() => {
     setReconciliationRevision((current) => current + 1);
+    void flushCriticalMutationOutbox();
   }), []);
   useEffect(() => realtimeService.onAuthenticationFailure(() => {
     void invalidateSession();
@@ -62,6 +64,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         realtimeService.suspend();
       } else if (resumed && sessionKeyRef.current) {
         void realtimeService.resume();
+        void flushCriticalMutationOutbox();
       }
     });
     return () => subscription.remove();
