@@ -21,7 +21,7 @@ from app.services.ride_service import seed_demo_rides
 from app.services.staging_courier_dispatch_smoke_service import run_staging_courier_dispatch_smoke_test
 from app.services.staging_routing_smoke_service import run_staging_routing_smoke_test
 from app.services.stripe_reconciliation_service import stripe_payment_reconciliation_sweeper_bounded
-from app.services.stripe_runtime_guard import ensure_stripe_runtime_binding
+from app.services.stripe_runtime_guard import StripeVerificationUnavailable, ensure_stripe_runtime_binding
 from app.services.worker_finance_index_service import ensure_worker_finance_indexes
 from app.utils import api_success
 
@@ -115,9 +115,13 @@ async def on_startup():
     await realtime_event_service.start()
     await ensure_admin_seed_user()
     if settings.stripe_configured:
-        # Production must prove that the configured live secret belongs to the
-        # approved LetsGoRide Stripe account before any money-moving worker starts.
-        await ensure_stripe_runtime_binding()
+        # Wrong live-account identity is a fatal configuration error and still
+        # bubbles out. A temporary Stripe outage only degrades payment features;
+        # cash Ride Now, Courier and Admin must remain available.
+        try:
+            await ensure_stripe_runtime_binding()
+        except StripeVerificationUnavailable as exc:
+            logger.error("stripe_runtime_degraded_on_startup error_type=%s", exc.__class__.__name__)
     driver_settlement_stop_event = asyncio.Event()
     driver_settlement_task = asyncio.create_task(driver_settlement_sweeper(driver_settlement_stop_event))
     if settings.enable_demo_seed:
