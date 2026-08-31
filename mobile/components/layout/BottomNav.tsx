@@ -62,16 +62,24 @@ function isItemActive(pathname: string, item: NavItem) {
   return item.aliases?.some((alias) => pathname === alias || pathname.endsWith(alias)) ?? false;
 }
 
-export function BottomNav({ role }: { role: NavRole }) {
+export function BottomNav({
+  role,
+  activeLabel,
+  bottomOffset = 10,
+}: {
+  role: NavRole;
+  activeLabel?: string;
+  bottomOffset?: number;
+}) {
   const router = useRouter();
   const pathname = useSafePathname();
   const items = role === "driver" ? driverItems : role === "courier" ? courierItems : role === "merchant" ? merchantItems : customerItems;
 
   return (
-    <View pointerEvents="box-none" style={styles.positioner}>
+    <View pointerEvents="box-none" style={[styles.positioner, { bottom: bottomOffset }]}>
       <View style={styles.wrap}>
         {items.map((item) => {
-          const active = isItemActive(pathname, item);
+          const active = activeLabel ? item.label === activeLabel : isItemActive(pathname, item);
           return (
             <Pressable
               key={item.label}
@@ -79,7 +87,10 @@ export function BottomNav({ role }: { role: NavRole }) {
               accessibilityState={{ selected: active }}
               accessibilityLabel={item.label}
               hitSlop={4}
-              onPress={() => { if (!active) router.replace(item.href as never); }}
+              onPress={() => {
+                if (activeLabel && active) return;
+                if (!active) router.replace(item.href as never);
+              }}
               style={({ pressed }) => [styles.item, active && styles.activeItem, pressed && styles.pressedItem]}
             >
               <MaterialCommunityIcons name={(active && item.activeIcon ? item.activeIcon : item.icon) as never} size={22} color={active ? v2Theme.colors.brand : v2Theme.colors.inkSecondary} />
@@ -93,7 +104,7 @@ export function BottomNav({ role }: { role: NavRole }) {
 }
 
 const styles = StyleSheet.create({
-  positioner: { position: "absolute", left: v2Theme.spacing.page, right: v2Theme.spacing.page, bottom: 10 },
+  positioner: { position: "absolute", left: v2Theme.spacing.page, right: v2Theme.spacing.page },
   wrap: { height: v2Theme.control.navHeight, borderRadius: v2Theme.radius.xxl, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: "rgba(255,255,255,0.98)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 7, paddingVertical: 7, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.1, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
   item: { flex: 1, minHeight: 56, borderRadius: 21, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 4 },
   activeItem: { backgroundColor: v2Theme.colors.brandSoft },
