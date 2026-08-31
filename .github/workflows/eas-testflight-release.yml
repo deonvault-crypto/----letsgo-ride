@@ -2,6 +2,9 @@ name: EAS TestFlight Release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'testflight/production-2.0.2'
 
 permissions:
   contents: read
@@ -31,12 +34,22 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      - name: Verify exact production release trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF_NAME}" != "testflight/production-2.0.2" ]; then
+            echo "Unexpected TestFlight push trigger: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          git rev-parse HEAD
+
       - name: Install dependencies
         run: npm ci
 
       - name: Verify release API target and Android policy
         run: |
-          node -e "const eas=require('./eas.json'); if(eas.build.testflight.env.EXPO_PUBLIC_API_BASE_URL !== 'https://letsgoride-v2-production.onrender.com') process.exit(1)"
+          node -e "const eas=require('./eas.json'); const p='https://letsgoride-v2-production.onrender.com'; if(eas.build.testflight.env.EXPO_PUBLIC_API_BASE_URL !== p || eas.build.production.env.EXPO_PUBLIC_API_BASE_URL !== p) process.exit(1)"
           npm run typecheck
           npm run verify:android
 
