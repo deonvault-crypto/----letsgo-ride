@@ -9,6 +9,7 @@ on:
       - scripts/align_weekly_settlement_validation.py
       - scripts/align_stripe_hailing_test_rollout_flag.py
       - scripts/align_admin_settlement_navigation.py
+      - scripts/align_weekly_settlement_mobile_contracts.py
       - .github/workflows/weekly-driver-settlement-apply-once.yml
   workflow_dispatch:
 
@@ -51,6 +52,7 @@ jobs:
           python scripts/align_weekly_settlement_validation.py
           python scripts/align_stripe_hailing_test_rollout_flag.py
           python scripts/align_admin_settlement_navigation.py
+          python scripts/align_weekly_settlement_mobile_contracts.py
 
       - name: Setup Python
         uses: actions/setup-python@v5
