@@ -37,7 +37,10 @@ describe("startup performance architecture", () => {
     expect(rides).not.toContain("useLiveRefresh");
     expect(home).toContain("HailingMapBackdrop");
     expect(home).toContain('title: "Where to?"');
-    expect(home).toContain("Checking available trips…");
+    expect(home).toContain('{mode !== "ride" ? (');
+    expect(home).toContain('router.push("/(shared)/services" as never)');
+    expect(home).not.toContain('useRides');
+    expect(home).not.toContain("Checking available trips…");
     expect(home).not.toContain("upcoming-rides-skeleton");
     expect(home).not.toContain("Finding rides...");
     expect(home).not.toContain("ScrollView");
