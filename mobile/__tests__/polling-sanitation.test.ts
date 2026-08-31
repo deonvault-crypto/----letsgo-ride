@@ -33,7 +33,7 @@ describe("Phase 8 recurring polling sanitation", () => {
   it("uses mutation responses locally for support, reports, and Admin collections", () => {
     expect(read("app/(shared)/support.tsx")).toContain("const created = await sendSupportMessage");
     expect(read("app/(shared)/report.tsx")).toContain("const created = await createReport");
-    const admin = read("app/(admin)/dashboard.tsx");
+    const admin = read("components/admin/AdminControlCenter.tsx");
     expect(admin).not.toContain(".then(load)");
     expect(admin).toContain("setSupport((current)");
     expect(admin).toContain("setReports((current)");

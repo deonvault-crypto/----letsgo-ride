@@ -195,6 +195,30 @@ class Database:
             [("user_id", 1), ("updated_at", -1)],
             name="ride_requests_by_passenger",
         )
+        await self.db["drivers"].create_index(
+            [("verification_status", 1), ("updated_at", -1)],
+            name="admin_driver_verification_queue",
+        )
+        await self.db["rides"].create_index(
+            [("status", 1), ("is_demo", 1), ("updated_at", -1)],
+            name="admin_rides_by_status",
+        )
+        await self.db["ride_requests"].create_index(
+            [("status", 1), ("updated_at", -1)],
+            name="admin_requests_by_status",
+        )
+        await self.db["support_messages"].create_index(
+            [("status", 1), ("updated_at", -1)],
+            name="admin_support_by_status",
+        )
+        await self.db["reports"].create_index(
+            [("status", 1), ("updated_at", -1)],
+            name="admin_reports_by_status",
+        )
+        await self.db["app_notifications"].create_index(
+            [("user_id", 1), ("read", 1), ("created_at", -1)],
+            name="admin_notifications_unread",
+        )
         await self.db["hailing_cities"].create_index(
             [("slug", 1)],
             name="unique_hailing_city_slug",

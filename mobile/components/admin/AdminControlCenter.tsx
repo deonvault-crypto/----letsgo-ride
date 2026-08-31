@@ -318,8 +318,9 @@ export default function AdminControlCenter() {
             <SupportList
               items={searchedSupport}
               onStatus={async (id, status) => {
-                await updateAdminSupportStatus(id, status);
-                await refreshAfterMutation();
+                const updated = await updateAdminSupportStatus(id, status);
+                setSupport((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+                await loadCore();
               }}
             />
           ) : null}
@@ -328,8 +329,9 @@ export default function AdminControlCenter() {
             <SafetyList
               items={searchedReports}
               onStatus={async (id, status) => {
-                await updateAdminReportStatus(id, status);
-                await refreshAfterMutation();
+                const updated = await updateAdminReportStatus(id, status);
+                setReports((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+                await loadCore();
               }}
             />
           ) : null}
@@ -343,7 +345,8 @@ export default function AdminControlCenter() {
                 reasonLabel: "Reason for cancellation",
                 confirmLabel: "Cancel booking",
                 onConfirm: async (actionReason) => {
-                  await updateAdminRequestStatus(request.id, "cancelled_by_admin", actionReason);
+                  const updated = await updateAdminRequestStatus(request.id, "cancelled_by_admin", actionReason);
+                  setRequests((current) => current.map((item) => (item.id === updated.id ? updated : item)));
                 },
               })}
             />
@@ -358,12 +361,14 @@ export default function AdminControlCenter() {
                 reasonLabel: "Reason for suspension",
                 confirmLabel: "Suspend user",
                 onConfirm: async (actionReason) => {
-                  await updateAdminUserStatus(user.id, "suspended", actionReason);
+                  const updated = await updateAdminUserStatus(user.id, "suspended", actionReason);
+                  setUsers((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
                 },
               })}
               onReactivate={async (user) => {
-                await updateAdminUserStatus(user.id, "active");
-                await refreshAfterMutation();
+                const updated = await updateAdminUserStatus(user.id, "active");
+                setUsers((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+                await loadCore();
               }}
             />
           ) : null}
@@ -372,12 +377,14 @@ export default function AdminControlCenter() {
             <RideList
               items={searchedRides}
               onClose={async (ride) => {
-                await updateAdminRideStatus(ride.id, "closed");
-                await refreshAfterMutation();
+                const updated = await updateAdminRideStatus(ride.id, "closed");
+                setRides((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+                await loadCore();
               }}
               onReopen={async (ride) => {
-                await updateAdminRideStatus(ride.id, "open");
-                await refreshAfterMutation();
+                const updated = await updateAdminRideStatus(ride.id, "open");
+                setRides((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+                await loadCore();
               }}
               onCancel={(ride) => setReasonAction({
                 title: "Cancel ride",
@@ -385,7 +392,8 @@ export default function AdminControlCenter() {
                 reasonLabel: "Reason for cancellation",
                 confirmLabel: "Cancel ride",
                 onConfirm: async (actionReason) => {
-                  await updateAdminRideStatus(ride.id, "cancelled", actionReason);
+                  const updated = await updateAdminRideStatus(ride.id, "cancelled", actionReason);
+                  setRides((current) => current.map((item) => (item.id === updated.id ? updated : item)));
                 },
               })}
             />
