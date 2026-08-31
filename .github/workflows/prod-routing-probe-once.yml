@@ -1,0 +1,27 @@
+name: Production Routing Probe Once
+
+on:
+  push:
+    branches:
+      - automation/prod-routing-probe-20260831
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe production reverse geocoding
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' \
+            --request POST 'https://letsgoride-v2-production.onrender.com/routing/reverse-geocode' \
+            --header 'Content-Type: application/json' \
+            --data '{"location":{"latitude":-17.824858,"longitude":31.053028}}')"
+          cat "$response_file"
+          echo
+          echo "HTTP_STATUS=$status"
+          test "$status" = "200"
