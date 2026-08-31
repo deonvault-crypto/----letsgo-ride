@@ -16,6 +16,16 @@ describe("Alpha M fluid canvas customer home", () => {
     expect(home).toContain('title: "Send a package"');
   });
 
+  it("morphs service state with restrained motion and respects reduced motion", () => {
+    expect(home).toContain("AccessibilityInfo.isReduceMotionEnabled");
+    expect(home).toContain('AccessibilityInfo.addEventListener("reduceMotionChanged"');
+    expect(home).toContain("Animated.parallel");
+    expect(home).toContain("duration: 170");
+    expect(home).toContain("duration: 260");
+    expect(home).toContain("opacity: moodOpacity");
+    expect(home).toContain("opacity: contentOpacity");
+  });
+
   it("preserves safe-area top controls and the protected notification route", () => {
     expect(home).toContain("top: insets.top + 8");
     expect(home).toContain('router.push("/(shared)/notifications"');
