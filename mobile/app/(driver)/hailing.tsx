@@ -169,7 +169,7 @@ export default function DriverHailingScreen() {
             <View style={styles.metrics}>
               <Metric label="Today" value={String(status?.stats.rides_today || 0)} />
               <Metric label="Gross" value={`$${(status?.stats.gross_fares || 0).toFixed(2)}`} />
-              <Metric label="Est. net" value={`$${(status?.stats.estimated_net || 0).toFixed(2)}`} />
+              <Metric label="Earnings" value={`$${(status?.stats.estimated_net || 0).toFixed(2)}`} />
             </View>
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => void goOffline()} style={({ pressed }) => [styles.offlineButton, busy && styles.disabled, pressed && styles.pressed]}>
               <Text style={styles.offlineText}>{busy ? "Going offline…" : "Go offline"}</Text>

@@ -4,10 +4,12 @@ on:
   pull_request:
     branches:
       - main
+      - platform-v2-m1-m6
   push:
     branches:
       - main
       - platform-v2-m1-m6
+      - 'release/**'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +17,7 @@ permissions:
 
 concurrency:
   # Keep push and PR runs in separate lanes. The platform PR's jobs are skipped
-  # below, while the exact staging-branch push remains the authoritative run.
+  # below, while exact integration/release branch pushes remain authoritative.
   group: platform-v2-ci-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -43,6 +45,50 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Classify npm audit findings without mutating dependencies
+        shell: bash
+        run: |
+          set -uo pipefail
+          npm audit --json > /tmp/npm-audit-full.json || true
+          npm audit --omit=dev --json > /tmp/npm-audit-prod.json || true
+          node <<'NODE'
+          const fs = require('fs');
+
+          const severityRank = { critical: 0, high: 1, moderate: 2, low: 3, info: 4 };
+
+          function summarize(path, label) {
+            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const metadata = report.metadata?.vulnerabilities || {};
+            const vulnerabilities = report.vulnerabilities || {};
+            console.log(`=== NPM AUDIT ${label} SUMMARY ===`);
+            console.log(JSON.stringify(metadata));
+
+            const rows = Object.entries(vulnerabilities)
+              .map(([name, item]) => ({
+                name,
+                severity: item.severity,
+                direct: Boolean(item.isDirect),
+                range: item.range,
+                via: (item.via || []).map((entry) => typeof entry === 'string' ? entry : entry.name),
+                effects: item.effects || [],
+                fixAvailable: item.fixAvailable,
+              }))
+              .sort((a, b) => (severityRank[a.severity] ?? 99) - (severityRank[b.severity] ?? 99) || a.name.localeCompare(b.name));
+
+            for (const row of rows) {
+              console.log(`AUDIT_ITEM ${label} ${JSON.stringify(row)}`);
+            }
+            return Number(metadata.critical || 0);
+          }
+
+          const fullCritical = summarize('/tmp/npm-audit-full.json', 'FULL');
+          const prodCritical = summarize('/tmp/npm-audit-prod.json', 'PRODUCTION');
+          if (fullCritical > 0 || prodCritical > 0) {
+            console.error('Critical npm vulnerability detected; failing closed.');
+            process.exit(1);
+          }
+          NODE
 
       - name: Typecheck
         run: npm run typecheck
@@ -89,8 +135,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install runtime and test dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install 'pytest>=8,<9' 'pytest-asyncio>=0.24,<1'
 
       - name: Compile Python package
         run: python -m compileall -q app scripts tests
@@ -103,7 +151,7 @@ jobs:
       - name: Platform V2 service tests
         env:
           ENABLE_DEMO_SEED: "false"
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        run: python -m pytest tests -q
 
   production-smoke:
     name: Production API and legal surface smoke
@@ -134,6 +182,8 @@ jobs:
           assert ready.get('success') is True, ready
           assert ready.get('data', {}).get('status') == 'ready', ready
           assert ready.get('data', {}).get('database_status') == 'connected', ready
+          assert ready.get('data', {}).get('realtime_status') == 'ready', ready
+          assert ready.get('data', {}).get('payments_status') == 'ready', ready
           PY
 
       - name: Verify production Resend and Google routing configuration

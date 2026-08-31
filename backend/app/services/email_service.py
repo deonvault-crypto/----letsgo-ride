@@ -288,3 +288,38 @@ def branded_notice_email(title: str, preheader: str, message: str, security_note
     </table>
   </body>
 </html>"""
+
+
+async def send_driver_weekly_statement_email(
+    to_email: str,
+    *,
+    amount_usd: float,
+    period_start: str,
+    period_end: str,
+    due_at: str,
+    overdue: bool = False,
+) -> bool:
+    amount = f"${float(amount_usd or 0):.2f}"
+    title = "LetsGoRide weekly balance overdue" if overdue else "Your LetsGoRide weekly statement is ready"
+    message = (
+        f"Your LetsGoRide service fee for the completed week is {amount}. "
+        + ("Settle the balance to receive new Ride Now requests again." if overdue else "Please settle it before the deadline to keep receiving Ride Now requests.")
+    )
+    text = (
+        f"{title}\n\n{message}\n\n"
+        f"Statement period: {period_start} to {period_end}\n"
+        f"Amount due: {amount}\nDue: {due_at}\n\n"
+        "Open LetsGoRide Wallet and tap Settle balance.\n\nLetsGoRide Driver Support"
+    )
+    html = branded_notice_email(
+        title=title,
+        preheader=message,
+        message=message,
+        security_note=f"Statement period: {period_start} to {period_end}. Amount due: {amount}. Due: {due_at}.",
+        footer="LetsGoRide Driver Support",
+    )
+    try:
+        return await asyncio.to_thread(_send_resend_email, to_email, title, html, text, "send_driver_weekly_statement_email")
+    except Exception:
+        logger.warning("Driver weekly statement email failed %s", _resend_log_context("send_driver_weekly_statement_email", message="unexpected email service error"))
+        return False

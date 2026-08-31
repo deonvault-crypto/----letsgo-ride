@@ -1,0 +1,60 @@
+name: Build 34 Recovery Patch
+
+on:
+  push:
+    branches:
+      - release/2.0.2-build34-recovery
+    paths:
+      - .github/workflows/build34-recovery-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/2.0.2-build34-recovery
+          fetch-depth: 0
+
+      - name: Verify approved release lineage
+        run: git merge-base --is-ancestor 8c6c71123e126111757268c009e45cc45aba5328 HEAD
+
+      - name: Apply targeted recovery patch
+        run: python .github/scripts/build34_recovery_patch.py
+
+      - name: Normalize React Native AppState API
+        run: sed -i 's/AppState.current !== "active"/AppState.currentState !== "active"/' mobile/components/courier/CourierBackgroundLocationPrompt.tsx
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: TypeScript gate
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Mobile regression suite
+        working-directory: mobile
+        run: npm test -- --runInBand
+
+      - name: Android release config gate
+        working-directory: mobile
+        run: npm run verify:android
+
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
+      - name: Commit green recovery candidate
+        run: |
+          set -euo pipefail
+          git config user.name "LetsGoRide Release Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add mobile
+          git diff --cached --check
+          git commit -m "Harden active-job recovery and courier background tracking"
+          git push origin HEAD:release/2.0.2-build34-recovery

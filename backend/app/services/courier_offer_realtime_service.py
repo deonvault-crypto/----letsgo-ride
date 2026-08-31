@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Dict, List
 
 from app.database import database
 from app.models.event import RealtimeAudience
 from app.services.courier_delivery_realtime_service import delivery_realtime_version
+from app.services.courier_presence_service import (
+    COURIER_GEO_CANDIDATE_LIMIT,
+    COURIER_OFFER_RADIUS_METERS,
+    courier_presence_cutoff,
+)
 from app.services.courier_state_service import ACTIVE_COURIER_STATUSES
 from app.services.event_service import realtime_event_service
 
@@ -51,12 +57,117 @@ def safe_courier_offer(delivery: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def eligible_courier_user_ids(*, sender_user_id: str | None = None) -> set[str]:
-    """Resolve offer recipients with three set-based reads, never per-Courier queries."""
+def _lat_lon(location: Any) -> tuple[float, float] | None:
+    if not isinstance(location, dict):
+        return None
+    if location.get("type") == "Point":
+        coordinates = location.get("coordinates") or []
+        if len(coordinates) != 2:
+            return None
+        longitude, latitude = coordinates
+    else:
+        latitude = location.get("latitude")
+        longitude = location.get("longitude")
+    if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
+        return None
+    return float(latitude), float(longitude)
+
+
+def _distance_meters(a: Any, b: Any) -> float | None:
+    first = _lat_lon(a)
+    second = _lat_lon(b)
+    if not first or not second:
+        return None
+    lat1, lon1 = first
+    lat2, lon2 = second
+    radians = math.pi / 180.0
+    p1 = lat1 * radians
+    p2 = lat2 * radians
+    dlat = (lat2 - lat1) * radians
+    dlon = (lon2 - lon1) * radians
+    h = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2) ** 2
+    return 6_371_000 * 2 * math.atan2(math.sqrt(h), math.sqrt(max(0.0, 1 - h)))
+
+
+def _legacy_presence(profile: Dict[str, Any]) -> bool:
+    """Build 35 and older profiles predate Courier presence; keep a bounded migration lane."""
+    return not profile.get("last_seen_at") and not _lat_lon(profile.get("location"))
+
+
+async def _nearby_online_profiles(pickup_location: Dict[str, Any] | None) -> List[Dict[str, Any]]:
+    pickup = _lat_lon(pickup_location)
+    cutoff = courier_presence_cutoff()
+
+    if database.db is not None and pickup:
+        latitude, longitude = pickup
+        cursor = database.db["courier_profiles"].find(
+            {
+                "status": "APPROVED",
+                "online": True,
+                "last_seen_at": {"$gte": cutoff},
+                "location": {
+                    "$near": {
+                        "$geometry": {"type": "Point", "coordinates": [longitude, latitude]},
+                        "$maxDistance": COURIER_OFFER_RADIUS_METERS,
+                    }
+                },
+            }
+        ).limit(COURIER_GEO_CANDIDATE_LIMIT)
+        nearby = [database._clean(item) async for item in cursor]
+        if len(nearby) >= COURIER_GEO_CANDIDATE_LIMIT:
+            return nearby
+        # Compatibility is deliberately limited to profiles that have never
+        # published presence. Once a client starts publishing, stale/far presence
+        # fails closed rather than falling back to city-wide broadcasts.
+        legacy = await database.find_many(
+            "courier_profiles",
+            {
+                "status": "APPROVED",
+                "online": True,
+                "last_seen_at": {"$in": [None, ""]},
+            },
+            limit=COURIER_GEO_CANDIDATE_LIMIT,
+        )
+        seen = {str(item.get("user_id") or "") for item in nearby}
+        nearby.extend(
+            item for item in legacy
+            if _legacy_presence(item) and str(item.get("user_id") or "") not in seen
+        )
+        return nearby[:COURIER_GEO_CANDIDATE_LIMIT]
+
     profiles = await database.find_many(
         "courier_profiles",
         {"status": "APPROVED", "online": True},
+        limit=COURIER_GEO_CANDIDATE_LIMIT * 3,
     )
+    if not pickup:
+        return profiles[:COURIER_GEO_CANDIDATE_LIMIT]
+
+    nearby: List[tuple[float, Dict[str, Any]]] = []
+    legacy: List[Dict[str, Any]] = []
+    for profile in profiles:
+        if _legacy_presence(profile):
+            legacy.append(profile)
+            continue
+        if str(profile.get("last_seen_at") or "") < cutoff:
+            continue
+        distance = _distance_meters(profile.get("location"), pickup_location)
+        if distance is None or distance > COURIER_OFFER_RADIUS_METERS:
+            continue
+        nearby.append((distance, profile))
+    nearby.sort(key=lambda item: item[0])
+    result = [profile for _, profile in nearby]
+    result.extend(legacy[: max(0, COURIER_GEO_CANDIDATE_LIMIT - len(result))])
+    return result[:COURIER_GEO_CANDIDATE_LIMIT]
+
+
+async def eligible_courier_user_ids(
+    *,
+    pickup_location: Dict[str, Any] | None = None,
+    sender_user_id: str | None = None,
+) -> set[str]:
+    """Resolve nearby/fresh Couriers while preserving a bounded pre-presence migration lane."""
+    profiles = await _nearby_online_profiles(pickup_location)
     profile_user_ids = {
         str(profile.get("user_id") or "")
         for profile in profiles
@@ -95,16 +206,34 @@ async def list_offer_deliveries_for_courier(
         raise PermissionError("Approved courier verification is required to view delivery offers.")
     if user.get("role") != "courier" or not profile.get("online") or has_active_delivery:
         return []
+
+    profile_location = _lat_lon(profile.get("location"))
+    legacy_profile = _legacy_presence(profile)
+    if not legacy_profile and (not profile_location or str(profile.get("last_seen_at") or "") < courier_presence_cutoff()):
+        return []
+
     deliveries = await database.find_many(
         "courier_deliveries",
         {"status": "MATCHING", "courier_user_id": None, "quote_status": "READY"},
+        sort=[("created_at", 1)],
+        limit=120,
     )
     user_id = str(user.get("id") or "")
-    return [
-        safe_courier_offer(delivery)
-        for delivery in sorted(deliveries, key=lambda item: str(item.get("created_at") or ""))
+    eligible = [
+        delivery for delivery in deliveries
         if delivery_is_offer_eligible(delivery) and delivery.get("sender_user_id") != user_id
     ]
+    if legacy_profile:
+        return [safe_courier_offer(delivery) for delivery in eligible[:COURIER_GEO_CANDIDATE_LIMIT]]
+
+    nearby: List[tuple[float, Dict[str, Any]]] = []
+    for delivery in eligible:
+        distance = _distance_meters(profile.get("location"), delivery.get("pickup_location"))
+        if distance is None or distance > COURIER_OFFER_RADIUS_METERS:
+            continue
+        nearby.append((distance, delivery))
+    nearby.sort(key=lambda item: (item[0], str(item[1].get("created_at") or "")))
+    return [safe_courier_offer(delivery) for _, delivery in nearby[:COURIER_GEO_CANDIDATE_LIMIT]]
 
 
 def _offer_visible_state(delivery: Dict[str, Any]) -> Dict[str, Any]:
@@ -136,6 +265,7 @@ async def publish_courier_offer_transition(
         return None
     try:
         recipients = await eligible_courier_user_ids(
+            pickup_location=delivery.get("pickup_location"),
             sender_user_id=str(delivery.get("sender_user_id") or "") or None,
         )
         if not recipients:

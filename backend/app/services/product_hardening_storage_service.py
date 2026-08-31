@@ -48,6 +48,14 @@ async def ensure_product_hardening_indexes() -> None:
         unique=True,
         partialFilterExpression={"stripe_payment_intent_id": {"$type": "string"}},
     )
+    await database.db["hailing_trips"].create_index(
+        [("created_at", -1)],
+        name="admin_hailing_trips_recent",
+    )
+    await database.db["drivers"].create_index(
+        [("name", 1), ("created_at", -1)],
+        name="admin_hailing_drivers_page",
+    )
 
     # Courier history stays durable, while only high-frequency GPS telemetry gets
     # a short retention window. Delivery/POD/earnings/audit documents are untouched.
@@ -63,6 +71,14 @@ async def ensure_product_hardening_indexes() -> None:
         [("expires_at", 1)],
         name="courier_telemetry_ttl",
         expireAfterSeconds=0,
+    )
+    await database.db["courier_profiles"].create_index(
+        [("location", "2dsphere")],
+        name="courier_presence_location",
+    )
+    await database.db["courier_profiles"].create_index(
+        [("status", 1), ("online", 1), ("last_seen_at", -1), ("user_id", 1)],
+        name="courier_presence_availability",
     )
 
     # High-growth user-facing histories.

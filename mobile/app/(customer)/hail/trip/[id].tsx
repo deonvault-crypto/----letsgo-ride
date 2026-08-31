@@ -249,7 +249,7 @@ export default function CustomerHailingTripScreen() {
             </Pressable>
           ) : null}
 
-          {trip ? <Text style={styles.fareLine}>Cash fare ${trip.fare.total_fare.toFixed(2)} · {trip.route.distance_km.toFixed(1)} km · {trip.ride_class}</Text> : null}
+          {trip ? <Text style={styles.fareLine}>{trip.payment_method === "card" ? "Card fare" : "Cash fare"} ${trip.fare.total_fare.toFixed(2)} · {trip.route.distance_km.toFixed(1)} km · {trip.ride_class}</Text> : null}
         </ScrollView>
       </View>
 

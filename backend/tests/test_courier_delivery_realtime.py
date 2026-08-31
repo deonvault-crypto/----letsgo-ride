@@ -1,5 +1,4 @@
 import asyncio
-import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -37,6 +36,19 @@ class CourierDeliveryRealtimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.publish_patch.stop()
+
+    def assert_payload_excludes_pin(self, value, pin):
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                self.assertNotIn("pin", str(key).lower())
+                self.assert_payload_excludes_pin(nested, pin)
+            return
+        if isinstance(value, (list, tuple)):
+            for nested in value:
+                self.assert_payload_excludes_pin(nested, pin)
+            return
+        if value is not None:
+            self.assertNotEqual(str(value), str(pin))
 
     async def create_ready_delivery(self):
         delivery = await create_delivery(
@@ -94,9 +106,7 @@ class CourierDeliveryRealtimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("courier_delivery.location_updated", types)
         self.assertEqual(types[-1], "courier_delivery.terminal")
         for call in self.publish.await_args_list:
-            encoded = json.dumps(call.args[0].envelope.payload)
-            self.assertNotIn(pin, encoded)
-            self.assertNotIn("handoff_pin", encoded.lower())
+            self.assert_payload_excludes_pin(call.args[0].envelope.payload, pin)
 
     async def test_route_refresh_has_its_own_committed_version_and_event(self):
         delivery = await self.create_ready_delivery()

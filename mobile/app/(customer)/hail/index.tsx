@@ -284,7 +284,7 @@ export default function HailingHomeScreen() {
                       onPress={() => chooseClass(option)}
                       style={({ pressed }) => [styles.classCard, selected && styles.classCardSelected, optionDisabled && styles.classCardDisabled, pressed && styles.pressed]}
                     >
-                      <RideClassCar rideClass={option.id} disabled={optionDisabled} />
+                      <RideClassCar rideClass={option.id} disabled={optionDisabled} selected={selected} />
                       <Text style={[styles.className, selected && styles.classNameSelected]}>{option.label || option.id}</Text>
                       <Text style={[styles.classPrice, selected && styles.classPriceSelected]}>{price}</Text>
                     </Pressable>
@@ -414,14 +414,14 @@ const styles = StyleSheet.create({
   divider: { height: StyleSheet.hairlineWidth, marginLeft: 36, backgroundColor: v2Theme.colors.lineStrong },
   classSection: { gap: 7 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
-  classRail: { gap: 8, paddingRight: 4 },
-  classCard: { width: 108, minHeight: 100, borderRadius: 18, backgroundColor: "#F6F6F4", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 8, alignItems: "center", justifyContent: "center" },
-  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
-  classCardDisabled: { opacity: 0.58 },
-  className: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900", marginTop: -1 },
+  classRail: { gap: 9, paddingRight: 6, paddingVertical: 2 },
+  classCard: { width: 112, minHeight: 124, borderRadius: 20, backgroundColor: "#F6F6F4", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, paddingHorizontal: 3, paddingTop: 8, paddingBottom: 10, alignItems: "center", justifyContent: "flex-start", overflow: "visible" },
+  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: "rgba(84,199,121,0.26)", shadowColor: "#54C779", shadowOpacity: 0.20, shadowRadius: 18, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  classCardDisabled: { opacity: 0.52 },
+  className: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900", marginTop: 1 },
   classNameSelected: { color: "#FFFFFF" },
-  classPrice: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "800", marginTop: 2 },
-  classPriceSelected: { color: "rgba(255,255,255,0.68)" },
+  classPrice: { color: v2Theme.colors.inkTertiary, fontSize: 9.5, fontWeight: "800", marginTop: 2 },
+  classPriceSelected: { color: "rgba(255,255,255,0.70)" },
   quoteStrip: { minHeight: 58, borderRadius: 17, backgroundColor: "#F2F2F0", paddingHorizontal: 12, flexDirection: "row", alignItems: "center" },
   quoteMetric: { flex: 1, gap: 2 },
   quoteMetricLabel: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },

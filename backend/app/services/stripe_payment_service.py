@@ -114,6 +114,8 @@ async def create_hailing_authorization(
     user: Dict[str, Any],
 ) -> Dict[str, Any]:
     settings = _settings()
+    if not settings.passenger_card_payments_enabled:
+        raise PermissionError("Passenger card payments are not enabled for Ride Now.")
     quote = await database.find_one("hailing_quotes", {"id": quote_id, "user_id": user["id"]})
     if not quote or quote_expired(quote):
         raise ValueError("This Ride Now quote has expired. Please request a new fare.")
@@ -207,6 +209,8 @@ async def create_authorized_hailing_trip(payload: Dict[str, Any], user: Dict[str
         record_trip_event,
     )
 
+    if not _settings().passenger_card_payments_enabled:
+        raise PermissionError("Passenger card payments are not enabled for Ride Now.")
     existing = await active_trip_for_user(user)
     if existing:
         return public_trip(existing, user)
@@ -439,6 +443,11 @@ async def handle_stripe_webhook(payload: bytes, signature_header: str) -> Dict[s
     intent = (((event.get("data") or {}).get("object")) or {})
     if not isinstance(intent, dict) or not str(intent.get("id") or "").startswith("pi_"):
         return {"received": True, "event_id": event_id}
+
+    metadata = intent.get("metadata") or {}
+    if metadata.get("product") == "driver_weekly_settlement":
+        from app.services.driver_weekly_settlement_service import apply_settlement_intent
+        return await apply_settlement_intent(intent, event_id=event_id, event_type=event_type)
 
     trip = await database.find_one("hailing_trips", {"stripe_payment_intent_id": intent.get("id")})
     if not trip or trip.get("stripe_last_event_id") == event_id:

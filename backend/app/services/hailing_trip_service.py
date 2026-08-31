@@ -432,6 +432,8 @@ async def eligible_drivers(trip: Dict[str, Any], radius_km: float, stale_seconds
 
 async def driver_go_online(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     _require_hailing_enabled()
+    from app.services.driver_weekly_settlement_service import enforce_driver_settlement_standing
+    await enforce_driver_settlement_standing(user)
     driver = await approved_driver_for_hailing(user, payload["city_id"], payload["ride_class"])
     city = await get_city(payload["city_id"])
     if not city or not city.get("enabled") or not city.get("ride_hailing_enabled"):
@@ -525,6 +527,8 @@ async def current_driver_offer(user: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
 async def accept_offer(offer_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     _require_hailing_enabled()
+    from app.services.driver_weekly_settlement_service import enforce_driver_settlement_standing
+    await enforce_driver_settlement_standing(user)
     driver = await driver_profile_for_user(user)
     active = await active_trip_for_user(user)
     if active:
@@ -813,6 +817,8 @@ async def complete_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     if trip.get("driver_user_id") != user.get("id"):
         raise PermissionError("Only the assigned driver can complete this trip.")
     updated = await transition_trip(trip, "COMPLETED", {"completed_at": now_iso(), "payment_status": "cash_collected" if trip.get("payment_method") == "cash" else trip.get("payment_status")})
+    from app.services.driver_weekly_settlement_service import record_completed_ride_fee
+    await record_completed_ride_fee(updated)
     if trip.get("driver_id"):
         await database.update_one(
             "hailing_driver_presence",

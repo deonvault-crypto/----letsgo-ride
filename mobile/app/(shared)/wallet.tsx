@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { initPaymentSheet, initStripe, presentPaymentSheet } from "@stripe/stripe-react-native";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useCallback, useEffect, useState } from "react";
 
@@ -6,6 +7,8 @@ import { AppInput } from "../../components/ui/AppInput";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import {
+  createDriverSettlementIntent,
+  confirmDriverSettlementPayment,
   createWorkerPayoutMethod,
   deleteWorkerPayoutMethod,
   getWorkerWallet,
@@ -29,6 +32,7 @@ export default function WalletScreen() {
   const [branch, setBranch] = useState("");
   const [branchCode, setBranchCode] = useState("");
   const [saving, setSaving] = useState(false);
+  const [settling, setSettling] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -137,6 +141,36 @@ export default function WalletScreen() {
     }
   }
 
+  async function settleDriverBalance() {
+    const settlement = wallet?.driver_settlement;
+    if (!wallet || wallet.worker_role !== "driver" || !settlement?.can_settle || settling) return;
+    try {
+      setSettling(true);
+      setError(null);
+      const intent = await createDriverSettlementIntent();
+      await initStripe({ publishableKey: intent.publishable_key });
+      const initialized = await initPaymentSheet({
+        merchantDisplayName: "LetsGoRide",
+        paymentIntentClientSecret: intent.client_secret,
+        allowsDelayedPaymentMethods: false,
+        returnURL: "letsgoride://stripe-redirect",
+      });
+      if (initialized.error) throw new Error(initialized.error.message);
+      const presented = await presentPaymentSheet();
+      if (presented.error) {
+        if (presented.error.code === "Canceled") return;
+        throw new Error(presented.error.message);
+      }
+      await confirmDriverSettlementPayment(intent.payment_intent_id);
+      await load();
+      Alert.alert("Balance settled", "Your weekly LetsGoRide balance is clear. You can keep receiving Ride Now requests.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to settle your weekly balance.");
+    } finally {
+      setSettling(false);
+    }
+  }
+
   async function makeDefault(method: WorkerPayoutMethod) {
     if (method.is_default) return;
     try {
@@ -186,22 +220,42 @@ export default function WalletScreen() {
       {wallet ? <>
         <View style={styles.heroCard}>
           <Text style={styles.kicker}>{roleLabel.toUpperCase()} WALLET</Text>
-          <Text style={styles.balance}>{money(wallet.available_balance_usd)}</Text>
-          <Text style={styles.balanceLabel}>Available digital earnings</Text>
+          <Text style={styles.balance}>{money(wallet.worker_role === "driver" ? wallet.cash_collected_usd : wallet.available_balance_usd)}</Text>
+          <Text style={styles.balanceLabel}>{wallet.worker_role === "driver" ? "Cash fares collected" : "Available digital earnings"}</Text>
           <View style={styles.heroDivider} />
           <View style={styles.heroMetrics}>
-            <Metric label="Net earnings" value={money(wallet.net_earnings_usd)} />
-            <Metric label="Paid out" value={money(wallet.paid_out_usd)} />
+            <Metric label={wallet.worker_role === "driver" ? "After LGR fees" : "Net earnings"} value={money(wallet.net_earnings_usd)} />
+            <Metric label={wallet.worker_role === "driver" ? "Weekly fees" : "Paid out"} value={money(wallet.worker_role === "driver" ? wallet.driver_settlement?.current_week_platform_fees_usd || 0 : wallet.paid_out_usd)} />
           </View>
         </View>
 
+        {wallet.worker_role === "driver" && wallet.driver_settlement ? (
+          <View style={styles.driverPolicyCard}>
+            <View style={styles.driverPolicyIcon}><MaterialCommunityIcons name={wallet.driver_settlement.ride_now_blocked ? "alert-circle-outline" : "calendar-check-outline"} size={22} color="#111111" /></View>
+            <View style={styles.driverPolicyCopy}>
+              <Text style={styles.driverPolicyTitle}>{wallet.driver_settlement.can_settle ? `Weekly balance · ${money(wallet.driver_settlement.amount_due_usd)}` : "Earn first. Settle weekly."}</Text>
+              <Text style={styles.driverPolicyBody}>
+                {wallet.driver_settlement.can_settle
+                  ? `${wallet.driver_settlement.outstanding_statement_count} statement${wallet.driver_settlement.outstanding_statement_count === 1 ? "" : "s"} ready to settle${wallet.driver_settlement.earliest_due_at ? ` · due ${formatDate(wallet.driver_settlement.earliest_due_at)}` : ""}.`
+                  : `This week: ${wallet.driver_settlement.current_week_ride_count} rides · ${money(wallet.driver_settlement.current_week_cash_fares_usd)} collected · ${money(wallet.driver_settlement.current_week_platform_fees_usd)} LetsGoRide fees accrued.`}
+              </Text>
+              {wallet.driver_settlement.can_settle ? (
+                <Pressable accessibilityRole="button" disabled={settling} onPress={() => void settleDriverBalance()} style={({ pressed }) => [styles.settleButton, pressed && styles.settleButtonPressed, settling && styles.settleButtonDisabled]}>
+                  <MaterialCommunityIcons name="credit-card-check-outline" size={19} color="#FFFFFF" />
+                  <Text style={styles.settleButtonText}>{settling ? "Opening secure payment…" : `Settle balance · ${money(wallet.driver_settlement.amount_due_usd)}`}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.moneyGrid}>
-          <MoneyCard icon="cash-multiple" label="Cash collected" value={money(wallet.cash_collected_usd)} body="Cash collected directly on completed work." />
-          <MoneyCard icon="bank-transfer" label="Owed to LetsGoRide" value={money(wallet.amount_due_to_platform_usd)} body="Platform amount arising from completed cash work." />
-          <MoneyCard icon="credit-card-outline" label="Digital earnings" value={money(wallet.digital_earnings_usd)} body="Worker earnings recorded digitally before payouts." />
-          <MoneyCard icon="percent-outline" label="Platform commission" value={money(wallet.platform_commission_usd)} body="Commission recorded across completed work." />
+          <MoneyCard icon="cash-multiple" label={wallet.worker_role === "driver" ? "Cash collected" : "Cash collected"} value={money(wallet.cash_collected_usd)} body={wallet.worker_role === "driver" ? "Passenger pays you directly. You keep the cash and settle LetsGoRide weekly." : "Cash collected directly on completed work."} />
+          <MoneyCard icon={wallet.worker_role === "driver" ? "calendar-week" : "credit-card-outline"} label={wallet.worker_role === "driver" ? "Due now" : "Digital earnings"} value={money(wallet.worker_role === "driver" ? wallet.amount_due_to_platform_usd : wallet.digital_earnings_usd)} body={wallet.worker_role === "driver" ? "Only completed weekly statements become payable." : "Settled digital worker earnings before payouts."} />
+          <MoneyCard icon="percent-outline" label={wallet.worker_role === "driver" ? "Lifetime LetsGoRide fees" : "Platform commission"} value={money(wallet.platform_commission_usd)} body={wallet.worker_role === "driver" ? "Calculated automatically from each completed ride fare snapshot." : "Platform commission recorded across completed work."} />
         </View>
 
+{wallet.worker_role === "courier" ? (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
@@ -292,6 +346,8 @@ export default function WalletScreen() {
           ) : null}
         </View>
 
+        ) : null}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent earnings</Text>
           {wallet.ledger.length ? (
@@ -358,6 +414,15 @@ const styles = StyleSheet.create({
   metric: { flex: 1, gap: 2 },
   metricValue: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
   metricLabel: { color: "rgba(255,255,255,0.52)", fontSize: 9, fontWeight: "700" },
+  driverPolicyCard: { borderRadius: 20, backgroundColor: "#F2F7F2", borderWidth: StyleSheet.hairlineWidth, borderColor: "#D9E8DA", padding: 13, flexDirection: "row", alignItems: "center", gap: 10 },
+  driverPolicyIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  driverPolicyCopy: { flex: 1, gap: 3 },
+  driverPolicyTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" },
+  settleButton: { marginTop: 14, minHeight: 48, borderRadius: 16, backgroundColor: "#111111", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 16 },
+  settleButtonPressed: { opacity: 0.86 },
+  settleButtonDisabled: { opacity: 0.55 },
+  settleButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  driverPolicyBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
   moneyGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
   moneyCard: { width: "48%", minHeight: 128, borderRadius: 20, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 13, gap: 5 },
   moneyLabel: { color: v2Theme.colors.inkSecondary, fontSize: 9, fontWeight: "800" },

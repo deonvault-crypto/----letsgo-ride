@@ -1,26 +1,39 @@
 import { requestData } from "./api";
-import { PayoutMethodInput, PayoutMethodUpdateInput, WorkerPayoutMethod, WorkerWallet } from "../types/workerFinance.types";
+import {
+  DriverSettlementIntent,
+  PayoutMethodCreatePayload,
+  PayoutMethodUpdateInput,
+  WorkerPayoutMethod,
+  WorkerWallet,
+} from "../types/workerFinance.types";
 
-export function getWorkerWallet() {
+export async function getWorkerWallet() {
   return requestData<WorkerWallet>({ method: "GET", url: "/worker/finance/wallet" });
 }
 
-export function listWorkerPayoutMethods() {
-  return requestData<WorkerPayoutMethod[]>({ method: "GET", url: "/worker/finance/payout-methods" });
+export async function createDriverSettlementIntent() {
+  return requestData<DriverSettlementIntent>({ method: "POST", url: "/worker/finance/driver/settlements/intent" });
 }
 
-export function createWorkerPayoutMethod(data: PayoutMethodInput) {
-  return requestData<WorkerPayoutMethod>({ method: "POST", url: "/worker/finance/payout-methods", data });
+export async function confirmDriverSettlementPayment(paymentIntentId: string) {
+  return requestData<Record<string, unknown>>({
+    method: "POST",
+    url: `/worker/finance/driver/settlements/confirm/${encodeURIComponent(paymentIntentId)}`,
+  });
 }
 
-export function updateWorkerPayoutMethod(id: string, data: PayoutMethodUpdateInput) {
-  return requestData<WorkerPayoutMethod>({ method: "PATCH", url: `/worker/finance/payout-methods/${encodeURIComponent(id)}`, data });
+export async function createWorkerPayoutMethod(payload: PayoutMethodCreatePayload) {
+  return requestData<WorkerPayoutMethod>({ method: "POST", url: "/worker/finance/payout-methods", data: payload });
 }
 
-export function setDefaultWorkerPayoutMethod(methodId: string) {
+export async function updateWorkerPayoutMethod(methodId: string, payload: PayoutMethodUpdateInput) {
+  return requestData<WorkerPayoutMethod>({ method: "PATCH", url: `/worker/finance/payout-methods/${methodId}`, data: payload });
+}
+
+export async function setDefaultWorkerPayoutMethod(methodId: string) {
   return requestData<WorkerPayoutMethod>({ method: "POST", url: "/worker/finance/payout-methods/default", data: { method_id: methodId } });
 }
 
-export function deleteWorkerPayoutMethod(id: string) {
-  return requestData<{ deleted: boolean; id: string }>({ method: "DELETE", url: `/worker/finance/payout-methods/${encodeURIComponent(id)}` });
+export async function deleteWorkerPayoutMethod(methodId: string) {
+  return requestData<{ deleted: boolean; id: string }>({ method: "DELETE", url: `/worker/finance/payout-methods/${methodId}` });
 }

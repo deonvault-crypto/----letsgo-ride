@@ -1,0 +1,263 @@
+name: Admin Control Center Recovery Once
+
+on:
+  push:
+    branches:
+      - fix/admin-control-center-production
+    paths:
+      - .github/workflows/admin-control-center-recovery-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  recover-admin:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
+    steps:
+      - name: Checkout admin recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/admin-control-center-production
+          fetch-depth: 0
+
+      - name: Apply backend status semantics and route replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          admin = Path('backend/app/routers/admin.py')
+          text = admin.read_text()
+
+          marker = 'router = APIRouter(prefix="/admin", tags=["admin"])\nlogger = logging.getLogger(__name__)\n'
+          addition = '''router = APIRouter(prefix="/admin", tags=["admin"])
+          logger = logging.getLogger(__name__)
+
+          VERIFIED_DRIVER_VERIFICATION_STATUSES = {"approved", "verified", "active"}
+          PENDING_DRIVER_VERIFICATION_STATUSES = {
+              "pending",
+              "pending_uploads",
+              "pending_auto_check",
+              "needs_review",
+              "needs_resubmission",
+          }
+
+
+          def _is_verified_driver_verification(status: Optional[str]) -> bool:
+              return str(status or "").strip().lower() in VERIFIED_DRIVER_VERIFICATION_STATUSES
+
+
+          def _is_pending_driver_verification(status: Optional[str]) -> bool:
+              return str(status or "").strip().lower() in PENDING_DRIVER_VERIFICATION_STATUSES
+          '''
+          if marker not in text:
+              raise SystemExit('admin router marker not found')
+          text = text.replace(marker, addition, 1)
+
+          old_tone = '''def _status_tone(status: Optional[str]) -> str:
+              if status in {"verified", "confirmed", "resolved", "active", "open"}:
+                  return "success"
+              if status in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
+                  return "danger"
+              if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed"}:
+                  return "warning"
+              return "neutral"
+          '''
+          new_tone = '''def _status_tone(status: Optional[str]) -> str:
+              normalized = str(status or "").strip().lower()
+              if _is_verified_driver_verification(normalized) or normalized in {"confirmed", "resolved", "open", "completed"}:
+                  return "success"
+              if normalized in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
+                  return "danger"
+              if _is_pending_driver_verification(normalized) or normalized in {"submitted", "received", "in_review", "declined", "closed"}:
+                  return "warning"
+              return "neutral"
+          '''
+          if old_tone not in text:
+              raise SystemExit('status tone block not found')
+          text = text.replace(old_tone, new_tone, 1)
+
+          old_counts = '''    verified_drivers = [driver for driver in drivers if public_verification_status(driver) in {"verified", "active"}]
+              pending_verifications = [driver for driver in drivers if public_verification_status(driver) in {"pending", "needs_review"}]
+          '''
+          new_counts = '''    verified_drivers = [driver for driver in drivers if _is_verified_driver_verification(public_verification_status(driver))]
+              pending_verifications = [driver for driver in drivers if _is_pending_driver_verification(public_verification_status(driver))]
+          '''
+          if old_counts not in text:
+              raise SystemExit('overview verification count block not found')
+          text = text.replace(old_counts, new_counts, 1)
+
+          old_activity = '''        if verification_status in {"pending", "needs_review", "rejected", "verified", "active"}:
+          '''
+          new_activity = '''        if _is_pending_driver_verification(verification_status) or _is_verified_driver_verification(verification_status) or verification_status == "rejected":
+          '''
+          if old_activity not in text:
+              raise SystemExit('verification activity condition not found')
+          text = text.replace(old_activity, new_activity, 1)
+
+          old_filter = '''        if verification and verification_status != verification:
+                      continue
+          '''
+          new_filter = '''        if verification:
+                      requested_verification = str(verification).strip().lower()
+                      if requested_verification in VERIFIED_DRIVER_VERIFICATION_STATUSES:
+                          if not _is_verified_driver_verification(verification_status):
+                              continue
+                      elif requested_verification in PENDING_DRIVER_VERIFICATION_STATUSES:
+                          if not _is_pending_driver_verification(verification_status):
+                              continue
+                      elif verification_status != requested_verification:
+                          continue
+          '''
+          if old_filter not in text:
+              raise SystemExit('admin user verification filter not found')
+          text = text.replace(old_filter, new_filter, 1)
+          admin.write_text(text)
+
+          dashboard = Path('mobile/app/(admin)/dashboard.tsx')
+          dashboard.write_text('export { default } from "../../components/admin/AdminControlCenter";\n')
+
+          control = Path('mobile/components/admin/AdminControlCenter.tsx')
+          control_text = control.read_text()
+          old_search = '''function filterSearch<T extends Record<string, unknown>>(rows: T[], search: string, fields: string[]) {
+            const term = search.trim().toLowerCase();
+            if (!term) return rows;
+            return rows.filter((row) => fields.some((field) => String(row[field] ?? "").toLowerCase().includes(term)));
+          }
+          '''
+          new_search = '''function filterSearch<T>(rows: T[], search: string, fields: string[]) {
+            const term = search.trim().toLowerCase();
+            if (!term) return rows;
+            return rows.filter((row) => fields.some((field) => String((row as Record<string, unknown>)[field] ?? "").toLowerCase().includes(term)));
+          }
+          '''
+          if old_search not in control_text:
+              raise SystemExit('admin control center search helper not found')
+          control.write_text(control_text.replace(old_search, new_search, 1))
+          PY
+
+          cat > backend/tests/test_admin_verification_status_semantics.py <<'PY'
+          import pytest
+
+          from app.routers.admin import (
+              _is_pending_driver_verification,
+              _is_verified_driver_verification,
+              _status_tone,
+          )
+
+
+          @pytest.mark.parametrize("status", ["approved", "verified", "active"])
+          def test_admin_counts_current_approved_driver_statuses(status):
+              assert _is_verified_driver_verification(status) is True
+              assert _status_tone(status) == "success"
+
+
+          @pytest.mark.parametrize(
+              "status",
+              ["pending", "pending_uploads", "pending_auto_check", "needs_review", "needs_resubmission"],
+          )
+          def test_admin_counts_all_actionable_verification_statuses(status):
+              assert _is_pending_driver_verification(status) is True
+              assert _status_tone(status) == "warning"
+
+
+          def test_rejected_verification_is_not_counted_as_pending_or_approved():
+              assert _is_pending_driver_verification("rejected") is False
+              assert _is_verified_driver_verification("rejected") is False
+              assert _status_tone("rejected") == "danger"
+          PY
+
+          cat > mobile/__tests__/admin-control-center-wiring.test.ts <<'TS'
+          import fs from "fs";
+          import path from "path";
+
+          describe("admin control center recovery", () => {
+            const root = path.resolve(__dirname, "..");
+            const source = fs.readFileSync(path.join(root, "components/admin/AdminControlCenter.tsx"), "utf8");
+            const route = fs.readFileSync(path.join(root, "app/(admin)/dashboard.tsx"), "utf8");
+
+            it("uses the new operations control center route", () => {
+              expect(route).toContain("AdminControlCenter");
+              expect(source).toContain("Needs attention");
+              expect(source).toContain("Platform controls");
+            });
+
+            it("keeps admin data reconciled while the control center is open", () => {
+              expect(source).toContain("useRealtime");
+              expect(source).toContain("ADMIN_CONNECTED_RECONCILIATION_MS = 15000");
+              expect(source).toContain("ADMIN_RECOVERY_RECONCILIATION_MS = 8000");
+              expect(source).toContain("setTimeout");
+              expect(source).not.toContain("setInterval");
+              expect(source).toContain("reconciliationRevision");
+            });
+
+            it("guards verification metrics against stale backend status semantics", () => {
+              expect(source).toContain('"approved", "verified", "active"');
+              expect(source).toContain('"pending_uploads"');
+              expect(source).toContain('pending_driver_verifications: pendingCount');
+            });
+          });
+          TS
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Compile backend
+        working-directory: backend
+        run: python -m compileall app
+
+      - name: Run targeted admin backend regression tests
+        working-directory: backend
+        run: python -m pytest -q tests/test_admin_verification_status_semantics.py
+
+      - name: Run backend regression suite
+        working-directory: backend
+        run: python -m pytest -q
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck mobile
+        working-directory: mobile
+        run: npm run typecheck
+
+      - name: Run mobile regression suite
+        working-directory: mobile
+        run: npm test -- --runInBand
+
+      - name: Verify Android release config
+        working-directory: mobile
+        run: npm run verify:android
+
+      - name: Commit validated admin recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "letsgoride-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/app/routers/admin.py backend/tests/test_admin_verification_status_semantics.py mobile/app/'(admin)'/dashboard.tsx mobile/components/admin/AdminControlCenter.tsx mobile/__tests__/admin-control-center-wiring.test.ts
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Fix admin control center sync and verification metrics"
+          git push origin HEAD:fix/admin-control-center-production

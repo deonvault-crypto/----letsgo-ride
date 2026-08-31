@@ -30,6 +30,23 @@ from app.utils import api_error, api_success, now_iso
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
+VERIFIED_DRIVER_VERIFICATION_STATUSES = {"approved", "verified", "active"}
+PENDING_DRIVER_VERIFICATION_STATUSES = {
+    "pending",
+    "pending_uploads",
+    "pending_auto_check",
+    "needs_review",
+    "needs_resubmission",
+}
+
+
+def _is_verified_driver_verification(status: Optional[str]) -> bool:
+    return str(status or "").strip().lower() in VERIFIED_DRIVER_VERIFICATION_STATUSES
+
+
+def _is_pending_driver_verification(status: Optional[str]) -> bool:
+    return str(status or "").strip().lower() in PENDING_DRIVER_VERIFICATION_STATUSES
+
 
 def _without_private_fields(rows):
     return [public_user(row) for row in rows]
@@ -65,11 +82,12 @@ def _contains_search(row: Dict[str, Any], search: Optional[str], fields: List[st
 
 
 def _status_tone(status: Optional[str]) -> str:
-    if status in {"verified", "confirmed", "resolved", "active", "open"}:
+    normalized = str(status or "").strip().lower()
+    if _is_verified_driver_verification(normalized) or normalized in {"confirmed", "resolved", "open", "completed"}:
         return "success"
-    if status in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
+    if normalized in {"rejected", "cancelled", "cancelled_by_admin", "cancelled_by_driver", "cancelled_by_passenger", "suspended", "deleted", "dismissed"}:
         return "danger"
-    if status in {"pending", "needs_review", "submitted", "received", "in_review", "declined", "closed"}:
+    if _is_pending_driver_verification(normalized) or normalized in {"submitted", "received", "in_review", "declined", "closed"}:
         return "warning"
     return "neutral"
 
@@ -183,24 +201,64 @@ def _report_open(status: Optional[str]) -> bool:
 
 @router.get("/overview")
 async def overview(admin=Depends(get_admin_user)):
-    users = await database.find_many("users")
-    rides = [ride for ride in await database.find_many("rides") if _is_real_ride(ride)]
-    requests = await database.find_many("ride_requests")
-    drivers = await database.find_many("drivers")
-    support_messages = await database.find_many("support_messages")
-    reports = await database.find_many("reports")
-    admin_notifications = await database.find_many("app_notifications", {"user_id": admin["id"]})
-    verified_drivers = [driver for driver in drivers if public_verification_status(driver) in {"verified", "active"}]
-    pending_verifications = [driver for driver in drivers if public_verification_status(driver) in {"pending", "needs_review"}]
-    enriched_rides = [await apply_ride_lifecycle(ride) for ride in rides]
-    active_rides = [ride for ride in enriched_rides if canonical_trip_status(ride.get("status")) in {TRIP_STATUS_SCHEDULED, TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}]
-    pending_requests = [request for request in requests if request.get("status") == "pending"]
-    confirmed_bookings = [request for request in requests if request.get("status") == "confirmed"]
-    open_support = [message for message in support_messages if _support_open(message.get("status", "received"))]
-    open_reports = [report for report in reports if _report_open(report.get("status", "submitted"))]
+    verified_filter = {
+        "$or": [
+            {"verification_status": {"$in": sorted(VERIFIED_DRIVER_VERIFICATION_STATUSES)}},
+            {
+                "verification_status": {"$exists": False},
+                "verified": True,
+                "status": {"$in": ["approved", "active"]},
+            },
+        ]
+    }
+    pending_filter = {
+        "verification_status": {"$in": sorted(PENDING_DRIVER_VERIFICATION_STATUSES)}
+    }
+    active_ride_statuses = [
+        "SCHEDULED", "BOARDING", "IN_PROGRESS", "OPEN", "DEPARTED",
+        "scheduled", "boarding", "in_progress", "open", "departed",
+    ]
+
+    (
+        user_count,
+        ride_count,
+        request_count,
+        verified_driver_count,
+        pending_verification_count,
+        active_ride_count,
+        pending_request_count,
+        confirmed_booking_count,
+        support_count,
+        open_support_count,
+        report_count,
+        open_report_count,
+        unread_notification_count,
+        recent_requests,
+        recent_drivers,
+        recent_support,
+        recent_reports,
+    ) = await asyncio.gather(
+        database.count("users"),
+        database.count("rides", {"is_demo": {"$ne": True}}),
+        database.count("ride_requests"),
+        database.count("drivers", verified_filter),
+        database.count("drivers", pending_filter),
+        database.count("rides", {"is_demo": {"$ne": True}, "status": {"$in": active_ride_statuses}}),
+        database.count("ride_requests", {"status": "pending"}),
+        database.count("ride_requests", {"status": "confirmed"}),
+        database.count("support_messages"),
+        database.count("support_messages", {"status": {"$nin": ["resolved", "closed"]}}),
+        database.count("reports"),
+        database.count("reports", {"status": {"$nin": ["resolved", "dismissed"]}}),
+        database.count("app_notifications", {"user_id": admin["id"], "read": {"$ne": True}}),
+        database.find_many("ride_requests", sort=[("updated_at", -1)], limit=8),
+        database.find_many("drivers", sort=[("updated_at", -1)], limit=8),
+        database.find_many("support_messages", sort=[("updated_at", -1)], limit=6),
+        database.find_many("reports", sort=[("updated_at", -1)], limit=6),
+    )
 
     activities = []
-    for request in _sort_recent(requests, 8):
+    for request in recent_requests:
         activities.append(
             _activity_item(
                 kind="ride_request",
@@ -212,9 +270,9 @@ async def overview(admin=Depends(get_admin_user)):
                 created_at=request.get("created_at") or request.get("updated_at"),
             )
         )
-    for driver in _sort_recent(drivers, 8):
+    for driver in recent_drivers:
         verification_status = public_verification_status(driver)
-        if verification_status in {"pending", "needs_review", "rejected", "verified", "active"}:
+        if _is_pending_driver_verification(verification_status) or _is_verified_driver_verification(verification_status) or verification_status == "rejected":
             activities.append(
                 _activity_item(
                     kind="verification",
@@ -226,7 +284,7 @@ async def overview(admin=Depends(get_admin_user)):
                     created_at=driver.get("verification_submitted_at") or driver.get("updated_at") or driver.get("created_at"),
                 )
             )
-    for message in _sort_recent(support_messages, 6):
+    for message in recent_support:
         activities.append(
             _activity_item(
                 kind="support",
@@ -238,7 +296,7 @@ async def overview(admin=Depends(get_admin_user)):
                 created_at=message.get("created_at") or message.get("updated_at"),
             )
         )
-    for report in _sort_recent(reports, 6):
+    for report in recent_reports:
         activities.append(
             _activity_item(
                 kind="safety_report",
@@ -250,26 +308,25 @@ async def overview(admin=Depends(get_admin_user)):
                 created_at=report.get("created_at") or report.get("updated_at"),
             )
         )
-    recent_activity = _sort_recent(activities, 12)
 
     return api_success(
         {
-            "users": len(users),
-            "total_users": len(users),
-            "verified_drivers": len(verified_drivers),
-            "pending_verifications": len(pending_verifications),
-            "pending_driver_verifications": len(pending_verifications),
-            "rides": len(rides),
-            "active_rides": len(active_rides),
-            "requests": len(requests),
-            "pending_ride_requests": len(pending_requests),
-            "confirmed_bookings": len(confirmed_bookings),
-            "support_messages": len(support_messages),
-            "open_support_cases": len(open_support),
-            "safety_reports": len(reports),
-            "open_safety_reports": len(open_reports),
-            "unread_admin_notifications": len([notification for notification in admin_notifications if not notification.get("read")]),
-            "recent_activity": recent_activity,
+            "users": user_count,
+            "total_users": user_count,
+            "verified_drivers": verified_driver_count,
+            "pending_verifications": pending_verification_count,
+            "pending_driver_verifications": pending_verification_count,
+            "rides": ride_count,
+            "active_rides": active_ride_count,
+            "requests": request_count,
+            "pending_ride_requests": pending_request_count,
+            "confirmed_bookings": confirmed_booking_count,
+            "support_messages": support_count,
+            "open_support_cases": open_support_count,
+            "safety_reports": report_count,
+            "open_safety_reports": open_report_count,
+            "unread_admin_notifications": unread_notification_count,
+            "recent_activity": _sort_recent(activities, 12),
         }
     )
 
@@ -292,8 +349,16 @@ async def list_users(
             continue
         enriched = await _enrich_admin_user(user)
         verification_status = enriched.get("driver_verification_status") or enriched.get("verification_status") or "not_started"
-        if verification and verification_status != verification:
-            continue
+        if verification:
+            requested_verification = str(verification).strip().lower()
+            if requested_verification in VERIFIED_DRIVER_VERIFICATION_STATUSES:
+                if not _is_verified_driver_verification(verification_status):
+                    continue
+            elif requested_verification in PENDING_DRIVER_VERIFICATION_STATUSES:
+                if not _is_pending_driver_verification(verification_status):
+                    continue
+            elif verification_status != requested_verification:
+                continue
         if not _contains_search(enriched, search, ["name", "email", "phone", "city", "role", "status"]):
             continue
         rows.append(enriched)

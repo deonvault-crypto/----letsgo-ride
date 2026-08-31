@@ -13,6 +13,7 @@ from app.services.stripe_payment_service import (
     create_hailing_authorization,
     handle_stripe_webhook,
 )
+from app.services.stripe_runtime_guard import ensure_stripe_runtime_binding, stripe_runtime_ready
 from app.utils import api_error, api_success
 
 
@@ -22,11 +23,20 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 @router.get("/config")
 async def payment_config():
     settings = get_settings()
+    if settings.stripe_configured and not stripe_runtime_ready():
+        try:
+            await ensure_stripe_runtime_binding()
+        except RuntimeError:
+            # Configuration is a capability endpoint, not a reason to make the
+            # entire customer app error. Degraded payment features are hidden.
+            pass
+    ready = bool(settings.stripe_configured and stripe_runtime_ready())
     return api_success(
         {
-            "card_enabled": bool(settings.stripe_configured),
-            "provider": "stripe" if settings.stripe_configured else None,
-            "currency": settings.stripe_currency.upper() if settings.stripe_configured else "USD",
+            "card_enabled": bool(ready and settings.passenger_card_payments_enabled),
+            "driver_settlement_enabled": ready,
+            "provider": "stripe" if ready else None,
+            "currency": settings.stripe_currency.upper() if ready else "USD",
         }
     )
 
@@ -44,6 +54,7 @@ async def create_hailing_stripe_intent(
         identity=str(user.get("id") or ""),
     )
     try:
+        await ensure_stripe_runtime_binding()
         return api_success(
             await create_hailing_authorization(
                 payload.quote_id,
@@ -80,6 +91,7 @@ async def create_hailing_card_trip(
             api_error("This card authorization belongs to another account.", 403)
         return api_success(public_trip(existing, user))
     try:
+        await ensure_stripe_runtime_binding()
         return api_success(await create_authorized_hailing_trip(payload.model_dump(), user))
     except PermissionError as exc:
         api_error(str(exc), 403)
@@ -96,6 +108,8 @@ async def stripe_webhook(request: Request):
     if not signature:
         api_error("Stripe signature is required.", 400)
     try:
+        # Incoming webhooks remain processable during a transient outbound Stripe
+        # outage; their signature is verified locally with the production secret.
         return api_success(await handle_stripe_webhook(payload, signature))
     except PermissionError as exc:
         api_error(str(exc), 503)

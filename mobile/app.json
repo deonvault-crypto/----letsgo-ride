@@ -16,7 +16,7 @@
         "NSCameraUsageDescription": "LetsGoRide may use the camera to capture profile photos and driver verification documents.",
         "NSPhotoLibraryUsageDescription": "LetsGoRide lets you choose profile photos from your photo library.",
         "NSLocationWhenInUseUsageDescription": "LetsGoRide uses your location for accurate pickups, nearby services and live journey progress while the app is in use.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "For Drivers, LetsGoRide can continue sharing location during an active Ride Now trip when the app is in the background so the rider can follow live trip progress. This stops when active-trip tracking ends.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "For Drivers and Couriers, LetsGoRide can continue sharing location during an active Ride Now trip or delivery when the app is in the background so the customer can follow live progress. Tracking stops when the active job ends.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "co.zw.letsgoride"
@@ -67,7 +67,8 @@
             "targetSdkVersion": 36,
             "buildToolsVersion": "36.0.0",
             "enableMinifyInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "extraProguardRules": "-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivity$g\n-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Args\n-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Error\n-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter\n-dontwarn com.stripe.android.pushProvisioning.PushProvisioningEphemeralKeyProvider"
           }
         }
       ],
@@ -95,7 +96,7 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "LetsGoRide uses your location for accurate pickups, nearby services and live journey progress while the app is in use.",
-          "locationAlwaysAndWhenInUsePermission": "For Drivers, LetsGoRide can continue sharing location during an active Ride Now trip when the app is in the background so the rider can follow live trip progress. This stops when active-trip tracking ends.",
+          "locationAlwaysAndWhenInUsePermission": "For Drivers and Couriers, LetsGoRide can continue sharing location during an active Ride Now trip or delivery when the app is in the background so the customer can follow live progress. Tracking stops when the active job ends.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
