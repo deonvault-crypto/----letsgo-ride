@@ -79,8 +79,8 @@ export default function CustomerHomeScreen() {
   const { trip: activeHailingTrip } = useActiveHailingTrip(false);
   const [mode, setMode] = useState<CanvasMode>("ride");
   const [hasSwiped, setHasSwiped] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
   const modeRef = useRef<CanvasMode>("ride");
+  const reduceMotionRef = useRef(false);
   const dragX = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const moodOpacity = useRef(new Animated.Value(1)).current;
@@ -98,10 +98,12 @@ export default function CustomerHomeScreen() {
     let mounted = true;
     AccessibilityInfo.isReduceMotionEnabled()
       .then((enabled) => {
-        if (mounted) setReduceMotion(enabled);
+        if (mounted) reduceMotionRef.current = enabled;
       })
       .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", (enabled) => {
+      reduceMotionRef.current = enabled;
+    });
     return () => {
       mounted = false;
       subscription.remove();
@@ -109,7 +111,7 @@ export default function CustomerHomeScreen() {
   }, []);
 
   function animateBack() {
-    if (reduceMotion) {
+    if (reduceMotionRef.current) {
       dragX.setValue(0);
       return;
     }
@@ -129,7 +131,7 @@ export default function CustomerHomeScreen() {
 
     modeRef.current = next;
     setHasSwiped(true);
-    if (reduceMotion) {
+    if (reduceMotionRef.current) {
       setMode(next);
       dragX.setValue(0);
       contentOpacity.setValue(1);
@@ -176,7 +178,7 @@ export default function CustomerHomeScreen() {
       onMoveShouldSetPanResponder: (_, gesture) =>
         Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
       onPanResponderMove: (_, gesture) => {
-        if (!reduceMotion) dragX.setValue(Math.max(-72, Math.min(72, gesture.dx * 0.42)));
+        if (!reduceMotionRef.current) dragX.setValue(Math.max(-72, Math.min(72, gesture.dx * 0.42)));
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dx < -46) shiftMode(1);
