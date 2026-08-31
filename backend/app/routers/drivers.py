@@ -116,11 +116,18 @@ async def add_vehicle(payload: VehicleBody, user=Depends(get_current_user)):
     driver = await database.find_one("drivers", {"user_id": user["id"]})
     if not driver:
         api_error("Create a driver profile before adding a vehicle.")
-    if driver.get("verified") or str(driver.get("status") or "").lower() in {"approved", "verified", "active"}:
+
+    existing_vehicles = await database.find_many("vehicles", {"driver_id": driver["id"]})
+    reviewed_driver = bool(driver.get("verified")) or str(driver.get("status") or "").lower() in {"approved", "verified", "active"}
+    # A reviewed Driver who somehow reached production without a vehicle must be
+    # able to complete that missing setup step. Once a vehicle exists, later swaps
+    # remain support/review controlled instead of silently replacing trusted data.
+    if reviewed_driver and existing_vehicles:
         api_error(
             "Contact LetsGoRide Support to request a reviewed vehicle change.",
             403,
         )
+
     timestamp = now_iso()
     vehicle = {
         "id": new_id(),
@@ -131,7 +138,10 @@ async def add_vehicle(payload: VehicleBody, user=Depends(get_current_user)):
         "updated_at": timestamp,
         **payload.model_dump(),
     }
-    return api_success(await database.insert_one("vehicles", vehicle))
+    created = await database.insert_one("vehicles", vehicle)
+    vehicle_name = f"{payload.make} {payload.model}".strip()
+    await database.update_one("drivers", driver["id"], {"vehicle": vehicle_name, "updated_at": timestamp})
+    return api_success(created)
 
 
 @router.get("/{driver_id}")
