@@ -141,9 +141,9 @@ export default function DriverAccountScreen() {
           <ListTile
             tone="neutral"
             icon="wallet-outline"
-            title="Earnings & settlement"
-            subtitle="Weekly Driver balance and payment history"
-            onPress={() => router.push("/(shared)/wallet" as never)}
+            title="Earnings"
+            subtitle="See what you earned from Ride Now"
+            onPress={() => router.push("/(driver)/earnings" as never)}
           />
           <ListTile
             tone="neutral"
