@@ -59,7 +59,6 @@ export default function AccountScreen() {
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(shared)/work-with-us" as never)} style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}><Text style={styles.guestSecondaryText}>Work with LetsGoRide</Text></Pressable>
         </View>
-
       </Screen>
     );
   }
@@ -82,11 +81,9 @@ export default function AccountScreen() {
       </View>
 
       <View style={styles.utilityPanel}>
-        <Text style={styles.utilityTitle}>Your account</Text>
+        <Text style={styles.utilityTitle}>Quick access</Text>
         <View style={styles.utilityGrid}>
           <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
-          <QuickAction icon="lifebuoy" label="Help" onPress={() => router.push("/(shared)/support" as never)} />
-          <QuickAction icon="shield-check-outline" label="Safety" onPress={() => router.push("/(shared)/safety" as never)} />
           <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
         </View>
       </View>
@@ -119,7 +116,7 @@ export default function AccountScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>More</Text>
         {user?.role === "passenger" ? <AccountRow icon="briefcase-outline" title="Work with LetsGoRide" subtitle="Courier, Driver and Merchant applications" onPress={() => router.push("/(shared)/work-with-us" as never)} /> : null}
-        <AccountRow icon="cog-outline" title="Settings" subtitle="Account, privacy and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
+        <AccountRow icon="cog-outline" title="Settings" subtitle="Notifications and device security" onPress={() => router.push("/(shared)/settings" as never)} />
       </View>
 
       <AccountComplianceSections product="customer" />
@@ -210,8 +207,8 @@ const styles = StyleSheet.create({
   accountType: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "800" },
   utilityPanel: { gap: 10 },
   utilityTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.35 },
-  utilityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  quickCard: { width: "48%", minHeight: 68, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
+  utilityGrid: { flexDirection: "row", gap: 8 },
+  quickCard: { flex: 1, minHeight: 68, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
   quickIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   quickLabel: { flex: 1, color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
   section: { gap: 9 },
