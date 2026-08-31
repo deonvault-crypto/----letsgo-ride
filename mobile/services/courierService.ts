@@ -1,4 +1,5 @@
 import { requestData } from "./api";
+import { executeCriticalMutation } from "./criticalMutationOutbox";
 import {
   CourierCreatePayload,
   CourierDelivery,
@@ -10,6 +11,12 @@ import {
   CourierStatus,
   CourierTrackingState,
 } from "../types/courier.types";
+
+const COURIER_STATUS_SUCCESS: Partial<Record<CourierStatus, string[]>> = {
+  PICKED_UP: ["PICKED_UP", "IN_TRANSIT", "ARRIVING", "DELIVERED"],
+  IN_TRANSIT: ["IN_TRANSIT", "ARRIVING", "DELIVERED"],
+  ARRIVING: ["ARRIVING", "DELIVERED"],
+};
 
 export function previewCourierQuote(payload: CourierQuotePreviewPayload) {
   return requestData<CourierQuotePreview>({
@@ -61,11 +68,21 @@ export function updateCourierDeliveryStatus(
   status: CourierStatus,
   note?: string,
 ) {
-  return requestData<CourierDelivery>({
-    method: "POST",
-    url: `/courier/deliveries/${deliveryId}/status`,
-    data: { status, note: note || null },
-  });
+  const url = `/courier/deliveries/${deliveryId}/status`;
+  const data = { status, note: note || null };
+  const execute = () => requestData<CourierDelivery>({ method: "POST", url, data });
+  const successStatuses = COURIER_STATUS_SUCCESS[status];
+  if (!successStatuses) return execute();
+  return executeCriticalMutation(
+    {
+      dedupeKey: `courier-status:${deliveryId}`,
+      url,
+      data,
+      checkUrl: `/courier/deliveries/${deliveryId}`,
+      successStatuses,
+    },
+    execute,
+  );
 }
 
 export function reportCourierDelay(deliveryId: string, note?: string) {
@@ -77,11 +94,18 @@ export function reportCourierDelay(deliveryId: string, note?: string) {
 }
 
 export function completeCourierDeliveryWithPin(deliveryId: string, pin: string) {
-  return requestData<CourierDelivery>({
-    method: "POST",
-    url: `/courier/deliveries/${deliveryId}/handoff`,
-    data: { pin },
-  });
+  const url = `/courier/deliveries/${deliveryId}/handoff`;
+  const data = { pin };
+  return executeCriticalMutation(
+    {
+      dedupeKey: `courier-handoff:${deliveryId}`,
+      url,
+      data,
+      checkUrl: `/courier/deliveries/${deliveryId}`,
+      successStatuses: ["DELIVERED"],
+    },
+    () => requestData<CourierDelivery>({ method: "POST", url, data }),
+  );
 }
 
 export function getCourierTracking(deliveryId: string) {
