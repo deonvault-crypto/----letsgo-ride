@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import activity, admin, auth, conversations, courier, courier_presence, drivers, food, hailing, health, media, merchant, notifications, operations, payments, public_tracking, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist, worker_finance
+from app.routers import activity, admin, admin_profile_photos, auth, conversations, courier, courier_presence, drivers, food, hailing, health, media, merchant, notifications, operations, payments, public_tracking, realtime, reports, requests, reviews, rides, routing, support, verification, waitlist, worker_finance
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
@@ -228,3 +228,4 @@ app.include_router(reports.router)
 app.include_router(support.router)
 app.include_router(verification.router)
 app.include_router(admin.router)
+app.include_router(admin_profile_photos.router)
