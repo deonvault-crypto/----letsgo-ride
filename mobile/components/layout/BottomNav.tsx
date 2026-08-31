@@ -79,7 +79,8 @@ export function BottomNav({
     <View pointerEvents="box-none" style={[styles.positioner, { bottom: bottomOffset }]}>
       <View style={styles.wrap}>
         {items.map((item) => {
-          const active = activeLabel ? item.label === activeLabel : isItemActive(pathname, item);
+          const routeActive = isItemActive(pathname, item);
+          const active = activeLabel ? item.label === activeLabel : routeActive;
           return (
             <Pressable
               key={item.label}
@@ -87,10 +88,7 @@ export function BottomNav({
               accessibilityState={{ selected: active }}
               accessibilityLabel={item.label}
               hitSlop={4}
-              onPress={() => {
-                if (activeLabel && active) return;
-                if (!active) router.replace(item.href as never);
-              }}
+              onPress={() => { if (!routeActive) router.replace(item.href as never); }}
               style={({ pressed }) => [styles.item, active && styles.activeItem, pressed && styles.pressedItem]}
             >
               <MaterialCommunityIcons name={(active && item.activeIcon ? item.activeIcon : item.icon) as never} size={22} color={active ? v2Theme.colors.brand : v2Theme.colors.inkSecondary} />
