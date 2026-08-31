@@ -79,5 +79,7 @@ replace_once(
 
 assert 'jest.mock("expo-task-manager"' in setup_path.read_text()
 assert "refreshBiometricCredentialAfterPasswordLogin" in Path("mobile/__tests__/auth-flow.test.tsx").read_text()
-assert "84,199,121" not in Path("mobile/__tests__/ride-class-visual-contract.test.ts").read_text()
+visual_contract = Path("mobile/__tests__/ride-class-visual-contract.test.ts").read_text()
+assert "17,17,17" in visual_contract
+assert 'toMatch(/rgba\\(84,199,121,0\\.14\\)/)' not in visual_contract
 print("Build39 Jest/native test contract fixes applied")
