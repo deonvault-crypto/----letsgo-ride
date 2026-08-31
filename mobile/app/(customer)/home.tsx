@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   PanResponder,
   Pressable,
@@ -78,8 +79,11 @@ export default function CustomerHomeScreen() {
   const { trip: activeHailingTrip } = useActiveHailingTrip(false);
   const [mode, setMode] = useState<CanvasMode>("ride");
   const [hasSwiped, setHasSwiped] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const modeRef = useRef<CanvasMode>("ride");
   const dragX = useRef(new Animated.Value(0)).current;
+  const contentOpacity = useRef(new Animated.Value(1)).current;
+  const moodOpacity = useRef(new Animated.Value(1)).current;
 
   modeRef.current = mode;
 
@@ -90,7 +94,25 @@ export default function CustomerHomeScreen() {
   const upcomingRideCount = rides.filter((ride) => isRideBookable(ride)).length;
   const meta = MODE_META[mode];
 
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (mounted) setReduceMotion(enabled);
+      })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
   function animateBack() {
+    if (reduceMotion) {
+      dragX.setValue(0);
+      return;
+    }
     Animated.spring(dragX, {
       toValue: 0,
       useNativeDriver: true,
@@ -104,11 +126,42 @@ export default function CustomerHomeScreen() {
       animateBack();
       return;
     }
+
     modeRef.current = next;
-    setMode(next);
     setHasSwiped(true);
+    if (reduceMotion) {
+      setMode(next);
+      dragX.setValue(0);
+      contentOpacity.setValue(1);
+      moodOpacity.setValue(1);
+      return;
+    }
+
+    contentOpacity.stopAnimation();
+    moodOpacity.stopAnimation();
+    contentOpacity.setValue(0.2);
+    moodOpacity.setValue(0);
     dragX.setValue(next === "food" ? 18 : next === "courier" ? 24 : -18);
-    animateBack();
+    setMode(next);
+
+    Animated.parallel([
+      Animated.spring(dragX, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 24,
+        bounciness: 4,
+      }),
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 170,
+        useNativeDriver: true,
+      }),
+      Animated.timing(moodOpacity, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }
 
   function shiftMode(direction: -1 | 1) {
@@ -123,7 +176,7 @@ export default function CustomerHomeScreen() {
       onMoveShouldSetPanResponder: (_, gesture) =>
         Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
       onPanResponderMove: (_, gesture) => {
-        dragX.setValue(Math.max(-72, Math.min(72, gesture.dx * 0.42)));
+        if (!reduceMotion) dragX.setValue(Math.max(-72, Math.min(72, gesture.dx * 0.42)));
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dx < -46) shiftMode(1);
@@ -200,9 +253,13 @@ export default function CustomerHomeScreen() {
       <StatusBar barStyle="dark-content" />
 
       <HailingMapBackdrop bottomPadding={330} />
-      <View
+      <Animated.View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.mapMood, { backgroundColor: meta.mapTint }]}
+        style={[
+          StyleSheet.absoluteFill,
+          styles.mapMood,
+          { backgroundColor: meta.mapTint, opacity: moodOpacity },
+        ]}
       />
 
       <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
@@ -257,21 +314,23 @@ export default function CustomerHomeScreen() {
             onPress={openPrimaryAction}
             style={({ pressed }) => [styles.primaryCard, pressed && styles.primaryPressed]}
           >
-            <View style={[styles.primaryIcon, mode === "food" && styles.foodIcon, mode === "courier" && styles.courierIcon]}>
-              <MaterialCommunityIcons
-                name={mode === "ride" && activeHailing ? "car-clock" : meta.icon}
-                size={22}
-                color="#111111"
-              />
-            </View>
-            <View style={styles.primaryCopy}>
-              <Text style={styles.primaryEyebrow}>{primaryEyebrow}</Text>
-              <Text numberOfLines={1} style={styles.primaryTitle}>{primaryTitle}</Text>
-              <Text numberOfLines={1} style={styles.primaryBody}>{primaryBody}</Text>
-            </View>
-            <View style={styles.primaryArrow}>
-              <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
-            </View>
+            <Animated.View style={[styles.primaryInner, { opacity: contentOpacity }]}>
+              <View style={[styles.primaryIcon, mode === "food" && styles.foodIcon, mode === "courier" && styles.courierIcon]}>
+                <MaterialCommunityIcons
+                  name={mode === "ride" && activeHailing ? "car-clock" : meta.icon}
+                  size={22}
+                  color="#111111"
+                />
+              </View>
+              <View style={styles.primaryCopy}>
+                <Text style={styles.primaryEyebrow}>{primaryEyebrow}</Text>
+                <Text numberOfLines={1} style={styles.primaryTitle}>{primaryTitle}</Text>
+                <Text numberOfLines={1} style={styles.primaryBody}>{primaryBody}</Text>
+              </View>
+              <View style={styles.primaryArrow}>
+                <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+              </View>
+            </Animated.View>
           </Pressable>
         </Animated.View>
 
@@ -465,14 +524,17 @@ const styles = StyleSheet.create({
     borderColor: "rgba(17,17,17,0.10)",
     paddingHorizontal: 12,
     paddingVertical: 11,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
     shadowColor: "#000000",
     shadowOpacity: 0.15,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
     elevation: 10,
+  },
+  primaryInner: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
   },
   primaryPressed: {
     transform: [{ scale: 0.992 }],
