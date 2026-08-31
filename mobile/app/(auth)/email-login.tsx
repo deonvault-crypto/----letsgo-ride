@@ -9,7 +9,7 @@ import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
 import { emailLogin, resendEmailVerification } from "../../services/authService";
-import { biometricLabel, hasBiometricLoginCredential, loginWithBiometrics } from "../../services/biometricService";
+import { biometricLabel, hasBiometricLoginCredential, loginWithBiometrics, refreshBiometricCredentialAfterPasswordLogin } from "../../services/biometricService";
 import { enablePhoneNotifications, hasSeenNotificationExplanation, markNotificationExplanationSeen } from "../../services/pushNotificationService";
 import { normalizeEmail } from "../../utils/passwordRules";
 import { destinationAfterAuth, intentCopy, parseApplicationIntent } from "../../utils/authIntent";
@@ -77,6 +77,9 @@ export default function EmailLoginScreen() {
       setError("");
       setMessage("");
       const result = await emailLogin(normalizeEmail(email), password);
+      // If this device previously opted into Face ID/fingerprint, refresh the
+      // protected credential silently. Do not show first-time setup every login.
+      await refreshBiometricCredentialAfterPasswordLogin();
       await continueAfterAuth(result.user.role);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not connect to LetsGoRide. Please try again.");
@@ -145,7 +148,7 @@ export default function EmailLoginScreen() {
         {needsVerification ? <View style={styles.inlineActions}><AppButton title="Resend verification code" variant="secondary" loading={resending} onPress={resendCode} disabled={!normalizedEmail} /><AppButton title="Go to email verification" variant="ghost" onPress={() => router.push({ pathname: "/(auth)/email-verification", params: { email: normalizedEmail, returnTo: params.returnTo, intent } } as never)} /></View> : null}
         <AppButton title="Login" loading={loading} onPress={submit} disabled={!normalizedEmail || password.length < 8} />
         {biometricReady ? <AppButton title={biometricText} variant="secondary" onPress={() => biometricLogin(false)} loading={loading} /> : null}
-        <AppButton title={intent === "customer_signup" ? "Create account" : "Create account to continue"} variant="secondary" onPress={() => router.push({ pathname: "/(auth)/email-register", params: { returnTo: params.returnTo, intent } } as never)} />
+        <AppButton title={intent === "customer_signup" ? "Create customer account" : "Create account to continue"} variant="secondary" onPress={() => router.push({ pathname: "/(auth)/email-register", params: { returnTo: params.returnTo, intent } } as never)} />
       </View>
       <Text style={styles.footer}>Proudly Zimbabwean · Built for safer shared rides and deliveries</Text>
     </Screen>
