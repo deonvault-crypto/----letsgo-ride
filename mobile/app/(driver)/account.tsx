@@ -95,7 +95,7 @@ export default function DriverAccountScreen() {
           style={({ pressed }) => [styles.requiredCard, pressed && styles.pressed]}
         >
           <View style={styles.requiredIcon}>
-            <MaterialCommunityIcons name={photoPending ? "clock-outline" : photoRejected ? "camera-alert-outline" : "camera-plus-outline"} size={23} color={DRIVER_BLACK} />
+            <MaterialCommunityIcons name={photoPending ? "clock-outline" : photoRejected ? "alert-circle-outline" : "camera-plus-outline"} size={23} color={DRIVER_BLACK} />
           </View>
           <View style={styles.flex}>
             <Text style={styles.requiredTitle}>{photoCardTitle}</Text>
