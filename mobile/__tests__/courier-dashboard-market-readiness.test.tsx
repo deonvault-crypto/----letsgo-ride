@@ -22,7 +22,16 @@ jest.mock("../services/operationsService", () => ({
 }));
 
 jest.mock("../contexts/SessionContext", () => ({
-  useSession: () => ({ user: { id: "courier-1", role: "courier", name: "Courier" } }),
+  useSession: () => ({
+    user: {
+      id: "courier-1",
+      role: "courier",
+      name: "Courier",
+      profile_photo_url: "https://example.com/courier.jpg",
+      profile_photo_verified: true,
+      profile_photo_review_status: "approved",
+    },
+  }),
 }));
 
 jest.mock("../contexts/RealtimeContext", () => ({

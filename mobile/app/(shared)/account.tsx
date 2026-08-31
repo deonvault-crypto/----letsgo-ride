@@ -35,7 +35,7 @@ export default function AccountScreen() {
       <Screen navRole="customer">
         <View style={styles.guestHero}>
           <View style={styles.guestIcon}>
-            <MaterialCommunityIcons name="account-circle-outline" size={36} color={v2Theme.colors.brandStrong} />
+            <MaterialCommunityIcons name="account-circle-outline" size={36} color={v2Theme.colors.ink} />
           </View>
           <Text style={styles.guestEyebrow}>YOUR LETSGORIDE ACCOUNT</Text>
           <Text style={styles.guestTitle}>Browse freely. Sign in when you need to.</Text>
@@ -59,7 +59,6 @@ export default function AccountScreen() {
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(shared)/work-with-us" as never)} style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}><Text style={styles.guestSecondaryText}>Work with LetsGoRide</Text></Pressable>
         </View>
-
       </Screen>
     );
   }
@@ -70,7 +69,7 @@ export default function AccountScreen() {
   return (
     <Screen navRole={navRole}>
       <View style={styles.profileHeader}>
-        <Avatar name={name} imageUri={user?.profile_photo_url} size={68} />
+        <Avatar name={name} imageUri={user?.profile_photo_url} size={68} tone="neutral" />
         <View style={styles.profileCopy}>
           <View style={styles.nameRow}>
             <Text numberOfLines={1} style={styles.name}>{name}</Text>
@@ -82,11 +81,9 @@ export default function AccountScreen() {
       </View>
 
       <View style={styles.utilityPanel}>
-        <Text style={styles.utilityTitle}>Your account</Text>
+        <Text style={styles.utilityTitle}>Quick access</Text>
         <View style={styles.utilityGrid}>
           <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
-          <QuickAction icon="lifebuoy" label="Help" onPress={() => router.push("/(shared)/support" as never)} />
-          <QuickAction icon="shield-check-outline" label="Safety" onPress={() => router.push("/(shared)/safety" as never)} />
           <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
         </View>
       </View>
@@ -119,7 +116,7 @@ export default function AccountScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>More</Text>
         {user?.role === "passenger" ? <AccountRow icon="briefcase-outline" title="Work with LetsGoRide" subtitle="Courier, Driver and Merchant applications" onPress={() => router.push("/(shared)/work-with-us" as never)} /> : null}
-        <AccountRow icon="cog-outline" title="Settings" subtitle="Account, privacy and app preferences" onPress={() => router.push("/(shared)/settings" as never)} />
+        <AccountRow icon="cog-outline" title="Settings" subtitle="Notifications and device security" onPress={() => router.push("/(shared)/settings" as never)} />
       </View>
 
       <AccountComplianceSections product="customer" />
@@ -150,7 +147,7 @@ function QuickAction({ icon, label, onPress }: { icon: keyof typeof MaterialComm
       onPress={onPress}
       style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
     >
-      <View style={styles.quickIcon}><MaterialCommunityIcons name={icon} size={21} color={v2Theme.colors.brandStrong} /></View>
+      <View style={styles.quickIcon}><MaterialCommunityIcons name={icon} size={21} color={v2Theme.colors.ink} /></View>
       <Text style={styles.quickLabel}>{label}</Text>
       <MaterialCommunityIcons name="chevron-right" size={17} color={v2Theme.colors.inkTertiary} />
     </Pressable>
@@ -170,7 +167,7 @@ function AccountRow({
   onPress: () => void;
   tone?: "neutral" | "success" | "warning";
 }) {
-  const iconColor = tone === "success" ? v2Theme.colors.brandStrong : tone === "warning" ? v2Theme.colors.warning : v2Theme.colors.ink;
+  const iconColor = tone === "warning" ? v2Theme.colors.warning : v2Theme.colors.ink;
 
   return (
     <Pressable
@@ -194,11 +191,11 @@ function AccountRow({
 
 const styles = StyleSheet.create({
   guestHero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 20, gap: 12, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.08, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 4 },
-  guestIcon: { width: 62, height: 62, borderRadius: 22, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" },
-  guestEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.1 },
+  guestIcon: { width: 62, height: 62, borderRadius: 22, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
+  guestEyebrow: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 1.1 },
   guestTitle: { color: v2Theme.colors.ink, fontSize: 28, lineHeight: 33, fontWeight: "900", letterSpacing: -0.8 },
   guestBody: { color: v2Theme.colors.inkSecondary, fontSize: 14, lineHeight: 21 },
-  guestPrimary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, marginTop: 4 },
+  guestPrimary: { minHeight: 54, borderRadius: 18, backgroundColor: v2Theme.colors.ink, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, marginTop: 4 },
   guestPrimaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   guestSecondary: { minHeight: 50, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, alignItems: "center", justifyContent: "center" },
   guestSecondaryText: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
@@ -207,18 +204,18 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   name: { flexShrink: 1, color: v2Theme.colors.ink, fontSize: 26, fontWeight: "900", letterSpacing: -0.7 },
   meta: { color: v2Theme.colors.inkSecondary, fontSize: 13 },
-  accountType: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "800" },
+  accountType: { color: v2Theme.colors.ink, fontSize: 11, fontWeight: "800" },
   utilityPanel: { gap: 10 },
   utilityTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.35 },
-  utilityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  quickCard: { width: "48%", minHeight: 68, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
-  quickIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: v2Theme.colors.brandSofter, alignItems: "center", justifyContent: "center" },
+  utilityGrid: { flexDirection: "row", gap: 8 },
+  quickCard: { flex: 1, minHeight: 68, borderRadius: 18, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 8 },
+  quickIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
   quickLabel: { flex: 1, color: v2Theme.colors.ink, fontSize: 11, fontWeight: "900" },
   section: { gap: 9 },
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   row: { minHeight: 74, borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 12 },
   rowIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" },
-  rowIconSuccess: { backgroundColor: v2Theme.colors.brandSoft },
+  rowIconSuccess: { backgroundColor: v2Theme.colors.surfaceMuted },
   rowIconWarning: { backgroundColor: v2Theme.colors.warningSoft },
   rowCopy: { flex: 1, gap: 3 },
   rowTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },

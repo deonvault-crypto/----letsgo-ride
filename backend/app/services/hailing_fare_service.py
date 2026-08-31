@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
+import os
 from typing import Any, Dict
 
 from app.database import database
@@ -22,6 +23,19 @@ def quote_expired(quote: Dict[str, Any]) -> bool:
         return datetime.fromisoformat(str(quote.get("expires_at"))) <= datetime.now(timezone.utc)
     except (TypeError, ValueError):
         return True
+
+
+def _driver_launch_full_fare_enabled() -> bool:
+    """Keep Ride Now Driver deductions at zero during the introductory launch.
+
+    Production defaults to the introductory policy so a missed environment variable
+    cannot accidentally charge Drivers. Set DRIVER_LAUNCH_FULL_FARE=false when the
+    introductory period is deliberately ended.
+    """
+    configured = os.getenv("DRIVER_LAUNCH_FULL_FARE")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes", "on"}
+    return os.getenv("APP_ENV", "development").strip().lower() == "production"
 
 
 def public_route(route: Dict[str, Any]) -> Dict[str, Any]:
@@ -60,7 +74,8 @@ def calculate_fare(
     minimum_fare = money(float(class_pricing.get("minimum_fare") or 0))
     subtotal = money(base_fare + distance_fare + time_fare + booking_fee)
     total_fare = money(max(minimum_fare, subtotal * surge))
-    commission_percent = float(class_pricing.get("platform_commission_percent") or 0)
+    configured_percent = float(class_pricing.get("platform_commission_percent") or 0)
+    commission_percent = 0.0 if _driver_launch_full_fare_enabled() else configured_percent
     platform_commission = money(total_fare * commission_percent / 100)
     driver_earnings = money(max(0, total_fare - platform_commission))
     return {

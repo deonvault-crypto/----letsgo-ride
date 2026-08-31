@@ -12,6 +12,12 @@ export type User = {
   profile_photo_url?: string;
   profile_photo_name?: string;
   profile_photo_verified?: boolean;
+  profile_photo_pending_url?: string;
+  profile_photo_pending_name?: string;
+  profile_photo_review_status?: "pending" | "approved" | "rejected" | "not_required" | string;
+  profile_photo_rejection_reason?: string | null;
+  profile_photo_submitted_at?: string | null;
+  profile_photo_reviewed_at?: string | null;
   verification_status?: "not_started" | "pending" | "pending_uploads" | "pending_auto_check" | "needs_review" | "needs_resubmission" | "verified" | "approved" | "rejected" | "active";
   email_verified?: boolean;
   notification_trip_updates?: boolean;

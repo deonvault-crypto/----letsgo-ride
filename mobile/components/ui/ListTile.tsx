@@ -10,20 +10,23 @@ type ListTileProps = {
   subtitle?: string;
   onPress?: () => void;
   danger?: boolean;
+  tone?: "brand" | "neutral";
 };
 
-export function ListTile({ icon, title, subtitle, onPress, danger = false }: ListTileProps) {
+export function ListTile({ icon, title, subtitle, onPress, danger = false, tone = "brand" }: ListTileProps) {
+  const neutral = tone === "neutral";
+
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
     >
-      <View style={[styles.iconWrap, danger && styles.dangerIcon]}>
+      <View style={[styles.iconWrap, neutral && styles.neutralIcon, danger && styles.dangerIcon]}>
         <MaterialCommunityIcons
           name={icon}
           size={21}
-          color={danger ? colors.danger : colors.primaryGreen}
+          color={danger ? colors.danger : neutral ? colors.charcoal : colors.primaryGreen}
         />
       </View>
       <View style={styles.copy}>
@@ -59,6 +62,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(17,139,68,0.11)",
+  },
+  neutralIcon: {
+    backgroundColor: "rgba(17,17,17,0.06)",
   },
   dangerIcon: {
     backgroundColor: "rgba(255,90,95,0.12)",

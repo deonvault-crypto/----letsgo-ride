@@ -8,11 +8,13 @@ import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
 import { useCourierWorkspace } from "../../contexts/CourierWorkspaceContext";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { setCourierOnline } from "../../services/operationsService";
 import { decodePolyline } from "../../utils/decodePolyline";
 
 export default function CourierHomeScreen() {
   const router = useRouter();
+  const { user } = useCurrentUser();
   const {
     profile, active, earnings, offers, nextShift, loading, error,
     setError, reconcile, applyOnlineProfile,
@@ -26,9 +28,22 @@ export default function CourierHomeScreen() {
   );
   const approved = profile?.status === "APPROVED";
   const online = Boolean(approved && profile?.online);
+  const photoApproved = user?.profile_photo_verified === true;
+  const photoPending = user?.profile_photo_review_status === "pending";
+  const photoRejected = user?.profile_photo_review_status === "rejected";
+  // Existing active deliveries are never interrupted. Approval gates only a new online session.
+  const photoRequired = Boolean(profile && approved && !photoApproved && !profile.online);
 
   async function toggleOnline() {
     if (!profile || busy) return;
+    if (!profile.online && !photoApproved) {
+      setError(photoPending
+        ? "Your Courier profile photo is still waiting for Admin approval."
+        : photoRejected
+          ? "Replace the rejected Courier profile photo before going online."
+          : "Add a clear, Admin-approved profile photo before going online for new deliveries.");
+      return;
+    }
     try {
       setBusy(true);
       setError(null);
@@ -42,6 +57,13 @@ export default function CourierHomeScreen() {
   }
 
   if (loading) return <Screen navRole="courier"><LoadingState label="Preparing your courier day…" /></Screen>;
+
+  const photoTitle = photoPending ? "Photo review pending." : photoRejected ? "Replace your profile photo." : "Add your profile photo.";
+  const photoBody = photoPending
+    ? "Your submitted Courier photo is waiting for Admin review. New delivery work opens after approval."
+    : photoRejected
+      ? (user?.profile_photo_rejection_reason || "That photo could not be approved. Upload a clear photo of yourself before going online.")
+      : "A clear, Admin-approved Courier profile photo is required before you can go online for new deliveries.";
 
   return (
     <Screen navRole="courier" refreshing={loading} onRefresh={reconcile} showNotifications>
@@ -69,13 +91,25 @@ export default function CourierHomeScreen() {
         <>
           <View style={styles.idleHero}>
             <View style={styles.heroTop}><Text style={styles.eyebrow}>TODAY</Text><View style={[styles.statePill, online && styles.statePillOnline]}><Text style={[styles.stateText, online && styles.stateTextOnline]}>{online ? "ONLINE" : "OFFLINE"}</Text></View></View>
-            <Text style={styles.title}>{online ? "You’re ready for nearby work." : "Start when you’re ready."}</Text>
-            <Text style={styles.darkBody}>{approved ? (online ? `${offerCount} available ${offerCount === 1 ? "offer" : "offers"} nearby. You can accept one job at a time.` : "Go online to receive real Courier and Food delivery offers.") : "Your application must be approved before work access opens."}</Text>
+            <Text style={styles.title}>{photoRequired ? photoTitle : online ? "You’re ready for nearby work." : "Start when you’re ready."}</Text>
+            <Text style={styles.darkBody}>{approved ? (photoRequired ? photoBody : online ? `${offerCount} available ${offerCount === 1 ? "offer" : "offers"} nearby. You can accept one job at a time.` : "Go online to receive real Courier and Food delivery offers.") : "Your application must be approved before work access opens."}</Text>
             {profile ? (
-              <Pressable accessibilityRole="switch" accessibilityState={{ checked: online, disabled: !approved || busy }} disabled={!approved || busy} onPress={toggleOnline} style={({ pressed }) => [styles.onlineButton, online && styles.onlineButtonActive, (!approved || busy) && styles.disabled, pressed && styles.pressed]}>
-                <MaterialCommunityIcons name={online ? "pause" : "power"} size={21} color={online ? v2Theme.colors.ink : "#FFFFFF"} />
-                <Text style={[styles.onlineButtonText, online && styles.onlineButtonTextActive]}>{busy ? "Updating…" : online ? "Pause new offers" : "Go online"}</Text>
-              </Pressable>
+              photoRequired ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={photoPending ? "Replace pending Courier profile photo" : "Add required Courier profile photo"}
+                  onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: { product: "courier" } } as never)}
+                  style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}
+                >
+                  <MaterialCommunityIcons name={photoPending ? "clock-outline" : photoRejected ? "alert-circle-outline" : "camera-plus-outline"} size={21} color="#FFFFFF" />
+                  <Text style={styles.photoButtonText}>{photoPending ? "Review photo" : photoRejected ? "Replace profile photo" : "Add profile photo"}</Text>
+                </Pressable>
+              ) : (
+                <Pressable accessibilityRole="switch" accessibilityState={{ checked: online, disabled: !approved || busy }} disabled={!approved || busy} onPress={toggleOnline} style={({ pressed }) => [styles.onlineButton, online && styles.onlineButtonActive, (!approved || busy) && styles.disabled, pressed && styles.pressed]}>
+                  <MaterialCommunityIcons name={online ? "pause" : "power"} size={21} color={online ? v2Theme.colors.ink : "#FFFFFF"} />
+                  <Text style={[styles.onlineButtonText, online && styles.onlineButtonTextActive]}>{busy ? "Updating…" : online ? "Pause new offers" : "Go online"}</Text>
+                </Pressable>
+              )
             ) : null}
           </View>
 
@@ -115,5 +149,5 @@ function formatShiftDate(value: string) { const date = new Date(value); return N
 const styles = StyleSheet.create({
   activeHero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 18, gap: 13 }, activeTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }, activeEyebrow: { color: "#8FE6AE", fontSize: 9, fontWeight: "900", letterSpacing: 1.1 }, activeTitle: { color: "#FFFFFF", fontSize: 26, fontWeight: "900", letterSpacing: -0.7, marginTop: 4 }, activeAvailability: { maxWidth: 92, color: "rgba(255,255,255,0.72)", fontSize: 8, lineHeight: 12, fontWeight: "800", textAlign: "right" }, activeRoute: { color: "rgba(255,255,255,0.74)", fontSize: 12, lineHeight: 18, fontWeight: "700" }, metricsRow: { flexDirection: "row", gap: 8 }, heroMetric: { flex: 1, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.08)", padding: 10, gap: 3 }, heroMetricLabel: { color: "rgba(255,255,255,0.42)", fontSize: 7, fontWeight: "900" }, heroMetricValue: { color: "#FFFFFF", fontSize: 11, fontWeight: "900" }, journeyButton: { minHeight: 64, borderRadius: 20, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, journeyTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" }, journeyBody: { color: "rgba(255,255,255,0.72)", fontSize: 9, marginTop: 3 },
   idleHero: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.ink, padding: 19, gap: 11 }, heroTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, eyebrow: { color: "#8FE6AE", fontSize: 9, fontWeight: "900", letterSpacing: 1.2 }, statePill: { borderRadius: 999, backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 10, paddingVertical: 7 }, statePillOnline: { backgroundColor: "#DDF7E6" }, stateText: { color: "rgba(255,255,255,0.66)", fontSize: 8, fontWeight: "900" }, stateTextOnline: { color: v2Theme.colors.brandStrong }, title: { color: "#FFFFFF", fontSize: 29, lineHeight: 34, fontWeight: "900", letterSpacing: -0.9 }, darkBody: { color: "rgba(255,255,255,0.66)", fontSize: 12, lineHeight: 18 }, body: { color: v2Theme.colors.inkSecondary, fontSize: 12, lineHeight: 18 },
-  onlineButton: { minHeight: 51, borderRadius: 16, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 2 }, onlineButtonActive: { backgroundColor: "#FFFFFF" }, onlineButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" }, onlineButtonTextActive: { color: v2Theme.colors.ink }, error: { borderRadius: 18, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }, errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 10, fontWeight: "700" }, retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" }, setupCard: { borderRadius: 24, backgroundColor: v2Theme.colors.surface, padding: 17, gap: 8 }, setupTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" }, smallButton: { alignSelf: "flex-start", borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 14, paddingVertical: 11 }, smallButtonText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" }, summaryRow: { flexDirection: "row", gap: 8 }, summaryTile: { flex: 1, minHeight: 100, borderRadius: 21, backgroundColor: v2Theme.colors.surface, padding: 11, gap: 5 }, summaryValue: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" }, summaryLabel: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" }, workRow: { flexDirection: "row", gap: 9 }, workCard: { flex: 1, minHeight: 176, borderRadius: 24, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.line, padding: 14, gap: 6 }, workIcon: { width: 45, height: 45, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center", marginBottom: 4 }, workValue: { color: v2Theme.colors.ink, fontSize: 29, fontWeight: "900" }, shiftDate: { color: v2Theme.colors.ink, fontSize: 19, fontWeight: "900", minHeight: 35, textAlignVertical: "center" }, workTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" }, workBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 }, disabled: { opacity: 0.42 }, pressed: { opacity: 0.72 },
+  onlineButton: { minHeight: 51, borderRadius: 16, backgroundColor: v2Theme.colors.brand, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 2 }, onlineButtonActive: { backgroundColor: "#FFFFFF" }, onlineButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" }, onlineButtonTextActive: { color: v2Theme.colors.ink }, photoButton: { minHeight: 51, borderRadius: 16, backgroundColor: v2Theme.colors.ink, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.24)", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 2 }, photoButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" }, error: { borderRadius: 18, backgroundColor: v2Theme.colors.dangerSoft, padding: 12, flexDirection: "row", alignItems: "center", gap: 8 }, errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 10, fontWeight: "700" }, retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" }, setupCard: { borderRadius: 24, backgroundColor: v2Theme.colors.surface, padding: 17, gap: 8 }, setupTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" }, smallButton: { alignSelf: "flex-start", borderRadius: 14, backgroundColor: v2Theme.colors.brand, paddingHorizontal: 14, paddingVertical: 11 }, smallButtonText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" }, summaryRow: { flexDirection: "row", gap: 8 }, summaryTile: { flex: 1, minHeight: 100, borderRadius: 21, backgroundColor: v2Theme.colors.surface, padding: 11, gap: 5 }, summaryValue: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" }, summaryLabel: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" }, workRow: { flexDirection: "row", gap: 9 }, workCard: { flex: 1, minHeight: 176, borderRadius: 24, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line, borderColor: v2Theme.colors.line, padding: 14, gap: 6 }, workIcon: { width: 45, height: 45, borderRadius: 16, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center", marginBottom: 4 }, workValue: { color: v2Theme.colors.ink, fontSize: 29, fontWeight: "900" }, shiftDate: { color: v2Theme.colors.ink, fontSize: 19, fontWeight: "900", minHeight: 35, textAlignVertical: "center" }, workTitle: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900" }, workBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 }, disabled: { opacity: 0.42 }, pressed: { opacity: 0.72 },
 });

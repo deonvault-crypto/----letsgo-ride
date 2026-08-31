@@ -1,20 +1,9 @@
-module.exports = ({ config }) => {
-  const googleMapsApiKey = String(process.env.GOOGLE_MAPS_ANDROID_API_KEY || "").trim();
-  const googleServicesFile = String(process.env.GOOGLE_SERVICES_JSON || "").trim();
+const path = require("path");
 
-  return {
-    ...config,
-    android: {
-      ...config.android,
-      ...(googleMapsApiKey
-        ? {
-            config: {
-              ...(config.android?.config || {}),
-              googleMaps: { apiKey: googleMapsApiKey },
-            },
-          }
-        : {}),
-      ...(googleServicesFile ? { googleServicesFile } : {}),
-    },
-  };
+module.exports = ({ config }) => {
+  // Generate small original notification WAV assets before Expo applies native
+  // notification plugins or EAS packages the project. This keeps the sounds
+  // deterministic and avoids shipping third-party/copyrighted ringtone assets.
+  require(path.resolve(__dirname, "scripts/generate-notification-sounds.js"));
+  return config;
 };

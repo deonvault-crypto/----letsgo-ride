@@ -8,7 +8,12 @@ import { registerPushToken, unregisterPushToken } from "./notificationService";
 const PUSH_TOKEN_STORAGE_KEY = "letsgoride.push.token";
 const NOTIFICATION_EXPLANATION_STORAGE_KEY = "letsgoride.notifications.explanation.seen";
 const NOTIFICATION_REMINDER_NEXT_AT_KEY = "letsgoride.notifications.reminder.next-at";
-const ANDROID_DEFAULT_CHANNEL_ID = "default";
+export const ANDROID_GENERAL_CHANNEL_ID = "general_v1";
+export const ANDROID_RIDE_REQUEST_CHANNEL_ID = "ride_requests_v1";
+export const ANDROID_COURIER_REQUEST_CHANNEL_ID = "courier_requests_v1";
+export const GENERAL_NOTIFICATION_SOUND = "letsgoride_notification.wav";
+export const RIDE_REQUEST_SOUND = "letsgoride_ride_request.wav";
+export const COURIER_REQUEST_SOUND = "letsgoride_courier_request.wav";
 
 export type PushRegistrationState = {
   enabled: boolean;
@@ -31,21 +36,42 @@ export function configureNotificationHandler() {
     handleNotification: async () => ({
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldPlaySound: false,
+      shouldPlaySound: true,
       shouldSetBadge: true,
     }),
   });
 }
 
-async function ensureAndroidDefaultNotificationChannel(): Promise<PushRegistrationState | null> {
+async function ensureAndroidNotificationChannels(): Promise<PushRegistrationState | null> {
   if (Platform.OS !== "android") return null;
   try {
-    await Notifications.setNotificationChannelAsync(ANDROID_DEFAULT_CHANNEL_ID, {
-      name: "Default",
+    await Notifications.setNotificationChannelAsync(ANDROID_GENERAL_CHANNEL_ID, {
+      name: "LetsGoRide notifications",
+      description: "General LetsGoRide updates and account activity.",
       importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
+      vibrationPattern: [0, 180],
       lightColor: "#118B44",
-      sound: "default",
+      sound: GENERAL_NOTIFICATION_SOUND,
+      enableVibrate: true,
+      showBadge: true,
+    });
+    await Notifications.setNotificationChannelAsync(ANDROID_RIDE_REQUEST_CHANNEL_ID, {
+      name: "Ride requests",
+      description: "New Ride Now requests for Drivers.",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 350, 120, 350, 120, 500],
+      lightColor: "#118B44",
+      sound: RIDE_REQUEST_SOUND,
+      enableVibrate: true,
+      showBadge: true,
+    });
+    await Notifications.setNotificationChannelAsync(ANDROID_COURIER_REQUEST_CHANNEL_ID, {
+      name: "Delivery requests",
+      description: "New Courier and Food delivery offers.",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 100, 250, 100, 250, 100, 450],
+      lightColor: "#118B44",
+      sound: COURIER_REQUEST_SOUND,
       enableVibrate: true,
       showBadge: true,
     });
@@ -176,7 +202,7 @@ function disabledPermissionState(permissions: NotificationPermissionState): Push
 }
 
 async function registerCurrentPushToken(permissions?: NotificationPermissionState): Promise<PushRegistrationState> {
-  const channelError = await ensureAndroidDefaultNotificationChannel();
+  const channelError = await ensureAndroidNotificationChannels();
   if (channelError) return channelError;
 
   const currentPermissions = permissions || await Notifications.getPermissionsAsync();
@@ -240,7 +266,7 @@ export async function openPhoneNotificationSettings() {
 }
 
 export async function enablePhoneNotifications(): Promise<PushRegistrationState> {
-  const channelError = await ensureAndroidDefaultNotificationChannel();
+  const channelError = await ensureAndroidNotificationChannels();
   if (channelError) return channelError;
 
   const current = await Notifications.getPermissionsAsync();

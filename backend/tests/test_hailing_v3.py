@@ -154,7 +154,7 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(trip_a["id"], trip_b["id"])
 
-    async def test_driver_online_requires_explicit_hailing_city_and_class_approval(self):
+    async def test_driver_online_requires_verification_admin_and_class_approval_nationwide(self):
         unverified_user = await database.insert_one("users", {"id": "driver-b", "role": "driver"})
         await database.insert_one(
             "drivers",
@@ -210,17 +210,19 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
                 "approved_hailing_classes": ["ECONOMY"],
             },
         )
-        with self.assertRaisesRegex(PermissionError, "this city"):
-            await driver_go_online(
-                {"city_id": "zw-harare", "ride_class": "ECONOMY", "location": {"latitude": -17.8248, "longitude": 31.053}},
-                no_city_user,
-            )
+        no_city_online = await driver_go_online(
+            {"city_id": "zw-harare", "ride_class": "ECONOMY", "location": {"latitude": -17.8248, "longitude": 31.053}},
+            no_city_user,
+        )
+        self.assertEqual(no_city_online["status"], "available")
 
-        with self.assertRaisesRegex(PermissionError, "this city"):
-            await driver_go_online(
-                {"city_id": "zw-bulawayo", "ride_class": "ECONOMY", "location": {"latitude": -20.15, "longitude": 28.58}},
-                self.driver_user,
-            )
+        nationwide = await driver_go_online(
+            {"city_id": "zw-bulawayo", "ride_class": "ECONOMY", "location": {"latitude": -20.15, "longitude": 28.58}},
+            self.driver_user,
+        )
+        self.assertEqual(nationwide["status"], "available")
+        self.assertEqual(nationwide["city_id"], "zw-bulawayo")
+
         with self.assertRaisesRegex(PermissionError, "class"):
             await driver_go_online(
                 {"city_id": "zw-harare", "ride_class": "COMFORT", "location": {"latitude": -17.8248, "longitude": 31.053}},
@@ -523,14 +525,19 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
         logs = await database.find_many("audit_logs", {"action": "hailing_city_upserted"})
         self.assertEqual(len(logs), 1)
 
-    async def test_admin_driver_explicit_approval_and_existing_rides_still_list(self):
+    async def test_admin_driver_nationwide_approval_and_existing_rides_still_list(self):
         admin = await database.insert_one("users", {"id": "admin-2", "role": "admin"})
-        with self.assertRaises(Exception):
-            await admin_update_hailing_driver(
-                self.driver["id"],
-                HailingDriverEligibilityBody(hailing_enabled=True, approved_hailing_city_ids=[], approved_hailing_classes=["ECONOMY"]),
-                admin,
-            )
+        nationwide = await admin_update_hailing_driver(
+            self.driver["id"],
+            HailingDriverEligibilityBody(hailing_enabled=True, approved_hailing_city_ids=[], approved_hailing_classes=["ECONOMY"]),
+            admin,
+        )
+        self.assertTrue(nationwide["data"]["hailing_enabled"])
+        self.assertEqual(nationwide["data"]["approved_hailing_classes"], ["ECONOMY"])
+        self.assertIn("zw-harare", nationwide["data"]["approved_hailing_city_ids"])
+        self.assertIn("zw-bulawayo", nationwide["data"]["approved_hailing_city_ids"])
+        self.assertGreaterEqual(len(nationwide["data"]["approved_hailing_city_ids"]), 30)
+
         updated_driver = await admin_update_hailing_driver(
             self.driver["id"],
             HailingDriverEligibilityBody(hailing_enabled=False, approved_hailing_city_ids=[], approved_hailing_classes=[]),
@@ -539,7 +546,7 @@ class HailingV3Tests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(updated_driver["data"]["hailing_enabled"])
         self.assertEqual(updated_driver["data"]["approved_hailing_classes"], [])
         driver_logs = await database.find_many("audit_logs", {"action": "hailing_driver_eligibility_update"})
-        self.assertEqual(len(driver_logs), 1)
+        self.assertEqual(len(driver_logs), 2)
         await database.insert_one(
             "rides",
             {"id": "legacy-ride", "origin": "Harare", "destination": "Bulawayo", "status": "SCHEDULED", "date": "2099-01-01", "time": "08:00", "available_seats": 2, "user_id": "driver-a"},

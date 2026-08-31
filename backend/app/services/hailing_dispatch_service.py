@@ -92,12 +92,12 @@ async def _nearby_available_presence(
     radius_km: float,
     policy: DispatchPolicy,
 ) -> List[Dict[str, Any]]:
+    """Find physically nearby Drivers; city labels never widen or shrink the radius."""
     pickup = trip["pickup"]
     cutoff = fresh_cutoff(policy.driver_stale_seconds)
     if database.db is not None:
         cursor = database.db["hailing_driver_presence"].find(
             {
-                "city_id": trip["city_id"],
                 "ride_class": trip["ride_class"],
                 "status": "available",
                 "last_seen_at": {"$gte": cutoff},
@@ -117,7 +117,6 @@ async def _nearby_available_presence(
         rows = await database.find_many(
             "hailing_driver_presence",
             {
-                "city_id": trip["city_id"],
                 "ride_class": trip["ride_class"],
                 "status": "available",
             },
@@ -188,8 +187,6 @@ async def _bulk_filter_eligible(
         if driver.get("hailing_enabled") is not True:
             continue
         if str(driver.get("status") or "").lower() in {"suspended", "blocked"}:
-            continue
-        if trip.get("city_id") not in (driver.get("approved_hailing_city_ids") or []):
             continue
         if trip.get("ride_class") not in (driver.get("approved_hailing_classes") or []):
             continue
@@ -281,7 +278,6 @@ async def reserve_candidate(
         {
             "id": candidate["id"],
             "driver_id": candidate["driver_id"],
-            "city_id": trip["city_id"],
             "ride_class": trip["ride_class"],
             "status": "available",
             "last_seen_at": {"$gte": fresh_cutoff(policy.driver_stale_seconds)},

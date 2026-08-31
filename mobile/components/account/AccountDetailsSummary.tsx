@@ -37,7 +37,7 @@ export function AccountDetailsSummary({ rows, note, onEdit, onRequestChange }: A
         ) : null}
         <Pressable accessibilityRole="button" onPress={onRequestChange} style={({ pressed }) => [styles.supportAction, pressed && styles.pressed]}>
           <Text style={styles.supportText}>Request a change</Text>
-          <MaterialCommunityIcons name="arrow-right" size={17} color={v2Theme.colors.brandStrong} />
+          <MaterialCommunityIcons name="arrow-right" size={17} color={v2Theme.colors.ink} />
         </Pressable>
       </View>
     </View>
@@ -64,6 +64,6 @@ const styles = StyleSheet.create({
   editAction: { minHeight: 45, borderRadius: 15, backgroundColor: v2Theme.colors.surfaceMuted, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 },
   editText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
   supportAction: { minHeight: 43, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 3 },
-  supportText: { color: v2Theme.colors.brandStrong, fontSize: 10, fontWeight: "900" },
+  supportText: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" },
   pressed: { opacity: 0.7 },
 });

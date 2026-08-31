@@ -3,7 +3,17 @@ import { Image, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "../../constants/colors";
 
-export function Avatar({ name = "LR", imageUri, size = 48 }: { name?: string; imageUri?: string; size?: number }) {
+export function Avatar({
+  name = "LR",
+  imageUri,
+  size = 48,
+  tone = "brand",
+}: {
+  name?: string;
+  imageUri?: string;
+  size?: number;
+  tone?: "brand" | "neutral";
+}) {
   const [failedUri, setFailedUri] = useState<string | null>(null);
   const initials = name
     .split(" ")
@@ -17,13 +27,20 @@ export function Avatar({ name = "LR", imageUri, size = 48 }: { name?: string; im
   }, [imageUri]);
 
   const validImageUri = imageUri && imageUri !== failedUri ? imageUri : undefined;
+  const neutral = tone === "neutral";
 
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
+    <View
+      style={[
+        styles.avatar,
+        neutral && styles.avatarNeutral,
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}
+    >
       {validImageUri ? (
         <Image source={{ uri: validImageUri }} style={[styles.image, { borderRadius: size / 2 }]} onError={() => setFailedUri(validImageUri)} />
       ) : (
-        <Text style={styles.text}>{initials || "LR"}</Text>
+        <Text style={[styles.text, neutral && styles.textNeutral]}>{initials || "LR"}</Text>
       )}
     </View>
   );
@@ -38,6 +55,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(17,139,68,0.22)",
     overflow: "hidden",
   },
+  avatarNeutral: {
+    backgroundColor: "rgba(17,17,17,0.06)",
+    borderColor: "rgba(17,17,17,0.14)",
+  },
   image: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
@@ -46,5 +67,8 @@ const styles = StyleSheet.create({
   text: {
     color: colors.primaryGreen,
     fontWeight: "900",
+  },
+  textNeutral: {
+    color: colors.charcoal,
   },
 });

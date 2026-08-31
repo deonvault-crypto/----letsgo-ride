@@ -1,14 +1,21 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HailingMapBackdrop } from "../../components/hailing/HailingMapBackdrop";
 import { AppNotice } from "../../components/ui/AppNotice";
 import { v2Theme } from "../../constants/v2Theme";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useHailingDriverWorkspace } from "../../hooks/useHailing";
 import { useHailingDriverLocationSync } from "../../hooks/useHailingDriverLocationSync";
+import {
+  getDriverBackgroundLocationPermissionState,
+  requestDriverBackgroundLocationPermission,
+  startDriverBackgroundAvailabilityTracking,
+  stopDriverBackgroundAvailabilityTracking,
+} from "../../services/hailingBackgroundLocation";
 import { acceptHailingOffer, declineHailingOffer, goHailingDriverOffline, goHailingDriverOnline, resolveHailingServiceArea } from "../../services/hailingService";
 import { getCurrentDeviceLocation } from "../../services/locationService";
 import { HailingCoordinate, HailingRideClass } from "../../types/hailing.types";
@@ -18,6 +25,7 @@ const RIDE_BLACK = "#111111";
 export default function DriverHailingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useCurrentUser();
   const { status, offer, loading, error, reload, setOffer, realtimeState } = useHailingDriverWorkspace(true);
   const [rideClass, setRideClass] = useState<HailingRideClass>("ECONOMY");
   const [currentLocation, setCurrentLocation] = useState<HailingCoordinate | null>(null);
@@ -28,6 +36,9 @@ export default function DriverHailingScreen() {
   const online = Boolean(status?.online);
   const activeTrip = status?.active_trip;
   const live = realtimeState === "connected";
+  const photoApproved = user?.profile_photo_verified === true;
+  const photoPending = user?.profile_photo_review_status === "pending";
+  const photoRejected = user?.profile_photo_review_status === "rejected";
 
   useHailingDriverLocationSync({
     enabled: online && !activeTrip,
@@ -50,7 +61,62 @@ export default function DriverHailingScreen() {
     router.replace(`/(driver)/hailing/trip/${activeTrip.id}` as never);
   }, [activeTrip?.id, router]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    if (!online) {
+      void stopDriverBackgroundAvailabilityTracking();
+      return;
+    }
+    if (activeTrip?.id) return;
+    void getDriverBackgroundLocationPermissionState().then((permission) => {
+      if (permission.enabled) void startDriverBackgroundAvailabilityTracking();
+    });
+  }, [activeTrip?.id, online]);
+
+  function offerBackgroundAvailability() {
+    if (Platform.OS !== "android") return;
+    void getDriverBackgroundLocationPermissionState().then((permission) => {
+      if (permission.enabled) {
+        void startDriverBackgroundAvailabilityTracking();
+        return;
+      }
+      Alert.alert(
+        "Stay available in the background",
+        "While you choose to stay Online, LetsGoRide can use your location in the background so nearby Ride Now requests can still reach you when another app is open or your screen is off. A persistent Android notification stays visible, and tracking stops when you go Offline.",
+        [
+          {
+            text: "Not now",
+            style: "cancel",
+            onPress: () => setNotice("Background availability is off. Keep LetsGoRide open to stay available for nearby requests."),
+          },
+          {
+            text: "Continue",
+            onPress: () => void (async () => {
+              const requested = await requestDriverBackgroundLocationPermission();
+              if (!requested.enabled) {
+                setNotice(requested.requiresSettings
+                  ? "Background location is blocked in Android settings. Keep LetsGoRide open while Online, or enable location access in Settings."
+                  : "Background availability was not enabled. Keep LetsGoRide open while Online to stay available.");
+                return;
+              }
+              await startDriverBackgroundAvailabilityTracking();
+              setNotice("Background availability is on while you stay Online.");
+            })(),
+          },
+        ],
+      );
+    });
+  }
+
   async function goOnline() {
+    if (!photoApproved) {
+      setNotice(photoPending
+        ? "Your Driver profile photo is still waiting for Admin approval."
+        : photoRejected
+          ? "Replace the rejected Driver profile photo before going online for Ride Now."
+          : "Add a clear, Admin-approved profile photo before going online for Ride Now.");
+      return;
+    }
     try {
       setBusy(true);
       setNotice(null);
@@ -66,6 +132,7 @@ export default function DriverHailingScreen() {
       await goHailingDriverOnline({ city_id: city.id, ride_class: rideClass, location: point });
       setCityName(city.name);
       await reload();
+      offerBackgroundAvailability();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to go online.");
     } finally {
@@ -78,6 +145,7 @@ export default function DriverHailingScreen() {
       setBusy(true);
       setNotice(null);
       await goHailingDriverOffline();
+      await stopDriverBackgroundAvailabilityTracking();
       await reload();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Unable to go offline.");
@@ -173,6 +241,24 @@ export default function DriverHailingScreen() {
             </View>
             <Pressable accessibilityRole="button" disabled={busy} onPress={() => void goOffline()} style={({ pressed }) => [styles.offlineButton, busy && styles.disabled, pressed && styles.pressed]}>
               <Text style={styles.offlineText}>{busy ? "Going offline…" : "Go offline"}</Text>
+            </Pressable>
+          </>
+        ) : !photoApproved ? (
+          <>
+            <Text style={styles.eyebrow}>RIDE NOW DRIVER</Text>
+            <Text style={styles.title}>{photoPending ? "Photo under review" : photoRejected ? "Replace your profile photo" : "Add your profile photo"}</Text>
+            <Text style={styles.body}>{photoPending
+              ? "Your submitted Driver photo must be approved before new Ride Now work can be enabled."
+              : photoRejected
+                ? "Your previous photo was not approved. Upload a clear photo of yourself before going online."
+                : "A clear, Admin-approved Driver profile photo is required before new Ride Now work can be enabled."}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={photoRejected ? "Replace rejected Driver profile photo" : "Add required Driver profile photo"}
+              onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: { product: "driver" } } as never)}
+              style={({ pressed }) => [styles.onlineButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.onlineText}>{photoRejected ? "Replace profile photo" : photoPending ? "Review profile photo" : "Add profile photo"}</Text>
             </Pressable>
           </>
         ) : (

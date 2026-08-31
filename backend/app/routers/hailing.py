@@ -441,11 +441,23 @@ async def admin_update_hailing_driver(driver_id: str, payload: HailingDriverElig
     driver = await database.find_one("drivers", {"id": driver_id})
     if not driver:
         api_error("Driver not found.", 404)
-    if payload.hailing_enabled and (not payload.approved_hailing_city_ids or not payload.approved_hailing_classes):
-        api_error("Ride Now drivers require at least one approved city and ride class.", 400)
+    if payload.hailing_enabled and not payload.approved_hailing_classes:
+        api_error("Ride Now drivers require at least one approved ride class.", 400)
+
+    enabled_cities = [
+        city for city in await list_service_areas()
+        if city.get("ride_hailing_enabled")
+    ]
+    nationwide_city_ids = [str(city["id"]) for city in enabled_cities if city.get("id")]
+    if payload.hailing_enabled and not nationwide_city_ids:
+        api_error("Ride Now has no enabled Zimbabwe service areas.", 400)
+
+    approved_city_ids = nationwide_city_ids if payload.hailing_enabled else payload.approved_hailing_city_ids
     updates = {
         "hailing_enabled": payload.hailing_enabled,
-        "approved_hailing_city_ids": payload.approved_hailing_city_ids,
+        # City IDs remain in the stored schema for backward compatibility, but an
+        # enabled Ride Now Driver is approved across every enabled Zimbabwe area.
+        "approved_hailing_city_ids": approved_city_ids,
         "approved_hailing_classes": payload.approved_hailing_classes,
         "updated_at": now_iso(),
     }
@@ -458,7 +470,8 @@ async def admin_update_hailing_driver(driver_id: str, payload: HailingDriverElig
         target_id=driver_id,
         metadata={
             "hailing_enabled": payload.hailing_enabled,
-            "approved_hailing_city_count": len(payload.approved_hailing_city_ids),
+            "coverage": "Zimbabwe nationwide" if payload.hailing_enabled else "disabled",
+            "approved_hailing_city_count": len(approved_city_ids),
             "approved_hailing_classes": payload.approved_hailing_classes,
         },
     )

@@ -5,9 +5,11 @@ import { Platform } from "react-native";
 
 import { ApiRequestError } from "./api";
 import { updateCourierLocation } from "./courierService";
+import { updateCourierPresence } from "./courierPresenceService";
 
 export const COURIER_BACKGROUND_TASK = "letsgoride-courier-background-location";
 const ACTIVE_DELIVERY_KEY = "letsgoride.courier.background-delivery-id";
+const ONLINE_AVAILABILITY_KEY = "letsgoride.courier.background-online";
 const ACTIVE_STATUSES = new Set(["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "IN_TRANSIT", "ARRIVING"]);
 
 export type CourierBackgroundLocationPermissionState = {
@@ -27,29 +29,97 @@ function locationPayload(location: Location.LocationObject) {
   };
 }
 
-async function stopTaskAndClearDelivery() {
-  await SecureStore.deleteItemAsync(ACTIVE_DELIVERY_KEY).catch(() => undefined);
-  const running = await Location.hasStartedLocationUpdatesAsync(COURIER_BACKGROUND_TASK).catch(() => false);
-  if (running) await Location.stopLocationUpdatesAsync(COURIER_BACKGROUND_TASK).catch(() => undefined);
+async function taskRunning() {
+  return Location.hasStartedLocationUpdatesAsync(COURIER_BACKGROUND_TASK).catch(() => false);
+}
+
+async function stopTask() {
+  if (await taskRunning()) await Location.stopLocationUpdatesAsync(COURIER_BACKGROUND_TASK).catch(() => undefined);
+}
+
+async function onlineAvailabilityEnabled() {
+  return (await SecureStore.getItemAsync(ONLINE_AVAILABILITY_KEY).catch(() => null)) === "true";
+}
+
+async function clearAllState() {
+  await Promise.all([
+    SecureStore.deleteItemAsync(ACTIVE_DELIVERY_KEY).catch(() => undefined),
+    SecureStore.deleteItemAsync(ONLINE_AVAILABILITY_KEY).catch(() => undefined),
+  ]);
+  await stopTask();
+}
+
+async function startTask(mode: "availability" | "delivery") {
+  await stopTask();
+  await Location.startLocationUpdatesAsync(COURIER_BACKGROUND_TASK, mode === "delivery" ? {
+    accuracy: Location.Accuracy.High,
+    distanceInterval: 25,
+    timeInterval: 10000,
+    deferredUpdatesDistance: 40,
+    deferredUpdatesInterval: 15000,
+    pausesUpdatesAutomatically: false,
+    activityType: Location.ActivityType.AutomotiveNavigation,
+    showsBackgroundLocationIndicator: true,
+    foregroundService: {
+      notificationTitle: "LetsGoRide active delivery",
+      notificationBody: "Sharing your location for the active delivery.",
+      notificationColor: "#111111",
+      killServiceOnDestroy: false,
+    },
+  } : {
+    accuracy: Location.Accuracy.Balanced,
+    distanceInterval: 75,
+    timeInterval: 30000,
+    deferredUpdatesDistance: 100,
+    deferredUpdatesInterval: 30000,
+    pausesUpdatesAutomatically: false,
+    activityType: Location.ActivityType.AutomotiveNavigation,
+    showsBackgroundLocationIndicator: true,
+    foregroundService: {
+      notificationTitle: "LetsGoRide Courier online",
+      notificationBody: "Listening for nearby delivery requests. Location is used only while you stay Online.",
+      notificationColor: "#111111",
+      killServiceOnDestroy: false,
+    },
+  });
 }
 
 if (Platform.OS !== "web" && !TaskManager.isTaskDefined(COURIER_BACKGROUND_TASK)) {
   TaskManager.defineTask(COURIER_BACKGROUND_TASK, async ({ data, error }) => {
     if (error) return;
     const deliveryId = await SecureStore.getItemAsync(ACTIVE_DELIVERY_KEY).catch(() => null);
-    if (!deliveryId) {
-      await stopTaskAndClearDelivery();
+    const availability = await onlineAvailabilityEnabled();
+    if (!deliveryId && !availability) {
+      await stopTask();
       return;
     }
     const locations = (data as { locations?: Location.LocationObject[] } | undefined)?.locations || [];
     const latest = locations[locations.length - 1];
     if (!latest) return;
     try {
-      const delivery = await updateCourierLocation(deliveryId, locationPayload(latest));
-      if (!ACTIVE_STATUSES.has(delivery.status)) await stopTaskAndClearDelivery();
+      if (deliveryId) {
+        const delivery = await updateCourierLocation(deliveryId, locationPayload(latest));
+        if (!ACTIVE_STATUSES.has(delivery.status)) {
+          await SecureStore.deleteItemAsync(ACTIVE_DELIVERY_KEY).catch(() => undefined);
+          if (!availability) await stopTask();
+        }
+        return;
+      }
+      await updateCourierPresence({
+        latitude: latest.coords.latitude,
+        longitude: latest.coords.longitude,
+        heading: typeof latest.coords.heading === "number" && latest.coords.heading >= 0 ? latest.coords.heading : null,
+        speed: typeof latest.coords.speed === "number" && latest.coords.speed >= 0 ? latest.coords.speed : null,
+        accuracy: typeof latest.coords.accuracy === "number" && latest.coords.accuracy >= 0 ? latest.coords.accuracy : null,
+        timestamp: latest.timestamp,
+      });
     } catch (err) {
       if (err instanceof ApiRequestError && [400, 401, 403, 404].includes(err.status || 0)) {
-        await stopTaskAndClearDelivery();
+        if (deliveryId) await SecureStore.deleteItemAsync(ACTIVE_DELIVERY_KEY).catch(() => undefined);
+        else await SecureStore.deleteItemAsync(ONLINE_AVAILABILITY_KEY).catch(() => undefined);
+        const stillDelivery = await SecureStore.getItemAsync(ACTIVE_DELIVERY_KEY).catch(() => null);
+        const stillOnline = await onlineAvailabilityEnabled();
+        if (!stillDelivery && !stillOnline) await stopTask();
       }
       // Temporary network/provider failures keep the task registered for recovery.
     }
@@ -80,33 +150,44 @@ export async function requestCourierBackgroundLocationPermission() {
   return permissionState(await Location.requestBackgroundPermissionsAsync());
 }
 
+export async function startCourierBackgroundAvailabilityTracking() {
+  if (Platform.OS !== "android") return false;
+  const permission = await getCourierBackgroundLocationPermissionState();
+  if (!permission.enabled) return false;
+  await SecureStore.setItemAsync(ONLINE_AVAILABILITY_KEY, "true");
+  const deliveryId = await SecureStore.getItemAsync(ACTIVE_DELIVERY_KEY).catch(() => null);
+  if (deliveryId) return true;
+  await startTask("availability");
+  return true;
+}
+
+export async function stopCourierBackgroundAvailabilityTracking() {
+  if (Platform.OS !== "android") return;
+  await SecureStore.deleteItemAsync(ONLINE_AVAILABILITY_KEY).catch(() => undefined);
+  const deliveryId = await SecureStore.getItemAsync(ACTIVE_DELIVERY_KEY).catch(() => null);
+  if (!deliveryId) await stopTask();
+}
+
 export async function startCourierBackgroundDeliveryTracking(deliveryId: string) {
   if (Platform.OS === "web") return false;
   const permission = await getCourierBackgroundLocationPermissionState();
   if (!permission.enabled) return false;
   await SecureStore.setItemAsync(ACTIVE_DELIVERY_KEY, deliveryId);
-  const running = await Location.hasStartedLocationUpdatesAsync(COURIER_BACKGROUND_TASK).catch(() => false);
-  if (running) return true;
-  await Location.startLocationUpdatesAsync(COURIER_BACKGROUND_TASK, {
-    accuracy: Location.Accuracy.High,
-    distanceInterval: 25,
-    timeInterval: 10000,
-    deferredUpdatesDistance: 40,
-    deferredUpdatesInterval: 15000,
-    pausesUpdatesAutomatically: false,
-    activityType: Location.ActivityType.AutomotiveNavigation,
-    showsBackgroundLocationIndicator: true,
-    foregroundService: {
-      notificationTitle: "LetsGoRide active delivery",
-      notificationBody: "Sharing your location for the active delivery.",
-      notificationColor: "#111111",
-      killServiceOnDestroy: false,
-    },
-  });
+  await startTask("delivery");
   return true;
 }
 
 export async function stopCourierBackgroundDeliveryTracking() {
   if (Platform.OS === "web") return;
-  await stopTaskAndClearDelivery();
+  await SecureStore.deleteItemAsync(ACTIVE_DELIVERY_KEY).catch(() => undefined);
+  if (Platform.OS === "android" && await onlineAvailabilityEnabled()) {
+    await startTask("availability").catch(() => undefined);
+    return;
+  }
+  await stopTask();
+}
+
+export async function stopAllCourierBackgroundLocation() {
+  if (Platform.OS === "web") return;
+  await clearAllState();
 }

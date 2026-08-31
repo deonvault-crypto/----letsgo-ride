@@ -30,13 +30,19 @@ describe("startup performance architecture", () => {
     expect(read("components/permissions/PermissionReminder.tsx")).toContain('pathname === "/"');
   });
 
-  it("keeps Ride discovery timer-free and the Home first-load state compact", () => {
+  it("keeps Ride discovery timer-free and the Fluid Canvas first-load state compact", () => {
     const rides = read("hooks/useRides.ts");
     const home = read("app/(customer)/home.tsx");
     expect(rides).not.toContain("setInterval(");
     expect(rides).not.toContain("useLiveRefresh");
-    expect(home).toContain("upcoming-rides-skeleton");
-    expect(home).toContain("AppNotice");
+    expect(home).toContain("HailingMapBackdrop");
+    expect(home).toContain('title: "Where to?"');
+    expect(home).toContain('{mode !== "ride" ? (');
+    expect(home).toContain('router.push("/(shared)/services" as never)');
+    expect(home).not.toContain('useRides');
+    expect(home).not.toContain("Checking available trips…");
+    expect(home).not.toContain("upcoming-rides-skeleton");
     expect(home).not.toContain("Finding rides...");
+    expect(home).not.toContain("ScrollView");
   });
 });

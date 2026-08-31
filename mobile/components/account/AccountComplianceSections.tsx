@@ -103,10 +103,11 @@ export function AccountComplianceSections({ product }: { product: PublicAccountP
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Legal &amp; support</Text>
-        <ListTile icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
-        <ListTile icon="file-document-outline" title="Terms of Service" onPress={() => openExternalUrl(legalUrls.terms)} />
-        <ListTile icon="shield-outline" title="Safety" onPress={() => openExternalUrl(legalUrls.safety)} />
+        <ListTile tone="neutral" icon="lock-outline" title="Privacy Policy" onPress={() => openExternalUrl(legalUrls.privacy)} />
+        <ListTile tone="neutral" icon="file-document-outline" title="Terms of Service" onPress={() => openExternalUrl(legalUrls.terms)} />
+        <ListTile tone="neutral" icon="shield-outline" title="Safety" onPress={() => openExternalUrl(legalUrls.safety)} />
         <ListTile
+          tone="neutral"
           icon="lifebuoy"
           title="Help & Support"
           subtitle="Contact LetsGoRide in the app"
@@ -123,7 +124,7 @@ export function AccountComplianceSections({ product }: { product: PublicAccountP
           onPress={openDeleteConfirmation}
           danger
         />
-        <ListTile icon="logout" title="Sign Out" subtitle="Sign out on this device" onPress={confirmSignOut} />
+        <ListTile tone="neutral" icon="logout" title="Sign Out" subtitle="Sign out on this device" onPress={confirmSignOut} />
       </View>
     </>
   );

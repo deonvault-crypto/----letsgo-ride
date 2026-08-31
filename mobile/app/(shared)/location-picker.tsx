@@ -36,9 +36,10 @@ type PickerKind = "pickup" | "dropoff" | "food";
 export default function LocationPickerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ kind?: string; flow?: string }>();
+  const params = useLocalSearchParams<{ kind?: string; flow?: string; focus?: string }>();
   const kind: PickerKind = params.kind === "food" ? "food" : params.kind === "dropoff" ? "dropoff" : "pickup";
   const hailingFlow = params.flow === "hailing";
+  const shouldAutoFocus = params.focus === "1";
   const accentColor = hailingFlow ? RIDE_ACCENT : kind === "food" ? FOOD_ACCENT : COURIER_ACCENT;
   const {
     pickup,
@@ -348,6 +349,7 @@ export default function LocationPickerScreen() {
             placeholderTextColor={v2Theme.colors.inkTertiary}
             autoCapitalize="words"
             autoCorrect={false}
+            autoFocus={shouldAutoFocus}
             returnKeyType="search"
             style={styles.searchInput}
           />

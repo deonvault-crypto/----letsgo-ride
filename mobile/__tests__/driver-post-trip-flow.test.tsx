@@ -57,8 +57,8 @@ describe("driver post-trip flow", () => {
     fireEvent.press(screen.getByRole("button", { name: "Date" }));
     fireEvent.press(screen.getByText("Tomorrow"));
 
-    expect(screen.getByText("Mutare")).toBeOnTheScreen();
-    expect(screen.getByText("Harare")).toBeOnTheScreen();
+    expect(screen.getAllByText("Mutare").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Harare").length).toBeGreaterThan(0);
   });
 
   it("requires phone number before posting a trip", async () => {
