@@ -9,6 +9,7 @@ describe("Alpha M fluid canvas surfaces", () => {
   const driverTrips = fs.readFileSync(path.join(root, "app/(driver)/trips.tsx"), "utf8");
   const driverPostTrip = fs.readFileSync(path.join(root, "app/(driver)/post-trip.tsx"), "utf8");
   const driverCalendar = fs.readFileSync(path.join(root, "app/(driver)/availability.tsx"), "utf8");
+  const mapBackdrop = fs.readFileSync(path.join(root, "components/hailing/HailingMapBackdrop.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(root, "components/layout/BottomNav.tsx"), "utf8");
   const locationPicker = fs.readFileSync(path.join(root, "app/(shared)/location-picker.tsx"), "utf8");
 
@@ -19,6 +20,24 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(home).toContain('title: "Where to?"');
     expect(home).toContain('title: "Search cuisines"');
     expect(home).toContain('title: "Send a package"');
+  });
+
+  it("uses real device location instead of a decorative Harare pointer", () => {
+    expect(home).toContain("showCurrentLocation");
+    expect(home).toContain("promptForLocation");
+    expect(home).toContain("showLocateControl");
+    expect(home).not.toContain("styles.cityMarker");
+    expect(home).not.toContain('<Text style={styles.cityName}>Harare</Text>');
+    expect(mapBackdrop).toContain("getCurrentDeviceLocation");
+    expect(mapBackdrop).toContain("watchForegroundLocation");
+    expect(mapBackdrop).toContain("requestForegroundLocationPermission");
+    expect(mapBackdrop).toContain("openLocationSettings");
+    expect(mapBackdrop).toContain("const blankCanvas = focusCoordinates.length === 0");
+    expect(mapBackdrop).toContain("<Circle");
+    expect(mapBackdrop).toContain("styles.locationPuck");
+    expect(mapBackdrop).toContain('accessibilityLabel="Locate me"');
+    expect(mapBackdrop).toContain('name={locationState === "locating" ? "crosshairs" : "crosshairs-gps"}');
+    expect(mapBackdrop).toContain("Improve location accuracy");
   });
 
   it("morphs service state with restrained motion and respects reduced motion", () => {
