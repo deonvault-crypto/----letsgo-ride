@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { v2Theme } from "../../constants/v2Theme";
@@ -9,7 +9,9 @@ import {
   CourierBackgroundLocationPermissionState,
   getCourierBackgroundLocationPermissionState,
   requestCourierBackgroundLocationPermission,
+  startCourierBackgroundAvailabilityTracking,
   startCourierBackgroundDeliveryTracking,
+  stopCourierBackgroundAvailabilityTracking,
 } from "../../services/courierBackgroundLocation";
 import { openLocationSettings } from "../../services/locationService";
 
@@ -17,26 +19,40 @@ const ACTIVE_STATUSES = new Set(["ASSIGNED", "COURIER_TO_PICKUP", "PICKED_UP", "
 
 export function CourierBackgroundLocationPrompt() {
   const insets = useSafeAreaInsets();
-  const { active } = useCourierWorkspace();
+  const { active, profile } = useCourierWorkspace();
   const [permission, setPermission] = useState<CourierBackgroundLocationPermissionState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const dismissedFor = useRef<string | null>(null);
   const openedSettings = useRef(false);
-  const relevant = Boolean(active?.id && ACTIVE_STATUSES.has(active.status));
+  const activeDelivery = Boolean(active?.id && ACTIVE_STATUSES.has(active.status));
+  const onlineAvailability = Boolean(Platform.OS === "android" && profile?.status === "APPROVED" && profile?.online && !activeDelivery);
+  const relevant = activeDelivery || onlineAvailability;
+  const disclosureKey = activeDelivery ? `delivery:${active?.id}` : "online";
+
+  const startRelevantTracking = useCallback(async () => {
+    if (activeDelivery && active?.id) {
+      await startCourierBackgroundDeliveryTracking(active.id);
+      return;
+    }
+    if (onlineAvailability) await startCourierBackgroundAvailabilityTracking();
+  }, [active?.id, activeDelivery, onlineAvailability]);
 
   const inspect = useCallback(async () => {
-    setPermission(await getCourierBackgroundLocationPermissionState());
-  }, []);
+    const next = await getCourierBackgroundLocationPermissionState();
+    setPermission(next);
+    if (next.enabled && relevant) await startRelevantTracking();
+  }, [relevant, startRelevantTracking]);
 
   useEffect(() => {
     if (!relevant) {
       setPermission(null);
       dismissedFor.current = null;
+      if (Platform.OS === "android" && !profile?.online) void stopCourierBackgroundAvailabilityTracking();
       return;
     }
     void inspect().catch(() => undefined);
-  }, [active?.id, inspect, relevant]);
+  }, [inspect, profile?.online, relevant]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -47,7 +63,7 @@ export function CourierBackgroundLocationPrompt() {
     return () => subscription.remove();
   }, [inspect]);
 
-  if (!relevant || !active?.id || !permission || permission.enabled || dismissedFor.current === active.id) return null;
+  if (!relevant || !permission || permission.enabled || dismissedFor.current === disclosureKey) return null;
 
   async function enable() {
     try {
@@ -60,10 +76,12 @@ export function CourierBackgroundLocationPrompt() {
       }
       const next = await requestCourierBackgroundLocationPermission();
       setPermission(next);
-      if (next.enabled && active?.id && AppState.currentState !== "active") {
-        await startCourierBackgroundDeliveryTracking(active.id);
-      } else if (!next.enabled) {
-        setMessage("Background location is still off. Keep LetsGoRide open during the delivery, or enable it later in Settings.");
+      if (next.enabled) {
+        await startRelevantTracking();
+      } else {
+        setMessage(activeDelivery
+          ? "Background location is still off. Keep LetsGoRide open during the delivery, or enable it later in Settings."
+          : "Background availability is still off. Keep LetsGoRide open while Online to receive nearby delivery requests.");
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Background location could not be enabled.");
@@ -72,18 +90,33 @@ export function CourierBackgroundLocationPrompt() {
     }
   }
 
+  const eyebrow = activeDelivery ? "ACTIVE DELIVERY" : "COURIER ONLINE";
+  const title = activeDelivery
+    ? "Keep the customer’s map moving if you switch apps"
+    : "Keep receiving nearby requests when you switch apps";
+  const body = activeDelivery
+    ? "Background location is used only while an active delivery needs your position. Tracking stops when the delivery ends unless you choose to stay Online for new work."
+    : "While you choose to stay Online, LetsGoRide can use your location in the background to keep nearby delivery matching accurate. Android keeps a visible ongoing notification, and tracking stops when you go Offline.";
+  const primaryLabel = busy
+    ? "Opening…"
+    : permission.requiresSettings
+      ? "Open Settings"
+      : activeDelivery
+        ? "Allow while delivering"
+        : "Allow while Online";
+
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <View style={[styles.card, { bottom: Math.max(insets.bottom, 10) + 78 }]}>
-        <View style={styles.icon}><MaterialCommunityIcons name="map-marker-path" size={22} color="#111111" /></View>
+        <View style={styles.icon}><MaterialCommunityIcons name={activeDelivery ? "map-marker-path" : "radar"} size={22} color="#111111" /></View>
         <View style={styles.copy}>
-          <Text style={styles.eyebrow}>ACTIVE DELIVERY</Text>
-          <Text style={styles.title}>Keep the customer’s map moving if you switch apps</Text>
-          <Text style={styles.body}>Background location is used only while an active delivery needs your position. Tracking stops when the delivery ends.</Text>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.body}>{body}</Text>
           {message ? <Text style={styles.message}>{message}</Text> : null}
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" disabled={busy} onPress={() => void enable()} style={[styles.primary, busy && styles.disabled]}><Text style={styles.primaryText}>{busy ? "Opening…" : permission.requiresSettings ? "Open Settings" : "Allow while delivering"}</Text></Pressable>
-            <Pressable accessibilityRole="button" disabled={busy} onPress={() => { dismissedFor.current = active.id; setPermission(null); }} style={styles.secondary}><Text style={styles.secondaryText}>Not now</Text></Pressable>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => void enable()} style={[styles.primary, busy && styles.disabled]}><Text style={styles.primaryText}>{primaryLabel}</Text></Pressable>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => { dismissedFor.current = disclosureKey; setPermission(null); }} style={styles.secondary}><Text style={styles.secondaryText}>Not now</Text></Pressable>
           </View>
         </View>
       </View>
