@@ -47,7 +47,7 @@ export default function DriverHomeScreen() {
   const photoApproved = user?.profile_photo_verified === true;
   const photoPending = user?.profile_photo_review_status === "pending";
   const photoRejected = user?.profile_photo_review_status === "rejected";
-  const vehicleAdded = Boolean(driver?.vehicle || driver?.vehicle_name);
+  const vehicleAdded = Boolean(driver?.vehicle);
   const dockBottom = v2Theme.control.navHeight + Math.max(insets.bottom, 10) + 18;
 
   useFocusEffect(useCallback(() => {

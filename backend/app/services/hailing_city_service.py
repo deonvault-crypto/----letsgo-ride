@@ -8,7 +8,8 @@ from app.database import database
 from app.utils import now_iso
 
 
-PRICING_VERSION = 2
+PRICING_VERSION = 3
+LAUNCH_RIDE_CLASSES = ("ECONOMY", "COMFORT", "XL")
 STAGING_EXTERNAL_TEST_CITY_ID = "zw-harare"
 
 # Exact V1 values are retained only so seeded service areas can be migrated safely.
@@ -71,7 +72,7 @@ DEFAULT_CITY_PRICING = {
         "surge_multiplier": 1.0,
     },
     "COMFORT": {
-        "enabled": False,
+        "enabled": True,
         "base_fare": 0.60,
         "per_km": 0.36,
         "per_minute": 0.03,
@@ -83,7 +84,7 @@ DEFAULT_CITY_PRICING = {
         "surge_multiplier": 1.0,
     },
     "XL": {
-        "enabled": False,
+        "enabled": True,
         "base_fare": 0.75,
         "per_km": 0.42,
         "per_minute": 0.04,
@@ -172,12 +173,8 @@ def haversine_km(a: Dict[str, float], b: Dict[str, float]) -> float:
 
 
 def enabled_ride_classes(city: Dict[str, Any]) -> List[str]:
-    pricing = city.get("pricing") or {}
-    return [
-        ride_class
-        for ride_class in ("ECONOMY", "COMFORT", "XL")
-        if bool((pricing.get(ride_class) or {}).get("enabled"))
-    ]
+    _ = city
+    return list(LAUNCH_RIDE_CLASSES)
 
 
 def public_city(city: Dict[str, Any]) -> Dict[str, Any]:
@@ -238,6 +235,12 @@ def _migrate_legacy_pricing(existing: Dict[str, Any]) -> Optional[Dict[str, Any]
             continue
         if all(current.get(field) == value for field, value in legacy.items()):
             migrated[ride_class] = dict(DEFAULT_CITY_PRICING[ride_class])
+            changed = True
+            continue
+        sanitized = dict(current)
+        if sanitized.get("enabled") is not True:
+            sanitized["enabled"] = True
+            migrated[ride_class] = sanitized
             changed = True
     return migrated if changed else None
 
@@ -367,7 +370,9 @@ def _pricing_from_update(data: Dict[str, Any], ride_class: str, existing: Option
         key = f"{prefix}_{field}"
         if key in data:
             value = data.pop(key)
-            pricing[field] = bool(value) if field == "enabled" else float(value)
+            if field != "enabled":
+                pricing[field] = float(value)
+    pricing["enabled"] = True
     return pricing
 
 

@@ -17,7 +17,7 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("../services/authService", () => ({ emailLogin: jest.fn(), resendEmailVerification: jest.fn() }));
-jest.mock("../services/biometricService", () => ({ biometricLabel: jest.fn(async () => "Use Face ID"), hasBiometricLoginCredential: jest.fn(async () => false), loginWithBiometrics: jest.fn() }));
+jest.mock("../services/biometricService", () => ({ biometricLabel: jest.fn(async () => "Use Face ID"), hasBiometricLoginCredential: jest.fn(async () => false), loginWithBiometrics: jest.fn(), refreshBiometricCredentialAfterPasswordLogin: jest.fn(async () => undefined) }));
 jest.mock("../services/pushNotificationService", () => ({ enablePhoneNotifications: jest.fn(async () => ({ enabled: true, status: "on" })), hasSeenNotificationExplanation: jest.fn(async () => true), markNotificationExplanationSeen: jest.fn() }));
 
 describe("email login flow", () => {
@@ -33,7 +33,7 @@ describe("email login flow", () => {
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: "Use Face ID" })).toBeNull();
       expect(screen.getByRole("button", { name: "Login" })).toBeOnTheScreen();
-      expect(screen.getByRole("button", { name: "Create account" })).toBeOnTheScreen();
+      expect(screen.getByRole("button", { name: "Create customer account" })).toBeOnTheScreen();
     });
   });
 

@@ -31,10 +31,21 @@ jest.mock("expo-notifications", () => ({
   getExpoPushTokenAsync: jest.fn(async () => ({ data: "ExpoPushToken[test]" })),
 }));
 
+jest.mock("expo-task-manager", () => ({
+  isTaskDefined: jest.fn(() => false),
+  defineTask: jest.fn(),
+}));
+
 jest.mock("expo-location", () => ({
-  Accuracy: { Balanced: 3 },
-  getForegroundPermissionsAsync: jest.fn(async () => ({ granted: true })),
-  requestForegroundPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  Accuracy: { Balanced: 3, High: 4 },
+  ActivityType: { AutomotiveNavigation: 1 },
+  getForegroundPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+  requestForegroundPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+  getBackgroundPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+  requestBackgroundPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+  hasStartedLocationUpdatesAsync: jest.fn(async () => false),
+  startLocationUpdatesAsync: jest.fn(async () => undefined),
+  stopLocationUpdatesAsync: jest.fn(async () => undefined),
   getCurrentPositionAsync: jest.fn(async () => ({
     coords: { latitude: -17.8252, longitude: 31.0335, accuracy: 20, heading: null, speed: null },
   })),

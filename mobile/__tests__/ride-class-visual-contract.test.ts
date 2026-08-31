@@ -21,6 +21,8 @@ describe("Ride Now service-class vehicle art", () => {
 
   it("keeps the selected treatment restrained instead of a permanent neon effect", () => {
     expect(source).toMatch(/selected \? <View/);
-    expect(source).toMatch(/rgba\(84,199,121,0\.14\)/);
+    expect(source).toMatch(/rgba\(17,17,17,0\.09\)/);
+    expect(source).toMatch(/shadowColor: "#111111"/);
+    expect(source).not.toMatch(/84,199,121/);
   });
 });

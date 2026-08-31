@@ -64,7 +64,22 @@ async def list_worker_profile_photos(
     limit: int = Query(default=80, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    rows = await database.find_many("users", {"role": {"$in": sorted(WORKER_ROLES)}})
+    candidate_filter = {
+        "role": {"$in": sorted(WORKER_ROLES)},
+        "$or": [
+            {"profile_photo_pending_url": {"$exists": True, "$ne": None}},
+            {
+                "profile_photo_url": {"$exists": True, "$ne": None},
+                "profile_photo_verified": {"$ne": True},
+            },
+        ],
+    }
+    rows = await database.find_many(
+        "users",
+        candidate_filter,
+        sort=[("profile_photo_submitted_at", -1), ("updated_at", -1)],
+        limit=min(200, max(limit * 3, 80)),
+    )
     items = []
     for user in rows:
         candidate = _review_candidate(user)

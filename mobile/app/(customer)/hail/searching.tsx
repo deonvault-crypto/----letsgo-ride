@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, Animated, Easing, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HailingMapBackdrop } from "../../../components/hailing/HailingMapBackdrop";
@@ -13,6 +13,73 @@ import { cancelHailingTrip } from "../../../services/hailingService";
 
 const RIDE_BLACK = "#111111";
 const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
+
+
+function DriverSearchRadar({ active }: { active: boolean }) {
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const pulseOne = useRef(new Animated.Value(0)).current;
+  const pulseTwo = useRef(new Animated.Value(0)).current;
+  const pulseThree = useRef(new Animated.Value(0)).current;
+  const carLift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let mounted = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => { if (mounted) setReduceMotion(enabled); })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    pulseOne.stopAnimation();
+    pulseTwo.stopAnimation();
+    pulseThree.stopAnimation();
+    carLift.stopAnimation();
+    if (!active || reduceMotion) {
+      pulseOne.setValue(0.34);
+      pulseTwo.setValue(0.20);
+      pulseThree.setValue(0.08);
+      carLift.setValue(0);
+      return undefined;
+    }
+
+    const pulse = (value: Animated.Value, delay: number) => Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(value, { toValue: 1, duration: 1450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(value, { toValue: 0, duration: 1, useNativeDriver: true }),
+        Animated.delay(Math.max(0, 900 - delay)),
+      ]),
+    );
+    const lift = Animated.loop(Animated.sequence([
+      Animated.timing(carLift, { toValue: -2, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.timing(carLift, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+    ]));
+    const animations = [pulse(pulseOne, 0), pulse(pulseTwo, 320), pulse(pulseThree, 640), lift];
+    animations.forEach((animation) => animation.start());
+    return () => animations.forEach((animation) => animation.stop());
+  }, [active, carLift, pulseOne, pulseThree, pulseTwo, reduceMotion]);
+
+  const ringStyle = (value: Animated.Value, baseScale: number) => ({
+    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0] }),
+    transform: [{ scale: value.interpolate({ inputRange: [0, 1], outputRange: [baseScale, baseScale + 0.58] }) }],
+  });
+
+  return (
+    <View accessibilityLabel="Searching nearby for an approved driver" style={styles.radar}>
+      <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseThree, 0.72)]} />
+      <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseTwo, 0.58)]} />
+      <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseOne, 0.44)]} />
+      <Animated.View style={[styles.radarCar, { transform: [{ translateY: carLift }] }]}>
+        <MaterialCommunityIcons name="car" size={25} color="#FFFFFF" />
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function HailingSearchingScreen() {
   const router = useRouter();
@@ -82,6 +149,7 @@ export default function HailingSearchingScreen() {
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.content}>
+          {!noDriver ? <DriverSearchRadar active={!loading && trip?.status === "SEARCHING"} /> : null}
           <View style={styles.statusRow}>
             <View style={[styles.statusIcon, noDriver && styles.statusIconWarning]}>
               <MaterialCommunityIcons name={noDriver ? "car-off" : "crosshairs-gps"} size={22} color={noDriver ? v2Theme.colors.warning : RIDE_BLACK} />
@@ -124,7 +192,7 @@ export default function HailingSearchingScreen() {
         </View>
       </View>
 
-      <BottomNav role="customer" />
+      <BottomNav role="customer" activeTone="neutral" />
     </SafeAreaView>
   );
 }
@@ -141,6 +209,9 @@ const styles = StyleSheet.create({
   sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
   content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 12 },
+  radar: { height: 104, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  radarRing: { position: "absolute", width: 94, height: 94, borderRadius: 47, borderWidth: 1, borderColor: "rgba(17,17,17,0.46)" },
+  radarCar: { width: 48, height: 48, borderRadius: 24, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 6 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 11 },
   statusIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: "#F0F0EE", alignItems: "center", justifyContent: "center" },
   statusIconWarning: { backgroundColor: v2Theme.colors.warningSoft },

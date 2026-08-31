@@ -52,8 +52,8 @@ describe("manual driver verification flow", () => {
     const screen = render(<DriverVerificationScreen />);
 
     expect(await screen.findByText("Driver verification")).toBeOnTheScreen();
-    expect(screen.getByText("Complete a camera-based identity check before posting public rides.")).toBeOnTheScreen();
-    expect(screen.getByText("LetsGoRide uses live capture for your selfie, identity document, driver licence, and vehicle record. If automated checks need help, the same captured documents move to manual review.")).toBeOnTheScreen();
+    expect(screen.getByText("Complete a camera-based identity and licence check before driving with Ride Now.")).toBeOnTheScreen();
+    expect(screen.getByText("LetsGoRide uses live capture for your selfie, identity document and driver licence. If automated checks need help, the same captured documents move to manual review.")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Submit for review" }).props.accessibilityState.disabled).toBe(true);
 
     fireEvent.press(screen.getByRole("button", { name: /Take selfie/ }));
@@ -75,28 +75,23 @@ describe("manual driver verification flow", () => {
     fireEvent.press(screen.getByRole("button", { name: /Scan driver licence/ }));
     await waitFor(() => {
       expect(uploadVerificationDocument).toHaveBeenCalledTimes(3);
+      expect(screen.getAllByText("✓ Captured - Pending").length).toBe(3);
     });
-    fireEvent.press(screen.getByRole("button", { name: /Scan registration\/logbook/ }));
-
-    await waitFor(() => {
-      expect(uploadVerificationDocument).toHaveBeenCalledTimes(4);
-      expect(screen.getAllByText("✓ Captured - Pending").length).toBe(4);
-    });
+    expect(screen.queryByRole("button", { name: /Scan registration\/logbook/ })).toBeNull();
 
     fireEvent.press(screen.getByRole("checkbox", { name: "Driver verification consent" }));
-    fireEvent.changeText(screen.getByLabelText("Message for verification team"), "Vehicle logbook is in my name.");
+    fireEvent.changeText(screen.getByLabelText("Message for verification team"), "Identity and licence captured.");
     expect(screen.getByRole("button", { name: "Submit for review" }).props.accessibilityState.disabled).toBe(false);
     fireEvent.press(screen.getByRole("button", { name: "Submit for review" }));
 
     await waitFor(() => {
       expect(submitManualVerification).toHaveBeenCalledWith({
         consent: true,
-        verification_notes: "Vehicle logbook is in my name.",
+        verification_notes: "Identity and licence captured.",
         documents: [
           { document_id: "doc-identity_document", document_type: "identity_document" },
           { document_id: "doc-driver_license", document_type: "driver_license" },
           { document_id: "doc-selfie", document_type: "selfie" },
-          { document_id: "doc-vehicle_registration_or_logbook", document_type: "vehicle_registration_or_logbook" },
         ],
       });
       expect(screen.getByText("Your driver verification is approved.")).toBeOnTheScreen();

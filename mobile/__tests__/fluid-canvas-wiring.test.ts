@@ -105,13 +105,14 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(screen).toContain('activeTone={routeName === "account" ? "neutral" : "brand"}');
     expect(nav).toContain('activeTone?: "brand" | "neutral"');
     expect(brandLogo).toContain('Lets<Text style={styles.green}>Go</Text>Ride');
-    expect(brandLogo).toContain("color: colors.primaryGreen");
+    expect(brandLogo).toContain('const WORDMARK_GREEN = "#118B44"');
+    expect(brandLogo).toContain("green: { color: WORDMARK_GREEN }");
   });
 
   it("channels Account sections without repeating root content in nested pages", () => {
     expect(customerAccount).toContain("Quick access");
     expect(customerAccount).toContain('label="Inbox"');
-    expect(customerAccount).toContain('label="Wallet"');
+    expect(customerAccount).not.toContain('label="Wallet"');
     expect(customerAccount).not.toContain('label="Help"');
     expect(customerAccount).not.toContain('label="Safety"');
     expect(customerAccount).toContain('subtitle="Notifications and device security"');
@@ -140,9 +141,11 @@ describe("Alpha M fluid canvas surfaces", () => {
 
   it("keeps Driver home a live mobility cockpit instead of a dashboard grid", () => {
     expect(driverHome).toContain("HailingMapBackdrop");
-    expect(driverHome).toContain("const rideNowTitle = photoBlocksNewWork");
-    expect(driverHome).toContain('router.push("/(driver)/hailing" as never)');
-    expect(driverHome).toContain('style={styles.intercityTitle}>Share a route</Text>');
+    expect(driverHome).toContain("const nextAction = useMemo<HomeAction>");
+    expect(driverHome).toContain('route: "/(driver)/hailing"');
+    expect(driverHome).toContain("router.push(nextAction.route as never)");
+    expect(driverHome).not.toContain("Share a route");
+    expect(driverHome).not.toContain("intercityTitle");
     expect(driverHome).toContain('<BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)} />');
     expect(driverHome).not.toContain("styles.metrics");
     expect(driverHome).not.toContain("Plan intercity rides. Manage passengers.");
@@ -172,8 +175,10 @@ describe("Alpha M fluid canvas surfaces", () => {
 
   it("requires an Admin-approved profile photo before Driver and Courier start new work", () => {
     expect(driverHome).toContain("const photoApproved = user?.profile_photo_verified === true");
-    expect(driverHome).toContain("const photoBlocksNewWork = !photoApproved");
-    expect(driverHome).toContain("Profile photo approval required");
+    expect(driverHome).toContain("if (!photoApproved)");
+    expect(driverHome).toContain('title: "Photo under review"');
+    expect(driverHome).toContain('"Add your profile photo"');
+    expect(driverHome).toContain('step: "STEP 1 OF 3"');
     expect(driverHailing).toContain("const photoApproved = user?.profile_photo_verified === true");
     expect(driverHailing).toContain("Admin-approved profile photo before going online for Ride Now");
     expect(driverHailing).not.toContain("const hasProfilePhoto = Boolean(user?.profile_photo_url?.trim())");

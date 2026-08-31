@@ -122,7 +122,8 @@ async def add_vehicle(payload: VehicleBody, user=Depends(get_current_user)):
     # A reviewed Driver who somehow reached production without a vehicle must be
     # able to complete that missing setup step. Once a vehicle exists, later swaps
     # remain support/review controlled instead of silently replacing trusted data.
-    if reviewed_driver and existing_vehicles:
+    has_reviewed_vehicle = bool(existing_vehicles) or bool(str(driver.get("vehicle") or "").strip())
+    if reviewed_driver and has_reviewed_vehicle:
         api_error(
             "Contact LetsGoRide Support to request a reviewed vehicle change.",
             403,

@@ -29,32 +29,24 @@ const manualDocumentTypes: VerificationDocumentType[] = [
   "selfie",
   "identity_document",
   "driver_license",
-  "vehicle_registration_or_logbook",
-  "vehicle_photo_optional",
 ];
 
 const documentLabels: Partial<Record<VerificationDocumentType, string>> = {
   selfie: "Selfie",
   identity_document: "Identity document",
   driver_license: "Driver licence",
-  vehicle_registration_or_logbook: "Registration or logbook",
-  vehicle_photo_optional: "Vehicle photo",
 };
 
 const documentDescriptions: Partial<Record<VerificationDocumentType, string>> = {
   selfie: "Use the front camera in good light so your face is clear.",
   identity_document: "Capture the photo page or national ID details clearly.",
   driver_license: "Scan the front of your valid driver licence.",
-  vehicle_registration_or_logbook: "Capture the vehicle registration or logbook details.",
-  vehicle_photo_optional: "Take a clear exterior photo of the vehicle passengers will see.",
 };
 
 const captureLabels: Partial<Record<VerificationDocumentType, string>> = {
   selfie: "Take selfie",
   identity_document: "Scan identity document",
   driver_license: "Scan driver licence",
-  vehicle_registration_or_logbook: "Scan registration/logbook",
-  vehicle_photo_optional: "Take vehicle photo",
 };
 
 export default function DriverVerificationScreen() {
@@ -158,7 +150,7 @@ export default function DriverVerificationScreen() {
   const status = profile?.verification_status || "not_started";
   const uploadedDocuments = profile?.documents || [];
   const requiredDocuments = (profile?.required_documents || manualDocumentTypes).filter((item) => manualDocumentTypes.includes(item));
-  const requiredCaptureDocuments = requiredDocuments.filter((item) => item !== "vehicle_photo_optional");
+  const requiredCaptureDocuments = requiredDocuments;
   const hasRequiredCaptures = requiredCaptureDocuments.every((documentType) => Boolean(findLatestDocument(uploadedDocuments, documentType)));
   const isResubmission = status === "rejected" || status === "needs_resubmission" || Boolean(profile?.verification_submitted_at);
   const canRenderVerification = Boolean(profile && !loadError);
@@ -181,10 +173,10 @@ export default function DriverVerificationScreen() {
           <StatusBadge label={userStatusLabel(status)} tone={statusTone(status)} />
           <Text style={styles.title}>Driver verification</Text>
           <Text style={styles.body}>
-            Complete a camera-based identity check before posting public rides.
+            Complete a camera-based identity and licence check before driving with Ride Now.
           </Text>
           <Text style={styles.body}>
-            LetsGoRide uses live capture for your selfie, identity document, driver licence, and vehicle record. If automated checks need help, the same captured documents move to manual review.
+            LetsGoRide uses live capture for your selfie, identity document and driver licence. If automated checks need help, the same captured documents move to manual review.
           </Text>
         </View>
       ) : null}
@@ -201,7 +193,7 @@ export default function DriverVerificationScreen() {
         <>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Capture documents</Text>
-            <Text style={styles.body}>Use the camera for each check. Make sure names, faces, licence numbers, and vehicle details are sharp and readable.</Text>
+            <Text style={styles.body}>Use the camera for each check. Make sure names, faces and licence numbers are sharp and readable.</Text>
             {requiredDocuments.map((documentType) => (
               <DocumentRow
                 key={documentType}
@@ -232,9 +224,8 @@ export default function DriverVerificationScreen() {
             >
               <View style={[styles.checkbox, consent && styles.checkboxOn]} />
               <Text style={styles.body}>
-                I consent to LetsGoRide reviewing my identity and vehicle
-                documents for driver verification, safety, and fraud
-                prevention.
+                I consent to LetsGoRide reviewing my identity documents and driver licence
+                for driver verification, safety, and fraud prevention.
               </Text>
             </Pressable>
             {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}

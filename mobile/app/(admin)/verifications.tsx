@@ -57,7 +57,7 @@ export default function AdminVerificationsScreen() {
       <View style={styles.hero}>
         <StatusBadge label={`${pendingCount} pending`} tone={pendingCount > 0 ? "warning" : "success"} />
         <Text style={styles.title}>Driver verifications</Text>
-        <Text style={styles.body}>Review manual driver identity and vehicle submissions.</Text>
+        <Text style={styles.body}>Review Driver identity documents and driver licences.</Text>
       </View>
 
       {loading ? <LoadingState label="Loading verification queue..." /> : null}
@@ -154,8 +154,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: "rgba(17,139,68,0.12)",
-    borderColor: "rgba(17,139,68,0.36)",
+    backgroundColor: "rgba(17,17,17,0.07)",
+    borderColor: "rgba(17,17,17,0.24)",
   },
   filterText: {
     color: colors.mutedText,
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   filterTextActive: {
-    color: colors.primaryGreen,
+    color: colors.charcoal,
   },
   pressed: {
     transform: [{ scale: 0.99 }],

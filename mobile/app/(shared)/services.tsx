@@ -18,7 +18,7 @@ export default function ServicesScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Travel</Text>
-        <ServiceStoryCard title="Ride" subtitle="Search local journeys and planned city-to-city trips" eyebrow="GO SOMEWHERE" icon="car-outline" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push("/(customer)/search" as never)} />
+        <ServiceStoryCard title="Ride" subtitle="Request a nearby ride with live driver matching" eyebrow="RIDE NOW" icon="car-outline" image={require("../../assets/images/ride-harare-owned-v2.jpg")} onPress={() => router.push("/(shared)/location-picker?kind=dropoff&flow=hailing&focus=1" as never)} />
       </View>
 
       <View style={styles.section}>
@@ -32,7 +32,7 @@ export default function ServicesScreen() {
 
 const styles = StyleSheet.create({
   hero: { gap: 8, paddingVertical: 4 },
-  eyebrow: { color: v2Theme.colors.brandStrong, fontSize: 11, fontWeight: "900", letterSpacing: 1.25 },
+  eyebrow: { color: v2Theme.colors.inkTertiary, fontSize: 11, fontWeight: "900", letterSpacing: 1.25 },
   title: { color: v2Theme.colors.ink, fontSize: 31, lineHeight: 36, fontWeight: "900", letterSpacing: -1, maxWidth: 350 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 15, lineHeight: 22, maxWidth: 360 },
   section: { gap: 10 },

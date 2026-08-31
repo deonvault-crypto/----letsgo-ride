@@ -45,6 +45,21 @@ export type AdminListResponse<T> = {
   items: T[];
 };
 
+export type AdminProfilePhotoReviewItem = {
+  user_id: string;
+  name?: string;
+  email?: string;
+  role: "driver" | "courier";
+  city?: string;
+  candidate_url: string;
+  current_approved_url?: string | null;
+  profile_photo_verified: boolean;
+  review_status: "pending" | "approved" | "rejected";
+  rejection_reason?: string | null;
+  submitted_at?: string | null;
+  is_replacement: boolean;
+};
+
 export type AdminUser = User & {
   status?: string;
   posted_rides_count?: number;
@@ -191,6 +206,29 @@ export async function listAdminAuditLogs(params?: { action?: string; target_type
     method: "GET",
     url: "/admin/audit-logs",
     params,
+  });
+}
+
+export async function listAdminProfilePhotos(status: "pending" | "approved" | "rejected" = "pending") {
+  return requestData<AdminListResponse<AdminProfilePhotoReviewItem>>({
+    method: "GET",
+    url: "/admin/profile-photos",
+    params: { status },
+  });
+}
+
+export async function updateAdminProfilePhotoStatus(userId: string, status: "approved" | "rejected", reason?: string) {
+  return requestData<{
+    user_id: string;
+    role: "driver" | "courier";
+    profile_photo_url?: string | null;
+    profile_photo_verified: boolean;
+    review_status: "approved" | "rejected";
+    rejection_reason?: string | null;
+  }>({
+    method: "PATCH",
+    url: `/admin/profile-photos/${userId}`,
+    data: { status, reason },
   });
 }
 

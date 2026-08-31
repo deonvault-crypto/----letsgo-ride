@@ -26,10 +26,34 @@ _autocomplete_cache: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
 _ZIMBABWE_DISCOVERY = [
     ("Harare", "Harare, Zimbabwe", -17.824858, 31.053028),
     ("Bulawayo", "Bulawayo, Zimbabwe", -20.149812, 28.585388),
+    ("Chitungwiza", "Chitungwiza, Zimbabwe", -18.0127, 31.0756),
     ("Mutare", "Mutare, Zimbabwe", -18.9707, 32.6709),
     ("Gweru", "Gweru, Zimbabwe", -19.4513, 29.8152),
+    ("Kwekwe", "Kwekwe, Zimbabwe", -18.9281, 29.8149),
+    ("Kadoma", "Kadoma, Zimbabwe", -18.3333, 29.9167),
     ("Masvingo", "Masvingo, Zimbabwe", -20.0744, 30.8328),
+    ("Chinhoyi", "Chinhoyi, Zimbabwe", -17.3667, 30.2000),
+    ("Marondera", "Marondera, Zimbabwe", -18.1853, 31.5519),
     ("Victoria Falls", "Victoria Falls, Zimbabwe", -17.9243, 25.8560),
+    ("Hwange", "Hwange, Zimbabwe", -18.3645, 26.4988),
+    ("Kariba", "Kariba, Zimbabwe", -16.5167, 28.8000),
+    ("Bindura", "Bindura, Zimbabwe", -17.3019, 31.3306),
+    ("Beitbridge", "Beitbridge, Zimbabwe", -22.2167, 30.0000),
+    ("Zvishavane", "Zvishavane, Zimbabwe", -20.3267, 30.0665),
+    ("Redcliff", "Redcliff, Zimbabwe", -19.0333, 29.7833),
+    ("Rusape", "Rusape, Zimbabwe", -18.5278, 32.1284),
+    ("Chegutu", "Chegutu, Zimbabwe", -18.1302, 30.1407),
+    ("Norton", "Norton, Zimbabwe", -17.8833, 30.7000),
+    ("Gwanda", "Gwanda, Zimbabwe", -20.9333, 29.0000),
+    ("Plumtree", "Plumtree, Zimbabwe", -20.4833, 27.8167),
+    ("Shurugwi", "Shurugwi, Zimbabwe", -19.6702, 30.0059),
+    ("Chipinge", "Chipinge, Zimbabwe", -20.1883, 32.6236),
+    ("Chiredzi", "Chiredzi, Zimbabwe", -21.0500, 31.6667),
+    ("Karoi", "Karoi, Zimbabwe", -16.8167, 29.6833),
+    ("Gokwe", "Gokwe, Zimbabwe", -18.2167, 28.9333),
+    ("Lupane", "Lupane, Zimbabwe", -18.9315, 27.8069),
+    ("Triangle", "Triangle, Zimbabwe", -21.0333, 31.4500),
+    ("Mvurwi", "Mvurwi, Zimbabwe", -17.0333, 30.8500),
     ("Joina City", "Joina City, Jason Moyo Avenue, Harare, Zimbabwe", -17.8313, 31.0477),
     ("Sam Levy’s Village", "Sam Levy’s Village, Borrowdale, Harare, Zimbabwe", -17.7622, 31.0902),
     ("Robert Gabriel Mugabe International Airport", "Harare Airport, Zimbabwe", -17.9318, 31.0928),
@@ -47,6 +71,19 @@ class RoutingNotConfiguredError(RoutingError):
 
 class RoutingNoResultError(RoutingError):
     pass
+
+
+def _zimbabwe_geocode_query(address: str, region_code: str) -> str:
+    clean = " ".join(address.strip().split())
+    if region_code.strip().upper() == "ZW" and "zimbabwe" not in clean.lower():
+        return f"{clean}, Zimbabwe"
+    return clean
+
+
+def _coordinate_in_region(latitude: float, longitude: float, region_code: str) -> bool:
+    if region_code.strip().upper() != "ZW":
+        return True
+    return -23.2 <= latitude <= -15.3 and 25.0 <= longitude <= 33.3
 
 
 def _curated_suggestions(query: str) -> List[Dict[str, Any]]:
@@ -158,7 +195,8 @@ async def geocode_address(address: str) -> Dict[str, Any]:
     if not clean_address:
         raise RoutingNoResultError("Address is required.")
 
-    url = GOOGLE_GEOCODE_URL.format(address=quote(clean_address, safe=""))
+    provider_address = _zimbabwe_geocode_query(clean_address, region_code)
+    url = GOOGLE_GEOCODE_URL.format(address=quote(provider_address, safe=""))
     headers = {
         "X-Goog-Api-Key": api_key,
         "X-Goog-FieldMask": "results.location,results.formattedAddress,results.placeId",
@@ -182,6 +220,8 @@ async def geocode_address(address: str) -> Dict[str, Any]:
     longitude = location.get("longitude")
     if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
         raise RoutingNoResultError("The routing provider did not return coordinates for that address.")
+    if not _coordinate_in_region(float(latitude), float(longitude), region_code):
+        raise RoutingNoResultError("No Zimbabwe location was found for that address.")
 
     return {
         "provider": "google",
@@ -252,6 +292,7 @@ async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
         "input": clean_query,
         "regionCode": region_code,
         "includedRegionCodes": [region_code.lower()],
+        "languageCode": "en",
     }
 
     try:
@@ -328,7 +369,7 @@ async def autocomplete_places(query: str) -> List[Dict[str, Any]]:
 
 
 async def resolve_place(place_id: str) -> Dict[str, Any]:
-    api_key, _, timeout = _google_config()
+    api_key, region_code, timeout = _google_config()
     clean_place_id = place_id.strip()
     if not clean_place_id:
         raise RoutingNoResultError("Place is required.")
@@ -350,6 +391,8 @@ async def resolve_place(place_id: str) -> Dict[str, Any]:
     longitude = location.get("longitude")
     if not isinstance(latitude, (int, float)) or not isinstance(longitude, (int, float)):
         raise RoutingNoResultError("That place does not have usable map coordinates.")
+    if not _coordinate_in_region(float(latitude), float(longitude), region_code):
+        raise RoutingNoResultError("That place is outside Zimbabwe.")
     display_name = payload.get("displayName") or {}
     label = display_name.get("text") if isinstance(display_name, dict) else None
     formatted_address = payload.get("formattedAddress") or label or "Selected location"

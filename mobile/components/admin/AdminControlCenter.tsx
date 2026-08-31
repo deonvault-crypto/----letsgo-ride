@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 
@@ -21,15 +21,18 @@ import {
   AdminRide,
   AdminSafetyReport,
   AdminSupportMessage,
+  AdminProfilePhotoReviewItem,
   AdminUser,
   getAdminOverview,
   listAdminAuditLogs,
+  listAdminProfilePhotos,
   listAdminReports,
   listAdminRequests,
   listAdminRides,
   listAdminSupportMessages,
   listAdminUsers,
   listAdminVerifications,
+  updateAdminProfilePhotoStatus,
   updateAdminReportStatus,
   updateAdminRequestStatus,
   updateAdminRideStatus,
@@ -66,9 +69,10 @@ const ADMIN_EVENT_RESOURCES = new Set([
   "safety_report",
   "worker_application",
   "notification",
+  "profile_photo",
 ]);
 
-type AdminSection = "overview" | "verifications" | "support" | "safety" | "bookings" | "users" | "rides" | "audit";
+type AdminSection = "overview" | "profile_photos" | "verifications" | "support" | "safety" | "bookings" | "users" | "rides" | "audit";
 
 type ReasonAction = {
   title: string;
@@ -87,6 +91,7 @@ export default function AdminControlCenter() {
 
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [verifications, setVerifications] = useState<AdminVerificationListItem[]>([]);
+  const [profilePhotos, setProfilePhotos] = useState<AdminProfilePhotoReviewItem[]>([]);
   const [support, setSupport] = useState<AdminSupportMessage[]>([]);
   const [reports, setReports] = useState<AdminSafetyReport[]>([]);
   const [requests, setRequests] = useState<AdminRequest[]>([]);
@@ -115,11 +120,12 @@ export default function AdminControlCenter() {
     setError("");
 
     let request!: Promise<void>;
-    request = Promise.all([getAdminOverview(), listAdminVerifications()])
-      .then(([overviewData, verificationData]) => {
+    request = Promise.all([getAdminOverview(), listAdminVerifications(), listAdminProfilePhotos("pending")])
+      .then(([overviewData, verificationData, profilePhotoData]) => {
         const approvedCount = verificationData.items.filter((item) => VERIFIED_DRIVER_STATUSES.has(String(item.verification_status))).length;
         const pendingCount = verificationData.items.filter((item) => PENDING_DRIVER_STATUSES.has(String(item.verification_status))).length;
         setVerifications(verificationData.items);
+        setProfilePhotos(profilePhotoData.items);
         // Keep the dashboard internally consistent even while an older backend is still deployed.
         setOverview({
           ...overviewData,
@@ -142,7 +148,7 @@ export default function AdminControlCenter() {
   }, []);
 
   const loadSection = useCallback((section: AdminSection) => {
-    if (section === "overview" || section === "verifications") return Promise.resolve();
+    if (section === "overview" || section === "profile_photos" || section === "verifications") return Promise.resolve();
     if (sectionInFlight.current) return sectionInFlight.current;
     setSectionLoading(true);
 
@@ -235,6 +241,10 @@ export default function AdminControlCenter() {
     () => filterSearch(verifications, search, ["name", "email", "phone", "city", "verification_status"]),
     [search, verifications],
   );
+  const searchedProfilePhotos = useMemo(
+    () => filterSearch(profilePhotos, search, ["name", "email", "role", "city", "review_status"]),
+    [profilePhotos, search],
+  );
   const searchedSupport = useMemo(() => filterSearch(support, search, ["subject", "message", "user_name", "user_email", "status"]), [search, support]);
   const searchedReports = useMemo(() => filterSearch(reports, search, ["report_type", "message", "user_name", "user_email", "status"]), [reports, search]);
   const searchedRequests = useMemo(() => filterSearch(requests, search, ["passenger_name", "passenger_email", "driver_name", "driver_email", "status"]), [requests, search]);
@@ -298,6 +308,7 @@ export default function AdminControlCenter() {
         <Overview
           overview={overview}
           pendingVerifications={pendingVerifications.length}
+          pendingProfilePhotos={profilePhotos.length}
           onOpen={switchSection}
           onOpenWorkforce={() => router.push("/(admin)/workforce" as never)}
           onOpenHailing={() => router.push("/(admin)/hailing" as never)}
@@ -310,6 +321,26 @@ export default function AdminControlCenter() {
         <View style={styles.section}>
           {active !== "audit" ? <AppInput label="Search" value={search} onChangeText={setSearch} placeholder={`Search ${sectionTitle(active).toLowerCase()}`} /> : <AppInput label="Search operations log" value={search} onChangeText={setSearch} />}
           {sectionLoading ? <LoadingState label={`Refreshing ${sectionTitle(active).toLowerCase()}…`} /> : null}
+
+          {active === "profile_photos" ? (
+            <ProfilePhotoList
+              items={searchedProfilePhotos}
+              onApprove={async (item) => {
+                await updateAdminProfilePhotoStatus(item.user_id, "approved");
+                setProfilePhotos((current) => current.filter((candidate) => candidate.user_id !== item.user_id));
+              }}
+              onReject={(item) => setReasonAction({
+                title: "Reject profile photo",
+                message: `Ask ${item.name || "this worker"} to upload another clear profile photo?`,
+                reasonLabel: "Reason for rejection",
+                confirmLabel: "Reject photo",
+                onConfirm: async (actionReason) => {
+                  await updateAdminProfilePhotoStatus(item.user_id, "rejected", actionReason);
+                  setProfilePhotos((current) => current.filter((candidate) => candidate.user_id !== item.user_id));
+                },
+              })}
+            />
+          ) : null}
 
           {active === "verifications" ? (
             <VerificationList items={searchedVerifications} onReview={(driverId) => router.push(`/(admin)/verification/${driverId}` as never)} />
@@ -410,6 +441,7 @@ export default function AdminControlCenter() {
 function Overview({
   overview,
   pendingVerifications,
+  pendingProfilePhotos,
   onOpen,
   onOpenWorkforce,
   onOpenHailing,
@@ -418,6 +450,7 @@ function Overview({
 }: {
   overview: AdminOverview;
   pendingVerifications: number;
+  pendingProfilePhotos: number;
   onOpen: (section: AdminSection) => void;
   onOpenWorkforce: () => void;
   onOpenHailing: () => void;
@@ -429,7 +462,7 @@ function Overview({
       <View style={styles.metricGrid}>
         <Metric value={overview.total_users ?? overview.users ?? 0} label="Users" />
         <Metric value={overview.verified_drivers || 0} label="Approved drivers" />
-        <Metric value={pendingVerifications} label="Pending checks" urgent={pendingVerifications > 0} />
+        <Metric value={pendingVerifications + pendingProfilePhotos} label="Pending checks" urgent={pendingVerifications + pendingProfilePhotos > 0} />
         <Metric value={overview.active_rides || 0} label="Active rides" />
       </View>
 
@@ -441,7 +474,8 @@ function Overview({
           </View>
           <Text style={styles.sectionHint}>Tap to manage</Text>
         </View>
-        <AttentionRow icon="shield-account-outline" title="Driver verification" subtitle="Review identity and vehicle documents" count={pendingVerifications} onPress={() => onOpen("verifications")} />
+        <AttentionRow icon="account-box-outline" title="Profile photos" subtitle="Approve Driver and Courier profile photos" count={pendingProfilePhotos} onPress={() => onOpen("profile_photos")} />
+        <AttentionRow icon="shield-account-outline" title="Driver verification" subtitle="Review identity documents and driver licences" count={pendingVerifications} onPress={() => onOpen("verifications")} />
         <AttentionRow icon="shield-alert-outline" title="Safety" subtitle="Open passenger and driver reports" count={overview.open_safety_reports || 0} onPress={() => onOpen("safety")} danger />
         <AttentionRow icon="lifebuoy" title="Support" subtitle="Cases waiting for an admin" count={overview.open_support_cases || 0} onPress={() => onOpen("support")} />
         <AttentionRow icon="ticket-confirmation-outline" title="Bookings" subtitle="Pending booking requests" count={overview.pending_ride_requests || 0} onPress={() => onOpen("bookings")} />
@@ -478,6 +512,42 @@ function Overview({
         </View>
       ) : null}
     </>
+  );
+}
+
+function ProfilePhotoList({ items, onApprove, onReject }: { items: AdminProfilePhotoReviewItem[]; onApprove: (item: AdminProfilePhotoReviewItem) => Promise<void>; onReject: (item: AdminProfilePhotoReviewItem) => void }) {
+  const [savingId, setSavingId] = useState<string | null>(null);
+  if (!items.length) return <EmptyState title="No profile photos waiting" body="New Driver and Courier profile photos will appear here automatically." />;
+
+  async function approve(item: AdminProfilePhotoReviewItem) {
+    if (savingId) return;
+    try {
+      setSavingId(item.user_id);
+      await onApprove(item);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  return (
+    <View style={styles.list}>
+      {items.map((item) => (
+        <View key={item.user_id} style={styles.recordCard}>
+          <View style={styles.recordTopRow}>
+            <StatusBadge label={item.is_replacement ? "Replacement" : "New photo"} tone="warning" />
+            <Text style={styles.roleText}>{formatStatus(item.role)}</Text>
+          </View>
+          <Image source={{ uri: item.candidate_url }} style={styles.profilePhotoPreview} resizeMode="cover" />
+          <Text style={styles.recordTitle}>{item.name || "Worker"}</Text>
+          <Text style={styles.muted}>{item.email || item.city || "No contact on file"}</Text>
+          {item.current_approved_url ? <Text style={styles.muted}>Existing approved photo stays live until this replacement is approved.</Text> : null}
+          <View style={styles.actionRow}>
+            <AppButton title="Approve photo" loading={savingId === item.user_id} disabled={Boolean(savingId)} onPress={() => void approve(item)} style={styles.flexButton} />
+            <AppButton title="Reject" variant="danger" disabled={Boolean(savingId)} onPress={() => onReject(item)} style={styles.flexButton} />
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -666,6 +736,7 @@ function ReasonModal({ action, reason, loading, onChangeReason, onCancel, onConf
 function sectionTitle(section: AdminSection) {
   const labels: Record<AdminSection, string> = {
     overview: "Operations",
+    profile_photos: "Profile photo approvals",
     verifications: "Driver verification",
     support: "Support",
     safety: "Safety",
@@ -707,12 +778,12 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: colors.charcoal, borderRadius: 30, padding: spacing.xl, gap: spacing.md },
   heroTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   livePill: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#4ADE80" },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" },
   liveDotOffline: { backgroundColor: "#FBBF24" },
   liveText: { color: "#FFFFFF", fontWeight: "900", fontSize: 11, letterSpacing: 1.2 },
   reconnectButton: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 12 },
   reconnectText: { color: "#FFFFFF", fontWeight: "800", fontSize: 12 },
-  heroEyebrow: { color: "#86EFAC", fontWeight: "900", fontSize: 11, letterSpacing: 1.8 },
+  heroEyebrow: { color: "#D1D5DB", fontWeight: "900", fontSize: 11, letterSpacing: 1.8 },
   heroTitle: { color: "#FFFFFF", fontSize: 34, lineHeight: 39, fontWeight: "900" },
   heroBody: { color: "#D1D5DB", lineHeight: 22 },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
@@ -723,7 +794,7 @@ const styles = StyleSheet.create({
   metricLabel: { color: colors.mutedText, fontWeight: "800", fontSize: 13 },
   section: { gap: spacing.md },
   sectionHeadingRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
-  sectionEyebrow: { color: colors.primaryGreen, fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },
+  sectionEyebrow: { color: colors.mutedText, fontWeight: "900", fontSize: 11, letterSpacing: 1.5 },
   sectionTitle: { color: colors.charcoal, fontSize: 24, fontWeight: "900", marginTop: 3 },
   sectionHint: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
   attentionRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 86, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 22, padding: spacing.md },
@@ -753,6 +824,7 @@ const styles = StyleSheet.create({
   warningTitle: { color: "#704A00", fontWeight: "900" },
   list: { gap: spacing.md },
   recordCard: { gap: spacing.sm, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 24, padding: spacing.lg },
+  profilePhotoPreview: { width: "100%", height: 260, borderRadius: 20, backgroundColor: colors.mutedSurface },
   recordTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   recordTitle: { color: colors.charcoal, fontSize: 20, fontWeight: "900" },
   recordBody: { color: colors.charcoal, lineHeight: 21 },

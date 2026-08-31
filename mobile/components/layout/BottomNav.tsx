@@ -78,7 +78,8 @@ export function BottomNav({
   const items = role === "driver" ? driverItems : role === "courier" ? courierItems : role === "merchant" ? merchantItems : customerItems;
   // Alpha M Driver direction is intentionally black-first. The shared nav keeps
   // brand treatment for the other products while Driver active state stays neutral.
-  const neutralActive = role === "driver" || activeTone === "neutral";
+  const neutralActive = true;
+  void activeTone;
 
   return (
     <View pointerEvents="box-none" style={[styles.positioner, { bottom: bottomOffset }]}>

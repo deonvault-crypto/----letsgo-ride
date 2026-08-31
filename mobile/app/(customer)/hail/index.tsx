@@ -34,8 +34,8 @@ const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
 const TERMINAL = new Set(["COMPLETED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "CANCELLED_BY_ADMIN", "NO_DRIVER_FOUND"]);
 const fallbackRideClasses: HailingRideClassConfig[] = [
   { id: "ECONOMY", label: "Economy", enabled: true },
-  { id: "COMFORT", label: "Comfort", enabled: false },
-  { id: "XL", label: "XL", enabled: false },
+  { id: "COMFORT", label: "Comfort", enabled: true },
+  { id: "XL", label: "XL", enabled: true },
 ];
 
 function toHailingPlace(choice: NonNullable<ReturnType<typeof useLocationDraft>["pickup"]>): HailingPlace {

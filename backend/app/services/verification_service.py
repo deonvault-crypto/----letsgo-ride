@@ -29,9 +29,12 @@ REQUIRED_DOCUMENTS = [
     "selfie",
     "identity_document",
     "driver_license",
+]
+LEGACY_OPTIONAL_DOCUMENT_TYPES = {
     "vehicle_registration_or_logbook",
     "vehicle_photo_optional",
-]
+}
+SUPPORTED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS) | LEGACY_OPTIONAL_DOCUMENT_TYPES
 
 DOCUMENT_STATUSES = {"pending", "accepted", "rejected"}
 VERIFICATION_STATUSES = {
@@ -44,7 +47,7 @@ VERIFICATION_STATUSES = {
     "needs_resubmission",
 }
 STORAGE_ROOT = Path(__file__).resolve().parents[2] / "storage" / "verification_documents"
-REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS) - {"vehicle_photo_optional"}
+REQUIRED_DOCUMENT_TYPES = set(REQUIRED_DOCUMENTS)
 ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "heic", "heif"}
 STATUS_ALIASES = {
     "active": "approved",
@@ -160,7 +163,7 @@ def _iter_document_items(documents: Any) -> List[Dict[str, Any]]:
 def _normalize_document_type(document_type: Any) -> Optional[str]:
     normalized = str(document_type or "").strip().lower().replace("-", "_").replace(" ", "_")
     normalized = DOCUMENT_TYPE_ALIASES.get(normalized, normalized)
-    return normalized if normalized in REQUIRED_DOCUMENTS else None
+    return normalized if normalized in SUPPORTED_DOCUMENT_TYPES else None
 
 
 def _normalize_document_status(status: Any) -> str:

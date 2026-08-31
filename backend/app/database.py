@@ -202,6 +202,10 @@ class Database:
             [("verification_status", 1), ("updated_at", -1)],
             name="admin_driver_verification_queue",
         )
+        await self.db["users"].create_index(
+            [("role", 1), ("profile_photo_review_status", 1), ("profile_photo_submitted_at", -1)],
+            name="admin_worker_profile_photo_review",
+        )
         await self.db["rides"].create_index(
             [("status", 1), ("is_demo", 1), ("updated_at", -1)],
             name="admin_rides_by_status",
