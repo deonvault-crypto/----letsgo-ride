@@ -40,7 +40,7 @@ export default function AccountScreen() {
           <Text style={styles.guestEyebrow}>YOUR LETSGORIDE ACCOUNT</Text>
           <Text style={styles.guestTitle}>Browse freely. Sign in when you need to.</Text>
           <Text style={styles.guestBody}>
-            You can explore rides, food and courier without an account. Sign in when you want to book, send, message, pay or save something.
+            You can explore rides, food and courier without an account. Sign in when you want to book, send, message or save something.
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -55,7 +55,7 @@ export default function AccountScreen() {
             onPress={() => router.push("/(auth)/email-register" as never)}
             style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}
           >
-            <Text style={styles.guestSecondaryText}>Create account</Text>
+            <Text style={styles.guestSecondaryText}>Create customer account</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => router.push("/(shared)/work-with-us" as never)} style={({ pressed }) => [styles.guestSecondary, pressed && styles.pressed]}><Text style={styles.guestSecondaryText}>Work with LetsGoRide</Text></Pressable>
         </View>
@@ -84,7 +84,6 @@ export default function AccountScreen() {
         <Text style={styles.utilityTitle}>Quick access</Text>
         <View style={styles.utilityGrid}>
           <QuickAction icon="message-text-outline" label="Inbox" onPress={() => router.push("/(shared)/messages" as never)} />
-          <QuickAction icon="wallet-outline" label="Wallet" onPress={() => router.push("/(shared)/wallet" as never)} />
         </View>
       </View>
 
