@@ -220,7 +220,7 @@ class Database:
         )
         await self.db["app_notifications"].create_index(
             [("user_id", 1), ("read", 1), ("created_at", -1)],
-            name="admin_notifications_unread",
+            name="notifications_unread_by_user",
         )
         await self.db["hailing_cities"].create_index(
             [("slug", 1)],
