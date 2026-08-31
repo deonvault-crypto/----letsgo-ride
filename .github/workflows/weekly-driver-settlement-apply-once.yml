@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/apply_weekly_driver_settlement.py
       - scripts/align_weekly_settlement_validation.py
+      - scripts/align_stripe_hailing_test_rollout_flag.py
       - .github/workflows/weekly-driver-settlement-apply-once.yml
   workflow_dispatch:
 
@@ -45,7 +46,9 @@ jobs:
         run: python scripts/apply_weekly_driver_settlement.py
 
       - name: Align database and finance tests
-        run: python scripts/align_weekly_settlement_validation.py
+        run: |
+          python scripts/align_weekly_settlement_validation.py
+          python scripts/align_stripe_hailing_test_rollout_flag.py
 
       - name: Setup Python
         uses: actions/setup-python@v5
