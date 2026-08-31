@@ -59,6 +59,7 @@ jobs:
         working-directory: backend
         env:
           ENABLE_DEMO_SEED: 'false'
+          PYTHONPATH: '.'
         run: pytest -q
 
       - name: Remove one-time workflow and commit validated hotfix
