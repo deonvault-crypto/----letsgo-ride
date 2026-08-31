@@ -6,6 +6,9 @@ describe("Alpha M fluid canvas surfaces", () => {
   const home = fs.readFileSync(path.join(root, "app/(customer)/home.tsx"), "utf8");
   const driverHome = fs.readFileSync(path.join(root, "app/(driver)/home.tsx"), "utf8");
   const driverAccount = fs.readFileSync(path.join(root, "app/(driver)/account.tsx"), "utf8");
+  const driverTrips = fs.readFileSync(path.join(root, "app/(driver)/trips.tsx"), "utf8");
+  const driverPostTrip = fs.readFileSync(path.join(root, "app/(driver)/post-trip.tsx"), "utf8");
+  const driverCalendar = fs.readFileSync(path.join(root, "app/(driver)/availability.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(root, "components/layout/BottomNav.tsx"), "utf8");
   const locationPicker = fs.readFileSync(path.join(root, "app/(shared)/location-picker.tsx"), "utf8");
 
@@ -71,5 +74,33 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(driverAccount).toContain("onRequestChange={requestAccountChange}");
     expect(driverAccount).toContain('<BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)} />');
     expect(driverAccount).not.toContain("Earnings & payouts");
+  });
+
+  it("keeps Driver trips route-first instead of generic dashboard cards", () => {
+    expect(driverTrips).toContain("YOUR ROAD");
+    expect(driverTrips).toContain("Routes you’re driving.");
+    expect(driverTrips).toContain("DriverRouteCard");
+    expect(driverTrips).toContain("styles.routeRail");
+    expect(driverTrips).not.toContain("RideCard");
+  });
+
+  it("keeps Post Trip as one continuous journey builder while preserving the proven fields", () => {
+    expect(driverPostTrip).toContain("SHARE A ROUTE");
+    expect(driverPostTrip).toContain("routePreview");
+    expect(driverPostTrip).toContain("BuilderSection");
+    expect(driverPostTrip).toContain('accessibilityLabel="Available seats"');
+    expect(driverPostTrip).toContain('accessibilityLabel="Price USD per seat"');
+    expect(driverPostTrip).toContain('accessibilityLabel="Vehicle"');
+    expect(driverPostTrip).toContain('title="Publish trip"');
+    expect(driverPostTrip).not.toContain("sectionCard");
+  });
+
+  it("keeps Driver Calendar as a driving timeline rather than a settings grid", () => {
+    expect(driverCalendar).toContain("DRIVING CALENDAR");
+    expect(driverCalendar).toContain("When can you drive?");
+    expect(driverCalendar).toContain("Your driving timeline");
+    expect(driverCalendar).toContain('accessibilityLabel="Add availability window"');
+    expect(driverCalendar).toContain("styles.timelineRail");
+    expect(driverCalendar).not.toContain("formCard");
   });
 });
