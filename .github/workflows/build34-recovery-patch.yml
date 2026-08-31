@@ -26,6 +26,9 @@ jobs:
       - name: Apply targeted recovery patch
         run: python .github/scripts/build34_recovery_patch.py
 
+      - name: Normalize React Native AppState API
+        run: sed -i 's/AppState.current !== "active"/AppState.currentState !== "active"/' mobile/components/courier/CourierBackgroundLocationPrompt.tsx
+
       - name: Install mobile dependencies
         working-directory: mobile
         run: npm ci
