@@ -42,6 +42,10 @@ export default function DriverAccountScreen() {
   const vehicle = String(driver?.vehicle || "Not added");
   const rating = driver?.rating ? Number(driver.rating).toFixed(1) : "New";
   const navBottom = v2Theme.control.navHeight + Math.max(insets.bottom, 10) + 26;
+  const requestAccountChange = () => router.push({
+    pathname: "/(shared)/support",
+    params: { ...productParam, subject: "Account details change" },
+  } as never);
 
   return (
     <SafeAreaView edges={[]} style={styles.root}>
@@ -136,19 +140,7 @@ export default function DriverAccountScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeadingRow}>
-              <View>
-                <Text style={styles.sectionEyebrow}>IDENTITY</Text>
-                <Text style={styles.sectionTitle}>Account details</Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => router.push({ pathname: "/(shared)/support", params: { ...productParam, subject: "Account details change" } } as never)}
-                hitSlop={8}
-              >
-                <Text style={styles.textAction}>Request change</Text>
-              </Pressable>
-            </View>
+            <Text style={styles.sectionEyebrow}>IDENTITY</Text>
             <AccountDetailsSummary
               rows={[
                 { label: "Full legal name", value: displayName },
@@ -157,6 +149,7 @@ export default function DriverAccountScreen() {
                 { label: "Service city", value: serviceArea },
               ]}
               note="These details were used to verify your Driver account."
+              onRequestChange={requestAccountChange}
             />
           </View>
 
@@ -320,9 +313,6 @@ const styles = StyleSheet.create({
   verificationBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14, marginTop: 2 },
   section: { gap: 9 },
   sectionEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 1.05 },
-  sectionTitle: { color: DRIVER_BLACK, fontSize: 18, fontWeight: "900", marginTop: 2 },
-  sectionHeadingRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 10 },
-  textAction: { color: v2Theme.colors.brandStrong, fontSize: 10, fontWeight: "900" },
   toolRow: { flexDirection: "row", gap: 7 },
   tool: {
     flex: 1,
