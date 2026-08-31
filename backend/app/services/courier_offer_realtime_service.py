@@ -14,6 +14,7 @@ from app.services.courier_presence_service import (
 )
 from app.services.courier_state_service import ACTIVE_COURIER_STATUSES
 from app.services.event_service import realtime_event_service
+from app.services.notification_service import notify_users
 
 
 logger = logging.getLogger(__name__)
@@ -116,9 +117,6 @@ async def _nearby_online_profiles(pickup_location: Dict[str, Any] | None) -> Lis
         nearby = [database._clean(item) async for item in cursor]
         if len(nearby) >= COURIER_GEO_CANDIDATE_LIMIT:
             return nearby
-        # Compatibility is deliberately limited to profiles that have never
-        # published presence. Once a client starts publishing, stale/far presence
-        # fails closed rather than falling back to city-wide broadcasts.
         legacy = await database.find_many(
             "courier_profiles",
             {
@@ -291,6 +289,18 @@ async def publish_courier_offer_transition(
                 "courier_offer_realtime_unavailable delivery_id=%s version=%s",
                 delivery.get("id"),
                 delivery_realtime_version(delivery),
+            )
+        if event_type == "courier_offer.available":
+            await notify_users(
+                sorted(recipients),
+                "trip_updates",
+                "New delivery request",
+                "A nearby delivery is ready. Open LetsGoRide to review the route and earnings.",
+                {
+                    "notification_target": "courier_offer",
+                    "courier_offer_id": delivery.get("id"),
+                    "delivery_id": delivery.get("id"),
+                },
             )
     except Exception as exc:
         logger.warning(
