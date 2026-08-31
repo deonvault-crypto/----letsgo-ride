@@ -29,6 +29,8 @@ PREFERENCE_FOR_TYPE = {
     "booking_cancelled": "booking_requests",
     "message": "messages",
     "driver_verification": "verification_updates",
+    "worker_profile_photo": "verification_updates",
+    "profile_photo_review": "verification_updates",
     "support_message": "support_replies",
     "support_reply": "support_replies",
     "safety_report": "safety_alerts",
