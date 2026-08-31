@@ -125,7 +125,7 @@ export function Screen({
           ) : null}
           {body}
         </View>
-        {navRole ? <BottomNav role={navRole} /> : null}
+        {navRole ? <BottomNav role={navRole} activeTone={routeName === "account" ? "neutral" : "brand"} /> : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
