@@ -87,9 +87,9 @@ export function HailingMapBackdrop({
   route,
   driverLocation,
   bottomPadding = 360,
-  showCurrentLocation = false,
-  promptForLocation = false,
-  showLocateControl = false,
+  showCurrentLocation: showCurrentLocationProp,
+  promptForLocation: promptForLocationProp,
+  showLocateControl: showLocateControlProp,
   locateButtonBottom,
 }: HailingMapBackdropProps) {
   const mapRef = useRef<MapView | null>(null);
@@ -106,6 +106,10 @@ export function HailingMapBackdrop({
     if (routeCoordinates.length > 1) return routeCoordinates;
     return [pickup, dropoff, driverLocation].filter(Boolean) as HailingCoordinate[];
   }, [driverLocation, dropoff, pickup, routeCoordinates]);
+  const blankCanvas = focusCoordinates.length === 0 && routeCoordinates.length === 0;
+  const showCurrentLocation = showCurrentLocationProp ?? blankCanvas;
+  const promptForLocation = promptForLocationProp ?? blankCanvas;
+  const showLocateControl = showLocateControlProp ?? blankCanvas;
 
   function centerOnDevice(location: DeviceLocation, animated = true) {
     if (!mapReady || !mapRef.current) return;
@@ -127,7 +131,7 @@ export function HailingMapBackdrop({
   }
 
   async function startLocationTracking(askIfNeeded: boolean, recenter = false) {
-    if (!showCurrentLocation) return;
+    if (!showCurrentLocation) return false;
     setLocationState("locating");
     try {
       let permission = await getForegroundLocationPermissionState();
@@ -136,7 +140,7 @@ export function HailingMapBackdrop({
       }
       if (!permission.enabled) {
         setLocationState(permission.requiresSettings ? "settings" : "denied");
-        return;
+        return false;
       }
 
       const current = await getCurrentDeviceLocation();
@@ -148,8 +152,10 @@ export function HailingMapBackdrop({
         () => setLocationState("error"),
         { timeInterval: 5000, distanceInterval: 6 },
       );
+      return true;
     } catch {
       setLocationState("error");
+      return false;
     }
   }
 
@@ -168,11 +174,30 @@ export function HailingMapBackdrop({
         setLocationState("settings");
         return;
       }
-      await startLocationTracking(true, true);
+      const started = await startLocationTracking(true, true);
+      if (!started) {
+        Alert.alert(
+          "Location needed",
+          "Allow location access so LetsGoRide can center the map on you. You can still move the map manually.",
+          [{ text: "OK" }],
+        );
+      }
       return;
     }
 
-    await startLocationTracking(false, true);
+    const started = await startLocationTracking(false, true);
+    if (!started) {
+      Alert.alert(
+        "Location unavailable",
+        "LetsGoRide cannot get your current position. Check that Location Services and Precise Location are enabled.",
+        [
+          { text: "Not now", style: "cancel" },
+          { text: "Open Settings", onPress: () => void openLocationSettings() },
+        ],
+      );
+      return;
+    }
+
     const next = await getCurrentDeviceLocation().catch(() => null);
     if (next && typeof next.accuracy === "number" && next.accuracy > 250 && !approximatePromptShownRef.current) {
       approximatePromptShownRef.current = true;
