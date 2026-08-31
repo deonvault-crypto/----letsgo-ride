@@ -72,6 +72,14 @@ async def ensure_product_hardening_indexes() -> None:
         name="courier_telemetry_ttl",
         expireAfterSeconds=0,
     )
+    await database.db["courier_profiles"].create_index(
+        [("location", "2dsphere")],
+        name="courier_presence_location",
+    )
+    await database.db["courier_profiles"].create_index(
+        [("status", 1), ("online", 1), ("last_seen_at", -1), ("user_id", 1)],
+        name="courier_presence_availability",
+    )
 
     # High-growth user-facing histories.
     await database.db["app_notifications"].create_index(
