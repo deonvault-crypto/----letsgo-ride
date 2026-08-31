@@ -44,7 +44,7 @@ function ActiveJobRecoveryRouter() {
 
   useEffect(() => {
     if (loading || isGuest || !user?.id) return;
-    if (!["customer", "driver", "courier"].includes(String(user.role))) return;
+    if (!["passenger", "driver", "courier"].includes(String(user.role))) return;
     const recoveryKey = `${user.id}:${user.role}`;
     if (attemptedFor.current === recoveryKey) return;
     attemptedFor.current = recoveryKey;
