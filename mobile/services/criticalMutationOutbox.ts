@@ -31,8 +31,28 @@ function newEntryId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+async function secureGet(key: string): Promise<string | null> {
+  try {
+    return (await Promise.resolve(SecureStore.getItemAsync(key))) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function secureSet(key: string, value: string): Promise<void> {
+  await Promise.resolve(SecureStore.setItemAsync(key, value));
+}
+
+async function secureDelete(key: string): Promise<void> {
+  try {
+    await Promise.resolve(SecureStore.deleteItemAsync(key));
+  } catch {
+    // Cleanup is best-effort. A future successful read/write will reconcile it.
+  }
+}
+
 async function readEntries(): Promise<CriticalMutationEntry[]> {
-  const raw = await SecureStore.getItemAsync(OUTBOX_KEY).catch(() => null);
+  const raw = await secureGet(OUTBOX_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -49,18 +69,18 @@ async function readEntries(): Promise<CriticalMutationEntry[]> {
       );
     });
   } catch {
-    await SecureStore.deleteItemAsync(OUTBOX_KEY).catch(() => undefined);
+    await secureDelete(OUTBOX_KEY);
     return [];
   }
 }
 
 async function writeEntries(entries: CriticalMutationEntry[]) {
   if (!entries.length) {
-    await SecureStore.deleteItemAsync(OUTBOX_KEY).catch(() => undefined);
+    await secureDelete(OUTBOX_KEY);
     return;
   }
   const bounded = entries.slice(-MAX_ENTRIES);
-  await SecureStore.setItemAsync(OUTBOX_KEY, JSON.stringify(bounded));
+  await secureSet(OUTBOX_KEY, JSON.stringify(bounded));
 }
 
 async function enqueue(spec: CriticalMutationSpec) {
@@ -160,5 +180,5 @@ export async function flushCriticalMutationOutbox() {
 
 export async function clearCriticalMutationOutbox() {
   flushPromise = null;
-  await SecureStore.deleteItemAsync(OUTBOX_KEY).catch(() => undefined);
+  await secureDelete(OUTBOX_KEY);
 }
