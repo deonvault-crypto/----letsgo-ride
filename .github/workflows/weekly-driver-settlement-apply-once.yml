@@ -27,6 +27,19 @@ jobs:
           ref: fix/product-polish-batch-production
           fetch-depth: 0
 
+      - name: Align patch with current Wallet section name
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply_weekly_driver_settlement.py')
+          text = path.read_text()
+          text = text.replace('Use the unique "Recent activity" title as boundary.', 'Use the unique "Recent earnings" title as boundary.')
+          text = text.replace("recent_anchor = '        <View style={styles.section}>\\n          <Text style={styles.sectionTitle}>Recent activity</Text>'", "recent_anchor = '        <View style={styles.section}>\\n          <Text style={styles.sectionTitle}>Recent earnings</Text>'")
+          text = text.replace('raise RuntimeError("Recent activity anchor missing")', 'raise RuntimeError("Recent earnings anchor missing")')
+          text = text.replace("wallet = wallet.replace(recent_anchor, '        </View>\\n        ) : null}\\n\\n        <View style={styles.section}>\\n          <Text style={styles.sectionTitle}>Recent activity</Text>', 1)", "wallet = wallet.replace(recent_anchor, '        ) : null}\\n\\n        <View style={styles.section}>\\n          <Text style={styles.sectionTitle}>Recent earnings</Text>', 1)")
+          path.write_text(text)
+          PY
+
       - name: Apply settlement patch
         run: python scripts/apply_weekly_driver_settlement.py
 
