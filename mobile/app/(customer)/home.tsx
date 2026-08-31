@@ -337,7 +337,11 @@ export default function CustomerHomeScreen() {
         </Pressable>
       </View>
 
-      <BottomNav role="customer" />
+      <BottomNav
+        role="customer"
+        activeLabel={mode === "ride" ? "Home" : "Services"}
+        bottomOffset={Math.max(insets.bottom, 10)}
+      />
     </SafeAreaView>
   );
 }
