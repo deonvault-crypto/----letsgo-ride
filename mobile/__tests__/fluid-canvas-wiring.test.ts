@@ -4,6 +4,7 @@ import path from "path";
 describe("Alpha M fluid canvas surfaces", () => {
   const root = path.resolve(__dirname, "..");
   const home = fs.readFileSync(path.join(root, "app/(customer)/home.tsx"), "utf8");
+  const customerAccount = fs.readFileSync(path.join(root, "app/(shared)/account.tsx"), "utf8");
   const driverHome = fs.readFileSync(path.join(root, "app/(driver)/home.tsx"), "utf8");
   const driverAccount = fs.readFileSync(path.join(root, "app/(driver)/account.tsx"), "utf8");
   const driverTrips = fs.readFileSync(path.join(root, "app/(driver)/trips.tsx"), "utf8");
@@ -11,6 +12,11 @@ describe("Alpha M fluid canvas surfaces", () => {
   const driverCalendar = fs.readFileSync(path.join(root, "app/(driver)/availability.tsx"), "utf8");
   const mapBackdrop = fs.readFileSync(path.join(root, "components/hailing/HailingMapBackdrop.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(root, "components/layout/BottomNav.tsx"), "utf8");
+  const brandLogo = fs.readFileSync(path.join(root, "components/layout/BrandLogo.tsx"), "utf8");
+  const screen = fs.readFileSync(path.join(root, "components/ui/Screen.tsx"), "utf8");
+  const avatar = fs.readFileSync(path.join(root, "components/ui/Avatar.tsx"), "utf8");
+  const accountSummary = fs.readFileSync(path.join(root, "components/account/AccountDetailsSummary.tsx"), "utf8");
+  const compliance = fs.readFileSync(path.join(root, "components/account/AccountComplianceSections.tsx"), "utf8");
   const locationPicker = fs.readFileSync(path.join(root, "app/(shared)/location-picker.tsx"), "utf8");
 
   it("keeps the customer home map-first and service-morph driven", () => {
@@ -80,6 +86,20 @@ describe("Alpha M fluid canvas surfaces", () => {
     expect(nav).toContain("bottomOffset = 10");
     expect(nav).toContain("const routeActive = isItemActive(pathname, item)");
     expect(nav).toContain("if (!routeActive) router.replace(item.href as never)");
+  });
+
+  it("keeps Account monochrome while preserving the LetsGoRide wordmark and destructive red", () => {
+    expect(customerAccount).toContain('tone="neutral"');
+    expect(customerAccount).toContain("accountType: { color: v2Theme.colors.ink");
+    expect(customerAccount).toContain("quickIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: v2Theme.colors.surfaceMuted");
+    expect(avatar).toContain('tone?: "brand" | "neutral"');
+    expect(accountSummary).toContain("supportText: { color: v2Theme.colors.ink");
+    expect(compliance).toContain('<ListTile tone="neutral" icon="lock-outline"');
+    expect(compliance).toContain("danger");
+    expect(screen).toContain('activeTone={routeName === "account" ? "neutral" : "brand"}');
+    expect(nav).toContain('activeTone?: "brand" | "neutral"');
+    expect(brandLogo).toContain('Lets<Text style={styles.green}>Go</Text>Ride');
+    expect(brandLogo).toContain("color: colors.primaryGreen");
   });
 
   it("keeps Driver home a live mobility cockpit instead of a dashboard grid", () => {
