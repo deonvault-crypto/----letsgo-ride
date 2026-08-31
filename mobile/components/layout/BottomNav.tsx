@@ -66,14 +66,17 @@ export function BottomNav({
   role,
   activeLabel,
   bottomOffset = 10,
+  activeTone = "brand",
 }: {
   role: NavRole;
   activeLabel?: string;
   bottomOffset?: number;
+  activeTone?: "brand" | "neutral";
 }) {
   const router = useRouter();
   const pathname = useSafePathname();
   const items = role === "driver" ? driverItems : role === "courier" ? courierItems : role === "merchant" ? merchantItems : customerItems;
+  const neutralActive = activeTone === "neutral";
 
   return (
     <View pointerEvents="box-none" style={[styles.positioner, { bottom: bottomOffset }]}>
@@ -81,6 +84,7 @@ export function BottomNav({
         {items.map((item) => {
           const routeActive = isItemActive(pathname, item);
           const active = activeLabel ? item.label === activeLabel : routeActive;
+          const activeColor = neutralActive ? v2Theme.colors.ink : v2Theme.colors.brand;
           return (
             <Pressable
               key={item.label}
@@ -89,10 +93,14 @@ export function BottomNav({
               accessibilityLabel={item.label}
               hitSlop={4}
               onPress={() => { if (!routeActive) router.replace(item.href as never); }}
-              style={({ pressed }) => [styles.item, active && styles.activeItem, pressed && styles.pressedItem]}
+              style={({ pressed }) => [
+                styles.item,
+                active && (neutralActive ? styles.activeItemNeutral : styles.activeItem),
+                pressed && styles.pressedItem,
+              ]}
             >
-              <MaterialCommunityIcons name={(active && item.activeIcon ? item.activeIcon : item.icon) as never} size={22} color={active ? v2Theme.colors.brand : v2Theme.colors.inkSecondary} />
-              <Text numberOfLines={1} style={[styles.label, active && styles.activeLabel]}>{item.label}</Text>
+              <MaterialCommunityIcons name={(active && item.activeIcon ? item.activeIcon : item.icon) as never} size={22} color={active ? activeColor : v2Theme.colors.inkSecondary} />
+              <Text numberOfLines={1} style={[styles.label, active && (neutralActive ? styles.activeLabelNeutral : styles.activeLabel)]}>{item.label}</Text>
             </Pressable>
           );
         })}
@@ -106,7 +114,9 @@ const styles = StyleSheet.create({
   wrap: { height: v2Theme.control.navHeight, borderRadius: v2Theme.radius.xxl, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, backgroundColor: "rgba(255,255,255,0.98)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 7, paddingVertical: 7, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.1, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 10 },
   item: { flex: 1, minHeight: 56, borderRadius: 21, alignItems: "center", justifyContent: "center", gap: 3, paddingHorizontal: 4 },
   activeItem: { backgroundColor: v2Theme.colors.brandSoft },
+  activeItemNeutral: { backgroundColor: "rgba(17,17,17,0.06)" },
   pressedItem: { opacity: 0.68 },
   label: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "700", letterSpacing: -0.1 },
   activeLabel: { color: v2Theme.colors.brandStrong, fontWeight: "800" },
+  activeLabelNeutral: { color: v2Theme.colors.ink, fontWeight: "800" },
 });
