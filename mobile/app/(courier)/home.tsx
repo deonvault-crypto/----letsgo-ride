@@ -101,7 +101,7 @@ export default function CourierHomeScreen() {
                   onPress={() => router.push({ pathname: "/(shared)/edit-profile", params: { product: "courier" } } as never)}
                   style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}
                 >
-                  <MaterialCommunityIcons name={photoPending ? "clock-outline" : photoRejected ? "camera-alert-outline" : "camera-plus-outline"} size={21} color="#FFFFFF" />
+                  <MaterialCommunityIcons name={photoPending ? "clock-outline" : photoRejected ? "alert-circle-outline" : "camera-plus-outline"} size={21} color="#FFFFFF" />
                   <Text style={styles.photoButtonText}>{photoPending ? "Review photo" : photoRejected ? "Replace profile photo" : "Add profile photo"}</Text>
                 </Pressable>
               ) : (
