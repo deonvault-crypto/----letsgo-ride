@@ -1,9 +1,7 @@
 name: EAS TestFlight Release
 
 on:
-  push:
-    branches:
-      - testflight-driver-map-release
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,7 +19,7 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - name: Checkout release commit
+      - name: Checkout exact release commit
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
@@ -36,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify release API target and Android policy
+        run: |
+          node -e "const eas=require('./eas.json'); if(eas.build.testflight.env.EXPO_PUBLIC_API_BASE_URL !== 'https://letsgoride-v2-production.onrender.com') process.exit(1)"
+          npm run typecheck
+          npm run verify:android
+
       - name: Require Expo token
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -45,7 +49,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build and submit to TestFlight
+      - name: Build and submit exact release to TestFlight
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: >-
@@ -55,4 +59,4 @@ jobs:
           --auto-submit-with-profile production
           --non-interactive
           --no-wait
-          --message "Driver map-first realtime Ride Now"
+          --message "LetsGoRide 2.0.2 production hardening: admin, vehicles, weekly settlement, realtime reliability"
