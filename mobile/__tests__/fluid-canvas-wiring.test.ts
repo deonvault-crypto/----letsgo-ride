@@ -1,9 +1,11 @@
 import fs from "fs";
 import path from "path";
 
-describe("Alpha M fluid canvas customer home", () => {
+describe("Alpha M fluid canvas surfaces", () => {
   const root = path.resolve(__dirname, "..");
   const home = fs.readFileSync(path.join(root, "app/(customer)/home.tsx"), "utf8");
+  const driverHome = fs.readFileSync(path.join(root, "app/(driver)/home.tsx"), "utf8");
+  const driverAccount = fs.readFileSync(path.join(root, "app/(driver)/account.tsx"), "utf8");
   const nav = fs.readFileSync(path.join(root, "components/layout/BottomNav.tsx"), "utf8");
   const locationPicker = fs.readFileSync(path.join(root, "app/(shared)/location-picker.tsx"), "utf8");
 
@@ -48,5 +50,26 @@ describe("Alpha M fluid canvas customer home", () => {
     expect(nav).toContain("bottomOffset = 10");
     expect(nav).toContain("const routeActive = isItemActive(pathname, item)");
     expect(nav).toContain("if (!routeActive) router.replace(item.href as never)");
+  });
+
+  it("keeps Driver home a live mobility cockpit instead of a dashboard grid", () => {
+    expect(driverHome).toContain("HailingMapBackdrop");
+    expect(driverHome).toContain('const rideNowTitle = hailingOffer');
+    expect(driverHome).toContain('router.push("/(driver)/hailing"');
+    expect(driverHome).toContain('Text style={styles.intercityTitle}>Share a route</Text>');
+    expect(driverHome).toContain('BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)}');
+    expect(driverHome).not.toContain("styles.metrics");
+    expect(driverHome).not.toContain("Plan intercity rides. Manage passengers.");
+  });
+
+  it("keeps Driver account identity-first and relegates money to a utility", () => {
+    expect(driverAccount).toContain("HailingMapBackdrop");
+    expect(driverAccount).toContain("DRIVER PROFILE");
+    expect(driverAccount).toContain("DRIVER TOOLS");
+    expect(driverAccount).toContain("Wallet & settlement");
+    expect(driverAccount).toContain("AccountDetailsSummary");
+    expect(driverAccount).toContain("onRequestChange={requestAccountChange}");
+    expect(driverAccount).toContain('BottomNav role="driver" bottomOffset={Math.max(insets.bottom, 10)}');
+    expect(driverAccount).not.toContain("Earnings & payouts");
   });
 });
