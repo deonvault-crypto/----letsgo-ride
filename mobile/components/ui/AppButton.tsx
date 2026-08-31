@@ -73,10 +73,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   primary: {
-    backgroundColor: colors.primaryGreen,
-    borderColor: colors.primaryGreen,
-    shadowColor: colors.primaryGreen,
-    shadowOpacity: 0.2,
+    backgroundColor: colors.charcoal,
+    borderColor: colors.charcoal,
+    shadowColor: colors.black,
+    shadowOpacity: 0.14,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   ghost: {
     backgroundColor: "transparent",
-    borderColor: "rgba(17,139,68,0.16)",
+    borderColor: colors.border,
   },
   danger: {
     backgroundColor: "rgba(255,90,95,0.14)",
