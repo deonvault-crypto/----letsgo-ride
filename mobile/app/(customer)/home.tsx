@@ -191,7 +191,7 @@ export default function CustomerHomeScreen() {
 
   function openRideNow() {
     if (!hailingEnabled) {
-      router.push("/(customer)/search" as never);
+      router.push("/(shared)/services" as never);
       return;
     }
     if (!activeHailing || !activeHailingTrip) {
@@ -221,7 +221,7 @@ export default function CustomerHomeScreen() {
 
   function openContextAction() {
     if (mode === "ride") {
-      router.push("/(customer)/search" as never);
+      router.push("/(shared)/services" as never);
       return;
     }
     if (mode === "food") {
@@ -232,22 +232,18 @@ export default function CustomerHomeScreen() {
   }
 
   const primaryEyebrow =
-    mode === "ride" && activeHailing
-      ? "ACTIVE RIDE"
-      : mode === "ride" && !hailingEnabled
-        ? "SCHEDULED RIDES"
-        : meta.eyebrow;
+    mode === "ride" && activeHailing ? "ACTIVE RIDE" : meta.eyebrow;
   const primaryTitle =
     mode === "ride" && activeHailing
       ? "Continue your ride"
       : mode === "ride" && !hailingEnabled
-        ? "Find a ride"
+        ? "Ride Now unavailable"
         : meta.title;
   const primaryBody =
     mode === "ride" && activeHailing && activeHailingTrip
       ? activeHailingTrip.status.replaceAll("_", " ")
       : mode === "ride" && !hailingEnabled
-        ? "Routes, dates and available seats"
+        ? "Open Services for other travel options"
         : meta.body;
 
   return (
@@ -356,44 +352,46 @@ export default function CustomerHomeScreen() {
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={openContextAction}
-          style={({ pressed }) => [styles.contextCard, pressed && styles.pressed]}
-        >
-          <View style={styles.contextIcon}>
-            <MaterialCommunityIcons
-              name={
-                mode === "ride"
-                  ? "road-variant"
+        {mode !== "ride" ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={openContextAction}
+            style={({ pressed }) => [styles.contextCard, pressed && styles.pressed]}
+          >
+            <View style={styles.contextIcon}>
+              <MaterialCommunityIcons
+                name={
+                  mode === "ride"
+                    ? "road-variant"
+                    : mode === "food"
+                      ? "storefront-outline"
+                      : "map-marker-path"
+                }
+                size={19}
+                color={v2Theme.colors.inkSecondary}
+              />
+            </View>
+            <View style={styles.contextCopy}>
+              <Text style={styles.contextTitle}>
+                {mode === "ride"
+                  ? "Intercity / Scheduled"
                   : mode === "food"
-                    ? "storefront-outline"
-                    : "map-marker-path"
-              }
-              size={19}
-              color={v2Theme.colors.inkSecondary}
-            />
-          </View>
-          <View style={styles.contextCopy}>
-            <Text style={styles.contextTitle}>
-              {mode === "ride"
-                ? "Intercity / Scheduled"
-                : mode === "food"
-                  ? "Explore nearby food"
-                  : "Start a delivery"}
-            </Text>
-            <Text numberOfLines={1} style={styles.contextBody}>
-              {mode === "ride"
-                ? loading
-                  ? "Checking available trips…"
-                  : `${upcomingRideCount} bookable ${upcomingRideCount === 1 ? "ride" : "rides"} available`
-                : mode === "food"
-                  ? "Restaurants, kitchens and dishes"
-                  : "Parcels with live tracking"}
-            </Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
-        </Pressable>
+                    ? "Explore nearby food"
+                    : "Start a delivery"}
+              </Text>
+              <Text numberOfLines={1} style={styles.contextBody}>
+                {mode === "ride"
+                  ? loading
+                    ? "Checking available trips…"
+                    : `${upcomingRideCount} bookable ${upcomingRideCount === 1 ? "ride" : "rides"} available`
+                  : mode === "food"
+                    ? "Restaurants, kitchens and dishes"
+                    : "Parcels with live tracking"}
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={v2Theme.colors.inkTertiary} />
+          </Pressable>
+        ) : null}
       </View>
 
       <BottomNav
