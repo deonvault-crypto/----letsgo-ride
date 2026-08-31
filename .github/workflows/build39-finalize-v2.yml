@@ -1,0 +1,78 @@
+name: Build 39 Guarded Finalization V2
+
+on:
+  push:
+    branches:
+      - final/build39-cleanup
+    paths:
+      - .github/workflows/build39-finalize-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: final/build39-cleanup
+          fetch-depth: 0
+
+      - name: Apply guarded cleanup source patch
+        run: python .github/scripts/build39_final_cleanup.py
+
+      - name: Install transparent Comfort production asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin fix/product-polish-batch-production
+          git show FETCH_HEAD:mobile/assets/images/hailing/comfort-executive.png > mobile/assets/images/hailing/comfort-executive.png
+          python - <<'PY'
+          from pathlib import Path
+          png = Path('mobile/assets/images/hailing/comfort-executive.png').read_bytes()
+          assert len(png) < 100_000
+          assert png[25] in (4, 6)
+          PY
+
+      - name: Remove temporary patch machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 9ac86c2b8cfc097ddac97a0c7e5a3e6a159fcc0e:.github/workflows/admin-control-center-finalize-once.yml > .github/workflows/admin-control-center-finalize-once.yml
+          rm .github/scripts/build39_final_cleanup.py
+          rm .github/workflows/build39-finalize-v2.yml
+          git diff --check
+
+      - name: Validate backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q -r backend/requirements.txt
+          python -m compileall -q backend/app backend/tests
+          cd backend
+          pytest -q
+
+      - name: Validate mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd mobile
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test -- --runInBand
+          npm run verify:android-api
+
+      - name: Commit only validated cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "deonvault-crypto"
+          git config user.email "deonvault@gmail.com"
+          git add -A
+          git diff --cached --check
+          test -n "$(git diff --cached --name-only)"
+          git commit -m "Build39: finish production cleanup"
+          git push origin HEAD:final/build39-cleanup
