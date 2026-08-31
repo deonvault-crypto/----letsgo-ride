@@ -4,6 +4,8 @@ import { api, requestData, saveToken, getToken, toFriendlyApiError } from "./api
 import { User } from "../types/user.types";
 import { clearPrivateSessionState, publishSessionUser } from "./sessionLifecycle";
 import { disablePhoneNotifications } from "./pushNotificationService";
+import { stopAllDriverBackgroundLocation } from "./hailingBackgroundLocation";
+import { stopAllCourierBackgroundLocation } from "./courierBackgroundLocation";
 
 type AuthPayload = { token: string; user: User };
 type EmailVerificationPayload = {
@@ -112,11 +114,22 @@ export async function uploadProfilePhoto(asset: { uri: string; fileName?: string
 
 export async function deleteAccount() {
   const result = await requestData<{ deleted: boolean }>({ method: "DELETE", url: "/auth/me" });
+  await stopNativeWorkBeforeSessionClear();
   await clearPrivateSessionState();
   return result;
 }
 
+async function stopNativeWorkBeforeSessionClear() {
+  // Native location tasks can still be executing when a user signs out. Stop them
+  // while the authenticated token and SecureStore state are still valid, then clear
+  // session state. This avoids an iOS teardown race where a background task wakes
+  // after its credentials have been deleted.
+  await stopAllDriverBackgroundLocation().catch(() => undefined);
+  await stopAllCourierBackgroundLocation().catch(() => undefined);
+}
+
 export async function logout() {
+  await stopNativeWorkBeforeSessionClear();
   await disablePhoneNotifications().catch(() => undefined);
   await requestData<{ logged_out: boolean }>({ method: "POST", url: "/auth/logout" }).catch(() => undefined);
   await clearPrivateSessionState();
