@@ -41,12 +41,14 @@ export default function EditProfileScreen() {
   const [isError, setIsError] = useState(false);
   const role = record?.role || user?.role;
   const isCustomer = role === "passenger";
-  const navRole: "customer" | "driver" | undefined = role === "driver"
-    ? "driver"
-    : role === "courier" || role === "merchant" || role === "admin"
-      ? undefined
-      : "customer";
   const product = role === "driver" || role === "courier" || role === "merchant" ? role : undefined;
+  const accountFallback = role === "driver"
+    ? "/(driver)/account"
+    : role === "courier"
+      ? "/(courier)/account"
+      : role === "merchant"
+        ? "/(merchant)/account"
+        : "/(shared)/account";
 
   function fillFormFromUser(nextUser: User | null | undefined) {
     if (!nextUser) return;
@@ -158,12 +160,13 @@ export default function EditProfileScreen() {
   const identityNote = isCustomer
     ? "Contact LetsGoRide Support to change your legal name. Contact details and ordinary preferences can be updated here."
     : `These details were used to verify your ${product === "merchant" ? "Merchant" : product === "driver" ? "Driver" : "Courier"} account. Contact support to request a correction.`;
+  const screenTitle = isCustomer && viewMode === "edit" ? "Edit profile" : "Account details";
 
   return (
-    <Screen title="Account details" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
+    <Screen title={screenTitle} showBack fallbackRoute={accountFallback as never} showNotifications={false}>
       <View style={styles.photoCard}>
         <View style={styles.photoRow}>
-          <Avatar name={displayName} imageUri={profilePhotoUrl} size={72} />
+          <Avatar name={displayName} imageUri={profilePhotoUrl} size={72} tone="neutral" />
           <View style={styles.photoCopy}>
             <View style={styles.nameRow}>
               <Text style={styles.title}>{displayName}</Text>
