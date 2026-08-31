@@ -1,10 +1,8 @@
 import { Alert, Modal, StyleSheet, Switch, Text, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { ReactNode, useCallback, useState } from "react";
 
-import { AccountComplianceSections, PublicAccountProduct } from "../../components/account/AccountComplianceSections";
 import { AppButton } from "../../components/ui/AppButton";
-import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
@@ -24,7 +22,6 @@ import {
   phoneNotificationStatus,
 } from "../../services/pushNotificationService";
 import { NotificationPreferences } from "../../types/notification.types";
-import { formatStatus } from "../../utils/formatStatus";
 
 type PreferenceKey =
   | "trip_updates"
@@ -46,21 +43,14 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
 ];
 
 export default function SettingsScreen() {
-  const router = useRouter();
   const { user } = useCurrentUser();
-  const navRole: "customer" | "driver" | undefined = user?.role === "driver"
-    ? "driver"
-    : user?.role === "courier" || user?.role === "merchant" || user?.role === "admin"
-      ? undefined
-      : "customer";
-  const verificationStatus = user?.verification_status || "not_started";
-  const accountProduct: PublicAccountProduct = user?.role === "driver"
-    ? "driver"
+  const accountFallback = user?.role === "driver"
+    ? "/(driver)/account"
     : user?.role === "courier"
-      ? "courier"
+      ? "/(courier)/account"
       : user?.role === "merchant"
-        ? "merchant"
-        : "customer";
+        ? "/(merchant)/account"
+        : "/(shared)/account";
 
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
@@ -188,7 +178,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Screen title="Settings" showBack fallbackRoute="/(shared)/account" navRole={navRole}>
+    <Screen title="Settings" showBack fallbackRoute={accountFallback as never} showNotifications={false}>
       <Modal visible={notificationExplanationOpen} transparent animationType="fade" onRequestClose={skipNotificationExplanation}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -215,36 +205,19 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <View style={styles.headerCopy}>
-        <Text style={styles.title}>Settings</Text>
-        <Text style={styles.body}>Manage this account, privacy, notifications, and device security.</Text>
-      </View>
-
-      <Section title="Account">
-        <ListTile
-          icon="account-edit-outline"
-          title="Account details"
-          subtitle={user?.role === "passenger" ? "Photo, contact details, city, and preferences" : "Saved identity details and profile photo"}
-          onPress={() => router.push("/(shared)/edit-profile" as never)}
-        />
-        {user?.role === "driver" ? (
-          <ListTile icon="shield-check-outline" title="Driver verification status" subtitle={formatStatus(verificationStatus)} onPress={() => router.push("/(shared)/verification" as never)} />
-        ) : null}
-      </Section>
-
-      <Section title="Notifications" subtitle="Choose which updates LetsGoRide should send you.">
+      <Section title="Notifications" subtitle="Choose which updates you want to receive.">
         <View style={styles.notificationStatus}>
           <View style={styles.toggleCopy}>
             <Text style={styles.toggleTitle}>Phone notifications: {phoneNotificationEnabled ? "On" : "Off"}</Text>
-            <Text style={styles.toggleSubtitle}>Phone alerts for service progress, messages, support, and safety updates.</Text>
+            <Text style={styles.toggleSubtitle}>Service progress, messages, support and safety alerts.</Text>
             {phoneNotificationMessage ? <Text style={[styles.noticeText, !phoneNotificationEnabled && styles.offNoticeText]}>{phoneNotificationMessage}</Text> : null}
           </View>
           {!phoneNotificationEnabled ? <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} /> : null}
         </View>
 
         {phoneNotificationEnabled ? preferenceRows.map((row) => {
-          const value = phoneNotificationEnabled ? preferences?.[row.key] ?? row.defaultValue : false;
-          const disabled = !phoneNotificationEnabled || preferenceSaving === row.key;
+          const value = preferences?.[row.key] ?? row.defaultValue;
+          const disabled = preferenceSaving === row.key;
           return (
             <View key={row.key} style={[styles.toggleRow, disabled && styles.disabledToggleRow]}>
               <View style={styles.toggleCopy}>
@@ -282,8 +255,6 @@ export default function SettingsScreen() {
           />
         </View>
       </Section>
-
-      <AccountComplianceSections product={accountProduct} />
     </Screen>
   );
 }
@@ -301,8 +272,6 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 }
 
 const styles = StyleSheet.create({
-  headerCopy: { gap: spacing.sm },
-  title: { color: colors.whiteText, fontWeight: "900", fontSize: 30 },
   body: { color: colors.mutedText, lineHeight: 21 },
   section: { gap: spacing.sm },
   sectionHeader: { gap: 3, paddingHorizontal: 2 },
