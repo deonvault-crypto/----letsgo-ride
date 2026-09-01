@@ -14,7 +14,6 @@ from app.services.ride_service import (
     apply_ride_lifecycle,
     cancel_trip,
     is_final_trip_status,
-    is_public_ride,
     live_trip_state,
     list_public_rides,
     list_user_rides,
@@ -65,7 +64,7 @@ async def driver_workspace(user=Depends(get_current_user)):
 @router.get("/{ride_id}")
 async def ride_detail(ride_id: str, user=Depends(get_optional_current_user)):
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         api_error("Ride not found.", 404)
     return api_success(await enrich_ride(ride, user))
 
@@ -102,7 +101,7 @@ async def post_ride(payload: RideCreateBody, user=Depends(get_current_user)):
 @router.patch("/{ride_id}")
 async def update_ride(ride_id: str, payload: RideUpdateBody, user=Depends(get_current_user)):
     existing = await database.find_one("rides", {"id": ride_id})
-    if not existing or not is_public_ride(existing):
+    if not existing:
         api_error("Ride not found.", 404)
     existing = await apply_ride_lifecycle(existing)
     if user.get("role") != "admin" and existing.get("user_id") != user.get("id"):

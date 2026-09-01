@@ -32,10 +32,10 @@ async def _confirmed_requests_for_ride(ride_id: str) -> list[Dict[str, Any]]:
 
 
 async def _resolve_intercity(transaction_id: str, reviewee_id: str, user: Dict[str, Any]) -> Optional[ReviewContext]:
-    from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status, is_public_ride
+    from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status
 
     ride = await database.find_one("rides", {"id": transaction_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         return None
     ride = await apply_ride_lifecycle(ride)
     if canonical_trip_status(ride.get("status")) != TRIP_STATUS_COMPLETED:
@@ -204,10 +204,10 @@ async def review_transaction_completed(review: Dict[str, Any]) -> bool:
     transaction_id = review_transaction_id(review)
     transaction_type = review_transaction_type(review)
     if transaction_type == "intercity":
-        from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status, is_public_ride
+        from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status
 
         ride = await database.find_one("rides", {"id": transaction_id})
-        if not ride or not is_public_ride(ride):
+        if not ride:
             return False
         ride = await apply_ride_lifecycle(ride)
         return canonical_trip_status(ride.get("status")) == TRIP_STATUS_COMPLETED

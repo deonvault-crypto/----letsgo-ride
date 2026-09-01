@@ -5,7 +5,7 @@ import logging
 from typing import Dict
 
 from app.database import database
-from app.services.ride_service import apply_ride_lifecycle, canonical_trip_status, is_public_ride
+from app.services.ride_service import apply_ride_lifecycle, canonical_trip_status
 
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,6 @@ async def sweep_ride_lifecycle_bounded() -> Dict[str, int]:
     checked = 0
     changed = 0
     for ride in rides:
-        if not is_public_ride(ride):
-            continue
         checked += 1
         before = canonical_trip_status(ride.get("status"))
         updated = await apply_ride_lifecycle(ride)

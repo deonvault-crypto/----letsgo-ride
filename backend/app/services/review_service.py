@@ -324,15 +324,13 @@ def _pending_payload(
 
 
 async def pending_reviews_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status, is_public_ride
+    from app.services.ride_service import TRIP_STATUS_COMPLETED, apply_ride_lifecycle, canonical_trip_status
 
     user_id = str(user.get("id") or "")
     pending: List[Dict[str, Any]] = []
 
     driver_rides = await database.find_many("rides", {"user_id": user_id})
     for ride in driver_rides:
-        if not is_public_ride(ride):
-            continue
         lifecycle_ride = await apply_ride_lifecycle(ride)
         if canonical_trip_status(lifecycle_ride.get("status")) != TRIP_STATUS_COMPLETED:
             continue
@@ -360,7 +358,7 @@ async def pending_reviews_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]
         if request.get("status") != "confirmed":
             continue
         ride = await database.find_one("rides", {"id": request.get("ride_id")})
-        if not ride or not is_public_ride(ride):
+        if not ride:
             continue
         lifecycle_ride = await apply_ride_lifecycle(ride)
         if canonical_trip_status(lifecycle_ride.get("status")) != TRIP_STATUS_COMPLETED:

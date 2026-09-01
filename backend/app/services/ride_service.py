@@ -320,8 +320,6 @@ async def list_public_rides(current_user: Optional[Dict[str, Any]] = None) -> Li
     rides = await database.find_many("rides")
     rows = []
     for ride in rides:
-        if not is_public_ride(ride):
-            continue
         lifecycle_ride = await apply_ride_lifecycle(ride)
         if is_bookable_public_ride(lifecycle_ride):
             rows.append(await enrich_ride(lifecycle_ride, current_user))
@@ -332,8 +330,6 @@ async def list_user_rides(current_user: Dict[str, Any]) -> List[Dict[str, Any]]:
     rides = await database.find_many("rides", {"user_id": current_user.get("id")})
     rows = []
     for ride in rides:
-        if not is_public_ride(ride):
-            continue
         lifecycle_ride = await apply_ride_lifecycle(ride)
         rows.append(await enrich_ride(lifecycle_ride, current_user))
     return sorted(rows, key=lambda item: item.get("departure_at") or item.get("date") or "", reverse=True)
@@ -396,7 +392,7 @@ async def user_can_view_live_trip(user: Dict[str, Any], ride: Dict[str, Any]) ->
 
 async def start_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         raise ValueError("Ride not found.")
     if not user_owns_ride(user, ride):
         raise PermissionError("Only the driver can start this trip.")
@@ -443,7 +439,7 @@ async def start_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 
 async def end_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         raise ValueError("Ride not found.")
     if not user_owns_ride(user, ride):
         raise PermissionError("Only the driver can end this trip.")
@@ -489,7 +485,7 @@ async def end_trip(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
 
 async def cancel_trip(ride_id: str, user: Dict[str, Any], reason: str) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         raise ValueError("Ride not found.")
     if not user_owns_ride(user, ride):
         raise PermissionError("Only the driver can cancel this trip.")
@@ -531,7 +527,7 @@ async def cancel_trip(ride_id: str, user: Dict[str, Any], reason: str) -> Dict[s
 
 async def update_live_location(ride_id: str, user: Dict[str, Any], location: Dict[str, Any]) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         raise ValueError("Ride not found.")
     if not user_owns_ride(user, ride):
         raise PermissionError("Only the driver can share this trip location.")
@@ -575,7 +571,7 @@ async def update_live_location(ride_id: str, user: Dict[str, Any], location: Dic
 
 async def disable_live_location(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         raise ValueError("Ride not found.")
     if not user_owns_ride(user, ride):
         raise PermissionError("Only the driver can change live sharing for this trip.")
@@ -592,7 +588,7 @@ async def disable_live_location(ride_id: str, user: Dict[str, Any]) -> Dict[str,
 
 async def live_trip_state(ride_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         raise ValueError("Ride not found.")
     if not await user_can_view_live_trip(user, ride):
         raise PermissionError("You can only view live trips connected to your account.")
