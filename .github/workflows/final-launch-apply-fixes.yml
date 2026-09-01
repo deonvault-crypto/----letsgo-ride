@@ -1,4 +1,4 @@
-name: Apply Final Production Launch Fixes
+name: Repair Final Launch Backend Import
 
 on:
   push:
@@ -6,40 +6,44 @@ on:
       - release/final-launch-fixes
     paths:
       - .github/workflows/final-launch-apply-fixes.yml
-      - .github/scripts/final-launch-apply-fixes-v3.py
 
 permissions:
   contents: write
 
 jobs:
-  apply:
+  repair:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install image tooling
-        run: python -m pip install --quiet pillow
-      - name: Apply controlled production fix batch
-        run: python .github/scripts/final-launch-apply-fixes-v3.py
-      - name: Validate generated assets and runtime hygiene
+      - name: Remove retired public-ride helper reference
         shell: bash
         run: |
           set -euo pipefail
-          python .github/scripts/check-hailing-assets.py
-          ! grep -RniE --exclude-dir='__pycache__' '(STAGING_EXTERNAL_TEST_CITY_ID|_staging_external_service_area|LEGACY_DEMO_RIDE_SIGNATURES|cleanup_demo_rides|mock_otp_allowed|MOCK_OTP|"is_demo")' backend/app
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('backend/app/routers/requests.py')
+          text = path.read_text(encoding='utf-8')
+          old_import = ', is_bookable_public_ride, is_public_ride'
+          old_guard = '    if not ride or not is_public_ride(ride):\n'
+          if text.count(old_import) != 1:
+              raise SystemExit(f'expected one stale import, found {text.count(old_import)}')
+          if text.count(old_guard) != 1:
+              raise SystemExit(f'expected one stale guard, found {text.count(old_guard)}')
+          text = text.replace(old_import, ', is_bookable_public_ride', 1)
+          text = text.replace(old_guard, '    if not ride:\n', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          ! grep -n 'is_public_ride' backend/app/routers/requests.py
           git diff --check
-      - name: Commit controlled fix batch
+      - name: Commit backend import repair
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'deonvault-crypto'
           git config user.email 'deonvault@gmail.com'
-          git add backend mobile .github/scripts/check-hailing-assets.py
-          git status --short
-          git commit -m 'fix: harden final production launch'
+          git add backend/app/routers/requests.py
+          git commit -m 'fix: remove retired ride helper reference'
           git push origin HEAD:release/final-launch-fixes
