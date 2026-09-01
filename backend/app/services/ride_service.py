@@ -42,10 +42,6 @@ ARRIVAL_GRACE_MINUTES = 60
 DEFAULT_ESTIMATED_DURATION_MINUTES = 240
 
 
-async def seed_demo_rides() -> None:
-    logger.info("demo_ride_seed_skipped")
-
-
 def canonical_trip_status(status: Optional[str]) -> str:
     normalized = str(status or TRIP_STATUS_SCHEDULED).strip().upper()
     legacy = {

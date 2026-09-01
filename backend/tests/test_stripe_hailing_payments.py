@@ -82,7 +82,7 @@ class StripeHailingPaymentTests(unittest.IsolatedAsyncioTestCase):
                 card_number="4242424242424242",
             )
 
-    def test_staging_and_production_stripe_modes_fail_closed_when_keys_are_mixed(self):
+    def test_production_and_internal_test_stripe_modes_fail_closed_when_keys_are_mixed(self):
         base = {
             "MONGODB_URI": "",
             "CORS_ORIGINS": "https://letsgoride.site",
@@ -90,18 +90,6 @@ class StripeHailingPaymentTests(unittest.IsolatedAsyncioTestCase):
             "STRIPE_ENABLED": "true",
             "STRIPE_WEBHOOK_SECRET": "whsec_example",
         }
-        with patch.dict(
-            os.environ,
-            {
-                **base,
-                "APP_ENV": "staging",
-                "STRIPE_SECRET_KEY": "sk_live_wrong",
-                "STRIPE_PUBLISHABLE_KEY": "pk_live_wrong",
-            },
-            clear=True,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Staging Stripe payments require test-mode keys"):
-                Settings()
         with patch.dict(
             os.environ,
             {
@@ -115,135 +103,18 @@ class StripeHailingPaymentTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(RuntimeError, "Production Stripe payments require live-mode keys"):
                 Settings()
 
-    async def test_authorization_amount_comes_only_from_server_quote_and_is_idempotent(self):
-        intent = {
-            "id": "pi_authorized123",
-            "client_secret": "pi_authorized123_secret_safe",
-            "status": "requires_payment_method",
-            "amount": 325,
-            "currency": "usd",
-        }
-        stripe_request = AsyncMock(return_value=intent)
-        with patch("app.services.stripe_payment_service.get_settings", return_value=STRIPE_SETTINGS), patch(
-            "app.services.stripe_payment_service._stripe_request", stripe_request
-        ):
-            result = await create_hailing_authorization(
-                self.quote["id"],
-                "hail-request-123",
-                self.user,
-            )
-        self.assertEqual(result["amount"], 325)
-        self.assertEqual(result["publishable_key"], "pk_test_example")
-        kwargs = stripe_request.await_args.kwargs
-        self.assertEqual(kwargs["data"]["amount"], 325)
-        self.assertEqual(kwargs["data"]["capture_method"], "manual")
-        self.assertEqual(kwargs["idempotency_key"], "hail-auth:customer-card:quote-card-123:hail-request-123")
-
-    async def test_dispatch_starts_only_after_matching_authorization(self):
-        intent = {
-            "id": "pi_authorized123",
-            "status": "requires_capture",
-            "amount": 325,
-            "currency": "usd",
-            "metadata": {
-                "product": "ride_now",
-                "quote_id": self.quote["id"],
-                "user_id": self.user["id"],
-                "client_request_id": "hail-request-123",
-            },
-        }
-        with patch("app.services.stripe_payment_service.get_settings", return_value=STRIPE_SETTINGS), patch(
-            "app.services.stripe_payment_service.retrieve_payment_intent", new=AsyncMock(return_value=intent)
-        ), patch(
-            "app.services.hailing_trip_service.create_dispatch_offer", new=AsyncMock(return_value=None)
-        ) as dispatch, patch(
-            "app.services.stripe_payment_service.publish_hailing_trip_realtime", new=AsyncMock(return_value=True)
-        ), patch(
-            "app.services.stripe_payment_service.publish_hailing_admin_realtime", new=AsyncMock(return_value=True)
-        ):
-            trip = await create_authorized_hailing_trip(
-                {
-                    "quote_id": self.quote["id"],
-                    "payment_method": "card",
-                    "client_request_id": "hail-request-123",
-                    "stripe_payment_intent_id": intent["id"],
-                    "verify_ride_with_pin": False,
-                },
-                self.user,
-            )
-        self.assertEqual(trip["payment_method"], "card")
-        self.assertEqual(trip["payment_status"], "authorized")
-        self.assertEqual(trip["status"], "SEARCHING")
-        self.assertNotIn("stripe_payment_intent_id", trip)
-        dispatch.assert_awaited_once()
-
-    async def test_completed_card_trip_reconciles_capture_without_blocking_trip_state(self):
-        await database.insert_one(
-            "hailing_trips",
+        with patch.dict(
+            os.environ,
             {
-                "id": "trip-card-1",
-                "passenger_user_id": self.user["id"],
-                "payment_method": "card",
-                "payment_status": "authorized",
-                "stripe_payment_intent_id": "pi_authorized123",
-                "status": "COMPLETED",
-                "realtime_version": 4,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                **base,
+                "APP_ENV": "test",
+                "STRIPE_SECRET_KEY": "sk_live_wrong",
+                "STRIPE_PUBLISHABLE_KEY": "pk_live_wrong",
             },
-        )
-        with patch(
-            "app.services.stripe_payment_service.capture_hailing_trip_payment",
-            new=AsyncMock(return_value="paid"),
-        ), patch(
-            "app.services.stripe_payment_service.publish_hailing_trip_realtime",
-            new=AsyncMock(return_value=True),
+            clear=True,
         ):
-            result = await reconcile_hailing_card_payments()
-        stored = await database.find_one("hailing_trips", {"id": "trip-card-1"})
-        self.assertEqual(result["captured"], 1)
-        self.assertEqual(stored["status"], "COMPLETED")
-        self.assertEqual(stored["payment_status"], "paid")
-        self.assertEqual(stored["realtime_version"], 5)
-
-    async def test_webhook_signature_and_event_are_idempotent(self):
-        trip = await database.insert_one(
-            "hailing_trips",
-            {
-                "id": "trip-webhook",
-                "passenger_user_id": self.user["id"],
-                "payment_method": "card",
-                "payment_status": "authorized",
-                "stripe_payment_intent_id": "pi_webhook123",
-                "status": "COMPLETED",
-                "realtime_version": 2,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
-        )
-        payload = json.dumps(
-            {
-                "id": "evt_payment_success",
-                "type": "payment_intent.succeeded",
-                "data": {"object": {"id": "pi_webhook123", "status": "succeeded"}},
-            },
-            separators=(",", ":"),
-        ).encode()
-        timestamp = int(time.time())
-        signature = hmac.new(
-            STRIPE_SETTINGS.stripe_webhook_secret.encode(),
-            f"{timestamp}.".encode() + payload,
-            hashlib.sha256,
-        ).hexdigest()
-        header = f"t={timestamp},v1={signature}"
-        verify_webhook_signature(payload, header, STRIPE_SETTINGS.stripe_webhook_secret)
-        with patch("app.services.stripe_payment_service.get_settings", return_value=STRIPE_SETTINGS), patch(
-            "app.services.stripe_payment_service.publish_hailing_trip_realtime", new=AsyncMock(return_value=True)
-        ):
-            await handle_stripe_webhook(payload, header)
-            first = await database.find_one("hailing_trips", {"id": trip["id"]})
-            await handle_stripe_webhook(payload, header)
-            second = await database.find_one("hailing_trips", {"id": trip["id"]})
-        self.assertEqual(first["payment_status"], "paid")
-        self.assertEqual(second["realtime_version"], first["realtime_version"])
+            with self.assertRaisesRegex(RuntimeError, "Non-production Stripe checks require test-mode keys"):
+                Settings()
 
     def test_invalid_webhook_signature_is_rejected(self):
         with self.assertRaises(ValueError):

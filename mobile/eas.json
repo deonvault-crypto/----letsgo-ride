@@ -4,32 +4,6 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://letsgoride-v2-staging.onrender.com",
-        "EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB": "false"
-      }
-    },
-    "preview": {
-      "distribution": "internal",
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://letsgoride-v2-staging.onrender.com",
-        "EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB": "false"
-      }
-    },
-    "testflight": {
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://letsgoride-v2-production.onrender.com",
-        "EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB": "false"
-      },
-      "ios": {
-        "simulator": false
-      }
-    },
     "production": {
       "autoIncrement": true,
       "env": {
@@ -46,6 +20,10 @@
   },
   "submit": {
     "production": {
+      "android": {
+        "track": "production",
+        "releaseStatus": "completed"
+      },
       "ios": {
         "ascAppId": "6772862281"
       }

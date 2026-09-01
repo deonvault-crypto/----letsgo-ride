@@ -19,12 +19,14 @@ class SecretConfigurationHardeningTests(unittest.TestCase):
             self.assertEqual(settings.mock_otp, "")
             self.assertFalse(settings.mock_otp_allowed)
 
-    def test_staging_mock_otp_requires_explicit_value_and_opt_in(self):
+    def test_production_mock_otp_is_never_allowed(self):
         with patch.dict(
             os.environ,
             {
-                "APP_ENV": "staging",
-                "ALLOW_STAGING_MOCK_OTP": "true",
+                "APP_ENV": "production",
+                "PUBLIC_API_BASE_URL": "https://example.invalid",
+                "CORS_ORIGINS": "https://letsgoride.site",
+                "MOCK_OTP": "internal-test-code",
             },
             clear=True,
         ):
@@ -33,9 +35,8 @@ class SecretConfigurationHardeningTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "APP_ENV": "staging",
-                "ALLOW_STAGING_MOCK_OTP": "true",
-                "MOCK_OTP": "environment-only-test-code",
+                "APP_ENV": "test",
+                "MOCK_OTP": "internal-test-code",
             },
             clear=True,
         ):
