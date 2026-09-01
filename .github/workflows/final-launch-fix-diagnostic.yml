@@ -20,13 +20,20 @@ jobs:
       - name: Inspect Ride Now vehicle PNGs
         run: |
           python -m pip install --quiet pillow
+          file mobile/assets/images/hailing/ride-*.png || true
           python - <<'PY'
           from pathlib import Path
-          from PIL import Image
+          from PIL import Image, UnidentifiedImageError
 
           root = Path('mobile/assets/images/hailing')
+          failures = []
           for path in sorted(root.glob('ride-*.png')):
-              image = Image.open(path).convert('RGBA')
+              try:
+                  image = Image.open(path).convert('RGBA')
+              except UnidentifiedImageError:
+                  print({'asset': path.name, 'valid_png': False, 'first_bytes': path.read_bytes()[:24]})
+                  failures.append(path.name)
+                  continue
               alpha = image.getchannel('A')
               alpha_bbox = alpha.getbbox()
               visible = sum(1 for value in alpha.getdata() if value > 16)
@@ -35,6 +42,7 @@ jobs:
               dark_visible = sum(1 for r, g, b, a in pixels if a > 16 and (r + g + b) / 3 < 220)
               print({
                   'asset': path.name,
+                  'valid_png': True,
                   'size': image.size,
                   'alpha_bbox': alpha_bbox,
                   'visible_pixels': visible,
@@ -42,4 +50,5 @@ jobs:
                   'dark_visible_pixels': dark_visible,
                   'total_pixels': image.width * image.height,
               })
+          print({'invalid_assets': failures})
           PY
