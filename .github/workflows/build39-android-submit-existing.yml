@@ -1,0 +1,52 @@
+name: Build39 Android Submit Existing Production Build
+
+on:
+  push:
+    branches:
+      - release/build39-mobile-production
+    paths:
+      - .github/workflows/build39-android-submit-existing.yml
+
+permissions:
+  contents: read
+
+jobs:
+  submit-existing-android:
+    name: Submit existing Build39 Android build to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies reproducibly
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify Expo authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN"
+          npx eas-cli@latest whoami --non-interactive
+
+      - name: Submit existing Android Build39 AAB to Google Play production
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >-
+          npx eas-cli@latest submit
+          --platform android
+          --id ecb8a77e-8b3d-4cdd-9d8f-c9f22f1617a7
+          --profile production
+          --non-interactive
