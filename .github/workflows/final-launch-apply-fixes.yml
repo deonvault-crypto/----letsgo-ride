@@ -6,7 +6,7 @@ on:
       - release/final-launch-fixes
     paths:
       - .github/workflows/final-launch-apply-fixes.yml
-      - .github/scripts/final-launch-apply-fixes-v2.py
+      - .github/scripts/final-launch-apply-fixes-v3.py
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
       - name: Install image tooling
         run: python -m pip install --quiet pillow
       - name: Apply controlled production fix batch
-        run: python .github/scripts/final-launch-apply-fixes-v2.py
+        run: python .github/scripts/final-launch-apply-fixes-v3.py
       - name: Validate generated assets and runtime hygiene
         shell: bash
         run: |
