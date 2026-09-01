@@ -18,6 +18,24 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      - name: Prove live Render API is reading production data
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 \
+            'https://letsgoride-v2-production.onrender.com/drivers/da83b7ad-1f76-4839-8bcd-e6a79a5870a6' \
+            -o /tmp/live-driver.json
+          python - <<'PY'
+          import json
+          with open('/tmp/live-driver.json', encoding='utf-8') as handle:
+              payload = json.load(handle)
+          assert payload.get('success') is True, payload
+          data = payload.get('data') or {}
+          assert data.get('id') == 'da83b7ad-1f76-4839-8bcd-e6a79a5870a6', data
+          assert data.get('name') == 'Elvis Masocha', data
+          assert data.get('verified') is True, data
+          print('Live Render API serves production-only driver record:', data['id'])
+          PY
       - name: Audit production runtime for staging demo and mock surfaces
         shell: bash
         run: |
