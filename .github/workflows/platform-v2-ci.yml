@@ -57,6 +57,9 @@ jobs:
             /tmp/npm-audit-prod.json \
             ../.github/security/mobile-audit-exceptions.json
 
+      - name: Verify Ride Now image asset integrity
+        run: python ../.github/scripts/check-hailing-assets.py
+
       - name: Typecheck
         run: npm run typecheck
 
