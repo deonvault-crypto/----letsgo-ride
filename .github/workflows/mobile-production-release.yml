@@ -1,0 +1,85 @@
+name: LetsGoRide Mobile Production Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate production release
+    if: github.ref == 'refs/heads/platform-v2-m1-m6'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Verify production-only EAS contract
+        run: |
+          node <<'NODE'
+          const eas = require('./eas.json');
+          const builds = Object.keys(eas.build || {});
+          if (JSON.stringify(builds) !== JSON.stringify(['production'])) throw new Error(`Unexpected build profiles: ${builds.join(', ')}`);
+          if (eas.build.production.env.EXPO_PUBLIC_API_BASE_URL !== 'https://letsgoride-v2-production.onrender.com') throw new Error('Production API URL mismatch');
+          if (eas.submit.production.android.track !== 'production') throw new Error('Android is not targeting production');
+          if (eas.submit.production.android.releaseStatus !== 'completed') throw new Error('Android release status is not completed');
+          NODE
+      - run: npm audit --audit-level=critical
+      - run: npm run typecheck
+      - run: npm test -- --runInBand
+      - run: npm run verify:android
+      - name: Verify Expo authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest whoami --non-interactive
+
+  android:
+    name: Android production
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build and submit Google Play production
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile production --auto-submit-with-profile production --non-interactive
+
+  ios:
+    name: iOS App Store Connect production
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build and upload App Store production
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform ios --profile production --auto-submit-with-profile production --non-interactive
