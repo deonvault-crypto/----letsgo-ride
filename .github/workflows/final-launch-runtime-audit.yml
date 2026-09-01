@@ -1,0 +1,46 @@
+name: Final Launch Runtime Audit
+
+on:
+  push:
+    branches:
+      - release/final-launch-fixes
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-launch-runtime-audit
+  cancel-in-progress: true
+
+jobs:
+  audit-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit production runtime for staging demo and mock surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '===== production EAS config ====='
+          cat mobile/eas.json
+          echo '===== runtime staging references ====='
+          grep -RniE --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=__tests__ --exclude-dir=tests --exclude='*.md' --exclude='*.lock' '(staging|stage\.letsgoride|letsgoride_staging)' backend/app mobile/app mobile/components mobile/constants mobile/hooks mobile/services mobile/utils mobile/app.json mobile/eas.json .github/scripts 2>/dev/null || true
+          echo '===== runtime demo references ====='
+          grep -RniE --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=__tests__ --exclude-dir=tests --exclude='*.md' --exclude='*.lock' '(is_demo|demo_|demo mode|demo data|seed_demo|seed demo)' backend/app mobile/app mobile/components mobile/constants mobile/hooks mobile/services mobile/utils 2>/dev/null || true
+          echo '===== runtime mock references ====='
+          grep -RniE --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=__tests__ --exclude-dir=tests --exclude='*.md' --exclude='*.lock' '(MOCK_OTP|mock otp|mock data|mock_)' backend/app mobile/app mobile/components mobile/constants mobile/hooks mobile/services mobile/utils 2>/dev/null || true
+          echo '===== fallback hosts / localhost references ====='
+          grep -RniE --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=__tests__ --exclude-dir=tests --exclude='*.md' --exclude='*.lock' '(localhost|127\.0\.0\.1|onrender\.com|preview\.emergent|emergentagent)' backend/app mobile/app mobile/components mobile/constants mobile/hooks mobile/services mobile/utils mobile/eas.json 2>/dev/null || true
+          echo '===== EAS production contract ====='
+          node - <<'NODE'
+          const eas = require('./mobile/eas.json');
+          const prod = eas?.build?.production;
+          if (!prod) throw new Error('Missing production build profile');
+          const api = prod?.env?.EXPO_PUBLIC_API_BASE_URL;
+          if (api !== 'https://letsgoride-v2-production.onrender.com') throw new Error(`Unexpected production API: ${api}`);
+          const serialized = JSON.stringify(prod).toLowerCase();
+          if (serialized.includes('staging') || serialized.includes('localhost') || serialized.includes('demo')) throw new Error('Production EAS profile contains non-production target');
+          if (eas?.submit?.production?.android?.track !== 'production') throw new Error('Android submit is not production track');
+          console.log('Production EAS contract OK');
+          NODE
