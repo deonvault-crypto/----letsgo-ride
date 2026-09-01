@@ -66,6 +66,8 @@ jobs:
           test ! -e .github/workflows/eas-testflight-release.yml
           test ! -e backend/app/services/staging_routing_smoke_service.py
           test ! -e backend/app/services/staging_courier_dispatch_smoke_service.py
+          test ! -e mobile/__tests__/testflight-staging-profile.test.ts
+          test -e mobile/__tests__/production-only-release-profile.test.ts
           if grep -R -n -E 'letsgoride-v2-staging\.onrender\.com|ENABLE_DEMO_SEED|ALLOW_STAGING_|ROUTING_STAGING_SMOKE_TEST_ENABLED|COURIER_DISPATCH_STAGING_SMOKE_TEST_ENABLED' \
             README.md mobile/eas.json backend/app .github/workflows; then
             echo 'Active staging/demo runtime configuration remains' >&2
