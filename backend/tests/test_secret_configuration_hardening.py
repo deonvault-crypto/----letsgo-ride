@@ -13,34 +13,36 @@ class SecretConfigurationHardeningTests(unittest.TestCase):
     def tearDown(self) -> None:
         get_settings.cache_clear()
 
-    def test_mock_otp_has_no_source_default(self):
-        with patch.dict(os.environ, {"APP_ENV": "development"}, clear=True):
+    def test_mock_otp_is_not_runtime_configuration(self):
+        with patch.dict(
+            os.environ,
+            {
+                "APP_ENV": "development",
+                "MOCK_OTP": "internal-test-code",
+            },
+            clear=True,
+        ):
             settings = Settings()
-            self.assertEqual(settings.mock_otp, "")
-            self.assertFalse(settings.mock_otp_allowed)
+            self.assertFalse(hasattr(settings, "mock_otp"))
+            self.assertFalse(hasattr(settings, "mock_otp_allowed"))
 
-    def test_production_mock_otp_is_never_allowed(self):
+    def test_production_exposes_no_mock_otp_capability(self):
         with patch.dict(
             os.environ,
             {
                 "APP_ENV": "production",
                 "PUBLIC_API_BASE_URL": "https://example.invalid",
                 "CORS_ORIGINS": "https://letsgoride.site",
+                "CLOUDINARY_CLOUD_NAME": "unit-test-cloud",
+                "CLOUDINARY_API_KEY": "unit-test-key",
+                "CLOUDINARY_API_SECRET": "unit-test-secret",
                 "MOCK_OTP": "internal-test-code",
             },
             clear=True,
         ):
-            self.assertFalse(Settings().mock_otp_allowed)
-
-        with patch.dict(
-            os.environ,
-            {
-                "APP_ENV": "test",
-                "MOCK_OTP": "internal-test-code",
-            },
-            clear=True,
-        ):
-            self.assertTrue(Settings().mock_otp_allowed)
+            settings = Settings()
+            self.assertFalse(hasattr(settings, "mock_otp"))
+            self.assertFalse(hasattr(settings, "mock_otp_allowed"))
 
     def test_production_refuses_admin_auto_create(self):
         with patch.dict(
