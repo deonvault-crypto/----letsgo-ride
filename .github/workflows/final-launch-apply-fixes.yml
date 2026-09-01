@@ -1,4 +1,4 @@
-name: Repair Final Launch Backend Import
+name: Repair Remaining Retired Ride Helper References
 
 on:
   push:
@@ -18,32 +18,37 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Remove retired public-ride helper reference
+      - name: Remove retired ride helper references
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          path = Path('backend/app/routers/requests.py')
+          path = Path('backend/app/routers/rides.py')
           text = path.read_text(encoding='utf-8')
-          old_import = ', is_bookable_public_ride, is_public_ride'
-          old_guard = '    if not ride or not is_public_ride(ride):\n'
-          if text.count(old_import) != 1:
-              raise SystemExit(f'expected one stale import, found {text.count(old_import)}')
-          if text.count(old_guard) != 1:
-              raise SystemExit(f'expected one stale guard, found {text.count(old_guard)}')
-          text = text.replace(old_import, ', is_bookable_public_ride', 1)
-          text = text.replace(old_guard, '    if not ride:\n', 1)
+          replacements = {
+              '    is_public_ride,\n': '',
+              '    if not ride or not is_public_ride(ride):\n': '    if not ride:\n',
+              '    if not existing or not is_public_ride(existing):\n': '    if not existing:\n',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match for {old!r}, found {count}')
+              text = text.replace(old, new, 1)
           path.write_text(text, encoding='utf-8')
           PY
-          ! grep -n 'is_public_ride' backend/app/routers/requests.py
+          if grep -Rni --exclude-dir='__pycache__' 'is_public_ride' backend/app; then
+            echo '::error::Retired is_public_ride helper reference still exists in backend/app'
+            exit 1
+          fi
           git diff --check
-      - name: Commit backend import repair
+      - name: Commit backend repair
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'deonvault-crypto'
           git config user.email 'deonvault@gmail.com'
-          git add backend/app/routers/requests.py
-          git commit -m 'fix: remove retired ride helper reference'
+          git add backend/app/routers/rides.py
+          git commit -m 'fix: remove remaining retired ride helper references'
           git push origin HEAD:release/final-launch-fixes
