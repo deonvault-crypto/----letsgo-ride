@@ -1,0 +1,79 @@
+name: Final Launch Asset Recovery
+
+on:
+  push:
+    branches:
+      - release/final-launch-fixes
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-launch-asset-recovery
+  cancel-in-progress: true
+
+jobs:
+  recover-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Diagnose and recover damaged Ride Now assets
+        shell: bash
+        run: |
+          set -uo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pngcheck pngcrush imagemagick ffmpeg
+          python -m pip install --quiet pillow
+
+          mkdir -p /tmp/recovered
+          for f in mobile/assets/images/hailing/ride-comfort.png mobile/assets/images/hailing/ride-xl.png; do
+            base="$(basename "$f" .png)"
+            echo "===== SOURCE $f ====="
+            sha256sum "$f"
+            file "$f"
+            pngcheck -vt "$f" || true
+            pngcrush -fix "$f" "/tmp/recovered/${base}-pngcrush.png" || true
+            convert "$f" "/tmp/recovered/${base}-convert.png" || true
+            ffmpeg -y -v warning -i "$f" -frames:v 1 "/tmp/recovered/${base}-ffmpeg.png" || true
+          done
+
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageFile
+
+          def strict_check(path: Path):
+              ImageFile.LOAD_TRUNCATED_IMAGES = False
+              try:
+                  with Image.open(path) as image:
+                      image.load()
+                      rgba = image.convert('RGBA')
+                      return {
+                          'valid': True,
+                          'size': rgba.size,
+                          'mode': rgba.mode,
+                          'alpha_bbox': rgba.getchannel('A').getbbox(),
+                          'bytes': path.stat().st_size,
+                      }
+              except Exception as exc:
+                  return {'valid': False, 'error': f'{type(exc).__name__}: {exc}', 'bytes': path.stat().st_size if path.exists() else 0}
+
+          originals = Path('mobile/assets/images/hailing')
+          for path in (originals / 'ride-comfort.png', originals / 'ride-xl.png'):
+              print('ORIGINAL_RESULT', path.name, strict_check(path))
+
+          recovered = Path('/tmp/recovered')
+          candidates = []
+          for pattern in ('*-pngcrush.png', '*-convert.png', '*-ffmpeg.png'):
+              candidates.extend(sorted(recovered.glob(pattern)))
+          if not candidates:
+              print('RECOVERY_RESULT no candidate files were produced')
+          for path in candidates:
+              print('RECOVERY_RESULT', path.name, strict_check(path))
+          PY
+
+          echo "===== candidate hashes ====="
+          find /tmp/recovered -maxdepth 1 -type f -name '*.png' -print0 | sort -z | xargs -0 -r sha256sum
