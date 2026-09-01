@@ -1,0 +1,45 @@
+name: Final Launch Fix Diagnostic
+
+on:
+  push:
+    branches:
+      - release/final-launch-fixes
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-hailing-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inspect Ride Now vehicle PNGs
+        run: |
+          python -m pip install --quiet pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          root = Path('mobile/assets/images/hailing')
+          for path in sorted(root.glob('ride-*.png')):
+              image = Image.open(path).convert('RGBA')
+              alpha = image.getchannel('A')
+              alpha_bbox = alpha.getbbox()
+              visible = sum(1 for value in alpha.getdata() if value > 16)
+              opaque = sum(1 for value in alpha.getdata() if value > 240)
+              pixels = list(image.getdata())
+              dark_visible = sum(1 for r, g, b, a in pixels if a > 16 and (r + g + b) / 3 < 220)
+              print({
+                  'asset': path.name,
+                  'size': image.size,
+                  'alpha_bbox': alpha_bbox,
+                  'visible_pixels': visible,
+                  'opaque_pixels': opaque,
+                  'dark_visible_pixels': dark_visible,
+                  'total_pixels': image.width * image.height,
+              })
+          PY
