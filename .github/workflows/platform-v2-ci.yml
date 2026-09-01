@@ -114,7 +114,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RniE --exclude-dir='__pycache__' '(STAGING_EXTERNAL_TEST_CITY_ID|_staging_external_service_area|LEGACY_DEMO_RIDE_SIGNATURES|cleanup_demo_rides|mock_otp_allowed|MOCK_OTP|"is_demo")' app; then
+          if grep -RniE --exclude-dir='__pycache__' '(STAGING_EXTERNAL_TEST_CITY_ID|_staging_external_service_area|LEGACY_DEMO_RIDE_SIGNATURES|cleanup_demo_rides|mock_otp_allowed|MOCK_OTP|"is_demo"|is_public_ride)' app; then
             echo '::error::Retired staging/demo/mock runtime marker found in backend/app'
             exit 1
           fi
