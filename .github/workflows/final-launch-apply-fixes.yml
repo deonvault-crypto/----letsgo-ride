@@ -40,7 +40,7 @@ jobs:
 
           # Core ride service: remove legacy demo/public filtering everywhere.
           replace_exact('backend/app/services/ride_service.py', '        if not is_public_ride(ride):\n            continue\n', '', 2)
-          replace_exact('backend/app/services/ride_service.py', '    if not ride or not is_public_ride(ride):\n', '    if not ride:\n', 7)
+          replace_exact('backend/app/services/ride_service.py', '    if not ride or not is_public_ride(ride):\n', '    if not ride:\n', 6)
 
           # Review context: intercity rows are real by construction.
           replace_exact(
