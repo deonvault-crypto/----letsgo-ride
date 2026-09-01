@@ -36,13 +36,16 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
 
       - name: Apply production-only cleanup
-        run: python .github/scripts/production_only_cleanup.py
+        run: |
+          python .github/scripts/production_only_cleanup.py
+          python .github/scripts/production_only_test_fix.py
 
       - name: Remove cleanup machinery
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/scripts/production_only_cleanup.py
+          rm -f .github/scripts/production_only_test_fix.py
           rm -f .github/workflows/production-only-cleanup.yml
           git diff --check
 
@@ -63,8 +66,6 @@ jobs:
           test ! -e .github/workflows/eas-testflight-release.yml
           test ! -e backend/app/services/staging_routing_smoke_service.py
           test ! -e backend/app/services/staging_courier_dispatch_smoke_service.py
-          ! grep -R -n -E 'letsgoride-v2-staging\.onrender\.com|ENABLE_DEMO_SEED|ALLOW_STAGING_|ROUTING_STAGING_SMOKE_TEST_ENABLED|COURIER_DISPATCH_STAGING_SMOKE_TEST_ENABLED' \
-            README.md mobile/eas.json backend/app .github/workflows || false
           if grep -R -n -E 'letsgoride-v2-staging\.onrender\.com|ENABLE_DEMO_SEED|ALLOW_STAGING_|ROUTING_STAGING_SMOKE_TEST_ENABLED|COURIER_DISPATCH_STAGING_SMOKE_TEST_ENABLED' \
             README.md mobile/eas.json backend/app .github/workflows; then
             echo 'Active staging/demo runtime configuration remains' >&2
@@ -102,7 +103,7 @@ jobs:
           git add -A
           git diff --cached --check
           test -n "$(git diff --cached --name-only)"
-          if git diff --cached --diff-filter=ACMR --name-only | grep -E '^\.github/(scripts/production_only_cleanup\.py|workflows/production-only-cleanup\.yml)$'; then
+          if git diff --cached --diff-filter=ACMR --name-only | grep -E '^\.github/(scripts/production_only_|workflows/production-only-cleanup\.yml)$'; then
             echo 'Temporary cleanup machinery leaked into final tree' >&2
             exit 1
           fi
