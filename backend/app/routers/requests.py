@@ -15,7 +15,7 @@ from app.services.ride_request_realtime_service import (
     ride_request_event_type,
     update_versioned_ride_request,
 )
-from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, enrich_ride, is_bookable_public_ride, is_public_ride
+from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, enrich_ride, is_bookable_public_ride
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -206,7 +206,7 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
     if not user.get("phone"):
         api_error("Add your phone number before booking a seat.")
     ride = await database.find_one("rides", {"id": payload.ride_id})
-    if not ride or not is_public_ride(ride):
+    if not ride:
         api_error("Ride not found.", 404)
     if not is_bookable_public_ride(ride):
         api_error("This ride has already departed.", 400)
