@@ -82,7 +82,7 @@ class StripeHailingPaymentTests(unittest.IsolatedAsyncioTestCase):
                 card_number="4242424242424242",
             )
 
-    def test_staging_and_production_stripe_modes_fail_closed_when_keys_are_mixed(self):
+    def test_production_and_internal_test_stripe_modes_fail_closed_when_keys_are_mixed(self):
         base = {
             "MONGODB_URI": "",
             "CORS_ORIGINS": "https://letsgoride.site",
@@ -94,18 +94,6 @@ class StripeHailingPaymentTests(unittest.IsolatedAsyncioTestCase):
             os.environ,
             {
                 **base,
-                "APP_ENV": "staging",
-                "STRIPE_SECRET_KEY": "sk_live_wrong",
-                "STRIPE_PUBLISHABLE_KEY": "pk_live_wrong",
-            },
-            clear=True,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Staging Stripe payments require test-mode keys"):
-                Settings()
-        with patch.dict(
-            os.environ,
-            {
-                **base,
                 "APP_ENV": "production",
                 "STRIPE_SECRET_KEY": "sk_test_wrong",
                 "STRIPE_PUBLISHABLE_KEY": "pk_test_wrong",
@@ -113,6 +101,19 @@ class StripeHailingPaymentTests(unittest.IsolatedAsyncioTestCase):
             clear=True,
         ):
             with self.assertRaisesRegex(RuntimeError, "Production Stripe payments require live-mode keys"):
+                Settings()
+
+        with patch.dict(
+            os.environ,
+            {
+                **base,
+                "APP_ENV": "test",
+                "STRIPE_SECRET_KEY": "sk_live_wrong",
+                "STRIPE_PUBLISHABLE_KEY": "pk_live_wrong",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Non-production Stripe checks require test-mode keys"):
                 Settings()
 
     async def test_authorization_amount_comes_only_from_server_quote_and_is_idempotent(self):

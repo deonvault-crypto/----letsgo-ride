@@ -7,11 +7,15 @@ const readMobile = (relative: string) => fs.readFileSync(path.join(mobileRoot, r
 const readRepo = (relative: string) => fs.readFileSync(path.join(repoRoot, relative), "utf8");
 
 describe("production hardening final contract", () => {
-  it("pins TestFlight and production builds to the production API", () => {
+  it("exposes one production EAS build and submit contract", () => {
     const eas = JSON.parse(readMobile("eas.json"));
-    expect(eas.build.testflight.env.EXPO_PUBLIC_API_BASE_URL).toBe("https://letsgoride-v2-production.onrender.com");
+    expect(Object.keys(eas.build)).toEqual(["production"]);
     expect(eas.build.production.env.EXPO_PUBLIC_API_BASE_URL).toBe("https://letsgoride-v2-production.onrender.com");
-    expect(eas.build.preview.env.EXPO_PUBLIC_API_BASE_URL).toBe("https://letsgoride-v2-staging.onrender.com");
+    expect(eas.build.production.autoIncrement).toBe(true);
+    expect(eas.build.production.android.buildType).toBe("app-bundle");
+    expect(eas.submit.production.android.track).toBe("production");
+    expect(eas.submit.production.android.releaseStatus).toBe("completed");
+    expect(eas.submit.production.ios.ascAppId).toBe("6772862281");
   });
 
   it("persists critical workflow mutations and reconciles them after realtime recovery", () => {

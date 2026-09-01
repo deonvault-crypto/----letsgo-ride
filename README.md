@@ -1,86 +1,30 @@
 # LetsGoRide
 
-Production readiness checkpoint for the mobile app and backend.
+Production repository for the LetsGoRide mobile app, API and public website.
 
-## Scope
+## Production surfaces
 
-The public website folder is `frontend` and was not edited, deleted, moved, rebuilt, or renamed during this rebuild.
+- Mobile: `mobile/` — Expo/React Native
+- API: `backend/` — FastAPI
+- Website: `frontend/`
+- Public site: https://letsgoride.site
+- Production API: https://letsgoride-v2-production.onrender.com
 
-Active rebuild folders:
+## Release model
 
-- `mobile`: Expo Router TypeScript mobile app.
-- `backend`: FastAPI API.
+There is one EAS build profile: `production`. Android builds an AAB for the Google Play `production` track. iOS builds for App Store Connect.
 
-Preserved brand assets:
+Permanent GitHub automation is intentionally limited to:
 
-- `_preserved_brand_assets`
+- `LetsGoRide Production CI` — typecheck, automated tests, Android policy checks, backend tests and production smoke checks.
+- `LetsGoRide Mobile Production Release` — manual production-only native release.
 
-Archived old active app/API folders:
+Automated tests remain in the repository because they protect production releases; they are not runtime modes and cannot be selected by app users.
 
-- `_archive/clean-rebuild-20260523-132512/mobile`
-- `_archive/clean-rebuild-20260523-132512/letsgoride-mobile`
-- `_archive/clean-rebuild-20260523-132512/backend`
+## Production safety
 
-## Start Backend
-
-```powershell
-cd C:\Users\mmm\----letsgo-ride\backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload
-```
-
-## Start Mobile
-
-```powershell
-cd C:\Users\mmm\----letsgo-ride\mobile
-npm install
-npx expo start --lan --port 8082 -c
-```
-
-## API Base URL
-
-Mobile uses the API URL in:
-
-```text
-mobile/constants/config.ts
-```
-
-Current value:
-
-```text
-https://letsgoride-backend.onrender.com
-```
-
-## Email Verification and Admin Seed
-
-New email accounts must verify their email before login. The backend can use Resend when these environment variables are configured in the hosting environment:
-
-- `RESEND_API_KEY`
-- `RESEND_FROM_EMAIL`
-- `RESEND_REPLY_TO`
-
-Admin login is created or refreshed safely on startup only when these environment variables are set:
-
-- `ADMIN_SEED_EMAIL`
-- `ADMIN_SEED_PASSWORD`
-- `ADMIN_AUTO_CREATE=true`
-
-Do not store admin credentials in this repository.
-
-## Current Product Limits
-
-- Phone login is not the primary public auth flow. Phone numbers are optional during signup and required before booking or posting rides.
-- No live payments or service fees.
-- No maps SDK.
-- No KYC provider.
-- No real emergency or police integration.
-- MongoDB is optional for local dev; when `MONGODB_URI` is missing the backend uses memory storage.
-- Production must keep `ENABLE_DEMO_SEED=false`. Demo rides are only for local testing and public ride APIs hide records marked `is_demo=true`.
-
-## Next Phases
-
-- Add production build testing for App Store and Play Store review.
-- Add maps and pickup/drop-off geocoding.
-- Add payment intent/deposit-proof workflows only after product rules are final.
+- Production API documentation is disabled.
+- Production requires explicit trusted CORS origins.
+- Production email delivery fails closed if Resend is unavailable.
+- Production Stripe mode requires live credentials when enabled.
+- No staging, preview, demo-seed or TestFlight build profile is part of the active release configuration.

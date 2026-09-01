@@ -225,12 +225,6 @@ async def start_email_verification(user: Dict[str, Any], force: bool = False) ->
     delivery_email = updated.get("pending_email") or updated["email"]
     sent = await send_verification_email(delivery_email, code)
     if not sent:
-        settings = get_settings()
-        if settings.staging_email_mock_allowed:
-            logger.warning(
-                "Email delivery unavailable in non-production; explicit staging mock verification fallback is active."
-            )
-            return updated
         raise RuntimeError("Email verification could not be sent.")
     return updated
 

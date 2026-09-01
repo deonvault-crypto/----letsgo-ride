@@ -15,13 +15,6 @@ class Settings:
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
         self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
         self.mock_otp = os.getenv("MOCK_OTP", "").strip()
-        self.allow_staging_mock_otp = self._parse_bool(
-            os.getenv("ALLOW_STAGING_MOCK_OTP", "false")
-        )
-        self.allow_staging_email_mock = self._parse_bool(
-            os.getenv("ALLOW_STAGING_EMAIL_MOCK", "false")
-        )
-        self.enable_demo_seed = self._parse_bool(os.getenv("ENABLE_DEMO_SEED", "false"))
         self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
@@ -41,13 +34,12 @@ class Settings:
         self.hailing_enabled = (
             self._parse_bool(raw_hailing_enabled)
             if raw_hailing_enabled is not None
-            else self.app_env.strip().lower() in {"development", "test", "staging"}
+            else self.app_env.strip().lower() in {"development", "test"}
         )
 
-        # Stripe card payments are fail-closed and environment isolated. A staging
-        # process may never boot with live credentials and production may never boot
-        # with test credentials. Publishable keys are safe to return to authenticated
-        # mobile clients; secret and webhook keys never leave the backend.
+        # Stripe card payments are fail-closed. Production requires live-mode keys.
+        # Publishable keys are safe to return to authenticated mobile clients; secret
+        # and webhook keys never leave the backend.
         self.stripe_enabled = self._parse_bool(os.getenv("STRIPE_ENABLED", "false"))
         self.stripe_account_id = self._get_env_first("STRIPE_ACCOUNT_ID")
         self.stripe_secret_key = self._get_env_first("STRIPE_SECRET_KEY")
@@ -67,9 +59,6 @@ class Settings:
         self.google_maps_api_key = self._get_env_first("GOOGLE_MAPS_API_KEY")
         self.routing_region_code = os.getenv("ROUTING_REGION_CODE", "ZW").strip().upper() or "ZW"
         self.routing_timeout_seconds = self._parse_float(os.getenv("ROUTING_TIMEOUT_SECONDS", "8"), 8.0)
-        self.routing_staging_smoke_test_enabled = self._parse_bool(
-            os.getenv("ROUTING_STAGING_SMOKE_TEST_ENABLED", "false")
-        )
 
         self.courier_auto_pricing_enabled = self._parse_bool(
             os.getenv("COURIER_AUTO_PRICING_ENABLED", "false")
@@ -88,9 +77,6 @@ class Settings:
         )
         self.courier_payout_percent = self._parse_nonnegative_float(
             os.getenv("COURIER_PAYOUT_PERCENT", "0"), 0.0
-        )
-        self.courier_dispatch_staging_smoke_test_enabled = self._parse_bool(
-            os.getenv("COURIER_DISPATCH_STAGING_SMOKE_TEST_ENABLED", "false")
         )
 
         self.resend_api_key = self._get_env_first("RESEND_API_KEY")
@@ -139,9 +125,9 @@ class Settings:
         if app_env == "production":
             if not self.stripe_secret_key.startswith("sk_live_") or not self.stripe_publishable_key.startswith("pk_live_"):
                 raise RuntimeError("Production Stripe payments require live-mode keys.")
-        elif app_env == "staging":
+        elif app_env in {"development", "test"}:
             if not self.stripe_secret_key.startswith("sk_test_") or not self.stripe_publishable_key.startswith("pk_test_"):
-                raise RuntimeError("Staging Stripe payments require test-mode keys.")
+                raise RuntimeError("Non-production Stripe checks require test-mode keys.")
         if not self.stripe_webhook_secret.startswith("whsec_"):
             raise RuntimeError("STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret.")
 
@@ -235,17 +221,8 @@ class Settings:
         return bool(self.resend_api_key and self.resend_from_email)
 
     @property
-    def staging_email_mock_allowed(self) -> bool:
-        return self.app_env != "production" and self.allow_staging_email_mock
-
-    @property
     def mock_otp_allowed(self) -> bool:
-        app_env = self.app_env.strip().lower()
-        return bool(self.mock_otp) and (
-            app_env in {"development", "test"} or (
-                app_env == "staging" and self.allow_staging_mock_otp
-            )
-        )
+        return bool(self.mock_otp) and self.app_env.strip().lower() in {"development", "test"}
 
     @property
     def is_production(self) -> bool:
