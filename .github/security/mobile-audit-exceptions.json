@@ -1,0 +1,31 @@
+{
+  "reviewedAt": "2026-09-01",
+  "expiresOn": "2026-09-30",
+  "scope": "Expo SDK 54 mobile build and navigation dependency chains",
+  "allowedAdvisories": [
+    {
+      "id": "GHSA-w3rx-r6r6-pgpr",
+      "package": "image-size",
+      "severity": "high",
+      "reason": "Transitive Metro build-time image parser advisory. npm's available remediation requires the breaking Expo 57 upgrade; no compatible Expo 54 remediation was validated."
+    },
+    {
+      "id": "GHSA-5p2g-fcmc-qvqq",
+      "package": "image-size",
+      "severity": "high",
+      "reason": "Transitive Metro build-time image parser advisory. npm's available remediation requires the breaking Expo 57 upgrade; no compatible Expo 54 remediation was validated."
+    },
+    {
+      "id": "GHSA-vcc3-ghjq-m6fr",
+      "package": "decode-uri-component",
+      "severity": "moderate",
+      "reason": "Transitive React Navigation/query-string chain. npm's remediation proposes a breaking Expo Router version change rather than a compatible patch."
+    },
+    {
+      "id": "GHSA-w5hq-g745-h8pq",
+      "package": "uuid",
+      "severity": "moderate",
+      "reason": "Transitive xcode/Expo config-plugin build chain. npm's available remediation requires the breaking Expo 57 upgrade."
+    }
+  ]
+}
