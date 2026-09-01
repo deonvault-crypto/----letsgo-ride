@@ -42,7 +42,12 @@ jobs:
 
       - name: Apply only non-breaking npm audit fixes
         working-directory: mobile
-        run: npm audit fix
+        shell: bash
+        run: |
+          # npm audit fix exits non-zero if any advisory remains, even when it
+          # successfully applied every non-breaking fix. Remaining findings are
+          # evaluated independently below after compatibility and regression gates.
+          npm audit fix || true
 
       - name: Reinstall from resulting lockfile
         working-directory: mobile
@@ -98,7 +103,7 @@ jobs:
           set -euo pipefail
           git status --short
           if git diff --quiet -- mobile/package.json mobile/package-lock.json; then
-            echo "No semver-compatible dependency fix available."
+            echo "No additional semver-compatible dependency fix available."
             exit 0
           fi
           git config user.name "github-actions[bot]"
