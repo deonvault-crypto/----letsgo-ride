@@ -39,10 +39,9 @@ jobs:
         run: |
           python .github/scripts/production_only_cleanup.py
           python .github/scripts/production_only_test_fix.py
-          # Workflow-file housekeeping is applied directly through the GitHub connector
-          # after this guarded runtime/config candidate passes. Actions tokens cannot
-          # push workflow-file changes without separate workflows permission.
+          # Workflow-file housekeeping is applied directly through the GitHub connector.
           git checkout HEAD -- .github/workflows
+          rm -f .github/workflows/mobile-production-release.yml
 
       - name: Remove temporary cleanup scripts
         shell: bash
