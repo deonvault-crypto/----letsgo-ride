@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           git config user.name 'deonvault-crypto'
           git config user.email 'deonvault@gmail.com'
-          git add backend mobile .github/scripts/check-hailing-assets.py .github/workflows/platform-v2-ci.yml
+          git add backend mobile .github/scripts/check-hailing-assets.py
           git status --short
           git commit -m 'fix: harden final production launch'
           git push origin HEAD:release/final-launch-fixes
