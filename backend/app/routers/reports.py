@@ -20,7 +20,6 @@ async def create_report(payload: ReportCreateBody, user=Depends(get_current_user
         "user_email": user.get("email"),
         "user_phone": user.get("phone") or payload.user_phone,
         "status": "submitted",
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
         **payload.model_dump(),

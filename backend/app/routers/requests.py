@@ -227,7 +227,6 @@ async def create_request(payload: RideRequestCreateBody, user=Depends(get_curren
         "status": "pending",
         "user_id": user["id"],
         "ride_snapshot": ride_snapshot,
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
         **payload.model_dump(),

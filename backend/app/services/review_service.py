@@ -203,7 +203,6 @@ async def _create_private_safety_report(review: Dict[str, Any], reviewer: Dict[s
         "reviewee_id": context.reviewee_id,
         "status": "submitted",
         "private": True,
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
     }

@@ -7,6 +7,7 @@ from app.auth import get_admin_user
 from app.database import database
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification
+from app.services.profile_photo_service import delete_profile_photo_asset
 from app.utils import api_error, api_success, now_iso
 
 
@@ -25,6 +26,10 @@ def _review_candidate(user):
         return {
             "candidate_url": pending_url,
             "candidate_name": user.get("profile_photo_pending_name"),
+            "cloudinary_public_id": user.get("profile_photo_pending_cloudinary_public_id"),
+            "resource_type": user.get("profile_photo_pending_resource_type"),
+            "delivery_type": user.get("profile_photo_pending_delivery_type"),
+            "version": user.get("profile_photo_pending_version"),
             "review_status": user.get("profile_photo_review_status") or "pending",
             "is_replacement": user.get("profile_photo_verified") is True and bool(user.get("profile_photo_url")),
         }
@@ -35,6 +40,10 @@ def _review_candidate(user):
         return {
             "candidate_url": user.get("profile_photo_url"),
             "candidate_name": user.get("profile_photo_name"),
+            "cloudinary_public_id": user.get("profile_photo_cloudinary_public_id"),
+            "resource_type": user.get("profile_photo_resource_type"),
+            "delivery_type": user.get("profile_photo_delivery_type"),
+            "version": user.get("profile_photo_version"),
             "review_status": user.get("profile_photo_review_status") or "pending",
             "is_replacement": False,
         }
@@ -118,6 +127,10 @@ async def review_worker_profile_photo(
         "profile_photo_rejection_reason": (payload.reason or "").strip() or None,
         "profile_photo_pending_url": None,
         "profile_photo_pending_name": None,
+        "profile_photo_pending_cloudinary_public_id": None,
+        "profile_photo_pending_resource_type": None,
+        "profile_photo_pending_delivery_type": None,
+        "profile_photo_pending_version": None,
         "updated_at": timestamp,
     }
 
@@ -126,6 +139,10 @@ async def review_worker_profile_photo(
             {
                 "profile_photo_url": candidate["candidate_url"],
                 "profile_photo_name": candidate.get("candidate_name") or user.get("profile_photo_name"),
+                "profile_photo_cloudinary_public_id": candidate.get("cloudinary_public_id"),
+                "profile_photo_resource_type": candidate.get("resource_type"),
+                "profile_photo_delivery_type": candidate.get("delivery_type"),
+                "profile_photo_version": candidate.get("version"),
                 "profile_photo_verified": True,
                 "profile_photo_rejection_reason": None,
             }
@@ -140,6 +157,12 @@ async def review_worker_profile_photo(
         )
 
     updated = await database.update_one("users", user_id, updates) or {**user, **updates}
+    candidate_public_id = candidate.get("cloudinary_public_id")
+    previous_public_id = user.get("profile_photo_cloudinary_public_id")
+    if payload.status == "rejected" and candidate_public_id:
+        await delete_profile_photo_asset(str(candidate_public_id))
+    elif payload.status == "approved" and replacement and previous_public_id and previous_public_id != candidate_public_id:
+        await delete_profile_photo_asset(str(previous_public_id))
     role_label = "Driver" if user.get("role") == "driver" else "Courier"
     if payload.status == "approved":
         title = "Profile photo approved"

@@ -20,12 +20,12 @@ export default function DriverTripsScreen() {
   const history = ownRides.filter((ride) => TERMINAL_STATUSES.has(String(ride.status)));
 
   return (
-    <Screen title="Trips" navRole="driver">
+    <Screen title="Intercity trips" navRole="driver">
       <View style={styles.hero}>
         <View style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>YOUR ROAD</Text>
-          <Text style={styles.title}>Routes you’re driving.</Text>
-          <Text style={styles.body}>Upcoming intercity trips and passenger-ready routes, without the dashboard clutter.</Text>
+          <Text style={styles.eyebrow}>INTERCITY</Text>
+          <Text style={styles.title}>Your intercity routes.</Text>
+          <Text style={styles.body}>Scheduled city-to-city trips you’re driving, kept separate from Ride Now.</Text>
         </View>
         <Pressable
           accessibilityRole="button"

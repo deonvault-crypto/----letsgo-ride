@@ -10,7 +10,6 @@ from app.utils import now_iso
 
 PRICING_VERSION = 3
 LAUNCH_RIDE_CLASSES = ("ECONOMY", "COMFORT", "XL")
-STAGING_EXTERNAL_TEST_CITY_ID = "zw-harare"
 
 # Exact V1 values are retained only so seeded service areas can be migrated safely.
 # A class is upgraded only when every stored field still matches this legacy profile;
@@ -290,30 +289,6 @@ async def get_city(city_id: str) -> Optional[Dict[str, Any]]:
     return await database.find_one("hailing_cities", {"id": city_id}) or await database.find_one("hailing_cities", {"slug": city_id})
 
 
-async def _staging_external_service_area() -> Optional[Dict[str, Any]]:
-    settings = get_settings()
-    if settings.app_env.strip().lower() != "staging":
-        return None
-    city = await get_city(STAGING_EXTERNAL_TEST_CITY_ID)
-    if not city:
-        return {
-            "supported": False,
-            "enabled": False,
-            "reason": "staging_test_city_unavailable",
-            "service_area": None,
-            "ride_classes": [],
-        }
-    enabled = bool(settings.hailing_enabled and city.get("enabled") and city.get("ride_hailing_enabled"))
-    return {
-        "supported": True,
-        "enabled": enabled,
-        "reason": "staging_external_test_location" if enabled else "disabled",
-        "distance_to_center_km": None,
-        "service_area": public_city(city),
-        "ride_classes": enabled_ride_classes(city) if enabled else [],
-    }
-
-
 async def resolve_service_area(latitude: float, longitude: float) -> Dict[str, Any]:
     """Resolve every Zimbabwe pickup to its nearest local pricing/admin profile.
 
@@ -323,9 +298,6 @@ async def resolve_service_area(latitude: float, longitude: float) -> Dict[str, A
     """
     settings = get_settings()
     if not is_in_zimbabwe(latitude, longitude):
-        staging_area = await _staging_external_service_area()
-        if staging_area is not None:
-            return staging_area
         return {"supported": False, "enabled": False, "reason": "outside_zimbabwe", "service_area": None, "ride_classes": []}
     cities = await list_service_areas(include_disabled=True)
     origin = point(latitude, longitude)

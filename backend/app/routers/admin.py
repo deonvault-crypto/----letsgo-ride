@@ -15,7 +15,7 @@ from app.models.user import AdminRoleUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
-from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, cleanup_demo_rides, is_final_trip_status
+from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, is_final_trip_status
 from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
 from app.services.ride_request_realtime_service import publish_ride_request_realtime, ride_request_event_type, update_versioned_ride_request
 from app.services.verification_service import (
@@ -64,10 +64,6 @@ def _public_document(document):
         "content_type": document.get("content_type") or mimetypes.guess_type(document.get("file_name") or "")[0],
         "ocr": document.get("ocr") if isinstance(document.get("ocr"), dict) else None,
     }
-
-
-def _is_real_ride(ride: Dict[str, Any]) -> bool:
-    return ride.get("is_demo") is not True
 
 
 def _sort_recent(rows: List[Dict[str, Any]], limit: int = 10) -> List[Dict[str, Any]]:
@@ -239,11 +235,11 @@ async def overview(admin=Depends(get_admin_user)):
         recent_reports,
     ) = await asyncio.gather(
         database.count("users"),
-        database.count("rides", {"is_demo": {"$ne": True}}),
+        database.count("rides"),
         database.count("ride_requests"),
         database.count("drivers", verified_filter),
         database.count("drivers", pending_filter),
-        database.count("rides", {"is_demo": {"$ne": True}, "status": {"$in": active_ride_statuses}}),
+        database.count("rides", {"status": {"$in": active_ride_statuses}}),
         database.count("ride_requests", {"status": "pending"}),
         database.count("ride_requests", {"status": "confirmed"}),
         database.count("support_messages"),
@@ -453,7 +449,7 @@ async def admin_rides(
     limit: int = Query(default=80, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    rides = [ride for ride in await database.find_many("rides") if _is_real_ride(ride)]
+    rides = await database.find_many("rides")
     rows = []
     for ride in rides:
         enriched = await _enrich_admin_ride(ride)
@@ -474,7 +470,7 @@ async def admin_rides(
 @router.get("/rides/{ride_id}")
 async def admin_ride_detail(ride_id: str, admin=Depends(get_admin_user)):
     ride = await database.find_one("rides", {"id": ride_id})
-    if not ride or not _is_real_ride(ride):
+    if not ride:
         api_error("Ride not found.", 404)
     ride_requests = [await _enrich_admin_request(request) for request in await database.find_many("ride_requests", {"ride_id": ride_id})]
     support_cases = [
@@ -964,17 +960,3 @@ async def verification_document_view(driver_id: str, document_id: str, document_
     if not admin or admin.get("role") != "admin":
         api_error("Admin access is required.", 403)
     return await verification_document(driver_id, document_id, admin)
-
-
-@router.delete("/rides/demo")
-async def delete_demo_rides(admin=Depends(get_admin_user)):
-    result = await cleanup_demo_rides()
-    await write_audit_log(
-        actor_user_id=admin["id"],
-        actor_role=admin.get("role"),
-        action="demo_rides_cleanup",
-        target_type="rides",
-        target_id="demo",
-        metadata=result,
-    )
-    return api_success(result)

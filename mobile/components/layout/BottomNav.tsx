@@ -25,7 +25,7 @@ const customerItems: NavItem[] = [
 
 const driverItems: NavItem[] = [
   { label: "Home", icon: "view-dashboard-outline", activeIcon: "view-dashboard", href: "/(driver)/home" },
-  { label: "Trips", icon: "steering", href: "/(driver)/trips" },
+  { label: "Intercity", icon: "steering", href: "/(driver)/trips" },
   { label: "Post", icon: "plus-circle-outline", activeIcon: "plus-circle", href: "/(driver)/post-trip" },
   { label: "Calendar", icon: "calendar-outline", activeIcon: "calendar", href: "/(driver)/availability" },
   { label: "Account", icon: "account-outline", activeIcon: "account", href: "/(driver)/account" },

@@ -134,7 +134,6 @@ async def add_vehicle(payload: VehicleBody, user=Depends(get_current_user)):
         "id": new_id(),
         "driver_id": driver["id"],
         "user_id": user["id"],
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
         **payload.model_dump(),

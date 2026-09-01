@@ -355,7 +355,7 @@ async def review_worker_application(application_id: str, status: str, note: str 
             else:
                 await database.insert_one(
                     "drivers",
-                    {"id": new_id(), "user_id": applicant["id"], "rating": 0, "is_demo": False, "created_at": now, **driver_updates},
+                    {"id": new_id(), "user_id": applicant["id"], "rating": 0, "created_at": now, **driver_updates},
                 )
         updates["approved_at"] = now
 

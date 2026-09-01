@@ -58,7 +58,7 @@ COLLECTION_NAMES = [
     "driver_settlement_payments",
 ]
 
-PERSISTENT_DATABASE_ENVS = {"staging", "production"}
+PERSISTENT_DATABASE_ENVS = {"production"}
 
 
 logger = logging.getLogger(__name__)
@@ -207,7 +207,7 @@ class Database:
             name="admin_worker_profile_photo_review",
         )
         await self.db["rides"].create_index(
-            [("status", 1), ("is_demo", 1), ("updated_at", -1)],
+            [("status", 1), ("updated_at", -1)],
             name="admin_rides_by_status",
         )
         await self.db["ride_requests"].create_index(

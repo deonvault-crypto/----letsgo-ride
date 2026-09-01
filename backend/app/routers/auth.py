@@ -30,7 +30,7 @@ from app.services.auth_service import (
     verify_email_code,
     verify_email_user,
 )
-from app.services.profile_photo_service import save_profile_photo
+from app.services.profile_photo_service import ProfilePhotoUploadError, save_profile_photo
 from app.services.account_deletion_service import (
     AccountDeletionBlockedError,
     delete_account,
@@ -56,44 +56,19 @@ def _require_public_customer_signup(role: str) -> None:
 @router.post("/request-otp")
 async def request_otp(payload: RequestOtpBody, request: Request):
     await rate_limit_service.enforce(request, "auth-otp-send", RateLimit(5, 3600), identity=payload.phone)
-    if not get_settings().mock_otp_allowed:
-        api_error("Phone verification is not available. Use secure email sign-in.", 503)
-    return api_success(
-        {
-            "phone": payload.phone,
-            "message": "Verification code request received.",
-        }
-    )
+    api_error("Phone verification is not available. Use secure email sign-in.", 503)
 
 
 @router.post("/verify-otp")
 async def verify_otp(payload: VerifyOtpBody, request: Request):
     await rate_limit_service.enforce(request, "auth-otp-verify", RateLimit(10, 900), identity=payload.phone)
-    settings = get_settings()
-    if not settings.mock_otp_allowed:
-        api_error("Phone verification is not available. Use secure email sign-in.", 503)
-    existing = await find_user_by_phone(payload.phone)
-    if not existing:
-        _require_public_customer_signup(payload.role)
-    if payload.otp != settings.mock_otp:
-        api_error("Invalid OTP code.", 401)
-
-    user = await create_or_update_user(payload.phone, "passenger")
-    return api_success({"token": user["token"], "user": public_user(user)})
+    api_error("Phone verification is not available. Use secure email sign-in.", 503)
 
 
 @router.post("/register")
 async def register(payload: RegisterBody, request: Request):
     await rate_limit_service.enforce(request, "auth-register", RateLimit(5, 3600), identity=payload.phone)
-    if not get_settings().mock_otp_allowed:
-        api_error("Phone registration is not available. Use secure email sign-up.", 503)
-    _require_public_customer_signup(payload.role)
-    if await find_user_by_phone(payload.phone):
-        api_error("An account already uses this phone number. Sign in through a supported method.", 409)
-    user = await create_or_update_user(payload.phone, "passenger", payload.name)
-    if payload.city and payload.city != user.get("city"):
-        user = await database.update_one("users", user["id"], {"city": payload.city, "updated_at": now_iso()}) or user
-    return api_success({"token": user["token"], "user": public_user(user)})
+    api_error("Phone registration is not available. Use secure email sign-up.", 503)
 
 
 @router.post("/email-register")
@@ -240,6 +215,8 @@ async def upload_profile_photo(file: UploadFile = File(...), user=Depends(get_cu
         updated = await save_profile_photo(user, file)
     except ValueError as error:
         api_error(str(error), 400)
+    except ProfilePhotoUploadError as error:
+        api_error(str(error), error.status_code)
     return api_success(public_user(updated))
 
 

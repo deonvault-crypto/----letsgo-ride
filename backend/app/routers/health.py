@@ -36,7 +36,8 @@ async def readiness_check():
     realtime_required = bool(str(settings.realtime_redis_url or "").strip())
     realtime_ready = not realtime_required or realtime_event_service.transport.available
     payments_ready = stripe_runtime_ready()
-    core_ready = database_ready and realtime_ready
+    storage_ready = bool(getattr(settings, "cloudinary_configured", False)) if settings.is_production else True
+    core_ready = database_ready and realtime_ready and storage_ready
     payload = {
         "success": core_ready,
         "data": {
@@ -45,6 +46,7 @@ async def readiness_check():
             "database_status": database.status,
             "realtime_status": "ready" if realtime_ready else "degraded",
             "payments_status": "ready" if payments_ready else "degraded",
+            "profile_storage_status": "ready" if storage_ready else "degraded",
         },
     }
     return JSONResponse(status_code=200 if core_ready else 503, content=payload)

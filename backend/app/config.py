@@ -11,10 +11,13 @@ load_dotenv()
 
 class Settings:
     def __init__(self) -> None:
-        self.app_env = os.getenv("APP_ENV", "development")
+        self.app_env = os.getenv("APP_ENV", "development").strip().lower() or "development"
+        if self.app_env not in {"development", "test", "production"}:
+            raise RuntimeError("Unsupported APP_ENV. Use development, test, or production.")
         self.mongodb_uri = os.getenv("MONGODB_URI", "").strip()
-        self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride")
-        self.mock_otp = os.getenv("MOCK_OTP", "").strip()
+        self.mongodb_db_name = os.getenv("MONGODB_DB_NAME", "letsgoride").strip() or "letsgoride"
+        if self.is_production and self.mongodb_db_name != "letsgoride":
+            raise RuntimeError("Production MONGODB_DB_NAME must be exactly letsgoride.")
         self.admin_seed_email = os.getenv("ADMIN_SEED_EMAIL", "").strip()
         self.admin_seed_password = os.getenv("ADMIN_SEED_PASSWORD", "")
         self.admin_auto_create = self._parse_bool(os.getenv("ADMIN_AUTO_CREATE", "false"))
@@ -96,6 +99,9 @@ class Settings:
         self.cloudinary_cloud_name = self._get_env_first("CLOUDINARY_CLOUD_NAME") or cloudinary_url_config.get("cloud_name", "")
         self.cloudinary_api_key = self._get_env_first("CLOUDINARY_API_KEY") or cloudinary_url_config.get("api_key", "")
         self.cloudinary_api_secret = self._get_env_first("CLOUDINARY_API_SECRET") or cloudinary_url_config.get("api_secret", "")
+        self.cloudinary_configured = bool(self.cloudinary_cloud_name and self.cloudinary_api_key and self.cloudinary_api_secret)
+        if self.is_production and not self.cloudinary_configured:
+            raise RuntimeError("Production Cloudinary storage credentials must be configured.")
         self.enable_face_ai = self._parse_bool(os.getenv("ENABLE_FACE_AI", "false"))
         self.verification_ocr_enabled = self._parse_bool(os.getenv("VERIFICATION_OCR_ENABLED", "false"))
         self.verification_ocr_provider = self._get_env_first("VERIFICATION_OCR_PROVIDER")
@@ -220,9 +226,6 @@ class Settings:
     def resend_configured(self) -> bool:
         return bool(self.resend_api_key and self.resend_from_email)
 
-    @property
-    def mock_otp_allowed(self) -> bool:
-        return bool(self.mock_otp) and self.app_env.strip().lower() in {"development", "test"}
 
     @property
     def is_production(self) -> bool:

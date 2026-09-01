@@ -254,7 +254,6 @@ async def create_or_update_user(phone: str, role: str, name: Optional[str] = Non
         "email_verified": False,
         "rating": 0,
         **session,
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
     }
@@ -295,7 +294,6 @@ async def create_email_user(
         **create_session_record(),
         **password_record,
         "status": "active",
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
         "notification_trip_updates": True,
@@ -345,9 +343,7 @@ async def verify_email_code(email: str, code: str) -> Optional[Dict[str, Any]]:
     attempts = int(user.get("email_verification_attempts", 0))
     if attempts >= 5:
         return None
-    settings = get_settings()
-    local_mock_allowed = settings.mock_otp_allowed and code == settings.mock_otp
-    if not local_mock_allowed and (not code_not_expired(user) or not code_matches(user, code)):
+    if not code_not_expired(user) or not code_matches(user, code):
         await database.update_one(
             "users",
             user["id"],
@@ -421,9 +417,7 @@ async def reset_email_password(email: str, code: str, password: str) -> bool:
     attempts = int(user.get("reset_attempts", 0))
     if attempts >= 5:
         return False
-    settings = get_settings()
-    local_mock_allowed = settings.mock_otp_allowed and code == settings.mock_otp
-    if not local_mock_allowed and (not code_not_expired(user, "reset") or not code_matches(user, code, "reset")):
+    if not code_not_expired(user, "reset") or not code_matches(user, code, "reset"):
         await database.update_one(
             "users",
             user["id"],
@@ -493,7 +487,6 @@ async def ensure_admin_seed_user() -> None:
         "email_verified": True,
         "email_verified_at": timestamp,
         **create_password_record(settings.admin_seed_password),
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
     }

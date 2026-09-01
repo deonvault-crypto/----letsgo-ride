@@ -78,11 +78,11 @@ export default function AvailabilityScreen() {
   }
 
   return (
-    <Screen navRole="driver" title="Calendar" showNotifications>
+    <Screen navRole="driver" title="Intercity calendar" showNotifications>
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>DRIVING CALENDAR</Text>
+        <Text style={styles.eyebrow}>INTERCITY CALENDAR</Text>
         <Text style={styles.title}>When can you drive?</Text>
-        <Text style={styles.body}>Mark the windows you’re available. Your route planning stays separate from Ride Now’s live online status.</Text>
+        <Text style={styles.body}>Plan availability for scheduled intercity routes. This calendar stays separate from Ride Now’s live online status.</Text>
       </View>
 
       <View style={styles.composer}>

@@ -14,7 +14,6 @@ async def _create(collection: str, payload: WaitlistBody):
     item = {
         "id": new_id(),
         "status": "new",
-        "is_demo": False,
         "created_at": timestamp,
         "updated_at": timestamp,
         **payload.model_dump(),

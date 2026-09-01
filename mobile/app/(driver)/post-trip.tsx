@@ -106,11 +106,11 @@ export default function PostTripScreen() {
   const verified = Boolean(user?.phone && user.profile_photo_url && isVerifiedStatus(verification?.verification_status));
 
   return (
-    <Screen navRole="driver" title="Post trip">
+    <Screen navRole="driver" title="Post intercity ride">
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>SHARE A ROUTE</Text>
-        <Text style={styles.title}>Where are you driving?</Text>
-        <Text style={styles.body}>Build the journey first. Seats, price and vehicle details follow the route.</Text>
+        <Text style={styles.eyebrow}>INTERCITY RIDE</Text>
+        <Text style={styles.title}>Post an intercity route.</Text>
+        <Text style={styles.body}>Scheduled rides between cities. Set the route first, then seats, fare and vehicle details.</Text>
       </View>
 
       {userError ? (

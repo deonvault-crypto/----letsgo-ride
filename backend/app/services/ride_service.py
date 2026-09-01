@@ -19,14 +19,6 @@ from app.utils import new_id, now_iso
 
 
 logger = logging.getLogger(__name__)
-LEGACY_DEMO_RIDE_SIGNATURES = {
-    ("local driver", "toyota wish, silver", "harare", "bulawayo", 12),
-    ("tafadzwa m.", "toyota wish, silver", "harare", "bulawayo", 12),
-    ("nyasha k.", "honda fit, black", "harare", "mutare", 10),
-    ("kudzai r.", "nissan note, white", "gweru", "harare", 11),
-    ("farai d.", "toyota noah, charcoal", "bulawayo", "victoria falls", 18),
-    ("rudo s.", "mazda premacy, green", "kwekwe", "harare", 9),
-}
 
 ZIMBABWE_TZ = timezone(timedelta(hours=2))
 TRIP_STATUS_DRAFT = "DRAFT"
@@ -59,27 +51,6 @@ def is_active_trip_status(status: Optional[str]) -> bool:
 
 def is_final_trip_status(status: Optional[str]) -> bool:
     return canonical_trip_status(status) in FINAL_TRIP_STATUSES
-
-
-def is_legacy_demo_ride(ride: Dict[str, Any]) -> bool:
-    if ride.get("is_demo") is True:
-        return True
-    try:
-        price_usd = int(float(ride.get("price_usd") or 0))
-    except (TypeError, ValueError):
-        price_usd = 0
-    signature = (
-        str(ride.get("driver_name") or "").strip().lower(),
-        str(ride.get("vehicle") or "").strip().lower(),
-        str(ride.get("origin") or "").strip().lower(),
-        str(ride.get("destination") or "").strip().lower(),
-        price_usd,
-    )
-    return signature in LEGACY_DEMO_RIDE_SIGNATURES
-
-
-def is_public_ride(ride: Dict[str, Any]) -> bool:
-    return not is_legacy_demo_ride(ride)
 
 
 def ride_departure_datetime(ride: Dict[str, Any]) -> Optional[datetime]:
@@ -238,8 +209,6 @@ async def sweep_ride_lifecycle() -> Dict[str, int]:
     rides = await database.find_many("rides")
     changed = 0
     for ride in rides:
-        if not is_public_ride(ride):
-            continue
         before = canonical_trip_status(ride.get("status"))
         updated = await apply_ride_lifecycle(ride)
         after = canonical_trip_status(updated.get("status"))
@@ -272,8 +241,7 @@ def public_ride_status(ride: Dict[str, Any]) -> str:
 def is_bookable_public_ride(ride: Dict[str, Any]) -> bool:
     departure_at = ride_departure_datetime(ride)
     return bool(
-        is_public_ride(ride)
-        and public_ride_status(ride) == TRIP_STATUS_SCHEDULED
+        public_ride_status(ride) == TRIP_STATUS_SCHEDULED
         and departure_at
         and datetime.now(ZIMBABWE_TZ) < departure_at
     )
@@ -397,21 +365,6 @@ async def search_rides(
     return results
 
 
-async def cleanup_demo_rides() -> Dict[str, int]:
-    rides = await database.find_many("rides")
-    deleted_count = 0
-    preserved_count = 0
-
-    for ride in rides:
-        if is_legacy_demo_ride(ride):
-            deleted = await database.delete_one("rides", ride["id"])
-            if deleted:
-                deleted_count += 1
-        else:
-            preserved_count += 1
-
-    return {"deleted_demo_rides": deleted_count, "preserved_real_rides": preserved_count}
-
 
 async def create_ride(payload: Dict[str, Any]) -> Dict[str, Any]:
     timestamp = now_iso()
@@ -419,7 +372,6 @@ async def create_ride(payload: Dict[str, Any]) -> Dict[str, Any]:
         "id": new_id(),
         "driver_id": payload.get("driver_id") or new_id(),
         "status": TRIP_STATUS_SCHEDULED,
-        "is_demo": False,
         "estimated_duration_minutes": payload.get("estimated_duration_minutes") or DEFAULT_ESTIMATED_DURATION_MINUTES,
         "live_tracking_enabled": False,
         "created_at": timestamp,
