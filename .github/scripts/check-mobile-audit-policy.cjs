@@ -7,7 +7,9 @@ if (!fullPath || !productionPath || !policyPath) {
 }
 
 const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
-const allowed = new Map((policy.allowedAdvisories || []).map((item) => [item.id, item]));
+const allowed = new Map(
+  (policy.allowedAdvisories || []).map((item) => [String(item.id || '').toUpperCase(), item]),
+);
 const ghsaPattern = /GHSA-[0-9a-z-]+/i;
 
 function advisoryId(entry) {
