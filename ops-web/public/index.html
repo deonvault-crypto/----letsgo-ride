@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="color-scheme" content="light">
+  <title>LetsGoRide Operations</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main id="loginView" class="login-wrap">
+    <section class="login-card" aria-labelledby="loginTitle">
+      <div class="brand">Lets<span>Go</span>Ride</div>
+      <p class="eyebrow">Operations Control Center</p>
+      <h1 id="loginTitle">Team sign in</h1>
+      <p class="muted">Authorized Customer Support, Managers and Admins only.</p>
+      <form id="loginForm" autocomplete="on">
+        <label>Email<input id="email" type="email" autocomplete="username" required></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit" class="primary">Sign in securely</button>
+      </form>
+      <p id="loginError" class="error" hidden></p>
+      <p class="muted">Staff permissions are enforced by the production API. This dashboard never connects directly to the database.</p>
+    </section>
+  </main>
+
+  <div id="appView" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="side-top">
+        <div class="brand side-brand">Lets<span>Go</span>Ride</div>
+        <p>Operations</p>
+      </div>
+      <nav id="nav" aria-label="Operations navigation">
+        <button data-view="overview" class="active">Overview</button>
+        <button data-view="cases">Support cases</button>
+        <button data-view="users">People</button>
+        <button data-view="rides">Rides</button>
+        <button data-view="safety">Safety reports</button>
+        <button data-view="staff" id="staffNav">Staff & roles</button>
+      </nav>
+      <div class="side-bottom">
+        <div id="staffIdentity" class="identity"></div>
+        <button id="logoutBtn" class="ghost">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">LetsGoRide Zimbabwe</p>
+          <h1 id="pageTitle">Operations overview</h1>
+        </div>
+        <div class="status-pill"><span class="dot"></span> Production</div>
+      </header>
+
+      <section id="overviewView" class="view"></section>
+      <section id="casesView" class="view" hidden></section>
+      <section id="usersView" class="view" hidden></section>
+      <section id="ridesView" class="view" hidden></section>
+      <section id="safetyView" class="view" hidden></section>
+      <section id="staffView" class="view" hidden></section>
+    </main>
+  </div>
+
+  <dialog id="caseDialog">
+    <form method="dialog"><button class="dialog-close" aria-label="Close">×</button></form>
+    <div id="caseDialogBody"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/app.js" defer></script>
+  <script src="/admin-tools.js" defer></script>
+</body>
+</html>
