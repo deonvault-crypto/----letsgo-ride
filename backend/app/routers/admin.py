@@ -177,7 +177,7 @@ async def _enrich_admin_user(user: Dict[str, Any]) -> Dict[str, Any]:
     reports = await database.find_many("reports", {"user_id": user.get("id")})
     driver = await database.find_one("drivers", {"user_id": user.get("id")})
     public = public_user(user)
-    public["posted_rides_count"] = len([ride for ride in rides if _is_real_ride(ride)])
+    public["posted_rides_count"] = len(rides)
     public["ride_requests_count"] = len(requests)
     public["confirmed_bookings_count"] = len([request for request in requests if request.get("status") == "confirmed"])
     public["support_cases_count"] = len(support_cases)
@@ -367,7 +367,7 @@ async def user_detail(user_id: str, admin=Depends(get_admin_user)):
     user = await database.find_one("users", {"id": user_id})
     if not user:
         api_error("User not found.", 404)
-    rides = [await _enrich_admin_ride(ride) for ride in await database.find_many("rides", {"user_id": user_id}) if _is_real_ride(ride)]
+    rides = [await _enrich_admin_ride(ride) for ride in await database.find_many("rides", {"user_id": user_id})]
     requests = [await _enrich_admin_request(request) for request in await database.find_many("ride_requests", {"user_id": user_id})]
     support_cases = await database.find_many("support_messages", {"user_id": user_id})
     safety_reports = await database.find_many("reports", {"user_id": user_id})
