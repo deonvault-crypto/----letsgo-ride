@@ -1,4 +1,4 @@
-const API='https://letsgoride-v2-production.onrender.com';
+const API='/api';
 const state={token:sessionStorage.getItem('lgr_ops_token')||'',me:null,staff:[]};
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
