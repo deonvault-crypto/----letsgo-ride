@@ -14,7 +14,6 @@ router = APIRouter(prefix="/ops", tags=["operations-control-center"])
 
 
 CASE_LEVEL_ORDER = ["cs", "manager", "admin"]
-OPEN_CASE_STATUSES = {"received", "open", "in_progress", "waiting_customer"}
 
 
 def _case_level(row: Dict[str, Any]) -> str:
@@ -45,9 +44,10 @@ def _safe_case(row: Dict[str, Any]) -> Dict[str, Any]:
 
 async def _write_case_event(case_id: str, actor: Dict[str, Any], event_type: str, details: Dict[str, Any]) -> None:
     await database.insert_one(
-        "ops_case_events",
+        "audit_logs",
         {
             "id": new_id(),
+            "action": "ops_case_event",
             "case_id": case_id,
             "event_type": event_type,
             "actor_id": actor.get("id"),
@@ -144,7 +144,12 @@ async def case_detail(case_id: str, user=Depends(get_ops_user)):
     row = await database.find_one("support_messages", {"id": case_id})
     if not row:
         api_error("Support case not found.", 404)
-    events = await database.find_many("ops_case_events", {"case_id": case_id}, sort=[("created_at", 1)], limit=200)
+    events = await database.find_many(
+        "audit_logs",
+        {"action": "ops_case_event", "case_id": case_id},
+        sort=[("created_at", 1)],
+        limit=200,
+    )
     return api_success({"case": _safe_case(row), "events": events})
 
 
@@ -195,8 +200,6 @@ async def escalate_case(case_id: str, payload: OpsEscalationBody, user=Depends(g
     if current_index >= len(CASE_LEVEL_ORDER) - 1:
         api_error("This case is already at Admin level.", 409)
     next_level = CASE_LEVEL_ORDER[current_index + 1]
-    # Escalation follows CS -> Manager -> Admin. An Admin may escalate a lower
-    # case one step, but nobody can skip levels accidentally.
     if actor_role == "cs" and next_level != "manager":
         api_error("Customer Support can escalate only to Manager.", 403)
     if actor_role == "manager" and current == "manager" and next_level != "admin":
@@ -298,9 +301,10 @@ async def set_staff_role(user_id: str, payload: OpsStaffRoleBody, user=Depends(g
     updates = {"ops_role": payload.ops_role, "updated_at": now_iso()}
     updated = await database.update_one("users", user_id, updates) or {**target, **updates}
     await database.insert_one(
-        "ops_staff_audit",
+        "audit_logs",
         {
             "id": new_id(),
+            "action": "ops_staff_role_changed",
             "actor_id": user.get("id"),
             "target_user_id": user_id,
             "previous_ops_role": effective_ops_role(target) or None,
