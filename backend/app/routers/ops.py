@@ -42,6 +42,36 @@ def _safe_case(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _safe_ride(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: row.get(key)
+        for key in (
+            "id", "user_id", "driver_name", "origin", "destination", "date", "time",
+            "status", "available_seats", "price_per_seat", "created_at", "updated_at",
+        )
+    }
+
+
+def _safe_ride_request(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: row.get(key)
+        for key in (
+            "id", "ride_id", "user_id", "passenger_name", "seats", "status",
+            "created_at", "updated_at",
+        )
+    }
+
+
+def _safe_report(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        key: row.get(key)
+        for key in (
+            "id", "user_id", "user_name", "user_email", "report_type", "description",
+            "details", "status", "created_at", "updated_at",
+        )
+    }
+
+
 async def _write_case_event(case_id: str, actor: Dict[str, Any], event_type: str, details: Dict[str, Any]) -> None:
     await database.insert_one(
         "audit_logs",
@@ -250,7 +280,7 @@ async def list_rides(
 ):
     query = {"status": status} if status else None
     rows = await database.find_many("rides", query, sort=[("updated_at", -1)], limit=limit)
-    return api_success(rows)
+    return api_success([_safe_ride(row) for row in rows])
 
 
 @router.get("/ride-requests")
@@ -261,7 +291,7 @@ async def list_ride_requests(
 ):
     query = {"status": status} if status else None
     rows = await database.find_many("ride_requests", query, sort=[("updated_at", -1)], limit=limit)
-    return api_success(rows)
+    return api_success([_safe_ride_request(row) for row in rows])
 
 
 @router.get("/safety-reports")
@@ -272,7 +302,7 @@ async def list_safety_reports(
 ):
     query = {"status": status} if status else None
     rows = await database.find_many("reports", query, sort=[("updated_at", -1)], limit=limit)
-    return api_success(rows)
+    return api_success([_safe_report(row) for row in rows])
 
 
 @router.get("/staff")
