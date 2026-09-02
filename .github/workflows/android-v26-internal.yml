@@ -15,9 +15,14 @@ jobs:
     if: github.ref == 'refs/heads/build/android-v26-internal'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       BUILD_ID: 85be9c19-3ef1-4ca0-ad1e-808f15dc6d6c
     steps:
+      - name: Checkout project for EAS context
+        uses: actions/checkout@v4
       - name: Read build status without creating or submitting anything
         run: npx eas-cli@latest build:view "$BUILD_ID" --json
