@@ -40,7 +40,6 @@ FINAL_HAILING_STATUSES = {
 }
 FINAL_COURIER_STATUSES = {"DELIVERED", "COMPLETED", "CANCELLED", "delivered", "completed", "cancelled"}
 FINAL_FOOD_STATUSES = {"DELIVERED", "COMPLETED", "CANCELLED", "delivered", "completed", "cancelled"}
-
 SOURCE_COLLECTIONS = {
     "support_message": "support_messages",
     "safety_report": "reports",
@@ -66,34 +65,18 @@ def _case_level(case: Dict[str, Any]) -> str:
 
 
 def _safe_case(case: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "id": case.get("id"),
-        "case_number": case.get("case_number"),
-        "subject": case.get("subject"),
-        "description": case.get("description"),
-        "priority": case.get("priority", "normal"),
-        "status": case.get("status", "open"),
-        "escalation_level": _case_level(case),
-        "source_type": case.get("source_type", "manual"),
-        "source_id": case.get("source_id"),
-        "customer_user_id": case.get("customer_user_id"),
-        "assigned_user_id": case.get("assigned_user_id"),
-        "assigned_name": case.get("assigned_name"),
-        "created_by_user_id": case.get("created_by_user_id"),
-        "created_at": case.get("created_at"),
-        "updated_at": case.get("updated_at"),
-        "resolved_at": case.get("resolved_at"),
-    }
-
-
-def _safe_audit_log(row: Dict[str, Any]) -> Dict[str, Any]:
-    safe = dict(row)
-    metadata = dict(safe.get("metadata") or {})
-    for key in list(metadata.keys()):
-        if key.lower() in {"password", "token", "otp", "code", "api_key", "authorization", "secret"}:
-            metadata[key] = "[redacted]"
-    safe["metadata"] = metadata
-    return safe
+    fields = (
+        "id", "case_number", "subject", "description", "priority", "status",
+        "escalation_level", "source_type", "source_id", "customer_user_id",
+        "assigned_user_id", "assigned_name", "created_by_user_id",
+        "created_at", "updated_at", "resolved_at",
+    )
+    result = {key: case.get(key) for key in fields}
+    result["priority"] = result.get("priority") or "normal"
+    result["status"] = result.get("status") or "open"
+    result["escalation_level"] = _case_level(case)
+    result["source_type"] = result.get("source_type") or "manual"
+    return result
 
 
 def _allowlist(row: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, Any]:
@@ -103,49 +86,53 @@ def _allowlist(row: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, Any]:
 def _safe_hailing(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
         "id", "status", "ride_class", "city_id", "passenger_user_id", "driver_user_id",
-        "driver_id", "pickup_address", "dropoff_address", "pickup", "dropoff", "fare_usd",
-        "estimated_fare", "created_at", "updated_at",
+        "driver_id", "pickup_address", "dropoff_address", "pickup", "dropoff",
+        "fare_usd", "estimated_fare", "created_at", "updated_at",
     ))
 
 
 def _safe_courier(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
-        "id", "status", "sender_user_id", "customer_user_id", "courier_user_id", "pickup_address",
-        "dropoff_address", "price_usd", "quoted_price_usd", "created_at", "updated_at",
+        "id", "status", "sender_user_id", "customer_user_id", "courier_user_id",
+        "pickup_address", "dropoff_address", "price_usd", "quoted_price_usd",
+        "created_at", "updated_at",
     ))
 
 
 def _safe_food(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
-        "id", "status", "customer_user_id", "restaurant_id", "courier_user_id", "total_usd",
-        "total", "created_at", "updated_at",
+        "id", "status", "customer_user_id", "restaurant_id", "courier_user_id",
+        "total_usd", "total", "created_at", "updated_at",
     ))
 
 
 def _safe_ride(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
-        "id", "user_id", "driver_name", "origin", "destination", "date", "time", "status",
-        "available_seats", "price_per_seat", "created_at", "updated_at",
+        "id", "user_id", "driver_name", "origin", "destination", "date", "time",
+        "status", "available_seats", "price_per_seat", "created_at", "updated_at",
     ))
 
 
 def _safe_ride_request(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
-        "id", "ride_id", "user_id", "passenger_name", "seats", "status", "created_at", "updated_at",
+        "id", "ride_id", "user_id", "passenger_name", "seats", "status",
+        "created_at", "updated_at",
     ))
 
 
 def _safe_support(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
-        "id", "user_id", "user_name", "user_email", "user_phone", "subject", "message", "status",
-        "ride_id", "request_id", "admin_notes", "created_at", "updated_at", "last_staff_reply_at",
+        "id", "user_id", "user_name", "user_email", "user_phone", "subject",
+        "message", "status", "ride_id", "request_id", "admin_notes",
+        "created_at", "updated_at", "last_staff_reply_at",
     ))
 
 
 def _safe_report(row: Dict[str, Any]) -> Dict[str, Any]:
     return _allowlist(row, (
-        "id", "user_id", "user_name", "user_email", "user_phone", "report_type", "message", "description",
-        "status", "ride_id", "request_id", "reported_user_id", "admin_notes", "created_at", "updated_at",
+        "id", "user_id", "user_name", "user_email", "user_phone", "report_type",
+        "message", "description", "status", "ride_id", "request_id",
+        "reported_user_id", "admin_notes", "created_at", "updated_at",
     ))
 
 
@@ -169,6 +156,16 @@ def _safe_source(source_type: str, source: Optional[Dict[str, Any]]) -> Optional
     if source_type == "user":
         return public_user(source)
     return None
+
+
+def _safe_audit_log(row: Dict[str, Any]) -> Dict[str, Any]:
+    safe = dict(row)
+    metadata = dict(safe.get("metadata") or {})
+    for key in list(metadata.keys()):
+        if key.lower() in {"password", "token", "otp", "code", "api_key", "authorization", "secret"}:
+            metadata[key] = "[redacted]"
+    safe["metadata"] = metadata
+    return safe
 
 
 async def _source_record(source_type: str, source_id: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -233,7 +230,10 @@ async def _case_event(
 async def _ops_role_for_user(target: Dict[str, Any]) -> Optional[str]:
     if target.get("role") == "admin":
         return "admin"
-    staff = await database.find_one("ops_staff", {"user_id": target.get("id"), "enabled": {"$ne": False}})
+    staff = await database.find_one(
+        "ops_staff",
+        {"user_id": target.get("id"), "enabled": {"$ne": False}},
+    )
     role = str((staff or {}).get("role") or "").strip().lower()
     return role if role in {"cs", "manager"} else None
 
@@ -277,7 +277,9 @@ async def overview(user=Depends(get_ops_user)):
         database.count("users"),
         database.count("support_messages", {"status": {"$nin": ["resolved", "closed"]}}),
         database.count("reports", {"status": {"$nin": ["resolved", "dismissed"]}}),
-        database.count("drivers", {"verification_status": {"$in": ["pending", "pending_uploads", "pending_auto_check", "needs_review", "needs_resubmission"]}}),
+        database.count("drivers", {"verification_status": {"$in": [
+            "pending", "pending_uploads", "pending_auto_check", "needs_review", "needs_resubmission"
+        ]}}),
         database.count("ops_cases", {"status": {"$in": sorted(CASE_OPEN_STATUSES)}}),
         database.count("ops_cases", {"status": {"$in": sorted(CASE_OPEN_STATUSES)}, "escalation_level": "manager"}),
         database.count("ops_cases", {"status": {"$in": sorted(CASE_OPEN_STATUSES)}, "escalation_level": "admin"}),
@@ -305,10 +307,30 @@ async def overview(user=Depends(get_ops_user)):
 @router.get("/live")
 async def live_operations(user=Depends(get_ops_user)):
     hailing, courier, food, rides = await asyncio.gather(
-        database.find_many("hailing_trips", {"status": {"$nin": sorted(FINAL_HAILING_STATUSES)}}, sort=[("updated_at", -1)], limit=30),
-        database.find_many("courier_deliveries", {"status": {"$nin": sorted(FINAL_COURIER_STATUSES)}}, sort=[("updated_at", -1)], limit=30),
-        database.find_many("food_orders", {"status": {"$nin": sorted(FINAL_FOOD_STATUSES)}}, sort=[("updated_at", -1)], limit=30),
-        database.find_many("rides", {"status": {"$nin": ["COMPLETED", "CANCELLED", "EXPIRED", "completed", "cancelled", "expired"]}}, sort=[("updated_at", -1)], limit=30),
+        database.find_many(
+            "hailing_trips",
+            {"status": {"$nin": sorted(FINAL_HAILING_STATUSES)}},
+            sort=[("updated_at", -1)],
+            limit=30,
+        ),
+        database.find_many(
+            "courier_deliveries",
+            {"status": {"$nin": sorted(FINAL_COURIER_STATUSES)}},
+            sort=[("updated_at", -1)],
+            limit=30,
+        ),
+        database.find_many(
+            "food_orders",
+            {"status": {"$nin": sorted(FINAL_FOOD_STATUSES)}},
+            sort=[("updated_at", -1)],
+            limit=30,
+        ),
+        database.find_many(
+            "rides",
+            {"status": {"$nin": ["COMPLETED", "CANCELLED", "EXPIRED", "completed", "cancelled", "expired"]}},
+            sort=[("updated_at", -1)],
+            limit=30,
+        ),
     )
     return api_success({
         "hailing": [_safe_hailing(row) for row in hailing],
@@ -349,13 +371,25 @@ async def support_messages(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many("support_messages", {"status": status} if status else None, sort=[("updated_at", -1)], limit=limit)
-    rows = [row for row in rows if _contains(row, search, ["subject", "message", "user_name", "user_email", "user_phone", "status"])]
+    rows = await database.find_many(
+        "support_messages",
+        {"status": status} if status else None,
+        sort=[("updated_at", -1)],
+        limit=limit,
+    )
+    rows = [
+        row for row in rows
+        if _contains(row, search, ["subject", "message", "user_name", "user_email", "user_phone", "status"])
+    ]
     return api_success({"count": len(rows), "items": [_safe_support(row) for row in rows]})
 
 
 @router.patch("/support/messages/{message_id}")
-async def update_support_message(message_id: str, payload: OpsSupportStatusBody, user=Depends(get_ops_user)):
+async def update_support_message(
+    message_id: str,
+    payload: OpsSupportStatusBody,
+    user=Depends(get_ops_user),
+):
     existing = await database.find_one("support_messages", {"id": message_id})
     if not existing:
         api_error("Support message not found.", 404)
@@ -390,13 +424,25 @@ async def safety_reports(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many("reports", {"status": status} if status else None, sort=[("updated_at", -1)], limit=limit)
-    rows = [row for row in rows if _contains(row, search, ["report_type", "message", "description", "user_name", "user_email", "user_phone", "status"])]
+    rows = await database.find_many(
+        "reports",
+        {"status": status} if status else None,
+        sort=[("updated_at", -1)],
+        limit=limit,
+    )
+    rows = [
+        row for row in rows
+        if _contains(row, search, ["report_type", "message", "description", "user_name", "user_email", "user_phone", "status"])
+    ]
     return api_success({"count": len(rows), "items": [_safe_report(row) for row in rows]})
 
 
 @router.patch("/safety-reports/{report_id}")
-async def update_safety_report(report_id: str, payload: OpsReportStatusBody, user=Depends(get_ops_manager)):
+async def update_safety_report(
+    report_id: str,
+    payload: OpsReportStatusBody,
+    user=Depends(get_ops_manager),
+):
     existing = await database.find_one("reports", {"id": report_id})
     if not existing:
         api_error("Safety report not found.", 404)
@@ -479,13 +525,19 @@ async def create_case(payload: OpsCaseCreateBody, user=Depends(get_ops_user)):
     if payload.source_type != "manual" and payload.source_id:
         existing = await database.find_one(
             "ops_cases",
-            {"source_type": payload.source_type, "source_id": payload.source_id, "status": {"$nin": ["resolved", "closed"]}},
+            {
+                "source_type": payload.source_type,
+                "source_id": payload.source_id,
+                "status": {"$nin": ["resolved", "closed"]},
+            },
         )
         if existing:
             return api_success(_safe_case(existing))
+
     timestamp = now_iso()
     case_id = new_id()
     customer_user_id = payload.customer_user_id or _source_customer_user_id(payload.source_type, source)
+    actor_role = effective_ops_role(user)
     case = {
         "id": case_id,
         "case_number": f"LGR-{timestamp[:10].replace('-', '')}-{case_id[:6].upper()}",
@@ -497,15 +549,24 @@ async def create_case(payload: OpsCaseCreateBody, user=Depends(get_ops_user)):
         "source_type": payload.source_type,
         "source_id": payload.source_id,
         "customer_user_id": customer_user_id,
-        "assigned_user_id": user.get("id") if effective_ops_role(user) == "cs" else None,
-        "assigned_name": (user.get("name") or user.get("email")) if effective_ops_role(user) == "cs" else None,
+        "assigned_user_id": user.get("id") if actor_role == "cs" else None,
+        "assigned_name": (user.get("name") or user.get("email")) if actor_role == "cs" else None,
         "created_by_user_id": user.get("id"),
         "created_at": timestamp,
         "updated_at": timestamp,
         "resolved_at": None,
     }
     created = await database.insert_one("ops_cases", case)
-    await _case_event(case_id, user, "created", metadata={"source_type": payload.source_type, "source_id": payload.source_id, "priority": payload.priority})
+    await _case_event(
+        case_id,
+        user,
+        "created",
+        metadata={
+            "source_type": payload.source_type,
+            "source_id": payload.source_id,
+            "priority": payload.priority,
+        },
+    )
     return api_success(_safe_case(created))
 
 
@@ -515,8 +576,17 @@ async def case_detail(case_id: str, user=Depends(get_ops_user)):
     if not case:
         api_error("Operations case not found.", 404)
     source = await _source_record(case.get("source_type", "manual"), case.get("source_id"))
-    customer = await database.find_one("users", {"id": case.get("customer_user_id")}) if case.get("customer_user_id") else None
-    events = await database.find_many("ops_case_events", {"case_id": case_id}, sort=[("created_at", 1)], limit=300)
+    customer = (
+        await database.find_one("users", {"id": case.get("customer_user_id")})
+        if case.get("customer_user_id")
+        else None
+    )
+    events = await database.find_many(
+        "ops_case_events",
+        {"case_id": case_id},
+        sort=[("created_at", 1)],
+        limit=300,
+    )
     return api_success({
         "case": _safe_case(case),
         "source": _safe_source(case.get("source_type", "manual"), source),
@@ -526,7 +596,11 @@ async def case_detail(case_id: str, user=Depends(get_ops_user)):
 
 
 @router.post("/cases/{case_id}/notes")
-async def add_case_note(case_id: str, payload: OpsCaseNoteBody, user=Depends(get_ops_user)):
+async def add_case_note(
+    case_id: str,
+    payload: OpsCaseNoteBody,
+    user=Depends(get_ops_user),
+):
     case = await database.find_one("ops_cases", {"id": case_id})
     if not case:
         api_error("Operations case not found.", 404)
@@ -538,19 +612,28 @@ async def add_case_note(case_id: str, payload: OpsCaseNoteBody, user=Depends(get
 
 
 @router.patch("/cases/{case_id}/assign")
-async def assign_case(case_id: str, payload: OpsCaseAssignBody, user=Depends(get_ops_user)):
+async def assign_case(
+    case_id: str,
+    payload: OpsCaseAssignBody,
+    user=Depends(get_ops_user),
+):
     case = await database.find_one("ops_cases", {"id": case_id})
     if not case:
         api_error("Operations case not found.", 404)
     level = _case_level(case)
     if not can_manage_case_level(user, level):
         api_error("This case has been escalated above your role.", 403)
+
     actor_role = effective_ops_role(user)
     target_role: Optional[str] = None
     if payload.assigned_user_id is None:
         if actor_role == "cs" and case.get("assigned_user_id") not in {None, user.get("id")}:
             api_error("Customer Support can only release its own assignment.", 403)
-        updates = {"assigned_user_id": None, "assigned_name": None, "updated_at": now_iso()}
+        updates = {
+            "assigned_user_id": None,
+            "assigned_name": None,
+            "updated_at": now_iso(),
+        }
     else:
         target = await database.find_one("users", {"id": payload.assigned_user_id})
         if not target:
@@ -560,14 +643,31 @@ async def assign_case(case_id: str, payload: OpsCaseAssignBody, user=Depends(get
             api_error("That staff member cannot manage this escalation level.", 400)
         if actor_role == "cs" and target.get("id") != user.get("id"):
             api_error("Customer Support can only assign a case to itself.", 403)
-        updates = {"assigned_user_id": target.get("id"), "assigned_name": target.get("name") or target.get("email"), "updated_at": now_iso()}
+        updates = {
+            "assigned_user_id": target.get("id"),
+            "assigned_name": target.get("name") or target.get("email"),
+            "updated_at": now_iso(),
+        }
+
     updated = await database.update_one("ops_cases", case_id, updates) or {**case, **updates}
-    await _case_event(case_id, user, "assigned", metadata={"assigned_user_id": payload.assigned_user_id, "assigned_role": target_role})
+    await _case_event(
+        case_id,
+        user,
+        "assigned",
+        metadata={
+            "assigned_user_id": payload.assigned_user_id,
+            "assigned_role": target_role,
+        },
+    )
     return api_success(_safe_case(updated))
 
 
 @router.post("/cases/{case_id}/escalate")
-async def escalate_case(case_id: str, payload: OpsCaseEscalateBody, user=Depends(get_ops_user)):
+async def escalate_case(
+    case_id: str,
+    payload: OpsCaseEscalateBody,
+    user=Depends(get_ops_user),
+):
     case = await database.find_one("ops_cases", {"id": case_id})
     if not case:
         api_error("Operations case not found.", 404)
@@ -578,32 +678,69 @@ async def escalate_case(case_id: str, payload: OpsCaseEscalateBody, user=Depends
     if index >= len(CASE_LEVEL_ORDER) - 1:
         api_error("This case is already at Admin level.", 409)
     next_level = CASE_LEVEL_ORDER[index + 1]
-    updates = {"escalation_level": next_level, "status": "escalated", "assigned_user_id": None, "assigned_name": None, "updated_at": now_iso()}
+
+    updates = {
+        "escalation_level": next_level,
+        "status": "escalated",
+        "assigned_user_id": None,
+        "assigned_name": None,
+        "updated_at": now_iso(),
+    }
     updated = await database.update_one("ops_cases", case_id, updates) or {**case, **updates}
-    await _case_event(case_id, user, "escalated", note=payload.reason, metadata={"from": current, "to": next_level})
+    await _case_event(
+        case_id,
+        user,
+        "escalated",
+        note=payload.reason,
+        metadata={"from": current, "to": next_level},
+    )
     return api_success(_safe_case(updated))
 
 
 @router.patch("/cases/{case_id}/status")
-async def update_case_status(case_id: str, payload: OpsCaseStatusBody, user=Depends(get_ops_user)):
+async def update_case_status(
+    case_id: str,
+    payload: OpsCaseStatusBody,
+    user=Depends(get_ops_user),
+):
     case = await database.find_one("ops_cases", {"id": case_id})
     if not case:
         api_error("Operations case not found.", 404)
     level = _case_level(case)
     if not can_manage_case_level(user, level):
         api_error("This case has been escalated above your role.", 403)
-    if payload.status == "closed" and roleRank := OPS_ROLE_LEVELS.get(effective_ops_role(user), 0) < OPS_ROLE_LEVELS["manager"]:
+    if (
+        payload.status == "closed"
+        and OPS_ROLE_LEVELS.get(effective_ops_role(user), 0) < OPS_ROLE_LEVELS["manager"]
+    ):
         api_error("Manager access is required to close a case.", 403)
+
     timestamp = now_iso()
     updates: Dict[str, Any] = {"status": payload.status, "updated_at": timestamp}
     if payload.status in {"resolved", "closed"}:
         updates["resolved_at"] = timestamp
     elif case.get("resolved_at"):
         updates["resolved_at"] = None
+
     updated = await database.update_one("ops_cases", case_id, updates) or {**case, **updates}
-    await _case_event(case_id, user, "status_changed", note=payload.note, metadata={"from": case.get("status"), "to": payload.status})
-    if case.get("source_type") == "support_message" and case.get("source_id") and payload.status in {"resolved", "closed"}:
-        support = await database.update_one("support_messages", case["source_id"], {"status": payload.status, "updated_at": timestamp})
+    await _case_event(
+        case_id,
+        user,
+        "status_changed",
+        note=payload.note,
+        metadata={"from": case.get("status"), "to": payload.status},
+    )
+
+    if (
+        case.get("source_type") == "support_message"
+        and case.get("source_id")
+        and payload.status in {"resolved", "closed"}
+    ):
+        support = await database.update_one(
+            "support_messages",
+            case["source_id"],
+            {"status": payload.status, "updated_at": timestamp},
+        )
         if support and support.get("user_id"):
             await create_app_notification(
                 support["user_id"],
@@ -617,9 +754,18 @@ async def update_case_status(case_id: str, payload: OpsCaseStatusBody, user=Depe
 
 @router.get("/staff")
 async def list_staff(user=Depends(get_ops_manager)):
-    staff_records = await database.find_many("ops_staff", sort=[("updated_at", -1)], limit=200)
+    staff_records = await database.find_many(
+        "ops_staff",
+        sort=[("updated_at", -1)],
+        limit=200,
+    )
     staff = [await _staff_row(row) for row in staff_records]
-    admins = await database.find_many("users", {"role": "admin"}, sort=[("name", 1)], limit=50)
+    admins = await database.find_many(
+        "users",
+        {"role": "admin"},
+        sort=[("name", 1)],
+        limit=50,
+    )
     for admin in admins:
         staff.append({
             "id": None,
@@ -633,13 +779,24 @@ async def list_staff(user=Depends(get_ops_manager)):
             "created_at": admin.get("created_at"),
             "updated_at": admin.get("updated_at"),
         })
+
     role_order = {"admin": 0, "manager": 1, "cs": 2}
-    staff.sort(key=lambda item: (role_order.get(item.get("role"), 9), str(item.get("name") or item.get("email") or "")))
-    return api_success({"count": len(staff), "items": staff, "can_manage": effective_ops_role(user) == "admin"})
+    staff.sort(key=lambda item: (
+        role_order.get(item.get("role"), 9),
+        str(item.get("name") or item.get("email") or ""),
+    ))
+    return api_success({
+        "count": len(staff),
+        "items": staff,
+        "can_manage": effective_ops_role(user) == "admin",
+    })
 
 
 @router.post("/staff")
-async def provision_staff(payload: OpsStaffProvisionBody, user=Depends(get_ops_admin)):
+async def provision_staff(
+    payload: OpsStaffProvisionBody,
+    user=Depends(get_ops_admin),
+):
     target = await database.find_one("users", {"id": payload.user_id})
     if not target:
         api_error("User not found.", 404)
@@ -647,30 +804,59 @@ async def provision_staff(payload: OpsStaffProvisionBody, user=Depends(get_ops_a
         api_error("Existing Admin accounts already have full Operations access.", 409)
     if target.get("status") in {"suspended", "deleted"}:
         api_error("Suspended or deleted accounts cannot receive Operations access.", 409)
+
     existing = await database.find_one("ops_staff", {"user_id": payload.user_id})
     timestamp = now_iso()
     if existing:
-        updated = await database.update_one("ops_staff", existing["id"], {"role": payload.role, "title": payload.title, "enabled": True, "updated_at": timestamp}) or existing
+        updated = await database.update_one(
+            "ops_staff",
+            existing["id"],
+            {
+                "role": payload.role,
+                "title": payload.title,
+                "enabled": True,
+                "updated_at": timestamp,
+            },
+        ) or existing
         action = "ops_staff_updated"
     else:
         updated = await database.insert_one("ops_staff", {
-            "id": new_id(), "user_id": payload.user_id, "role": payload.role, "title": payload.title,
-            "enabled": True, "created_by_user_id": user.get("id"), "created_at": timestamp, "updated_at": timestamp,
+            "id": new_id(),
+            "user_id": payload.user_id,
+            "role": payload.role,
+            "title": payload.title,
+            "enabled": True,
+            "created_by_user_id": user.get("id"),
+            "created_at": timestamp,
+            "updated_at": timestamp,
         })
         action = "ops_staff_provisioned"
+
     await write_audit_log(
-        actor_user_id=user.get("id"), actor_role="ops:admin", action=action,
-        target_type="ops_staff", target_id=updated.get("id"),
-        metadata={"user_id": payload.user_id, "role": payload.role, "reason": payload.reason},
+        actor_user_id=user.get("id"),
+        actor_role="ops:admin",
+        action=action,
+        target_type="ops_staff",
+        target_id=updated.get("id"),
+        metadata={
+            "user_id": payload.user_id,
+            "role": payload.role,
+            "reason": payload.reason,
+        },
     )
     return api_success(await _staff_row(updated))
 
 
 @router.patch("/staff/{staff_id}")
-async def update_staff(staff_id: str, payload: OpsStaffUpdateBody, user=Depends(get_ops_admin)):
+async def update_staff(
+    staff_id: str,
+    payload: OpsStaffUpdateBody,
+    user=Depends(get_ops_admin),
+):
     existing = await database.find_one("ops_staff", {"id": staff_id})
     if not existing:
         api_error("Staff record not found.", 404)
+
     updates: Dict[str, Any] = {"updated_at": now_iso()}
     if payload.role is not None:
         updates["role"] = payload.role
@@ -678,18 +864,36 @@ async def update_staff(staff_id: str, payload: OpsStaffUpdateBody, user=Depends(
         updates["title"] = payload.title
     if payload.enabled is not None:
         updates["enabled"] = payload.enabled
+
     updated = await database.update_one("ops_staff", staff_id, updates) or {**existing, **updates}
     await write_audit_log(
-        actor_user_id=user.get("id"), actor_role="ops:admin", action="ops_staff_access_changed",
-        target_type="ops_staff", target_id=staff_id, metadata={"updates": updates, "reason": payload.reason},
+        actor_user_id=user.get("id"),
+        actor_role="ops:admin",
+        action="ops_staff_access_changed",
+        target_type="ops_staff",
+        target_id=staff_id,
+        metadata={"updates": updates, "reason": payload.reason},
     )
     return api_success(await _staff_row(updated))
 
 
 @router.get("/audit-logs")
-async def audit_logs(limit: int = Query(default=100, ge=1, le=250), user=Depends(get_ops_manager)):
-    rows = await database.find_many("audit_logs", sort=[("created_at", -1)], limit=limit * 3)
+async def audit_logs(
+    limit: int = Query(default=100, ge=1, le=250),
+    user=Depends(get_ops_manager),
+):
+    rows = await database.find_many(
+        "audit_logs",
+        sort=[("created_at", -1)],
+        limit=limit * 3,
+    )
     if effective_ops_role(user) != "admin":
-        rows = [row for row in rows if str(row.get("action") or "").startswith("ops_")]
+        rows = [
+            row for row in rows
+            if str(row.get("action") or "").startswith("ops_")
+        ]
     rows = rows[:limit]
-    return api_success({"count": len(rows), "items": [_safe_audit_log(row) for row in rows]})
+    return api_success({
+        "count": len(rows),
+        "items": [_safe_audit_log(row) for row in rows],
+    })
