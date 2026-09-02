@@ -18,10 +18,10 @@
       <form id="loginForm" autocomplete="on">
         <label>Email<input id="email" type="email" autocomplete="username" required></label>
         <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
-        <button type="submit" class="primary">Sign in securely</button>
+        <button id="loginBtn" type="submit" class="primary">Sign in securely</button>
       </form>
       <p id="loginError" class="error" hidden></p>
-      <p class="muted">Staff permissions are enforced by the production API. This dashboard never connects directly to the database.</p>
+      <p class="security-note">Staff permissions are enforced by the production API. This dashboard never connects directly to the database.</p>
     </section>
   </main>
 
@@ -32,12 +32,15 @@
         <p>Operations</p>
       </div>
       <nav id="nav" aria-label="Operations navigation">
-        <button data-view="overview" class="active">Overview</button>
-        <button data-view="cases">Support cases</button>
-        <button data-view="users">People</button>
-        <button data-view="rides">Rides</button>
-        <button data-view="safety">Safety reports</button>
-        <button data-view="staff" id="staffNav">Staff & roles</button>
+        <button data-view="overview" class="active"><span>Overview</span></button>
+        <button data-view="live"><span>Live operations</span></button>
+        <button data-view="cases"><span>Cases</span><span id="caseBadge" class="nav-badge" hidden></span></button>
+        <button data-view="support"><span>Customer support</span></button>
+        <button data-view="users"><span>People</span></button>
+        <button data-view="safety"><span>Safety</span></button>
+        <button data-view="verifications" id="verificationNav"><span>Verification</span></button>
+        <button data-view="staff" id="staffNav"><span>Staff & roles</span></button>
+        <button data-view="audit" id="auditNav"><span>Audit trail</span></button>
       </nav>
       <div class="side-bottom">
         <div id="staffIdentity" class="identity"></div>
@@ -51,25 +54,35 @@
           <p class="eyebrow">LetsGoRide Zimbabwe</p>
           <h1 id="pageTitle">Operations overview</h1>
         </div>
-        <div class="status-pill"><span class="dot"></span> Production</div>
+        <div class="top-actions">
+          <button id="refreshBtn" class="secondary">Refresh</button>
+          <div class="status-pill"><span class="dot"></span> Production</div>
+        </div>
       </header>
 
       <section id="overviewView" class="view"></section>
+      <section id="liveView" class="view" hidden></section>
       <section id="casesView" class="view" hidden></section>
+      <section id="supportView" class="view" hidden></section>
       <section id="usersView" class="view" hidden></section>
-      <section id="ridesView" class="view" hidden></section>
       <section id="safetyView" class="view" hidden></section>
+      <section id="verificationsView" class="view" hidden></section>
       <section id="staffView" class="view" hidden></section>
+      <section id="auditView" class="view" hidden></section>
     </main>
   </div>
 
-  <dialog id="caseDialog">
+  <dialog id="caseDialog" class="modal">
     <form method="dialog"><button class="dialog-close" aria-label="Close">×</button></form>
     <div id="caseDialogBody"></div>
   </dialog>
 
+  <dialog id="actionDialog" class="modal compact-modal">
+    <form method="dialog"><button class="dialog-close" aria-label="Close">×</button></form>
+    <div id="actionDialogBody"></div>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/app.js" defer></script>
-  <script src="/admin-tools.js" defer></script>
 </body>
 </html>
