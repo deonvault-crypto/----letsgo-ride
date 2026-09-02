@@ -24,5 +24,13 @@ jobs:
     steps:
       - name: Checkout project for EAS context
         uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install project dependencies for Expo config resolution
+        run: npm ci --no-audit --no-fund
       - name: Read build status without creating or submitting anything
         run: npx eas-cli@latest build:view "$BUILD_ID" --json
