@@ -128,12 +128,49 @@ jobs:
       - name: Production service tests
         run: python -m pytest tests -q
 
+  ops-web:
+    name: Operations dashboard syntax and server smoke
+    if: github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check dashboard JavaScript syntax
+        run: |
+          node --check ops-web/server.js
+          node --check ops-web/public/app.js
+
+      - name: Smoke test static dashboard server
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3900 API_UPSTREAM=http://127.0.0.1:9 node ops-web/server.js >/tmp/ops-web.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error http://127.0.0.1:3900/ -o /tmp/ops-index.html; then
+              break
+            fi
+            sleep 0.25
+          done
+          grep -q "LetsGoRide Operations" /tmp/ops-index.html
+          curl --fail --silent --show-error http://127.0.0.1:3900/styles.css -o /tmp/ops-styles.css
+          grep -q -- "--bg" /tmp/ops-styles.css
+
   production-smoke:
     name: Production API and legal surface smoke
     if: github.ref == 'refs/heads/platform-v2-m1-m6' || github.head_ref == 'platform-v2-m1-m6'
     needs:
       - mobile
       - backend
+      - ops-web
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
