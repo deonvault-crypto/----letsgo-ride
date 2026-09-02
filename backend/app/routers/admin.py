@@ -66,6 +66,10 @@ def _public_document(document):
     }
 
 
+def _is_real_ride(ride: Dict[str, Any]) -> bool:
+    return ride.get("is_demo") is not True
+
+
 def _sort_recent(rows: List[Dict[str, Any]], limit: int = 10) -> List[Dict[str, Any]]:
     return sorted(rows, key=lambda row: row.get("created_at") or row.get("updated_at") or "", reverse=True)[:limit]
 
