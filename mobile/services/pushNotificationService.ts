@@ -21,6 +21,7 @@ export type PushRegistrationState = {
   message?: string;
   canAskAgain?: boolean;
   requiresSettings?: boolean;
+  permissionGranted?: boolean;
 };
 
 const DEVICE_SETTINGS_MESSAGE = "Notifications are off in device settings. Open device settings to allow them.";
@@ -197,6 +198,7 @@ function disabledPermissionState(permissions: NotificationPermissionState): Push
     status: "off",
     canAskAgain,
     requiresSettings: !canAskAgain,
+    permissionGranted: false,
     message: canAskAgain ? READY_TO_ENABLE_MESSAGE : DEVICE_SETTINGS_MESSAGE,
   };
 }
@@ -223,6 +225,7 @@ async function registerCurrentPushToken(permissions?: NotificationPermissionStat
       status: "off",
       canAskAgain: true,
       requiresSettings: false,
+      permissionGranted: true,
       message: "Notification permission is on, but this device could not get a push token. Please try again.",
     };
   }
@@ -242,6 +245,7 @@ async function registerCurrentPushToken(permissions?: NotificationPermissionStat
       status: "on",
       canAskAgain: true,
       requiresSettings: false,
+      permissionGranted: true,
       message: "Phone notifications are enabled.",
     };
   } catch {
@@ -251,6 +255,7 @@ async function registerCurrentPushToken(permissions?: NotificationPermissionStat
       status: "off",
       canAskAgain: true,
       requiresSettings: false,
+      permissionGranted: true,
       message: "Notification permission is on, but LetsGoRide could not register this device. Please try again.",
     };
   }
@@ -300,6 +305,7 @@ export async function disablePhoneNotifications(): Promise<PushRegistrationState
     status: "off",
     canAskAgain: true,
     requiresSettings: false,
+    permissionGranted: false,
     message: "Phone notifications are disabled for this device.",
   };
 }
