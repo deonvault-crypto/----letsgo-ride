@@ -28,6 +28,7 @@ export function PermissionReminder() {
   const [saving, setSaving] = useState(false);
   const shownThisSession = useRef<string | null>(null);
   const openedSettings = useRef<"notifications" | "location" | null>(null);
+  const notificationActionInFlight = useRef(false);
   const userIdRef = useRef<string | null>(null);
   userIdRef.current = user?.id || null;
 
@@ -91,6 +92,8 @@ export function PermissionReminder() {
   }, [loading, locationState, pathname, prompt, pushState, user?.id]);
 
   async function handleNotificationEnable() {
+    if (notificationActionInFlight.current) return;
+    notificationActionInFlight.current = true;
     try {
       setSaving(true); setMessage("");
       if (pushState?.requiresSettings) { openedSettings.current = "notifications"; await openPhoneNotificationSettings(); return; }
@@ -98,7 +101,7 @@ export function PermissionReminder() {
       setPushState(state);
       if (state.enabled) setPrompt(null); else setMessage(state.message || "Notifications are still off. You can enable them later in device settings.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not enable phone notifications."); }
-    finally { setSaving(false); }
+    finally { notificationActionInFlight.current = false; setSaving(false); }
   }
 
   async function handleLocationEnable() {
@@ -129,19 +132,25 @@ export function PermissionReminder() {
   if (Platform.OS === "web") return null;
   const worker = user?.role === "driver" || user?.role === "courier";
   const needsSettings = prompt === "notifications" ? Boolean(pushState?.requiresSettings) : prompt === "location" ? Boolean(locationState?.requiresSettings) : false;
+  const notificationRetry = prompt === "notifications" && Boolean(pushState?.permissionGranted) && !needsSettings;
   const title = prompt === "notifications" ? "Don’t miss an important update" : prompt === "location" ? worker ? "Location keeps work accurate" : "Use your location when it helps" : "Faster secure login";
   const body = prompt === "notifications"
-    ? "Allow notifications for driver acceptance and arrival, Food updates, Courier progress, messages, verification and safety alerts."
+    ? notificationRetry
+      ? "Notification permission is already on. LetsGoRide needs to finish registering this device so ride, delivery, message and safety alerts can reach this phone."
+      : "Allow notifications for driver acceptance and arrival, Food updates, Courier progress, messages, verification and safety alerts."
     : prompt === "location"
       ? worker
         ? "LetsGoRide uses your location for nearby work, accurate pickup and live journey tracking while you are working. We explain separately before asking for any stronger background permission."
         : "LetsGoRide uses location for accurate pickup points, nearby drivers, delivery locations, ETAs and trip safety. You can still enter places manually when location is off."
       : `${biometricText} can unlock LetsGoRide without typing your password each time.`;
   const primaryTitle = prompt === "notifications"
-    ? needsSettings ? "Open notification settings" : "Allow notifications"
+    ? needsSettings ? "Open notification settings" : notificationRetry ? "Retry notifications" : "Allow notifications"
     : prompt === "location"
       ? needsSettings ? "Open location settings" : "Allow location"
       : biometricText;
+  const savingTitle = prompt === "notifications"
+    ? needsSettings ? "Opening…" : notificationRetry ? "Retrying…" : "Setting up…"
+    : "Opening…";
   const action = prompt === "notifications" ? handleNotificationEnable : prompt === "location" ? handleLocationEnable : handleBiometricEnable;
 
   return (
@@ -152,7 +161,7 @@ export function PermissionReminder() {
         <Text style={styles.body}>{body}</Text>
         {message ? <Text style={styles.message}>{message}</Text> : null}
         <View style={styles.actions}>
-          <AppButton title={saving ? "Opening…" : primaryTitle} disabled={saving} onPress={action} />
+          <AppButton title={saving ? savingTitle : primaryTitle} disabled={saving} onPress={action} />
           <AppButton title="Not now" variant="secondary" disabled={saving} onPress={() => void dismissPrompt()} />
         </View>
         <Text style={styles.helper}>Not now is respected. If the operating system will not show the permission prompt again, LetsGoRide sends you to Settings instead.</Text>

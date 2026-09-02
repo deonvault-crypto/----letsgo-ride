@@ -78,6 +78,7 @@ describe("push notification permission flow", () => {
     expect(registerPushToken).toHaveBeenCalledTimes(1);
     expect(result.enabled).toBe(true);
     expect(result.requiresSettings).toBe(false);
+    expect(result.permissionGranted).toBe(true);
   });
 
   it("opens device settings instead of silently failing after permission was denied", async () => {
@@ -93,6 +94,7 @@ describe("push notification permission flow", () => {
     expect(Linking.openSettings).toHaveBeenCalledTimes(1);
     expect(result.enabled).toBe(false);
     expect(result.requiresSettings).toBe(true);
+    expect(result.permissionGranted).toBe(false);
   });
 
   it("treats provisional iOS notification permission as enabled", async () => {
@@ -105,5 +107,24 @@ describe("push notification permission flow", () => {
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
     expect(registerPushToken).toHaveBeenCalledTimes(1);
     expect(result.enabled).toBe(true);
+    expect(result.permissionGranted).toBe(true);
+  });
+
+  it("keeps granted permission distinct when push-token acquisition fails", async () => {
+    (Notifications.getPermissionsAsync as jest.Mock).mockResolvedValue(permission({
+      granted: true,
+      status: "granted",
+      ios: { status: Notifications.IosAuthorizationStatus.AUTHORIZED },
+    }));
+    (Notifications.getExpoPushTokenAsync as jest.Mock).mockRejectedValue(new Error("Push token unavailable"));
+
+    const result = await phoneNotificationStatus();
+
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(registerPushToken).not.toHaveBeenCalled();
+    expect(result.enabled).toBe(false);
+    expect(result.requiresSettings).toBe(false);
+    expect(result.permissionGranted).toBe(true);
+    expect(result.message).toContain("could not get a push token");
   });
 });
