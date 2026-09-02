@@ -1,7 +1,12 @@
-from app.routers.admin import _is_real_ride
+import inspect
+
+from app.routers import admin as admin_router
 
 
-def test_admin_real_ride_filter_excludes_only_explicit_demo_rides():
-    assert _is_real_ride({"id": "production-ride"}) is True
-    assert _is_real_ride({"id": "production-ride", "is_demo": False}) is True
-    assert _is_real_ride({"id": "legacy-demo", "is_demo": True}) is False
+def test_admin_user_views_do_not_reference_retired_demo_filter():
+    enrich_source = inspect.getsource(admin_router._enrich_admin_user)
+    detail_source = inspect.getsource(admin_router.user_detail)
+
+    assert "_is_real_ride" not in enrich_source
+    assert "_is_real_ride" not in detail_source
+    assert 'public["posted_rides_count"] = len(rides)' in enrich_source
