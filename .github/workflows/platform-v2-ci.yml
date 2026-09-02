@@ -142,16 +142,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Check dashboard JavaScript syntax
-        run: |
-          node --check ops-web/server.js
-          node --check ops-web/public/app.js
+      - name: Run the same dashboard check Render uses
+        working-directory: ops-web
+        run: npm run check
 
       - name: Smoke test static dashboard server
         shell: bash
         run: |
           set -euo pipefail
-          PORT=3900 API_UPSTREAM=http://127.0.0.1:9 node ops-web/server.js >/tmp/ops-web.log 2>&1 &
+          PORT=3900 LETSGORIDE_API_ORIGIN=http://127.0.0.1:9 node ops-web/server.js >/tmp/ops-web.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do
