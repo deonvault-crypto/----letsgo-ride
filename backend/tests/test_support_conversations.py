@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
@@ -21,6 +22,14 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         database.db = None
         for collection in list(database.memory.keys()):
             await database.replace_collection(collection, [])
+
+        self.realtime_patch = patch(
+            "app.services.support_realtime_service.realtime_event_service.publish",
+            new_callable=AsyncMock,
+            return_value=True,
+        )
+        self.realtime_publish = self.realtime_patch.start()
+        self.addCleanup(self.realtime_patch.stop)
 
         self.admin = {
             "id": "admin-1",
@@ -60,6 +69,8 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         })
         self.cs_ops = await get_ops_user(self.cs_user)
 
+        # Deliberately omit realtime_version to prove existing production tickets
+        # safely enter the versioned realtime path on their first public reply.
         await database.insert_one("support_messages", {
             "id": "support-1",
             "user_id": self.customer["id"],
@@ -83,8 +94,9 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         stored = await database.find_one("support_messages", {"id": "support-1"})
         self.assertEqual(stored["message"], "My driver did not arrive.")
         self.assertEqual(stored["status"], "received")
+        self.realtime_publish.assert_not_awaited()
 
-    async def test_ops_reply_persists_thread_and_preserves_legacy_fields(self):
+    async def test_ops_reply_persists_thread_and_publishes_scoped_realtime_signal(self):
         response = await ops_support_reply(
             "support-1",
             OpsSupportReplyBody(message="We are checking this for you.", status="in_review"),
@@ -97,13 +109,26 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stored["status"], "in_review")
         self.assertEqual(stored["admin_notes"], "We are checking this for you.")
         self.assertTrue(stored.get("last_staff_reply_at"))
+        self.assertEqual(stored.get("realtime_version"), 1)
+
+        self.realtime_publish.assert_awaited_once()
+        published = self.realtime_publish.await_args.args[0]
+        self.assertEqual(published.envelope.type, "support_message.staff_replied")
+        self.assertEqual(published.envelope.resource_type, "support_message")
+        self.assertEqual(published.envelope.resource_id, "support-1")
+        self.assertEqual(published.envelope.version, 1)
+        self.assertEqual(published.envelope.payload.get("status"), "in_review")
+        self.assertNotIn("message", published.envelope.payload)
+        self.assertIn(self.customer["id"], published.audience.user_ids)
+        self.assertIn(self.cs_user["id"], published.audience.user_ids)
+        self.assertIn("admin", published.audience.roles)
 
         thread = await customer_support_thread("support-1", user=self.customer)
         items = thread["data"]["items"]
         self.assertEqual([item["sender_type"] for item in items], ["customer", "staff"])
         self.assertEqual(items[-1]["message"], "We are checking this for you.")
 
-    async def test_internal_note_is_ops_only(self):
+    async def test_internal_note_is_ops_only_and_does_not_publish_customer_realtime(self):
         await ops_support_internal_note(
             "support-1",
             OpsSupportNoteBody(note="Escalate if driver disputes the report."),
@@ -119,6 +144,9 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
             item["message"] == "Escalate if driver disputes the report."
             for item in customer_thread["data"]["items"]
         ))
+        stored = await database.find_one("support_messages", {"id": "support-1"})
+        self.assertIsNone(stored.get("realtime_version"))
+        self.realtime_publish.assert_not_awaited()
 
     async def test_customer_cannot_read_or_reply_to_another_users_thread(self):
         with self.assertRaises(HTTPException) as read_error:
@@ -132,8 +160,9 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
                 user=self.other_customer,
             )
         self.assertEqual(reply_error.exception.status_code, 404)
+        self.realtime_publish.assert_not_awaited()
 
-    async def test_customer_reply_reopens_closed_ticket(self):
+    async def test_customer_reply_reopens_closed_ticket_and_notifies_support_realtime(self):
         await database.update_one("support_messages", "support-1", {"status": "closed"})
         response = await customer_support_reply(
             "support-1",
@@ -145,6 +174,11 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         stored = await database.find_one("support_messages", {"id": "support-1"})
         self.assertEqual(stored["status"], "received")
         self.assertTrue(stored.get("last_customer_reply_at"))
+        self.assertEqual(stored.get("realtime_version"), 1)
+        published = self.realtime_publish.await_args.args[0]
+        self.assertEqual(published.envelope.type, "support_message.customer_replied")
+        self.assertEqual(published.envelope.resource_id, "support-1")
+        self.assertNotIn("message", published.envelope.payload)
 
 
 if __name__ == "__main__":
