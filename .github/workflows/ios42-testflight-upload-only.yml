@@ -17,7 +17,7 @@ concurrency:
 jobs:
   upload:
     name: Verify and upload existing iOS 42
-    if: github.run_attempt == 1 && github.event.head_commit.message == 'ci: upload existing iOS 42 to TestFlight only'
+    if: github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -26,13 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Verify isolated workflow and unchanged app source
         working-directory: .
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "b8cf4084b29315620ad5f7d2ba026e95ac3d215a"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/ios42-testflight-upload-only.yml"
+          git merge-base --is-ancestor b8cf4084b29315620ad5f7d2ba026e95ac3d215a HEAD
+          test "$(git diff --name-only b8cf4084b29315620ad5f7d2ba026e95ac3d215a HEAD)" = ".github/workflows/ios42-testflight-upload-only.yml"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
