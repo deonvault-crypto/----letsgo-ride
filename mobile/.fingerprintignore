@@ -1,0 +1,4 @@
+# EAS injects this reviewed Firebase client configuration only on remote builders.
+# It configures the push project, not native APIs. Keep all native code, dependencies,
+# Maps configuration and other files fingerprinted. A changed secret file fails closed.
+../../eas-environment-secrets/cfa3a4ed9924da7bf5bae42c1458a573ab53e60859e91265c511152c7320e0c9
