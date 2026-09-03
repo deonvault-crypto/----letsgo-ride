@@ -1,0 +1,52 @@
+name: LetsGoRide Communications Live Audit
+on:
+  push:
+    branches: [audit/ops-communications-live]
+    paths: [.github/workflows/communications-live-audit.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify backend health and protected communications routes
+        env:
+          API_ORIGIN: https://letsgoride-v2-production.onrender.com
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$API_ORIGIN/health/live" -o /tmp/live.json
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 "$API_ORIGIN/health/ready" -o /tmp/ready.json
+          python - <<'PY'
+          import json
+          live=json.load(open('/tmp/live.json'))
+          ready=json.load(open('/tmp/ready.json'))
+          assert live.get('success') and live['data']['status']=='alive'
+          assert ready.get('success') and ready['data']['status']=='ready'
+          for key in ('database_status','realtime_status','payments_status'):
+              assert ready['data'][key] in ('connected','ready'), (key,ready['data'][key])
+          print('Backend alive; database, realtime and payment readiness passed.')
+          PY
+          for path in ops/communications ops/app-updates app-updates notifications/audit-nonexistent; do
+            code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$API_ORIGIN/$path")"
+            test "$code" = "401" -o "$code" = "403"
+            echo "$path rejects unauthenticated access ($code)"
+          done
+      - name: Verify Ops HTTPS and deployed communications assets
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 https://ops.letsgoride.site/ -o /tmp/ops.html
+          curl --fail --silent --show-error https://ops.letsgoride.site/communications.js -o /tmp/comms.js
+          curl --fail --silent --show-error https://ops.letsgoride.site/communications.css -o /tmp/comms.css
+          curl --fail --silent --show-error 'https://ops.letsgoride.site/app.js?v=communications-1' -o /tmp/app.js
+          python - <<'PY'
+          from pathlib import Path
+          html=Path('/tmp/ops.html').read_text()
+          assert 'communicationsView' in html and 'appUpdatesView' in html
+          assert '/app.js?v=communications-1' in html
+          assert Path('/tmp/comms.js').read_text() == Path('ops-web/public/communications.js').read_text()
+          assert Path('/tmp/comms.css').read_text() == Path('ops-web/public/communications.css').read_text()
+          assert Path('/tmp/app.js').read_text() == Path('ops-web/public/app.js').read_text()
+          print('Ops HTTPS and exact communications JavaScript/CSS passed.')
+          PY
