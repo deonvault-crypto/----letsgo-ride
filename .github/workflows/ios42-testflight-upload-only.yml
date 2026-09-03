@@ -1,4 +1,4 @@
-name: LetsGoRide iOS 42 TestFlight Upload Only
+name: LetsGoRide iOS 42 Submission Diagnosis
 
 on:
   push:
@@ -10,69 +10,40 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: letsgoride-ios42-testflight-upload
-  cancel-in-progress: false
-
 jobs:
-  upload:
-    name: Verify and upload existing iOS 42
-    if: github.run_attempt == 1
+  inspect:
+    name: Read iOS 42 submission failure
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Verify isolated workflow and unchanged app source
-        working-directory: .
-        run: |
-          set -euo pipefail
-          git merge-base --is-ancestor b8cf4084b29315620ad5f7d2ba026e95ac3d215a HEAD
-          test "$(git diff --name-only b8cf4084b29315620ad5f7d2ba026e95ac3d215a HEAD)" = ".github/workflows/ios42-testflight-upload-only.yml"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci --no-audit --no-fund
-      - name: Verify existing build identity and prevent duplicate upload
-        id: verify
+      - name: Read exact submission details
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           set -euo pipefail
-          npx --yes eas-cli@23.2.0 build:view b5ae0ea3-0d4e-4f3c-8346-16aba29421f5 --json > "$RUNNER_TEMP/ios42-build.json"
-          npx --yes eas-cli@23.2.0 submit:list --platform ios --limit 50 --json --non-interactive > "$RUNNER_TEMP/ios-submissions.json"
+          npx --yes eas-cli@23.2.0 submit:view a43a6667-85dc-4eba-8251-484e3b260095 --json > "$RUNNER_TEMP/ios42-submission.json"
           node <<'NODE'
           const fs = require('fs');
-          const assert = require('assert/strict');
-          const build = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/ios42-build.json', 'utf8'));
-          const submissions = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/ios-submissions.json', 'utf8'));
-          const app = require('./app.json').expo;
-          const eas = require('./eas.json');
-          assert.equal(build.id, 'b5ae0ea3-0d4e-4f3c-8346-16aba29421f5');
-          assert.equal(build.status, 'FINISHED');
-          assert.equal(build.platform, 'IOS');
-          assert.equal(String(build.appBuildVersion), '42');
-          assert.equal(build.appVersion, '2.0.2');
-          assert.equal(build.gitCommitHash, '4052558fc6ce62a07713bf477e22d42c02eb8d14');
-          assert.equal(app.ios.bundleIdentifier, 'co.zw.letsgoride');
-          assert.equal(eas.submit.production.ios.ascAppId, '6772862281');
-          const exists = JSON.stringify(submissions).includes(build.id);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'exists=' + exists + '\n');
-          console.log(JSON.stringify({ id: build.id, platform: build.platform, status: build.status, version: build.appVersion, buildNumber: build.appBuildVersion, priorSubmissionFound: exists }));
-          if (exists) console.log('Existing submission found; upload skipped to prevent duplication.');
+          const submission = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/ios42-submission.json', 'utf8'));
+          function safe(value) {
+            if (Array.isArray(value)) return value.map(safe);
+            if (!value || typeof value !== 'object') return value;
+            return Object.fromEntries(Object.entries(value).filter(([key]) => !/token|secret|password|credential|private|url|issuer|key/i.test(key)).map(([key, v]) => [key, safe(v)]));
+          }
+          console.log('Submission fields:', Object.keys(submission));
+          console.log(JSON.stringify(safe(submission), null, 2));
           NODE
-      - name: Upload exact existing IPA to App Store Connect for TestFlight
-        if: steps.verify.outputs.exists == 'false'
+      - name: Read Apple build status
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@23.2.0 submit --platform ios --profile production --id b5ae0ea3-0d4e-4f3c-8346-16aba29421f5 --non-interactive --wait
-      - name: Read submission result
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@23.2.0 submit:list --platform ios --limit 5 --non-interactive
+        run: npx --yes eas-cli@23.2.0 submit:status --platform ios --profile production --non-interactive
