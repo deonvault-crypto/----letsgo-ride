@@ -4,6 +4,7 @@ from app.auth import get_current_user
 from app.database import database
 from app.models.report import SupportMessageBody
 from app.services.notification_service import notify_admins
+from app.services.support_realtime_service import publish_support_realtime
 from app.utils import api_success, new_id, now_iso
 
 
@@ -32,6 +33,7 @@ async def create_message(payload: SupportMessageBody, user=Depends(get_current_u
         f"{user.get('name') or 'A user'} sent a support message.",
         {"support_message_id": created["id"]},
     )
+    await publish_support_realtime(created, "support_message.created")
     return api_success(created)
 
 
