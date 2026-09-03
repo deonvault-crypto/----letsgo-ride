@@ -1,4 +1,90 @@
 (() => {
+  const SUPPORT_REALTIME_URL = 'wss://letsgoride-v2-production.onrender.com/realtime';
+  let supportRealtimeSocket = null;
+  let supportRealtimeRetry = null;
+  let supportRealtimeTarget = null;
+  let supportRealtimeGeneration = 0;
+
+  function stopSupportRealtime() {
+    supportRealtimeGeneration += 1;
+    supportRealtimeTarget = null;
+    if (supportRealtimeRetry) {
+      clearTimeout(supportRealtimeRetry);
+      supportRealtimeRetry = null;
+    }
+    const socket = supportRealtimeSocket;
+    supportRealtimeSocket = null;
+    if (socket) {
+      try { socket.close(1000, 'support dialog closed'); } catch {}
+    }
+  }
+
+  function setRealtimeState(label) {
+    const element = $('#supportRealtimeState');
+    if (element) element.textContent = label;
+  }
+
+  function startSupportRealtime(messageId, reloadThread) {
+    stopSupportRealtime();
+    supportRealtimeTarget = messageId;
+    const generation = supportRealtimeGeneration;
+
+    const connect = () => {
+      if (generation !== supportRealtimeGeneration || supportRealtimeTarget !== messageId || !state.token) return;
+      setRealtimeState('Connecting…');
+      let socket;
+      try {
+        socket = new WebSocket(SUPPORT_REALTIME_URL, [
+          'letsgoride.realtime.v1',
+          `letsgoride.auth.${state.token}`,
+        ]);
+      } catch {
+        supportRealtimeRetry = setTimeout(connect, 1500);
+        return;
+      }
+      supportRealtimeSocket = socket;
+
+      socket.onopen = () => {
+        if (generation === supportRealtimeGeneration && supportRealtimeSocket === socket) setRealtimeState('Live');
+      };
+      socket.onmessage = event => {
+        if (generation !== supportRealtimeGeneration || supportRealtimeSocket !== socket || typeof event.data !== 'string') return;
+        let message;
+        try { message = JSON.parse(event.data); } catch { return; }
+        if (!message || typeof message !== 'object') return;
+        if (message.type === 'realtime.ready') {
+          setRealtimeState('Live');
+          return;
+        }
+        if (message.type === 'realtime.ping') {
+          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'realtime.pong' }));
+          return;
+        }
+        if (message.event_id && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'realtime.ack', event_id: message.event_id }));
+        }
+        if (message.resource_type === 'support_message' && message.resource_id === messageId) {
+          void reloadThread().catch(() => undefined);
+        }
+      };
+      socket.onerror = () => undefined;
+      socket.onclose = event => {
+        if (generation !== supportRealtimeGeneration || supportRealtimeSocket !== socket) return;
+        supportRealtimeSocket = null;
+        if (event.code === 4401 || event.code === 4403) {
+          setRealtimeState('Session expired');
+          return;
+        }
+        if (supportRealtimeTarget === messageId && $('#actionDialog')?.open) {
+          setRealtimeState('Reconnecting…');
+          supportRealtimeRetry = setTimeout(connect, 1500);
+        }
+      };
+    };
+
+    connect();
+  }
+
   function threadMessageHtml(item) {
     const internal = Boolean(item.is_internal);
     const sender = internal
@@ -49,6 +135,7 @@
         ${customer.email || row.user_email ? `<span>${esc(customer.email || row.user_email)}</span>` : ''}
         ${customer.phone || row.user_phone ? `<span>${esc(customer.phone || row.user_phone)}</span>` : ''}
         <span class="codeish">${esc(row.id)}</span>
+        <span class="codeish" id="supportRealtimeState">Connecting…</span>
       </div>
 
       <section class="support-thread" id="supportThread" aria-live="polite">
@@ -85,15 +172,18 @@
 
     const reloadThread = async () => {
       const next = await request(`/ops/support/messages/${encodeURIComponent(row.id)}/thread`);
-      $('#supportThread').innerHTML = renderThreadItems(next.items);
-      $('#supportConversationStatus').value = next.status || $('#supportConversationStatus').value;
       const container = $('#supportThread');
+      if (!container) return next;
+      container.innerHTML = renderThreadItems(next.items);
+      const status = $('#supportConversationStatus');
+      if (status) status.value = next.status || status.value;
       container.scrollTop = container.scrollHeight;
       return next;
     };
 
     const threadContainer = $('#supportThread');
     threadContainer.scrollTop = threadContainer.scrollHeight;
+    startSupportRealtime(row.id, reloadThread);
 
     $('#supportReplyForm').onsubmit = async event => {
       event.preventDefault();
@@ -161,6 +251,7 @@
   };
 
   $('#actionDialog').addEventListener('close', () => {
+    stopSupportRealtime();
     $('#actionDialog').classList.remove('support-dialog');
   });
 })();
