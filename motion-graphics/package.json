@@ -1,0 +1,21 @@
+{
+  "name": "letsgoride-motion-graphics",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:vertical": "remotion render src/index.ts LetsGoRideVertical out/letsgoride-vertical.mp4",
+    "render:landscape": "remotion render src/index.ts LetsGoRideLandscape out/letsgoride-landscape.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "remotion": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest"
+  }
+}
