@@ -1,6 +1,8 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -11,6 +13,9 @@ import {
 
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
+import { useMotionSettings } from "../../hooks/useMotionSettings";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type AppButtonProps = {
   title: string;
@@ -32,24 +37,47 @@ export function AppButton({
   style,
 }: AppButtonProps) {
   const isDisabled = Boolean(disabled || loading);
+  const { canAnimate } = useMotionSettings();
+  const [pressed, setPressed] = useState(false);
+  const scale = useRef(new Animated.Value(1)).current;
   const indicatorColor = variant === "primary" ? colors.card : variant === "danger" ? colors.danger : colors.whiteText;
 
+  useEffect(() => {
+    if (!canAnimate || isDisabled) {
+      scale.setValue(1);
+      setPressed(false);
+      return;
+    }
+    const animation = Animated.timing(scale, {
+      toValue: pressed ? 0.985 : 1,
+      duration: pressed ? 90 : 140,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [canAnimate, isDisabled, pressed, scale]);
+
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: Boolean(loading) }}
       disabled={isDisabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={[
         styles.button,
         styles[variant],
         isDisabled && styles.disabled,
         pressed && !isDisabled && styles.pressed,
+        { transform: [{ scale: canAnimate && !isDisabled ? scale : 1 }] },
         style,
       ]}
     >
       <View style={styles.content}>
-        {loading ? <ActivityIndicator size="small" color={indicatorColor} /> : icon}
+        {loading ? <ActivityIndicator size="small" color={indicatorColor} animating={canAnimate} hidesWhenStopped={false} /> : icon}
         <Text style={[
           styles.text,
           variant === "primary" && styles.primaryText,
@@ -59,7 +87,7 @@ export function AppButton({
           {title}
         </Text>
       </View>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -99,7 +127,7 @@ const styles = StyleSheet.create({
     borderColor: "#D8CEC0",
   },
   pressed: {
-    transform: [{ scale: 0.985 }],
+    opacity: 0.85,
   },
   content: {
     flexDirection: "row",

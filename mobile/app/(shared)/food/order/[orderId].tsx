@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppButton } from "../../../../components/ui/AppButton";
 import { Screen } from "../../../../components/ui/Screen";
+import { MotionView } from "../../../../components/ui/MotionView";
 import { v2Theme } from "../../../../constants/v2Theme";
 import { useFoodOrderRealtime } from "../../../../hooks/useFoodOrderRealtime";
 import { cancelFoodOrder } from "../../../../services/foodService";
@@ -178,12 +179,12 @@ export default function FoodOrderScreen() {
 
 function TrackCard({ icon, eyebrow, title, body, complete }: { icon: keyof typeof MaterialCommunityIcons.glyphMap; eyebrow: string; title: string; body: string; complete: boolean }) {
   return (
-    <View style={[styles.trackCard, complete && styles.trackCardDone]}>
+    <MotionView changeKey={`${title}:${complete}`} distance={0} style={[styles.trackCard, complete && styles.trackCardDone]}>
       <View style={[styles.trackIcon, complete && styles.trackIconDone]}><MaterialCommunityIcons name={complete ? "check" : icon} size={22} color={complete ? "#FFFFFF" : v2Theme.colors.brandStrong} /></View>
       <Text style={styles.trackEyebrow}>{eyebrow}</Text>
       <Text style={styles.trackTitle}>{title}</Text>
       <Text style={styles.trackBody}>{body}</Text>
-    </View>
+    </MotionView>
   );
 }
 
@@ -196,7 +197,7 @@ function customerHeadline(order: FoodOrder) {
 }
 
 function customerMessage(order: FoodOrder) {
-  if (order.status === "DELIVERED") return "Delivered. Enjoy your order 💚";
+  if (order.status === "DELIVERED") return "Delivered. Enjoy your order.";
   if (order.status === "CANCELLED" || order.status === "REJECTED") return "This order is no longer active.";
   if (order.fulfillment_status === "ARRIVING") return "Your courier is almost there. Have your handoff code ready.";
   if (["PICKED_UP", "OUT_FOR_DELIVERY", "IN_TRANSIT"].includes(order.fulfillment_status || "")) return "Your food has been collected and is on the way.";

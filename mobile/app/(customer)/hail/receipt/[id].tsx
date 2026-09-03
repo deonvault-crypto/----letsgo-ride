@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppNotice } from "../../../../components/ui/AppNotice";
 import { Screen } from "../../../../components/ui/Screen";
+import { MotionView } from "../../../../components/ui/MotionView";
 import { v2Theme } from "../../../../constants/v2Theme";
 import { getHailingTrip } from "../../../../services/hailingService";
 import { listPendingReviews } from "../../../../services/reviewService";
@@ -52,11 +53,12 @@ export default function HailingReceiptScreen() {
 
   return (
     <Screen navRole="customer" onRefresh={load} showNotifications={false}>
-      <View style={styles.hero}>
+      <MotionView changeKey={trip?.status || "loading"} style={styles.hero}>
+        {trip?.status === "COMPLETED" ? <MaterialCommunityIcons accessibilityLabel="Ride completed" name="check-circle-outline" size={26} color={v2Theme.colors.ink} /> : null}
         <Text style={styles.eyebrow}>RIDE RECEIPT</Text>
-        <Text style={styles.title}>Ride complete</Text>
-        <Text style={styles.body}>Your server-calculated fare and completed Ride Now record stay in Activity.</Text>
-      </View>
+        <Text style={styles.title}>{trip?.status === "COMPLETED" ? "Ride complete" : trip ? "Ride receipt" : error ? "Receipt unavailable" : "Loading receipt…"}</Text>
+        <Text style={styles.body}>{trip?.status === "COMPLETED" ? "Your fare and ride details are saved in Activity." : "Your receipt is available after the ride is complete."}</Text>
+      </MotionView>
       {error ? <AppNotice message={error} actionLabel="Retry" onAction={load} /> : null}
       {trip ? (
         <View style={styles.card}>
@@ -101,7 +103,7 @@ function Line({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   hero: { gap: 8 },
   eyebrow: { color: "#111111", fontSize: 10, fontWeight: "900", letterSpacing: 1.35 },
-  title: { color: v2Theme.colors.ink, fontSize: 31, lineHeight: 36, fontWeight: "900", letterSpacing: -1 },
+  title: { color: v2Theme.colors.ink, fontSize: 24, lineHeight: 29, fontWeight: "800", letterSpacing: -0.5 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 13, lineHeight: 19 },
   card: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 18, gap: 14 },
   line: { gap: 3 },

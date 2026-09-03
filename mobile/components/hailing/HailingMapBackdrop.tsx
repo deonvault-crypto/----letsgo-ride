@@ -3,6 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Circle, Marker, Polyline } from "react-native-maps";
 
+import { useMotionSettings } from "../../hooks/useMotionSettings";
+import { isMapCoordinate } from "../../utils/mapMotion";
+import { LiveLocationMarker } from "../maps/LiveLocationMarker";
+
 import {
   DeviceLocation,
   getCurrentDeviceLocation,
@@ -11,13 +15,14 @@ import {
   requestForegroundLocationPermission,
   watchForegroundLocation,
 } from "../../services/locationService";
-import { HailingCoordinate, HailingRoute } from "../../types/hailing.types";
+import { HailingCoordinate, HailingLiveLocation, HailingRoute } from "../../types/hailing.types";
 
 type HailingMapBackdropProps = {
   pickup?: HailingCoordinate | null;
   dropoff?: HailingCoordinate | null;
   route?: HailingRoute | null;
-  driverLocation?: HailingCoordinate | null;
+  driverLocation?: HailingLiveLocation | null;
+  driverLocationKey?: string;
   bottomPadding?: number;
   showCurrentLocation?: boolean;
   promptForLocation?: boolean;
@@ -86,12 +91,14 @@ export function HailingMapBackdrop({
   dropoff,
   route,
   driverLocation,
+  driverLocationKey,
   bottomPadding = 360,
   showCurrentLocation: showCurrentLocationProp,
   promptForLocation: promptForLocationProp,
   showLocateControl: showLocateControlProp,
   locateButtonBottom,
 }: HailingMapBackdropProps) {
+  const { canAnimate } = useMotionSettings();
   const mapRef = useRef<MapView | null>(null);
   const watcherRef = useRef<{ remove: () => void } | null>(null);
   const approximatePromptShownRef = useRef(false);
@@ -120,7 +127,7 @@ export function HailingMapBackdrop({
         latitudeDelta: 0.012,
         longitudeDelta: 0.012,
       },
-      animated ? 260 : 0,
+      animated && canAnimate ? 260 : 0,
     );
   }
 
@@ -230,11 +237,11 @@ export function HailingMapBackdrop({
       return;
     }
     if (focusCoordinates.length === 1) {
-      mapRef.current.animateToRegion(regionFor(focusCoordinates[0]), 220);
+      mapRef.current.animateToRegion(regionFor(focusCoordinates[0]), canAnimate ? 220 : 0);
       return;
     }
     mapRef.current.fitToCoordinates(focusCoordinates, {
-      animated: true,
+      animated: canAnimate,
       edgePadding: { top: 118, right: 52, bottom: bottomPadding, left: 52 },
     });
   }, [bottomPadding, deviceLocation, focusCoordinates, mapReady, showCurrentLocation]);
@@ -280,12 +287,12 @@ export function HailingMapBackdrop({
           </Marker>
         ) : null}
 
-        {driverLocation ? (
-          <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+        {isMapCoordinate(driverLocation) ? (
+          <LiveLocationMarker key={driverLocationKey} location={driverLocation} title="Driver">
             <View style={styles.driverMarker}>
               <MaterialCommunityIcons name="car" size={17} color="#FFFFFF" />
             </View>
-          </Marker>
+          </LiveLocationMarker>
         ) : null}
 
         {showCurrentLocation && deviceCoordinate ? (

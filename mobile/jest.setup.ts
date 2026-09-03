@@ -57,7 +57,7 @@ jest.mock("react-native-maps", () => {
   const Marker = View as typeof View & { Animated?: typeof View };
   Marker.Animated = View;
   class AnimatedRegion {
-    timing() { return { start: jest.fn() }; }
+    timing() { return { start: jest.fn(), stop: jest.fn(), reset: jest.fn() }; }
   }
   return {
     __esModule: true,

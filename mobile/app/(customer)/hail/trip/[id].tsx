@@ -8,6 +8,7 @@ import { HailingMapBackdrop } from "../../../../components/hailing/HailingMapBac
 import { BottomNav } from "../../../../components/layout/BottomNav";
 import { AppNotice } from "../../../../components/ui/AppNotice";
 import { Avatar } from "../../../../components/ui/Avatar";
+import { MotionView } from "../../../../components/ui/MotionView";
 import { v2Theme } from "../../../../constants/v2Theme";
 import { useHailingTripRealtime } from "../../../../hooks/useHailing";
 import {
@@ -156,7 +157,7 @@ export default function CustomerHailingTripScreen() {
   return (
     <SafeAreaView edges={[]} style={styles.root}>
       <StatusBar barStyle="dark-content" />
-      <HailingMapBackdrop pickup={trip?.pickup} dropoff={trip?.dropoff} route={trip?.route} driverLocation={trip?.driver_location} bottomPadding={430} />
+      <HailingMapBackdrop pickup={trip?.pickup} dropoff={trip?.dropoff} route={trip?.route} driverLocation={trip?.driver_location} driverLocationKey={`${tripId}:${trip?.driver_user_id || ""}`} bottomPadding={430} />
 
       <View pointerEvents="box-none" style={[styles.topBar, { top: insets.top + 8 }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back to Home" hitSlop={8} onPress={goBack} style={({ pressed }) => [styles.topButton, pressed && styles.pressed]}>
@@ -173,31 +174,33 @@ export default function CustomerHailingTripScreen() {
       <View style={styles.sheet}>
         <View style={styles.handle} />
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-          <View style={styles.headingRow}>
+          <MotionView changeKey={trip?.status || (loading ? "loading" : "missing")} style={styles.headingRow} accessibilityLiveRegion="polite">
             <View style={styles.flex}>
               <Text style={styles.eyebrow}>RIDE NOW</Text>
               <Text style={styles.title}>{loading && !trip ? "Restoring your ride…" : statusTitle(trip?.status)}</Text>
               <Text style={styles.body}>{statusBody(trip?.status, Boolean(trip?.verify_ride_with_pin))}</Text>
             </View>
-            <View accessibilityLabel={live ? "Ride updates connected" : "Ride updates reconnecting"} style={styles.liveBadge}>
+            {trip?.status === "COMPLETED" ? (
+              <MaterialCommunityIcons accessibilityLabel="Ride completed" name="check-circle-outline" size={26} color={RIDE_BLACK} />
+            ) : <View accessibilityLabel={live ? "Ride updates connected" : "Ride updates reconnecting"} style={styles.liveBadge}>
               <View style={[styles.liveDot, !live && styles.liveDotSyncing]} />
               <Text style={styles.liveText}>{live ? "LIVE" : "SYNC"}</Text>
-            </View>
-          </View>
+            </View>}
+          </MotionView>
 
           {loading && !trip ? <View style={styles.skeleton}><View style={styles.skeletonWide} /><View style={styles.skeletonShort} /></View> : null}
           {notice ? <AppNotice message={notice} actionLabel="Reconnect" onAction={() => void reload()} onDismiss={() => setNotice(null)} /> : null}
           {error ? <AppNotice message={error} actionLabel="Reconnect" onAction={() => void reload()} /> : null}
 
           {trip?.driver && !TERMINAL.has(trip.status) ? (
-            <View style={styles.driverCard}>
+            <MotionView changeKey={trip.driver_user_id || trip.driver.name || "driver"} animateOnMount style={styles.driverCard}>
               <Avatar name={trip.driver.name || "Driver"} imageUri={trip.driver.profile_photo_url || undefined} size={52} />
               <View style={styles.flex}>
                 <Text style={styles.driverName}>{trip.driver.name || "Your driver"}</Text>
                 <Text style={styles.vehicle}>{vehicleDescription}</Text>
-                {typeof trip.driver.rating === "number" ? <Text style={styles.rating}>★ {trip.driver.rating.toFixed(1)}</Text> : <Text style={styles.newDriver}>NEW DRIVER · VERIFIED</Text>}
+                {typeof trip.driver.rating === "number" ? <View style={styles.ratingRow}><MaterialCommunityIcons name="star" size={12} color={RIDE_BLACK} /><Text style={styles.rating}>{trip.driver.rating.toFixed(1)}</Text></View> : null}
               </View>
-            </View>
+            </MotionView>
           ) : null}
 
           {trip ? (
@@ -287,11 +290,11 @@ const styles = StyleSheet.create({
   skeleton: { borderRadius: 18, backgroundColor: "#F6F5F2", padding: 14, gap: 9 },
   skeletonWide: { height: 13, width: "75%", borderRadius: 7, backgroundColor: "#E3E2DE" },
   skeletonShort: { height: 10, width: "48%", borderRadius: 5, backgroundColor: "#E9E8E4" },
-  driverCard: { minHeight: 76, borderRadius: 20, backgroundColor: "#F7F7F5", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 11, flexDirection: "row", alignItems: "center", gap: 11 },
+  driverCard: { minHeight: 76, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 11 },
   driverName: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" },
   vehicle: { color: v2Theme.colors.inkSecondary, fontSize: 10, marginTop: 2 },
-  rating: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", marginTop: 3 },
-  newDriver: { color: v2Theme.colors.inkSecondary, fontSize: 8.5, fontWeight: "900", letterSpacing: 0.55, marginTop: 3 },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 3 },
+  rating: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900" },
   routeCard: { borderRadius: 18, backgroundColor: "#F7F7F5", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, overflow: "hidden" },
   routeRow: { minHeight: 49, paddingHorizontal: 11, flexDirection: "row", alignItems: "center", gap: 9 },
   routeDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: RIDE_BLACK },

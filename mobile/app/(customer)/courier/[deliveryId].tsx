@@ -1,10 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { DeliveryMap } from "../../../components/maps/DeliveryMap";
+import { LoadingState } from "../../../components/states/LoadingState";
+import { MotionView } from "../../../components/ui/MotionView";
+import { useMotionSettings } from "../../../hooks/useMotionSettings";
 import { AppButton } from "../../../components/ui/AppButton";
 import { Screen } from "../../../components/ui/Screen";
 import { v2Theme } from "../../../constants/v2Theme";
@@ -36,31 +38,7 @@ export default function CustomerCourierDeliveryScreen() {
     reconcile,
   } = useCourierDeliveryRealtime(deliveryId, { includeHandoffPin: true });
   const [busy, setBusy] = useState(false);
-  const pulse = useRef(new Animated.Value(0)).current;
-  const statusEntrance = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 950, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 950, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-
-  useEffect(() => {
-    if (!delivery) return;
-    statusEntrance.setValue(0);
-    Animated.spring(statusEntrance, {
-      toValue: 1,
-      damping: 18,
-      stiffness: 185,
-      mass: 0.82,
-      useNativeDriver: true,
-    }).start();
-  }, [delivery?.status, statusEntrance]);
+  const { canAnimate } = useMotionSettings();
 
   const route = useMemo(() => decodePolyline(delivery?.remaining_route_polyline || delivery?.route_polyline), [delivery?.remaining_route_polyline, delivery?.route_polyline]);
 
@@ -94,15 +72,11 @@ export default function CustomerCourierDeliveryScreen() {
   if (loading && !delivery) {
     return (
       <Screen title="Delivery" showBack fallbackRoute="/(shared)/activity" navRole="customer">
-        <DeliveryLoading pulse={pulse} />
+        <LoadingState label="Loading delivery…" />
       </Screen>
     );
   }
 
-  const animatedStatus = {
-    opacity: statusEntrance,
-    transform: [{ translateY: statusEntrance.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
-  };
 
   return (
     <Screen title="Delivery" showBack fallbackRoute="/(shared)/activity" navRole="customer">
@@ -116,32 +90,29 @@ export default function CustomerCourierDeliveryScreen() {
 
       {delivery ? (
         <>
-          <Animated.View style={animatedStatus}>
-            <LinearGradient colors={["#102F21", "#164B30", "#1E6A3C"]} style={styles.hero}>
-              <View style={styles.heroTop}>
-                <View style={styles.heroBadge}>
-                  <MaterialCommunityIcons name={delivery.source_type === "FOOD_ORDER" ? "food-takeout-box-outline" : "package-variant-closed"} size={21} color="#E9FFF0" />
-                </View>
-                <Text style={styles.eyebrow}>{delivery.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"}</Text>
-                {delivery.price_usd != null ? <Text style={styles.price}>${delivery.price_usd.toFixed(2)}</Text> : null}
+          <MotionView changeKey={delivery.status} style={styles.hero} accessibilityLiveRegion="polite">
+            <View style={styles.heroTop}>
+              <View style={styles.heroBadge}>
+                <MaterialCommunityIcons name={delivery.source_type === "FOOD_ORDER" ? "food-takeout-box-outline" : "package-variant-closed"} size={21} color="#E9FFF0" />
               </View>
-              <Text style={styles.title}>{customerStatusTitle(delivery)}</Text>
-              <Text style={styles.body}>{customerStatusBody(delivery)}</Text>
-              <View style={styles.statusRow}>
-                <View style={styles.statusPill}>
-                  <Animated.View style={[styles.statusDot, delivery.live_tracking_active && styles.statusDotLive, delivery.live_tracking_active && { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }) }]} />
-                  <Text style={styles.statusText}>{customerStatusChip(delivery.status)}</Text>
-                </View>
-                <Text style={styles.orderId}>{displayDeliveryReference(delivery.id)}</Text>
+              <Text style={styles.eyebrow}>{delivery.source_type === "FOOD_ORDER" ? "FOOD DELIVERY" : "COURIER DELIVERY"}</Text>
+              {delivery.price_usd != null ? <Text style={styles.price}>${delivery.price_usd.toFixed(2)}</Text> : null}
+            </View>
+            <Text style={styles.title}>{customerStatusTitle(delivery)}</Text>
+            <Text style={styles.body}>{customerStatusBody(delivery)}</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.statusPill}>
+                {isMatching(delivery.status) && canAnimate ? <ActivityIndicator size="small" color="#FFFFFF" /> : <View style={styles.statusDot} />}
+                <Text style={styles.statusText}>{customerStatusChip(delivery.status)}</Text>
               </View>
-            </LinearGradient>
-          </Animated.View>
+              <Text style={styles.orderId}>{displayDeliveryReference(delivery.id)}</Text>
+            </View>
+          </MotionView>
 
-          {isMatching(delivery.status) ? <MatchingSearch pulse={pulse} /> : null}
-          {isCourierHeading(delivery.status) ? <CourierFoundCard delivery={delivery} pulse={pulse} /> : null}
+          {isCourierHeading(delivery.status) ? <CourierFoundCard delivery={delivery} /> : null}
 
           <View style={styles.mapFrame}>
-            <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} courierHeading={delivery.last_courier_location?.heading} route={route} height={315} />
+            <DeliveryMap pickup={delivery.pickup_location} dropoff={delivery.dropoff_location} courier={delivery.last_courier_location} courierHeading={delivery.last_courier_location?.heading} liveTracking={delivery.live_tracking_active === true && !FINAL.has(delivery.status)} trackingKey={`${delivery.id}:${delivery.courier_user_id || ""}`} route={route} height={315} />
             {delivery.live_tracking_active ? (
               <View style={styles.mapLivePill}>
                 <MaterialCommunityIcons name="crosshairs-gps" size={15} color={v2Theme.colors.brandStrong} />
@@ -159,7 +130,7 @@ export default function CustomerCourierDeliveryScreen() {
           ) : null}
 
           {handoff && PIN_VISIBLE.has(delivery.status) ? (
-            <Animated.View style={[styles.pinCard, animatedStatus]}>
+            <View style={styles.pinCard}>
               <View style={styles.pinHeader}>
                 <View style={styles.pinIcon}><MaterialCommunityIcons name="shield-key-outline" size={27} color={v2Theme.colors.brandStrong} /></View>
                 <View style={styles.pinCopy}>
@@ -174,10 +145,10 @@ export default function CustomerCourierDeliveryScreen() {
                 <MaterialCommunityIcons name="map-marker-check-outline" size={19} color={v2Theme.colors.brandStrong} />
                 <Text style={styles.securityText}>The code only works when the courier is near your saved drop-off pin.</Text>
               </View>
-            </Animated.View>
+            </View>
           ) : null}
 
-          {delivery.status === "DELIVERED" ? <DeliveredCard handoff={handoff} pulse={pulse} /> : null}
+          {delivery.status === "DELIVERED" ? <DeliveredCard handoff={handoff} /> : null}
 
           {delivery.status === "DELIVERED" ? (
             <View style={styles.reviewCard}>
@@ -228,49 +199,16 @@ export default function CustomerCourierDeliveryScreen() {
   );
 }
 
-function DeliveryLoading({ pulse }: { pulse: Animated.Value }) {
-  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.42, 0.82] });
+function CourierFoundCard({ delivery }: { delivery: CourierDelivery }) {
   return (
-    <View style={styles.loadingWrap}>
-      <Animated.View style={[styles.loadingHero, { opacity }]} />
-      <View style={styles.loadingMap}><MaterialCommunityIcons name="map-outline" size={34} color={v2Theme.colors.brandStrong} /><Text style={styles.loadingText}>Preparing your live delivery view…</Text></View>
-      <Animated.View style={[styles.loadingLine, { opacity }]} />
-      <Animated.View style={[styles.loadingLineShort, { opacity }]} />
-    </View>
-  );
-}
-
-function MatchingSearch({ pulse }: { pulse: Animated.Value }) {
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1.35] });
-  const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.05] });
-  return (
-    <View style={styles.matchCard}>
-      <View style={styles.radar}>
-        <Animated.View style={[styles.radarRing, { opacity: ringOpacity, transform: [{ scale: ringScale }] }]} />
-        <View style={styles.radarCore}><MaterialCommunityIcons name="map-marker-radius-outline" size={26} color="#FFFFFF" /></View>
-        <View style={[styles.courierDot, styles.courierDotOne]}><MaterialCommunityIcons name="motorbike" size={16} color={v2Theme.colors.brandStrong} /></View>
-        <View style={[styles.courierDot, styles.courierDotTwo]}><MaterialCommunityIcons name="bike-fast" size={15} color={v2Theme.colors.brandStrong} /></View>
-        <View style={[styles.courierDot, styles.courierDotThree]}><MaterialCommunityIcons name="motorbike" size={15} color={v2Theme.colors.brandStrong} /></View>
-      </View>
-      <View style={styles.matchCopy}>
-        <Text style={styles.matchTitle}>Finding someone nearby…</Text>
-        <Text style={styles.matchBody}>We’re checking approved couriers around your pickup. You can leave this screen while the request keeps running.</Text>
-        <View style={styles.searchingRow}><Animated.View style={[styles.searchingDot, { opacity: pulse }]} /><Text style={styles.searchingText}>Searching nearby couriers</Text></View>
-      </View>
-    </View>
-  );
-}
-
-function CourierFoundCard({ delivery, pulse }: { delivery: CourierDelivery; pulse: Animated.Value }) {
-  return (
-    <View style={styles.courierCard}>
+    <MotionView animateOnMount changeKey={delivery.courier_user_id || "assigned"} style={styles.courierCard}>
       <View style={styles.courierAvatar}><MaterialCommunityIcons name="motorbike" size={27} color="#FFFFFF" /></View>
       <View style={styles.courierCopy}>
         <Text style={styles.courierEyebrow}>COURIER FOUND</Text>
         <Text style={styles.courierName}>{delivery.courier_name || "Your courier"}</Text>
         <Text style={styles.courierBody}>Heading to your pickup now. Live location turns on automatically.</Text>
       </View>
-    </View>
+    </MotionView>
   );
 }
 
@@ -287,9 +225,9 @@ function JourneyCard({ status }: { status: CourierStatus }) {
           return (
             <View key={label} style={styles.journeyItem}>
               <View style={styles.journeyTop}>
-                <View style={[styles.journeyNode, complete && styles.journeyNodeComplete, active && styles.journeyNodeActive]}>
+                <MotionView changeKey={`${complete}:${active}`} distance={0} style={[styles.journeyNode, complete && styles.journeyNodeComplete, active && styles.journeyNodeActive]}>
                   {complete ? <MaterialCommunityIcons name={index === step && active ? "circle-slice-8" : "check"} size={12} color="#FFFFFF" /> : <View style={styles.journeyNodeDot} />}
-                </View>
+                </MotionView>
                 {index < labels.length - 1 ? <View style={[styles.journeyConnector, index < step && styles.journeyConnectorComplete]} /> : null}
               </View>
               <Text style={[styles.journeyLabel, complete && styles.journeyLabelComplete]}>{label}</Text>
@@ -301,12 +239,12 @@ function JourneyCard({ status }: { status: CourierStatus }) {
   );
 }
 
-function DeliveredCard({ handoff, pulse }: { handoff: CourierDeliveryPin | null; pulse: Animated.Value }) {
+function DeliveredCard({ handoff }: { handoff: CourierDeliveryPin | null }) {
   return (
-    <LinearGradient colors={["#DDF6E5", "#F4FBF6"]} style={styles.successCard}>
-      <Animated.View style={[styles.successIcon, { transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.05] }) }] }]}><MaterialCommunityIcons name="check" size={28} color="#FFFFFF" /></Animated.View>
-      <View style={styles.successCopy}><Text style={styles.successTitle}>Delivered 💚</Text><Text style={styles.successBody}>{handoff?.verified ? "Recipient code verified. Tracking is closed and the handoff is recorded." : "This delivery is complete."}</Text></View>
-    </LinearGradient>
+    <MotionView animateOnMount distance={0} style={styles.successCard}>
+      <View style={styles.successIcon}><MaterialCommunityIcons name="check" size={28} color="#FFFFFF" /></View>
+      <View style={styles.successCopy}><Text style={styles.successTitle}>Delivered</Text><Text style={styles.successBody}>{handoff?.verified ? "Recipient code verified. Tracking is closed and the handoff is recorded." : "This delivery is complete."}</Text></View>
+    </MotionView>
   );
 }
 
@@ -392,19 +330,11 @@ function RouteRow({ icon, label, value }: { icon: keyof typeof MaterialCommunity
 }
 
 const styles = StyleSheet.create({
-  loadingWrap: { gap: 12 },
-  loadingHero: { height: 170, borderRadius: 28, backgroundColor: v2Theme.colors.surfaceMuted },
-  loadingMap: { height: 240, borderRadius: 26, backgroundColor: v2Theme.colors.brandSofter, alignItems: "center", justifyContent: "center", gap: 10 },
-  loadingText: { color: v2Theme.colors.inkSecondary, fontSize: 11, fontWeight: "800" },
-  loadingLine: { height: 68, borderRadius: 20, backgroundColor: v2Theme.colors.surfaceMuted },
-  loadingLineShort: { height: 68, width: "74%", borderRadius: 20, backgroundColor: v2Theme.colors.surfaceMuted },
   errorCard: { borderRadius: 18, backgroundColor: v2Theme.colors.dangerSoft, padding: 13, flexDirection: "row", alignItems: "center", gap: 9 },
   errorText: { flex: 1, color: v2Theme.colors.danger, fontSize: 11, fontWeight: "700" }, retry: { color: v2Theme.colors.danger, fontSize: 10, fontWeight: "900" },
-  hero: { borderRadius: 30, padding: 18, gap: 9, overflow: "hidden", shadowColor: "#123F2A", shadowOpacity: 0.2, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 7 },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: 8 }, heroBadge: { width: 38, height: 38, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.11)", alignItems: "center", justifyContent: "center" }, eyebrow: { flex: 1, color: "#A8E7BC", fontSize: 9, fontWeight: "900", letterSpacing: 1.1 }, price: { color: "#FFFFFF", fontSize: 17, fontWeight: "900" }, title: { color: "#FFFFFF", fontSize: 27, lineHeight: 32, fontWeight: "900", letterSpacing: -0.8 }, body: { color: "rgba(255,255,255,0.7)", fontSize: 11, lineHeight: 17 },
+  hero: { borderRadius: v2Theme.radius.md, padding: 18, gap: 9, backgroundColor: v2Theme.colors.ink },
+  heroTop: { flexDirection: "row", alignItems: "center", gap: 8 }, heroBadge: { width: 38, height: 38, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.11)", alignItems: "center", justifyContent: "center" }, eyebrow: { flex: 1, color: "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: "900", letterSpacing: 1.1 }, price: { color: "#FFFFFF", fontSize: 17, fontWeight: "900" }, title: { color: "#FFFFFF", fontSize: 27, lineHeight: 32, fontWeight: "900", letterSpacing: -0.8 }, body: { color: "rgba(255,255,255,0.7)", fontSize: 11, lineHeight: 17 },
   statusRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }, statusPill: { borderRadius: 999, backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 9, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 6 }, statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.45)" }, statusDotLive: { backgroundColor: "#8FE6AE" }, statusText: { color: "#FFFFFF", fontSize: 8, fontWeight: "900" }, orderId: { color: "rgba(255,255,255,0.45)", fontSize: 8, fontWeight: "900" },
-  matchCard: { minHeight: 154, borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 15, flexDirection: "row", alignItems: "center", gap: 16, overflow: "hidden" }, radar: { width: 116, height: 116, alignItems: "center", justifyContent: "center" }, radarRing: { position: "absolute", width: 86, height: 86, borderRadius: 43, borderWidth: 2, borderColor: v2Theme.colors.brand }, radarCore: { width: 54, height: 54, borderRadius: 27, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" },
-  courierDot: { position: "absolute", width: 34, height: 34, borderRadius: 17, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.12, shadowRadius: 8, elevation: 3 }, courierDotOne: { top: 5, right: 4 }, courierDotTwo: { bottom: 4, left: 1 }, courierDotThree: { bottom: 8, right: 0 }, matchCopy: { flex: 1, gap: 6 }, matchTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900", letterSpacing: -0.3 }, matchBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, searchingRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 3 }, searchingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: v2Theme.colors.brand }, searchingText: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900" },
   courierCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, padding: 14, flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft }, courierAvatar: { width: 54, height: 54, borderRadius: 19, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, courierCopy: { flex: 1, gap: 3 }, courierEyebrow: { color: v2Theme.colors.brandStrong, fontSize: 8, fontWeight: "900", letterSpacing: 0.7 }, courierName: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, courierBody: { color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 }, liveBadge: { borderRadius: 999, backgroundColor: v2Theme.colors.brandSoft, paddingHorizontal: 8, paddingVertical: 5 }, liveBadgeText: { color: v2Theme.colors.brandStrong, fontSize: 7, fontWeight: "900" },
   mapFrame: { borderRadius: 26, overflow: "hidden", position: "relative" }, mapLivePill: { position: "absolute", left: 12, bottom: 12, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.94)", paddingHorizontal: 10, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 6 }, mapLiveText: { color: v2Theme.colors.ink, fontSize: 8, fontWeight: "900" },
   trackingSheet: { minHeight: 74, marginTop: -22, marginHorizontal: 12, borderRadius: 22, backgroundColor: v2Theme.colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 11, flexDirection: "row", alignItems: "center", gap: 10, shadowColor: v2Theme.colors.shadow, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 7 },
@@ -412,7 +342,7 @@ const styles = StyleSheet.create({
   pinCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.brandSofter, padding: 16, gap: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.brandSoft }, pinHeader: { flexDirection: "row", gap: 11, alignItems: "center" }, pinIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: v2Theme.colors.brandSoft, alignItems: "center", justifyContent: "center" }, pinCopy: { flex: 1, gap: 3 }, pinTitle: { color: v2Theme.colors.ink, fontSize: 16, fontWeight: "900" }, pinBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 }, pinDigits: { flexDirection: "row", justifyContent: "center", gap: 9 }, pinDigit: { width: 52, height: 62, borderRadius: 18, backgroundColor: v2Theme.colors.surface, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong }, pinDigitText: { color: v2Theme.colors.ink, fontSize: 27, fontWeight: "900" }, securityRow: { borderRadius: 16, backgroundColor: v2Theme.colors.surface, padding: 11, flexDirection: "row", gap: 8, alignItems: "flex-start" }, securityText: { flex: 1, color: v2Theme.colors.inkSecondary, fontSize: 9, lineHeight: 14 },
   successCard: { borderRadius: v2Theme.radius.xl, padding: 14, flexDirection: "row", alignItems: "center", gap: 11 }, successIcon: { width: 52, height: 52, borderRadius: 19, backgroundColor: v2Theme.colors.brand, alignItems: "center", justifyContent: "center" }, successCopy: { flex: 1, gap: 3 }, successTitle: { color: v2Theme.colors.ink, fontSize: 17, fontWeight: "900" }, successBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
   reviewCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: "#F4F1EA", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, padding: 15, gap: 13 }, reviewHeader: { flexDirection: "row", alignItems: "center", gap: 11 }, reviewIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }, reviewCopy: { flex: 1, gap: 3 }, reviewTitle: { color: v2Theme.colors.ink, fontSize: 15, fontWeight: "900" }, reviewBody: { color: v2Theme.colors.inkSecondary, fontSize: 10, lineHeight: 15 },
-  journeyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 15, gap: 15 }, journeyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }, journeyNow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900" }, journeyTrack: { flexDirection: "row" }, journeyItem: { flex: 1, minWidth: 0 }, journeyTop: { flexDirection: "row", alignItems: "center" }, journeyNode: { width: 24, height: 24, borderRadius: 12, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, journeyNodeComplete: { backgroundColor: v2Theme.colors.brand }, journeyNodeActive: { shadowColor: v2Theme.colors.brand, shadowOpacity: 0.32, shadowRadius: 8, elevation: 3 }, journeyNodeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.inkTertiary }, journeyConnector: { flex: 1, height: 3, backgroundColor: v2Theme.colors.surfaceMuted }, journeyConnectorComplete: { backgroundColor: v2Theme.colors.brand }, journeyLabel: { marginTop: 7, color: v2Theme.colors.inkTertiary, fontSize: 7, lineHeight: 10, fontWeight: "800", paddingRight: 2 }, journeyLabelComplete: { color: v2Theme.colors.ink }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
+  journeyCard: { borderRadius: v2Theme.radius.xxl, backgroundColor: v2Theme.colors.surface, padding: 15, gap: 15 }, journeyHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }, journeyNow: { color: v2Theme.colors.brandStrong, fontSize: 9, fontWeight: "900" }, journeyTrack: { flexDirection: "row" }, journeyItem: { flex: 1, minWidth: 0 }, journeyTop: { flexDirection: "row", alignItems: "center" }, journeyNode: { width: 24, height: 24, borderRadius: 12, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, journeyNodeComplete: { backgroundColor: v2Theme.colors.brand }, journeyNodeActive: { borderWidth: 2, borderColor: v2Theme.colors.inkSecondary }, journeyNodeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: v2Theme.colors.inkTertiary }, journeyConnector: { flex: 1, height: 3, backgroundColor: v2Theme.colors.surfaceMuted }, journeyConnectorComplete: { backgroundColor: v2Theme.colors.brand }, journeyLabel: { marginTop: 7, color: v2Theme.colors.inkTertiary, fontSize: 7, lineHeight: 10, fontWeight: "800", paddingRight: 2 }, journeyLabelComplete: { color: v2Theme.colors.ink }, sectionTitle: { color: v2Theme.colors.ink, fontSize: 18, fontWeight: "900" },
   routeCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, overflow: "hidden" }, routeRow: { minHeight: 66, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: v2Theme.colors.line }, routeIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: v2Theme.colors.surfaceMuted, alignItems: "center", justifyContent: "center" }, routeCopy: { flex: 1, gap: 3 }, routeLabel: { color: v2Theme.colors.inkSecondary, fontSize: 8, fontWeight: "800" }, routeValue: { color: v2Theme.colors.ink, fontSize: 11, lineHeight: 16, fontWeight: "800" },
   cancelButton: { minHeight: 50, borderRadius: 17, backgroundColor: v2Theme.colors.dangerSoft, alignItems: "center", justifyContent: "center" }, cancelText: { color: v2Theme.colors.danger, fontSize: 11, fontWeight: "900" }, activityCard: { borderRadius: v2Theme.radius.xl, backgroundColor: v2Theme.colors.surface, paddingHorizontal: 13 }, activityHeader: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, activityCount: { color: v2Theme.colors.inkTertiary, fontSize: 9, fontWeight: "900" }, eventRow: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: 10 }, eventBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: v2Theme.colors.line }, eventDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: v2Theme.colors.brand }, eventCopy: { flex: 1, gap: 3 }, eventTitle: { color: v2Theme.colors.ink, fontSize: 10, fontWeight: "900" }, eventTime: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "700" }, disabled: { opacity: 0.45 }, pressed: { opacity: 0.72 },
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 
@@ -7,6 +7,7 @@ import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { AppButton } from "../../components/ui/AppButton";
 import { AppInput } from "../../components/ui/AppInput";
+import { MotionView } from "../../components/ui/MotionView";
 import { Screen } from "../../components/ui/Screen";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
@@ -179,24 +180,7 @@ export default function SupportScreen() {
                 <StatusBadge label={formatStatus(thread.status)} tone="success" />
               </View>
 
-              <View style={styles.transcript}>
-                {thread.items.map((item) => {
-                  const mine = item.sender_type === "customer";
-                  return (
-                    <View key={item.id} style={[styles.bubbleRow, mine ? styles.bubbleRowMine : styles.bubbleRowSupport]}>
-                      <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleSupport]}>
-                        <Text style={[styles.sender, mine && styles.textOnGreen]}>
-                          {mine ? "You" : item.sender_name || "LetsGoRide Support"}
-                        </Text>
-                        <Text style={[styles.bubbleText, mine && styles.textOnGreen]}>{item.message}</Text>
-                        {item.created_at ? (
-                          <Text style={[styles.time, mine && styles.timeOnGreen]}>{formatTime(item.created_at)}</Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
+              <SupportTranscript key={thread.support_message_id} thread={thread} />
 
               <Text style={styles.replyLabel}>Reply</Text>
               <AppInput
@@ -212,7 +196,6 @@ export default function SupportScreen() {
                 onPress={sendReply}
                 disabled={!reply.trim()}
               />
-              <Text style={styles.autoRefresh}>Replies from support appear here automatically while this conversation is open.</Text>
             </>
           ) : null}
         </View>
@@ -250,6 +233,30 @@ export default function SupportScreen() {
     </Screen>
   );
 }
+
+const SupportTranscript = memo(function SupportTranscript({ thread }: { thread: SupportThread }) {
+  const [initialItems] = useState(() => new Set(thread.items.map((item) => item.id)));
+  return (
+    <View style={styles.transcript}>
+      {thread.items.map((item) => {
+        const mine = item.sender_type === "customer";
+        return (
+          <MotionView key={item.id} animateOnMount={!initialItems.has(item.id)} distance={4} style={[styles.bubbleRow, mine ? styles.bubbleRowMine : styles.bubbleRowSupport]}>
+            <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleSupport]}>
+              <Text style={[styles.sender, mine && styles.textOnGreen]}>
+                {mine ? "You" : item.sender_name || "LetsGoRide Support"}
+              </Text>
+              <Text style={[styles.bubbleText, mine && styles.textOnGreen]}>{item.message}</Text>
+              {item.created_at ? (
+                <Text style={[styles.time, mine && styles.timeOnGreen]}>{formatTime(item.created_at)}</Text>
+              ) : null}
+            </View>
+          </MotionView>
+        );
+      })}
+    </View>
+  );
+});
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -372,7 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   textOnGreen: {
-    color: colors.whiteText,
+    color: colors.card,
   },
   time: {
     color: colors.mutedText,
@@ -387,11 +394,5 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 18,
     marginTop: spacing.sm,
-  },
-  autoRefresh: {
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 18,
-    textAlign: "center",
   },
 });

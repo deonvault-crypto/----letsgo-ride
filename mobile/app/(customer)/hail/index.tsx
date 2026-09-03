@@ -1,8 +1,8 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { initPaymentSheet, initStripe, presentPaymentSheet } from "@stripe/stripe-react-native";
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, Pressable, ScrollView, StatusBar, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AuthRequiredModal } from "../../../components/auth/AuthRequiredModal";
@@ -10,9 +10,11 @@ import { HailingMapBackdrop } from "../../../components/hailing/HailingMapBackdr
 import { RideClassCar } from "../../../components/hailing/RideClassCar";
 import { BottomNav } from "../../../components/layout/BottomNav";
 import { AppNotice } from "../../../components/ui/AppNotice";
+import { MotionView } from "../../../components/ui/MotionView";
 import { v2Theme } from "../../../constants/v2Theme";
 import { useLocationDraft } from "../../../contexts/LocationDraftContext";
 import { useActiveHailingTrip, useHailingConfig } from "../../../hooks/useHailing";
+import { useMotionSettings } from "../../../hooks/useMotionSettings";
 import { hasSession } from "../../../services/authService";
 import {
   createHailingQuote,
@@ -50,6 +52,29 @@ function toHailingPlace(choice: NonNullable<ReturnType<typeof useLocationDraft>[
 export default function HailingHomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const { canAnimate } = useMotionSettings();
+  const [sheetContentHeight, setSheetContentHeight] = useState<number | null>(null);
+  const sheetHeight = useRef(new Animated.Value(248)).current;
+  const previousSheet = useRef<{ measured: boolean; limit: number } | null>(null);
+  const sheetLimit = Math.max(100, Math.min(windowHeight * 0.61, windowHeight - insets.top - 64 - SHEET_BOTTOM));
+  const sheetMeasured = sheetContentHeight !== null;
+  const sheetTarget = Math.min(sheetLimit, Math.max(248, (sheetContentHeight ?? 236) + 12));
+
+  useLayoutEffect(() => {
+    const shouldAnimate = canAnimate && previousSheet.current?.measured && previousSheet.current.limit === sheetLimit;
+    previousSheet.current = { measured: sheetMeasured, limit: sheetLimit };
+    if (!shouldAnimate) {
+      sheetHeight.setValue(sheetTarget);
+      return;
+    }
+    const animation = Animated.timing(sheetHeight, {
+      toValue: sheetTarget, duration: 180, easing: Easing.out(Easing.cubic),
+      useNativeDriver: false, isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [canAnimate, sheetHeight, sheetLimit, sheetMeasured, sheetTarget]);
   const { pickup, dropoff } = useLocationDraft();
   const { config, loading: configLoading, error: configError, reload: reloadConfig } = useHailingConfig();
   const { trip: activeTrip, reload: reloadActive } = useActiveHailingTrip(false);
@@ -236,9 +261,9 @@ export default function HailingHomeScreen() {
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.topButtonSpacer} />
       </View>
 
-      <View style={styles.sheet}>
+      <Animated.View testID="hailing-booking-sheet" style={[styles.sheet, { height: sheetHeight, maxHeight: sheetLimit }]}>
         <View style={styles.handle} />
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetContent} onContentSizeChange={(_, height) => setSheetContentHeight(height)}>
           <View style={styles.sheetHeader}>
             <View><Text style={styles.eyebrow}>RIDE NOW</Text><Text style={styles.title}>Where to?</Text></View>
             <Pressable accessibilityRole="button" accessibilityLabel="Refresh Ride Now" hitSlop={6} onPress={() => { reloadConfig(); reloadActive(); }} style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
@@ -276,18 +301,20 @@ export default function HailingHomeScreen() {
                   const optionDisabled = !option.enabled;
                   const price = quote?.ride_class === option.id ? `$${quote.fare.total_fare.toFixed(2)}` : optionDisabled ? "Soon" : "Available";
                   return (
-                    <Pressable
-                      key={option.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected, disabled: optionDisabled }}
-                      disabled={optionDisabled}
-                      onPress={() => chooseClass(option)}
-                      style={({ pressed }) => [styles.classCard, selected && styles.classCardSelected, optionDisabled && styles.classCardDisabled, pressed && styles.pressed]}
-                    >
-                      <RideClassCar rideClass={option.id} disabled={optionDisabled} selected={selected} />
-                      <Text style={[styles.className, selected && styles.classNameSelected]}>{option.label || option.id}</Text>
-                      <Text style={[styles.classPrice, selected && styles.classPriceSelected]}>{price}</Text>
-                    </Pressable>
+                    <MotionView key={option.id} changeKey={selected} distance={0}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected, disabled: optionDisabled }}
+                        disabled={optionDisabled}
+                        onPress={() => chooseClass(option)}
+                        style={({ pressed }) => [styles.classCard, selected && styles.classCardSelected, optionDisabled && styles.classCardDisabled, pressed && styles.pressed]}
+                      >
+                        <RideClassCar rideClass={option.id} disabled={optionDisabled} selected={selected} />
+                        {selected ? <MaterialCommunityIcons name="check" size={14} color="#FFFFFF" style={styles.classCheck} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" /> : null}
+                        <Text style={[styles.className, selected && styles.classNameSelected]}>{option.label || option.id}</Text>
+                        <Text style={[styles.classPrice, selected && styles.classPriceSelected]}>{price}</Text>
+                      </Pressable>
+                    </MotionView>
                   );
                 })}
               </ScrollView>
@@ -334,7 +361,7 @@ export default function HailingHomeScreen() {
             </Pressable>
           ) : null}
 
-          <Pressable accessibilityRole="button" disabled={actionDisabled} onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, actionDisabled && styles.primaryBusy, pressed && !actionDisabled && styles.pressed]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: actionDisabled, busy: quoting || requesting }} disabled={actionDisabled} onPress={handlePrimaryAction} style={({ pressed }) => [styles.primary, actionDisabled && styles.primaryBusy, pressed && !actionDisabled && styles.pressed]}>
             <View style={styles.primaryCopy}>
               <Text style={styles.primaryText}>{actionLabel}</Text>
               {quoting ? <Text style={styles.primaryHint}>Using the selected route and current fare rules</Text> : null}
@@ -349,7 +376,7 @@ export default function HailingHomeScreen() {
             <MaterialCommunityIcons name="chevron-right" size={19} color={v2Theme.colors.inkTertiary} />
           </Pressable>
         </ScrollView>
-      </View>
+      </Animated.View>
 
       <BottomNav role="customer" />
       <AuthRequiredModal visible={authOpen} onClose={() => setAuthOpen(false)} returnTo="/(customer)/hail" />
@@ -394,7 +421,7 @@ const styles = StyleSheet.create({
   topButtonSpacer: { width: 48, height: 48 },
   ridePill: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.94)", alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)" },
   ridePillText: { color: RIDE_BLACK, fontSize: 10, fontWeight: "900", letterSpacing: 1.25 },
-  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, maxHeight: "61%", minHeight: 248, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12, overflow: "hidden" },
+  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12, overflow: "hidden" },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
   sheetContent: { paddingHorizontal: 14, paddingTop: 9, paddingBottom: 16, gap: 11 },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
@@ -416,7 +443,8 @@ const styles = StyleSheet.create({
   sectionTitle: { color: v2Theme.colors.ink, fontSize: 14, fontWeight: "900" },
   classRail: { gap: 9, paddingRight: 6, paddingVertical: 2 },
   classCard: { width: 112, minHeight: 124, borderRadius: 20, backgroundColor: "#F6F6F4", borderWidth: StyleSheet.hairlineWidth, borderColor: v2Theme.colors.lineStrong, paddingHorizontal: 3, paddingTop: 8, paddingBottom: 10, alignItems: "center", justifyContent: "flex-start", overflow: "visible" },
-  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: "rgba(84,199,121,0.26)", shadowColor: "#54C779", shadowOpacity: 0.20, shadowRadius: 18, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  classCardSelected: { backgroundColor: RIDE_BLACK, borderColor: RIDE_BLACK },
+  classCheck: { position: "absolute", top: 7, right: 7 },
   classCardDisabled: { opacity: 0.52 },
   className: { color: v2Theme.colors.ink, fontSize: 12, fontWeight: "900", marginTop: 1 },
   classNameSelected: { color: "#FFFFFF" },

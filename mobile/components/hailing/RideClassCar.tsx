@@ -14,7 +14,7 @@ const VEHICLE_IMAGES: Record<HailingRideClass, number> = {
   XL: require("../../assets/images/hailing/ride-xl.png"),
 };
 
-export function RideClassCar({ rideClass, disabled = false, selected = false }: RideClassCarProps) {
+export function RideClassCar({ rideClass, disabled = false }: RideClassCarProps) {
   return (
     <View
       testID={`ride-class-car-${rideClass.toLowerCase()}`}
@@ -22,7 +22,6 @@ export function RideClassCar({ rideClass, disabled = false, selected = false }: 
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      {selected ? <View pointerEvents="none" style={styles.selectedGlow} /> : null}
       <Image
         source={VEHICLE_IMAGES[rideClass]}
         resizeMode="contain"
@@ -45,20 +44,6 @@ const styles = StyleSheet.create({
     width: 106,
     height: 64,
     zIndex: 2,
-  },
-  selectedGlow: {
-    position: "absolute",
-    width: 82,
-    height: 34,
-    top: 20,
-    borderRadius: 999,
-    backgroundColor: "rgba(17,17,17,0.09)",
-    shadowColor: "#111111",
-    shadowOpacity: 0.32,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 3,
-    zIndex: 1,
   },
   disabled: {
     opacity: 0.34,
