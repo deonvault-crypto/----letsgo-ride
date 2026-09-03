@@ -30,7 +30,7 @@ function securityHeaders(ext) {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://letsgoride-v2-production.onrender.com; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://letsgoride-v2-production.onrender.com; img-src 'self' data: https://tile.openstreetmap.org https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   };
 }
 
