@@ -12,6 +12,7 @@ import { StatusBadge } from "../../components/ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { supportEmail } from "../../constants/legal";
 import { spacing } from "../../constants/spacing";
+import { useRealtime } from "../../contexts/RealtimeContext";
 import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
 import {
   getSupportThread,
@@ -23,13 +24,12 @@ import {
 } from "../../services/supportService";
 import { formatStatus } from "../../utils/formatStatus";
 
-const THREAD_REFRESH_MS = 5000;
-
 export default function SupportScreen() {
   const params = useLocalSearchParams<{ subject?: string; product?: string; supportMessageId?: string }>();
   const initialSubject = params.subject === "Account details change" ? params.subject : "LetsGoRide support";
   const navRole = params.product === "driver" || params.product === "courier" || params.product === "merchant" ? params.product : "customer";
   const requestedMessageId = typeof params.supportMessageId === "string" ? params.supportMessageId : "";
+  const { reconciliationRevision, subscribe } = useRealtime();
 
   const [subject, setSubject] = useState(initialSubject);
   const [message, setMessage] = useState("");
@@ -43,6 +43,7 @@ export default function SupportScreen() {
   const [reply, setReply] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
   const threadRefreshInFlight = useRef(false);
+  const seenReconciliationRevision = useRef(reconciliationRevision);
 
   useEffect(() => {
     if (requestedMessageId) setSelectedMessageId(requestedMessageId);
@@ -82,15 +83,24 @@ export default function SupportScreen() {
   useScreenReconciliation(loadMessages);
 
   useFocusEffect(useCallback(() => {
-    if (!selectedMessageId) return undefined;
-
-    void loadThread(selectedMessageId);
-    const interval = setInterval(() => {
-      void loadThread(selectedMessageId, true);
-    }, THREAD_REFRESH_MS);
-
-    return () => clearInterval(interval);
+    if (selectedMessageId) void loadThread(selectedMessageId);
+    return undefined;
   }, [loadThread, selectedMessageId]));
+
+  useEffect(() => subscribe((event) => {
+    if (event.resource_type !== "support_message") return;
+    void loadMessages();
+    if (selectedMessageId && event.resource_id === selectedMessageId) {
+      void loadThread(selectedMessageId, true);
+    }
+  }), [loadMessages, loadThread, selectedMessageId, subscribe]);
+
+  useEffect(() => {
+    if (seenReconciliationRevision.current === reconciliationRevision) return;
+    seenReconciliationRevision.current = reconciliationRevision;
+    void loadMessages();
+    if (selectedMessageId) void loadThread(selectedMessageId, true);
+  }, [loadMessages, loadThread, reconciliationRevision, selectedMessageId]);
 
   async function submit() {
     try {
