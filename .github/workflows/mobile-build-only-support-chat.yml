@@ -1,0 +1,87 @@
+name: LetsGoRide Support Chat Build Only
+
+on:
+  push:
+    branches:
+      - release/support-chat-build-only
+    paths:
+      - .github/workflows/mobile-build-only-support-chat.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Verify exact production source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Prove app source is exact merged production SHA
+        working-directory: .
+        run: |
+          set -euo pipefail
+          EXPECTED_PARENT="b8cf4084b29315620ad5f7d2ba026e95ac3d215a"
+          ACTUAL_PARENT="$(git rev-parse HEAD^)"
+          test "$ACTUAL_PARENT" = "$EXPECTED_PARENT"
+          CHANGED="$(git diff --name-only HEAD^ HEAD)"
+          test "$CHANGED" = ".github/workflows/mobile-build-only-support-chat.yml"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:android
+      - name: Verify Expo authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest whoami --non-interactive
+
+  android:
+    name: Android build only
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build Android production AAB without submission
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile production --non-interactive --wait
+
+  ios:
+    name: iOS build only
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build iOS production IPA without submission
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform ios --profile production --non-interactive --wait
