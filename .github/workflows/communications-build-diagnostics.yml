@@ -36,16 +36,11 @@ jobs:
               const response=await fetch(url,{signal:AbortSignal.timeout(30000)});
               if(!response.ok) throw Error('Build log retrieval failed: '+response.status);
               const log=await response.text();
-              const lines=log.split('\n').filter(line=>/Error:|FAILURE:|What went wrong|exception|runtime version|prebuild failed|Difference between local and EAS fingerprints/i.test(line));
-              for (const line of lines.slice(-16)) {
-                const entry=JSON.parse(line);
-                if (String(entry.msg).includes('Difference between local and EAS fingerprints')) {
-                  const message=String(entry.msg);
-                  const diff=JSON.parse(message.slice(message.indexOf('[')));
-                  const source=value=>value && ({type:value.type,id:value.id,filePath:value.filePath,reasons:value.reasons,hash:value.hash});
-                  console.log(JSON.stringify({fingerprintDiff:diff.map(item=>({op:item.op,before:source(item.beforeSource),after:source(item.afterSource)}))}));
-                } else console.log(line.replace(/AIza[0-9A-Za-z_-]+/g,'[REDACTED]'));
-              }
+              const entries=log.split('\n').filter(Boolean).map(line=>{try{return JSON.parse(line);}catch{return null;}}).filter(Boolean);
+              const messages=entries.filter(entry=>entry.phase==='CONFIGURE_EXPO_UPDATES').map(entry=>String(entry.msg||'')).join('\n');
+              const details=messages.slice(Math.max(0,messages.indexOf('Difference between local and EAS fingerprints')));
+              console.log(details.split('\n').filter(line=>/"(op|filePath|id|reasons|hash)"\s*:/.test(line) && !/"contents"\s*:/.test(line)).slice(0,100).join('\n'));
+
             }
           })().catch(error=>{console.error(error.message);process.exitCode=1;});
           NODE
