@@ -14,7 +14,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install project configuration dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
       - name: Read failed Android build
+        continue-on-error: true
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -24,7 +28,9 @@ jobs:
           node <<'NODE'
           const fs=require('fs');
           (async()=>{
-            const build=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/build-diagnostic.json','utf8'));
+            const raw=fs.readFileSync(process.env.RUNNER_TEMP+'/build-diagnostic.json','utf8');
+            let build;
+            try { build=JSON.parse(raw); } catch { console.log(raw.split('\n').filter(line=>/error|cannot|missing|failed|not found/i.test(line)).slice(-12).map(line=>line.replace(/https?:\/\/\S+/g,'[url]').replace(/AIza[0-9A-Za-z_-]+/g,'[REDACTED]')).join('\n')); throw Error('Build metadata was not JSON.'); }
             console.log(JSON.stringify({id:build.id,status:build.status,version:build.appVersion,buildNumber:build.appBuildVersion,error:build.error}));
             for(const url of build.logFiles || []) {
               const response=await fetch(url,{signal:AbortSignal.timeout(30000)});
