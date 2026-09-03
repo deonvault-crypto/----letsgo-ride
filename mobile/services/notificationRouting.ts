@@ -62,7 +62,7 @@ export function resolveNotificationRoute({ data = {}, notificationType, role }: 
   if (rideId && role === "passenger") return `/(customer)/ride/${rideId}`;
   if (hailingTripId && role === "driver") return `/(driver)/hailing/trip/${hailingTripId}`;
   if (hailingTripId && role === "passenger") return `/(customer)/hail/trip/${hailingTripId}`;
-  if (supportMessageId && role) return "/(shared)/support";
+  if (supportMessageId && role) return `/(shared)/support?supportMessageId=${supportMessageId}`;
   if (reportId && role) return "/(shared)/safety";
   return null;
 }
