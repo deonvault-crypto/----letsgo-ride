@@ -16,6 +16,14 @@ THREAD_COLLECTION = "support_thread_messages"
 SUPPORT_STATUSES = {"received", "open", "in_review", "resolved", "closed"}
 
 
+def _ensure_thread_collection() -> None:
+    # Production MongoDB creates collections on first write. Development/tests use
+    # the backend's bounded in-memory adapter, whose collection map is explicit.
+    # Register only this additive support collection when that adapter is active.
+    if database.db is None:
+        database.memory.setdefault(THREAD_COLLECTION, [])
+
+
 class CustomerSupportReplyBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=5000)
@@ -70,6 +78,7 @@ def _initial_message(ticket: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def _thread(ticket: Dict[str, Any], *, include_internal: bool) -> list[Dict[str, Any]]:
+    _ensure_thread_collection()
     stored = await database.find_many(
         THREAD_COLLECTION,
         {"support_message_id": ticket["id"]},
@@ -116,6 +125,7 @@ async def _insert_thread_message(
     message: str,
     is_internal: bool = False,
 ) -> Dict[str, Any]:
+    _ensure_thread_collection()
     row = {
         "id": new_id(),
         "support_message_id": ticket["id"],
