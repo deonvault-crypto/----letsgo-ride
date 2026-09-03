@@ -1,13 +1,17 @@
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import MapView, { AnimatedRegion, Marker, Polyline, Region } from "react-native-maps";
+import MapView, { Marker, Polyline, Region } from "react-native-maps";
 import { useEffect, useRef } from "react";
 
 import { v2Theme } from "../../constants/v2Theme";
+import { useMotionSettings } from "../../hooks/useMotionSettings";
+import { isMapCoordinate } from "../../utils/mapMotion";
+import { LiveLocationMarker } from "./LiveLocationMarker";
 
 type Point = {
   latitude?: number | null;
   longitude?: number | null;
+  recorded_at?: string | null;
 };
 
 type DeliveryMapProps = {
@@ -16,6 +20,8 @@ type DeliveryMapProps = {
   courier?: Point | null;
   route?: Array<{ latitude: number; longitude: number }>;
   courierHeading?: number | null;
+  liveTracking?: boolean;
+  trackingKey?: string;
   height?: number;
 };
 
@@ -27,37 +33,23 @@ const ZIMBABWE_REGION: Region = {
 };
 
 function validPoint(point?: Point | null): point is { latitude: number; longitude: number } {
-  return typeof point?.latitude === "number" && typeof point?.longitude === "number";
+  return isMapCoordinate(point);
 }
 
-export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeading, height = 340 }: DeliveryMapProps) {
+export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeading, liveTracking = true, trackingKey, height = 340 }: DeliveryMapProps) {
+  const { canAnimate } = useMotionSettings();
   const initialRegion = regionForPoints([pickup, dropoff, courier]);
   const mapRef = useRef<MapView | null>(null);
-  const initialCourier = validPoint(courier) ? courier : { latitude: initialRegion.latitude, longitude: initialRegion.longitude };
-  const courierCoordinate = useRef(new AnimatedRegion(initialCourier)).current;
 
   useEffect(() => {
     if (Platform.OS === "web") return;
     const points = [pickup, dropoff].filter(validPoint);
     if (points.length < 2) return;
     mapRef.current?.fitToCoordinates(points, {
-      animated: true,
+      animated: canAnimate,
       edgePadding: { top: 54, right: 44, bottom: 54, left: 44 },
     });
   }, [dropoff?.latitude, dropoff?.longitude, pickup?.latitude, pickup?.longitude]);
-
-  useEffect(() => {
-    if (Platform.OS === "web" || !validPoint(courier)) return;
-    courierCoordinate.timing({
-      latitude: courier.latitude,
-      longitude: courier.longitude,
-      latitudeDelta: 0,
-      longitudeDelta: 0,
-      duration: 6500,
-      useNativeDriver: false,
-      toValue: 0,
-    }).start();
-  }, [courier?.latitude, courier?.longitude, courierCoordinate]);
 
   function recenter() {
     if (!validPoint(courier)) return;
@@ -68,7 +60,7 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeadi
         pitch: 0,
         zoom: 16,
       },
-      { duration: 520 },
+      { duration: canAnimate ? 240 : 0 },
     );
   }
 
@@ -106,9 +98,9 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeadi
           </Marker>
         ) : null}
         {validPoint(courier) ? (
-          <Marker.Animated coordinate={courierCoordinate as unknown as { latitude: number; longitude: number }} anchor={{ x: 0.5, y: 0.5 }} rotation={typeof courierHeading === "number" && courierHeading >= 0 ? courierHeading : 0} flat>
+          <LiveLocationMarker key={trackingKey} location={courier} heading={courierHeading} title="Courier" animate={liveTracking}>
             <CourierMarker />
-          </Marker.Animated>
+          </LiveLocationMarker>
         ) : null}
       </MapView>
       {validPoint(courier) ? (
@@ -121,29 +113,9 @@ export function DeliveryMap({ pickup, dropoff, courier, route = [], courierHeadi
 }
 
 function CourierMarker() {
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(pulse, { toValue: 1, duration: 1600, useNativeDriver: true }),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [pulse]);
   return (
-    <View style={styles.markerWrap}>
-      <Animated.View
-        style={[
-          styles.livePulse,
-          {
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.34, 0] }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1.65] }) }],
-          },
-        ]}
-      />
-      <View style={[styles.marker, styles.markerAccent]}>
-        <MaterialCommunityIcons name="motorbike" size={18} color="#FFFFFF" />
-      </View>
-      <View style={styles.markerLabelWrap}><Text style={styles.markerLabel}>Courier</Text></View>
+    <View style={[styles.marker, styles.markerAccent]}>
+      <MaterialCommunityIcons name="motorbike" size={18} color="#FFFFFF" />
     </View>
   );
 }
@@ -222,14 +194,6 @@ const styles = StyleSheet.create({
   markerAccent: {
     backgroundColor: v2Theme.colors.brand,
     borderColor: "#FFFFFF",
-  },
-  livePulse: {
-    position: "absolute",
-    top: -3,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: v2Theme.colors.brand,
   },
   markerLabelWrap: {
     marginTop: 4,

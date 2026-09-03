@@ -8,6 +8,7 @@
   <title>LetsGoRide Operations</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/support-conversations.css">
+  <link rel="stylesheet" href="/communications.css">
 </head>
 <body>
   <main id="loginView" class="login-wrap">
@@ -37,6 +38,8 @@
         <button data-view="live"><span>Live operations</span></button>
         <button data-view="cases"><span>Cases</span><span id="caseBadge" class="nav-badge" hidden></span></button>
         <button data-view="support"><span>Customer support</span></button>
+        <button data-view="communications"><span>Communications</span></button>
+        <button data-view="appUpdates" id="appUpdatesNav"><span>App updates</span></button>
         <button data-view="users"><span>People</span></button>
         <button data-view="safety"><span>Safety</span></button>
         <button data-view="verifications" id="verificationNav"><span>Verification</span></button>
@@ -65,6 +68,8 @@
       <section id="liveView" class="view" hidden></section>
       <section id="casesView" class="view" hidden></section>
       <section id="supportView" class="view" hidden></section>
+      <section id="communicationsView" class="view" hidden></section>
+      <section id="appUpdatesView" class="view" hidden></section>
       <section id="usersView" class="view" hidden></section>
       <section id="safetyView" class="view" hidden></section>
       <section id="verificationsView" class="view" hidden></section>
@@ -84,7 +89,9 @@
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <script src="/app.js" defer></script>
+  <script src="/app.js?v=communications-1" defer></script>
   <script src="/support-conversations.js" defer></script>
+  <script src="/communications.js"></script>
 </body>
 </html>
+

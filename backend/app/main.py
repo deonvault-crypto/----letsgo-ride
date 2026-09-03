@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.database import database
-from app.routers import activity, admin, admin_profile_photos, auth, conversations, courier, courier_presence, drivers, food, hailing, health, media, merchant, notifications, operations, ops, payments, public_tracking, realtime, reports, requests, reviews, rides, routing, support, support_conversations, verification, waitlist, worker_finance
+from app.routers import communications, activity, admin, admin_profile_photos, auth, conversations, courier, courier_presence, drivers, food, hailing, health, media, merchant, notifications, operations, ops, payments, public_tracking, realtime, reports, requests, reviews, rides, routing, support, support_conversations, verification, waitlist, worker_finance
 from app.services.auth_service import ensure_admin_seed_user
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
@@ -20,6 +20,7 @@ from app.services.ride_lifecycle_scale_service import ride_lifecycle_sweeper_bou
 from app.services.stripe_reconciliation_service import stripe_payment_reconciliation_sweeper_bounded
 from app.services.stripe_runtime_guard import StripeVerificationUnavailable, ensure_stripe_runtime_binding
 from app.services.worker_finance_index_service import ensure_worker_finance_indexes
+from app.services.communications_service import communications_worker, ensure_communications_indexes
 from app.utils import api_success
 
 
@@ -40,6 +41,9 @@ stripe_payment_stop_event: asyncio.Event | None = None
 stripe_payment_task: asyncio.Task | None = None
 driver_settlement_stop_event: asyncio.Event | None = None
 driver_settlement_task: asyncio.Task | None = None
+
+communications_stop_event: asyncio.Event | None = None
+communications_task: asyncio.Task | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -107,6 +111,8 @@ async def on_startup():
     await database.connect()
     await ensure_product_hardening_indexes()
     await ensure_worker_finance_indexes()
+    await ensure_communications_indexes()
+    global communications_stop_event, communications_task
     await realtime_event_service.start()
     await ensure_admin_seed_user()
     if settings.stripe_configured:
@@ -147,6 +153,8 @@ async def on_startup():
         stripe_payment_task = None
         logger.info("stripe_payment_runtime enabled=false")
 
+    communications_stop_event = asyncio.Event()
+    communications_task = asyncio.create_task(communications_worker(communications_stop_event))
 
 
 @app.on_event("shutdown")
@@ -168,6 +176,11 @@ async def on_shutdown():
         driver_settlement_stop_event.set()
     if driver_settlement_task:
         driver_settlement_task.cancel()
+    if communications_stop_event:
+        communications_stop_event.set()
+    if communications_task:
+        communications_task.cancel()
+        await asyncio.gather(communications_task, return_exceptions=True)
     await realtime_event_service.close()
     await database.close()
 
@@ -181,6 +194,7 @@ app.include_router(requests.router)
 app.include_router(reviews.router)
 app.include_router(conversations.router)
 app.include_router(notifications.router)
+app.include_router(communications.router)
 app.include_router(realtime.router)
 app.include_router(drivers.router)
 app.include_router(hailing.router)

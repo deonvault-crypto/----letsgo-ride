@@ -17,7 +17,7 @@ export async function getNotificationPreferences() {
   return requestData<NotificationPreferences>({ method: "GET", url: "/notifications/preferences" });
 }
 
-export async function updateNotificationPreferences(data: Partial<NotificationPreferences>) {
+export async function updateNotificationPreferences(data: Partial<NotificationPreferences> & { marketing_consent_version?: 1 }) {
   return requestData<NotificationPreferences>({ method: "PUT", url: "/notifications/preferences", data });
 }
 
@@ -27,4 +27,9 @@ export async function registerPushToken(data: PushTokenRegistration) {
 
 export async function unregisterPushToken(data: PushTokenRegistration) {
   return requestData<{ active: boolean }>({ method: "DELETE", url: "/notifications/unregister-token", data });
+}
+
+
+export async function getNotification(id: string) {
+  return requestData<AppNotification>({ method: "GET", url: `/notifications/${encodeURIComponent(id)}` });
 }

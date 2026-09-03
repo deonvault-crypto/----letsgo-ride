@@ -1,5 +1,5 @@
 import { Alert, Modal, StyleSheet, Switch, Text, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { ReactNode, useCallback, useState } from "react";
 
 import { AppButton } from "../../components/ui/AppButton";
@@ -39,10 +39,11 @@ const preferenceRows: Array<{ key: PreferenceKey; title: string; subtitle: strin
   { key: "verification_updates", title: "Verification updates", subtitle: "Application and document review updates.", defaultValue: true },
   { key: "support_replies", title: "Support replies", subtitle: "Updates from LetsGoRide support.", defaultValue: true },
   { key: "safety_alerts", title: "Safety alerts", subtitle: "Important account and service safety notices.", defaultValue: true },
-  { key: "marketing_messages", title: "Product news", subtitle: "Occasional LetsGoRide product updates.", defaultValue: false },
+  { key: "marketing_messages", title: "Offers and product news", subtitle: "Receive LetsGoRide promotions and product news in your inbox and by push notification. Turn off anytime.", defaultValue: false },
 ];
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const { user } = useCurrentUser();
   const accountFallback = user?.role === "driver"
     ? "/(driver)/account"
@@ -100,10 +101,12 @@ export default function SettingsScreen() {
   );
 
   async function updatePreference(key: PreferenceKey, value: boolean) {
-    if (!phoneNotificationEnabled) return;
+    if (!preferences || preferenceSaving) return;
     try {
       setPreferenceSaving(key);
-      setPreferences(await updateNotificationPreferences({ [key]: value }));
+      setPreferences(await updateNotificationPreferences({ [key]: value, ...(key === "marketing_messages" && value ? { marketing_consent_version: 1 as const } : {}) }));
+    } catch (error) {
+      Alert.alert("Could not save preference", error instanceof Error ? error.message : "Try again.");
     } finally {
       setPreferenceSaving("");
     }
@@ -215,9 +218,9 @@ export default function SettingsScreen() {
           {!phoneNotificationEnabled ? <AppButton title="Enable phone notifications" variant="secondary" loading={pushSaving} onPress={enableNotifications} /> : null}
         </View>
 
-        {phoneNotificationEnabled ? preferenceRows.map((row) => {
+        {preferenceRows.map((row) => {
           const value = preferences?.[row.key] ?? row.defaultValue;
-          const disabled = preferenceSaving === row.key;
+          const disabled = Boolean(preferenceSaving) || !preferences;
           return (
             <View key={row.key} style={[styles.toggleRow, disabled && styles.disabledToggleRow]}>
               <View style={styles.toggleCopy}>
@@ -235,7 +238,11 @@ export default function SettingsScreen() {
               />
             </View>
           );
-        }) : <View style={styles.categoriesLocked}><Text style={styles.categoriesLockedTitle}>Notification categories</Text><Text style={styles.toggleSubtitle}>Enable phone notifications first, then choose exactly which updates you want.</Text></View>}
+        })}
+      </Section>
+
+      <Section title="App updates">
+        <AppButton title="Check app updates" variant="secondary" onPress={() => router.push("/(shared)/app-updates" as never)} />
       </Section>
 
       <Section title="Security">
@@ -292,3 +299,4 @@ const styles = StyleSheet.create({
   modalTitle: { color: colors.whiteText, fontWeight: "900", fontSize: 24 },
   modalActions: { gap: spacing.sm },
 });
+

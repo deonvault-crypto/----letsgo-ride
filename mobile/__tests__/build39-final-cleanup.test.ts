@@ -19,10 +19,12 @@ describe("Build 39 final cleanup contract", () => {
     expect(source).toContain("driver_license");
   });
 
-  it("uses a Reduce-Motion-aware nearby-driver radar", () => {
+  it("keeps driver-search feedback reduced-motion aware without decorative radar", () => {
     const source = readSource("app/(customer)/hail/searching.tsx");
-    expect(source).toContain("DriverSearchRadar");
-    expect(source).toContain("AccessibilityInfo");
+    expect(source).toContain("useMotionSettings");
+    expect(source).toContain("busy && canAnimate");
+    expect(source).not.toContain("DriverSearchRadar");
+    expect(source).not.toContain("elapsedSeconds");
     expect(source).toContain('activeTone="neutral"');
   });
 

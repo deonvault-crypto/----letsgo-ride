@@ -7,6 +7,8 @@ export type AppNotification = {
   data?: Record<string, unknown>;
   read: boolean;
   created_at: string;
+  expires_at?: string;
+  expired?: boolean;
   delivered_push?: boolean;
   push_status?: string;
 };
@@ -28,3 +30,4 @@ export type PushTokenRegistration = {
   app_version?: string;
   active?: boolean;
 };
+

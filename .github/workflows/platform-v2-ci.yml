@@ -108,7 +108,7 @@ jobs:
       - name: Install runtime and test dependencies
         run: |
           pip install -r requirements.txt
-          pip install 'pytest>=8,<9' 'pytest-asyncio>=0.24,<1'
+          pip install 'pytest>=8,<9' 'pytest-asyncio>=0.24,<1' 'httpx==0.28.1'
 
       - name: Verify retired launch-only runtime markers remain absent
         shell: bash
@@ -253,3 +253,4 @@ jobs:
             grep -qi "LetsGoRide" "/tmp/${path}.html"
           done
           grep -qi "Delete your LetsGoRide account" /tmp/delete-account.html
+

@@ -1,12 +1,14 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Easing, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HailingMapBackdrop } from "../../../components/hailing/HailingMapBackdrop";
 import { BottomNav } from "../../../components/layout/BottomNav";
 import { AppNotice } from "../../../components/ui/AppNotice";
+import { MotionView } from "../../../components/ui/MotionView";
+import { useMotionSettings } from "../../../hooks/useMotionSettings";
 import { v2Theme } from "../../../constants/v2Theme";
 import { useActiveHailingTrip } from "../../../hooks/useHailing";
 import { cancelHailingTrip } from "../../../services/hailingService";
@@ -15,88 +17,13 @@ const RIDE_BLACK = "#111111";
 const SHEET_BOTTOM = v2Theme.control.navHeight + 26;
 
 
-function DriverSearchRadar({ active }: { active: boolean }) {
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const pulseOne = useRef(new Animated.Value(0)).current;
-  const pulseTwo = useRef(new Animated.Value(0)).current;
-  const pulseThree = useRef(new Animated.Value(0)).current;
-  const carLift = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    let mounted = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => { if (mounted) setReduceMotion(enabled); })
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    pulseOne.stopAnimation();
-    pulseTwo.stopAnimation();
-    pulseThree.stopAnimation();
-    carLift.stopAnimation();
-    if (!active || reduceMotion) {
-      pulseOne.setValue(0.34);
-      pulseTwo.setValue(0.20);
-      pulseThree.setValue(0.08);
-      carLift.setValue(0);
-      return undefined;
-    }
-
-    const pulse = (value: Animated.Value, delay: number) => Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(value, { toValue: 1, duration: 1450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(value, { toValue: 0, duration: 1, useNativeDriver: true }),
-        Animated.delay(Math.max(0, 900 - delay)),
-      ]),
-    );
-    const lift = Animated.loop(Animated.sequence([
-      Animated.timing(carLift, { toValue: -2, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      Animated.timing(carLift, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    ]));
-    const animations = [pulse(pulseOne, 0), pulse(pulseTwo, 320), pulse(pulseThree, 640), lift];
-    animations.forEach((animation) => animation.start());
-    return () => animations.forEach((animation) => animation.stop());
-  }, [active, carLift, pulseOne, pulseThree, pulseTwo, reduceMotion]);
-
-  const ringStyle = (value: Animated.Value, baseScale: number) => ({
-    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.32, 0] }),
-    transform: [{ scale: value.interpolate({ inputRange: [0, 1], outputRange: [baseScale, baseScale + 0.58] }) }],
-  });
-
-  return (
-    <View accessibilityLabel="Searching nearby for an approved driver" style={styles.radar}>
-      <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseThree, 0.72)]} />
-      <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseTwo, 0.58)]} />
-      <Animated.View pointerEvents="none" style={[styles.radarRing, ringStyle(pulseOne, 0.44)]} />
-      <Animated.View style={[styles.radarCar, { transform: [{ translateY: carLift }] }]}>
-        <MaterialCommunityIcons name="car" size={25} color="#FFFFFF" />
-      </Animated.View>
-    </View>
-  );
-}
-
 export default function HailingSearchingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ tripId?: string }>();
   const { trip, loading, error, reload, setTrip, realtimeState } = useActiveHailingTrip(true);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const { canAnimate } = useMotionSettings();
   const [cancelling, setCancelling] = useState(false);
-
-  useEffect(() => {
-    if (!trip || trip.status !== "SEARCHING") return undefined;
-    const start = trip.created_at ? new Date(trip.created_at).getTime() : Date.now();
-    const update = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [trip?.created_at, trip?.id, trip?.status]);
 
   useEffect(() => {
     if (loading || !trip || trip.status === "SEARCHING" || trip.status === "NO_DRIVER_FOUND") return;
@@ -123,12 +50,18 @@ export default function HailingSearchingScreen() {
 
   const noDriver = trip?.status === "NO_DRIVER_FOUND";
   const live = realtimeState === "connected";
-  const searchCopy = useMemo(() => {
-    if (loading && !trip) return { eyebrow: "RESTORING RIDE", title: "Restoring your ride request…", body: "Checking the server for your active Ride Now request." };
-    if (elapsedSeconds < 15) return { eyebrow: "MATCHING YOU", title: "Finding nearby drivers…", body: "Checking approved drivers closest to your pickup." };
-    if (elapsedSeconds < 45) return { eyebrow: "EXPANDING SEARCH", title: "Checking more nearby drivers…", body: "We’re widening the search while keeping your request active." };
-    return { eyebrow: "STILL SEARCHING", title: "Searching across nearby areas…", body: "Your request is still active. You can leave this screen — we’ll notify you when a driver accepts." };
-  }, [elapsedSeconds, loading, trip]);
+  const searching = trip?.status === "SEARCHING";
+  const restoring = loading && !trip;
+  const searchTitle = restoring ? "Restoring your request…"
+    : !trip ? "Ride request unavailable"
+      : !searching ? "Opening your ride…"
+        : !live || error ? "Reconnecting…"
+          : "Finding a driver";
+  const searchBody = restoring ? "Getting your latest ride request."
+    : !trip ? "Refresh to check your ride request."
+      : !live || error ? "Checking your request. Your ride status will update when connected."
+        : "We’ll notify you when a driver accepts. You can leave this screen.";
+  const busy = restoring || (searching && live && !error);
 
   return (
     <SafeAreaView edges={[]} style={styles.root}>
@@ -148,27 +81,19 @@ export default function HailingSearchingScreen() {
 
       <View style={styles.sheet}>
         <View style={styles.handle} />
-        <View style={styles.content}>
-          {!noDriver ? <DriverSearchRadar active={!loading && trip?.status === "SEARCHING"} /> : null}
-          <View style={styles.statusRow}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <MotionView changeKey={noDriver ? "no-driver" : searchTitle} style={styles.statusRow} accessibilityLiveRegion="polite">
             <View style={[styles.statusIcon, noDriver && styles.statusIconWarning]}>
-              <MaterialCommunityIcons name={noDriver ? "car-off" : "crosshairs-gps"} size={22} color={noDriver ? v2Theme.colors.warning : RIDE_BLACK} />
+              {busy && canAnimate ? <ActivityIndicator color={RIDE_BLACK} /> : (
+                <MaterialCommunityIcons name={noDriver ? "car-off" : "crosshairs-gps"} size={22} color={noDriver ? v2Theme.colors.warning : RIDE_BLACK} />
+              )}
             </View>
             <View style={styles.flex}>
-              <Text style={styles.eyebrow}>{noDriver ? "NO MATCH YET" : searchCopy.eyebrow}</Text>
-              <Text style={styles.title}>{noDriver ? "No drivers nearby" : searchCopy.title}</Text>
+              <Text style={styles.title}>{noDriver ? "No drivers nearby" : searchTitle}</Text>
             </View>
-          </View>
+          </MotionView>
 
-          <Text style={styles.body}>{noDriver ? "No approved driver accepted in time. Try again in a moment or choose another available ride class." : searchCopy.body}</Text>
-
-          {!noDriver && trip ? (
-            <View accessibilityLabel={`Driver search active for ${elapsedSeconds} seconds`} style={styles.progressTrack}>
-              <View style={[styles.progressSegment, elapsedSeconds >= 0 && styles.progressSegmentActive]} />
-              <View style={[styles.progressSegment, elapsedSeconds >= 15 && styles.progressSegmentActive]} />
-              <View style={[styles.progressSegment, elapsedSeconds >= 45 && styles.progressSegmentActive]} />
-            </View>
-          ) : null}
+          <Text style={styles.body}>{noDriver ? "No approved driver accepted in time. Try again in a moment or choose another available ride class." : searchBody}</Text>
 
           {trip ? (
             <View style={styles.routeSummary}>
@@ -185,11 +110,11 @@ export default function HailingSearchingScreen() {
               <Text style={styles.primaryText}>Try another ride</Text><MaterialCommunityIcons name="arrow-right" size={19} color="#FFFFFF" />
             </Pressable>
           ) : (
-            <Pressable accessibilityRole="button" accessibilityLabel="Cancel Ride Now request" disabled={cancelling} onPress={() => void cancel()} style={({ pressed }) => [styles.cancel, cancelling && styles.cancelBusy, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Cancel Ride Now request" accessibilityState={{ disabled: cancelling, busy: cancelling }} disabled={cancelling} onPress={() => void cancel()} style={({ pressed }) => [styles.cancel, cancelling && styles.cancelBusy, pressed && styles.pressed]}>
               <Text style={styles.cancelText}>{cancelling ? "Cancelling your request…" : "Cancel request"}</Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       <BottomNav role="customer" activeTone="neutral" />
@@ -206,21 +131,14 @@ const styles = StyleSheet.create({
   liveDotSyncing: { backgroundColor: "#D39A24" },
   tripPill: { minHeight: 36, maxWidth: 220, paddingHorizontal: 13, borderRadius: 18, backgroundColor: "rgba(17,17,17,0.94)", alignItems: "center", justifyContent: "center" },
   tripPillText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
-  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+  sheet: { position: "absolute", left: 10, right: 10, bottom: SHEET_BOTTOM, maxHeight: "60%", overflow: "hidden", backgroundColor: "rgba(255,255,255,0.985)", borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(0,0,0,0.08)", shadowColor: "#000000", shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
   handle: { width: 42, height: 4, borderRadius: 2, backgroundColor: "#D7D8D5", alignSelf: "center", marginTop: 8 },
   content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, gap: 12 },
-  radar: { height: 104, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  radarRing: { position: "absolute", width: 94, height: 94, borderRadius: 47, borderWidth: 1, borderColor: "rgba(17,17,17,0.46)" },
-  radarCar: { width: 48, height: 48, borderRadius: 24, backgroundColor: RIDE_BLACK, alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 6 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 11 },
   statusIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: "#F0F0EE", alignItems: "center", justifyContent: "center" },
   statusIconWarning: { backgroundColor: v2Theme.colors.warningSoft },
-  eyebrow: { color: v2Theme.colors.inkTertiary, fontSize: 8, fontWeight: "900", letterSpacing: 1.1 },
   title: { color: v2Theme.colors.ink, fontSize: 22, lineHeight: 26, fontWeight: "900", letterSpacing: -0.55, marginTop: 1 },
   body: { color: v2Theme.colors.inkSecondary, fontSize: 11, lineHeight: 17 },
-  progressTrack: { flexDirection: "row", gap: 5 },
-  progressSegment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: "#DDDDDA" },
-  progressSegmentActive: { backgroundColor: RIDE_BLACK },
   routeSummary: { minHeight: 40, borderRadius: 14, backgroundColor: "#F7F7F5", paddingHorizontal: 10, flexDirection: "row", alignItems: "center", gap: 7 },
   routeDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: RIDE_BLACK },
   routeSquare: { width: 9, height: 9, borderRadius: 2, backgroundColor: RIDE_BLACK },

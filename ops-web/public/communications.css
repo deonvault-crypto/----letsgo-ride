@@ -1,0 +1,16 @@
+.comms-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin:16px 0; }
+.comms-toolbar p { margin:0; }
+.comms-form, .comms-detail { max-width:800px; margin-top:32px; padding-top:24px; border-top:1px solid var(--border, #ddd); }
+.comms-form { display:grid; gap:16px; }
+.comms-form h2, .comms-detail h2 { font-size:20px; margin:0; }
+.comms-form label { display:grid; gap:6px; }
+.comms-form .comms-check { display:flex; align-items:center; gap:10px; font-weight:400; }
+.comms-check input { width:20px; height:20px; flex-shrink:0; }
+.comms-form fieldset { border:0; padding:0; display:flex; gap:20px; flex-wrap:wrap; }
+.comms-form legend { margin-bottom:10px; font-weight:600; }
+.comms-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.comms-message { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.6; }
+.comms-counts { display:flex; flex-wrap:wrap; gap:24px; margin:24px 0; }
+.comms-counts dt { font-size:13px; }
+.comms-counts dd { margin:6px 0 0; font-size:20px; font-weight:600; }
+@media(max-width:600px) { .comms-columns { grid-template-columns:1fr; } }
