@@ -1,4 +1,4 @@
-name: LetsGoRide iOS 2.0.3 Support Chat TestFlight
+name: LetsGoRide iOS 2.0.3 Status Only
 on:
   push:
     branches:
@@ -7,104 +7,29 @@ on:
       - .github/workflows/ios203-support-chat-testflight.yml
 permissions:
   contents: read
-  actions: read
-concurrency:
-  group: letsgoride-ios203-support-chat-build
-  cancel-in-progress: false
-
 jobs:
-  ios:
-    name: Validate source, build iOS, upload to TestFlight
-    if: github.run_attempt == 1
+  status:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: mobile
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-      - name: Prove version-only app change and isolated build workflow
-        run: |
-          set -euo pipefail
-          git cat-file -e 48d627a433f5bc62013ba548ebdbb5d717ed7e32^{commit}
-          test "$(git diff --name-only 48d627a433f5bc62013ba548ebdbb5d717ed7e32 HEAD)" = ".github/workflows/ios203-support-chat-testflight.yml"
-          git diff --name-only b8cf4084b29315620ad5f7d2ba026e95ac3d215a 48d627a433f5bc62013ba548ebdbb5d717ed7e32 > "$RUNNER_TEMP/version-changed-files.txt"
-          git show b8cf4084b29315620ad5f7d2ba026e95ac3d215a:mobile/app.json > "$RUNNER_TEMP/original-app.json"
-          node <<'NODE'
-          const fs = require('fs');
-          const assert = require('assert/strict');
-          assert.deepEqual(fs.readFileSync(process.env.RUNNER_TEMP + '/version-changed-files.txt', 'utf8').trim().split('\n').sort(), ['mobile/__tests__/release-config.test.ts', 'mobile/app.json']);
-          const original = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/original-app.json', 'utf8'));
-          const current = require('./app.json');
-          assert.equal(current.expo.version, '2.0.3');
-          current.expo.version = '2.0.2';
-          assert.deepEqual(current, original);
-          const eas = require('./eas.json');
-          assert.equal(eas.build.production.env.EXPO_PUBLIC_API_BASE_URL, 'https://letsgoride-v2-production.onrender.com');
-          assert.equal(eas.submit.production.ios.ascAppId, '6772862281');
-          console.log('Confirmed: support-chat app source differs only by marketing version 2.0.3.');
-          NODE
-      - name: Require successful production CI for the version correction
+      - name: Read finished build and submission only
         env:
-          GH_TOKEN: ${{ github.token }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           node <<'NODE'
           (async () => {
-            const source = '48d627a433f5bc62013ba548ebdbb5d717ed7e32';
-            const deadline = Date.now() + 20 * 60 * 1000;
-            while (Date.now() < deadline) {
-              const response = await fetch('https://api.github.com/repos/' + process.env.GITHUB_REPOSITORY + '/actions/runs?head_sha=' + source + '&per_page=20', {
-                headers: { Authorization: 'Bearer ' + process.env.GH_TOKEN, Accept: 'application/vnd.github+json' },
-                signal: AbortSignal.timeout(30000)
-              });
-              if (!response.ok) throw new Error('CI status query failed: ' + response.status);
-              const runs = (await response.json()).workflow_runs.filter(run => run.name === 'LetsGoRide Production CI');
-              if (runs.some(run => run.status === 'completed' && run.conclusion === 'success')) {
-                console.log('Production CI passed for exact version-correction commit.');
-                return;
-              }
-              if (runs.some(run => run.status === 'completed' && ['failure', 'timed_out', 'action_required'].includes(run.conclusion))) throw new Error('Production CI failed; build will not start');
-              console.log('Waiting for production CI on version correction.');
-              await new Promise(resolve => setTimeout(resolve, 20000));
-            }
-            throw new Error('Timed out waiting for CI; no build started');
+            const query = 'query { builds { byId(buildId: "c967f784-fb5f-43cf-ad4e-b50c388d020f") { id status platform appVersion appBuildVersion } } submissions { byId(submissionId: "06b72541-9049-46d0-935f-9701ef941ff1") { id status error { errorCode message } } } }';
+            const response = await fetch('https://api.expo.dev/graphql', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', authorization: 'Bearer ' + process.env.EXPO_TOKEN },
+              body: JSON.stringify({ query }),
+              signal: AbortSignal.timeout(30000)
+            });
+            const data = await response.json();
+            if (!response.ok || data.errors) throw new Error(JSON.stringify(data.errors || { status: response.status }));
+            console.log(JSON.stringify(data.data));
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
-      - run: npm ci --no-audit --no-fund
-      - name: Build iOS 2.0.3 only
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@23.2.0 build --platform ios --profile production --non-interactive --wait --json > "$RUNNER_TEMP/ios203-build.json"
-      - name: Verify the finished binary
-        id: built
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const assert = require('assert/strict');
-          const output = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/ios203-build.json', 'utf8'));
-          const build = Array.isArray(output) ? output[0] : output;
-          assert.equal(build.platform, 'IOS');
-          assert.equal(build.status, 'FINISHED');
-          assert.equal(build.appVersion, '2.0.3');
-          assert.equal(build.appIdentifier, 'co.zw.letsgoride');
-          assert.equal(build.gitCommitHash, process.env.GITHUB_SHA);
-          assert.match(build.id, /^[a-f0-9-]{36}$/);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'id=' + build.id + '\n');
-          console.log(JSON.stringify({ id: build.id, status: build.status, version: build.appVersion, buildNumber: build.appBuildVersion, artifacts: build.artifacts }));
-          NODE
-      - name: Upload corrected iOS binary to TestFlight
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          IOS_BUILD_ID: ${{ steps.built.outputs.id }}
-        run: npx --yes eas-cli@23.2.0 submit --platform ios --profile production --id "$IOS_BUILD_ID" --non-interactive --wait --verbose
-      - name: Read App Store and TestFlight status
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@23.2.0 submit:status --platform ios --profile production --non-interactive
