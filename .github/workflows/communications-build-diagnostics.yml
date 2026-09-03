@@ -17,30 +17,16 @@ jobs:
       - name: Install project configuration dependencies
         working-directory: mobile
         run: npm ci --no-audit --no-fund
-      - name: Read failed Android build
-        continue-on-error: true
+      - name: Read exact Android retry status
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@23.2.0 build:view 46508cc7-a80d-4720-9ad6-73ac66eafd02 --json > "$RUNNER_TEMP/build-diagnostic.json"
-      - name: Print error details without environment values
         run: |
+          npx --yes eas-cli@23.2.0 build:list --platform android --git-commit-hash 8de640e5a73a9a6e4178af6b89ecb2915d6411d1 --limit 1 --json --non-interactive > "$RUNNER_TEMP/android-retry-status.json"
           node <<'NODE'
           const fs=require('fs');
-          (async()=>{
-            const raw=fs.readFileSync(process.env.RUNNER_TEMP+'/build-diagnostic.json','utf8');
-            let build;
-            try { build=JSON.parse(raw); } catch { console.log(raw.split('\n').filter(line=>/error|cannot|missing|failed|not found/i.test(line)).slice(-12).map(line=>line.replace(/https?:\/\/\S+/g,'[url]').replace(/AIza[0-9A-Za-z_-]+/g,'[REDACTED]')).join('\n')); throw Error('Build metadata was not JSON.'); }
-            console.log(JSON.stringify({id:build.id,status:build.status,version:build.appVersion,buildNumber:build.appBuildVersion,error:build.error}));
-            for(const url of build.logFiles || []) {
-              const response=await fetch(url,{signal:AbortSignal.timeout(30000)});
-              if(!response.ok) throw Error('Build log retrieval failed: '+response.status);
-              const log=await response.text();
-              const entries=log.split('\n').filter(Boolean).map(line=>{try{return JSON.parse(line);}catch{return null;}}).filter(Boolean);
-              const messages=entries.filter(entry=>entry.phase==='CONFIGURE_EXPO_UPDATES').map(entry=>String(entry.msg||'')).join('\n');
-              const details=messages.slice(Math.max(0,messages.indexOf('Difference between local and EAS fingerprints')));
-              console.log(details.split('\n').filter(line=>/"(op|filePath|id|reasons|hash)"\s*:/.test(line) && !/"contents"\s*:/.test(line)).slice(0,100).join('\n'));
-
-            }
-          })().catch(error=>{console.error(error.message);process.exitCode=1;});
+          const builds=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/android-retry-status.json','utf8'));
+          const b=builds[0];
+          if(!b || b.gitCommitHash!=='8de640e5a73a9a6e4178af6b89ecb2915d6411d1') throw Error('Exact Android retry not found');
+          console.log(JSON.stringify({id:b.id,status:b.status,version:b.appVersion,buildNumber:b.appBuildVersion,runtimeVersion:b.runtimeVersion,createdAt:b.createdAt,completedAt:b.completedAt,artifacts:b.artifacts,error:b.error}));
           NODE
