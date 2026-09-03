@@ -29,6 +29,10 @@ DEFAULT_PREFERENCES = {
 }
 
 PREFERENCE_FOR_TYPE = {
+    "marketing": "marketing_messages",
+    "service_update": "trip_updates",
+    "safety_alert": "safety_alerts",
+    "app_update": "trip_updates",
     "booking_request": "booking_requests",
     "booking_confirmed": "booking_requests",
     "booking_declined": "booking_requests",
@@ -56,6 +60,8 @@ def _safe_provider_body(raw_body: str) -> str:
 
 def _push_allowed(notification_type: str, preferences: Dict[str, Any]) -> bool:
     preference_key = PREFERENCE_FOR_TYPE.get(notification_type, "trip_updates")
+    if preference_key == "marketing_messages":
+        return preferences.get("marketing_messages") is True and preferences.get("marketing_consent_version") == 1
     if preference_key == "safety_alerts":
         return bool(preferences.get(preference_key, True))
     return bool(preferences.get(preference_key, DEFAULT_PREFERENCES.get(preference_key, True)))
@@ -218,7 +224,7 @@ async def _send_push_for_notification(notification: Dict[str, Any]) -> Dict[str,
             "body": notification.get("body") or "You have a new update.",
             "data": notification.get("data", {}),
             "sound": push_profile["sound"],
-            "priority": "high",
+            "priority": "normal" if notification_type == "marketing" else "high",
             "channelId": push_profile["channel_id"],
         }
         for token in tokens

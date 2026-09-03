@@ -60,6 +60,7 @@ function badge(value) {
 }
 
 function showLogin(message = '') {
+  window.stopCommunicationsRealtime?.();
   $('#loginView').hidden = false;
   $('#appView').hidden = true;
   $('#loginError').hidden = !message;
@@ -76,6 +77,7 @@ function showApp() {
   $('#staffNav').hidden = !managerPlus;
   $('#verificationNav').hidden = !managerPlus;
   $('#auditNav').hidden = !managerPlus;
+  $('#appUpdatesNav').hidden = !managerPlus;
 }
 
 async function boot() {
@@ -142,11 +144,14 @@ const TITLES = {
   verifications: 'Verification queue',
   staff: 'Staff & roles',
   audit: 'Audit trail',
+  communications: 'Communications',
+  appUpdates: 'App updates',
 };
 
 async function openView(name) {
-  const managerOnly = new Set(['verifications', 'staff', 'audit']);
+  const managerOnly = new Set(['verifications', 'staff', 'audit', 'appUpdates']);
   if (managerOnly.has(name) && roleRank(state.me?.ops_role) < roleRank('manager')) name = 'overview';
+  window.stopCommunicationsRealtime?.();
   state.currentView = name;
   $$('.view').forEach(view => { view.hidden = true; });
   $$('#nav button').forEach(button => button.classList.toggle('active', button.dataset.view === name));
@@ -164,6 +169,8 @@ async function openView(name) {
     else if (name === 'verifications') await renderVerifications();
     else if (name === 'staff') await renderStaff();
     else if (name === 'audit') await renderAudit();
+    else if (name === 'communications') await window.renderCommunications();
+    else if (name === 'appUpdates') await window.renderAppUpdates();
   } catch (error) {
     target.innerHTML = `<div class="panel"><div class="empty">${esc(error.message)}</div></div>`;
     toast(error.message, true);
@@ -608,3 +615,4 @@ async function renderAudit() {
 }
 
 boot();
+

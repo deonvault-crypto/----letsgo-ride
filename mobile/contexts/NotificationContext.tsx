@@ -4,6 +4,8 @@ import { usePathname } from "expo-router";
 
 import { listNotifications } from "../services/notificationService";
 import { AppNotification } from "../types/notification.types";
+import * as Notifications from "expo-notifications";
+import { useRealtime } from "./RealtimeContext";
 import { useSession } from "./SessionContext";
 
 type NotificationState = {
@@ -30,6 +32,7 @@ const NotificationContext = createContext<NotificationState>(defaultNotification
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { subscribe, reconciliationRevision } = useRealtime();
   const { user, loading: sessionLoading } = useSession();
   const isBootstrapPath = pathname === "/";
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -38,6 +41,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const inFlight = useRef<{ userId: string; promise: Promise<void> } | null>(null);
   const userId = useRef<string | null>(null);
   const snapshotUserId = useRef<string | null>(null);
+  const refreshQueued = useRef(false);
 
   userId.current = user?.id || null;
 
@@ -60,12 +64,39 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         }
       } finally {
         if (userId.current === requestUserId) setLoading(false);
-        if (inFlight.current?.promise === request) inFlight.current = null;
+        if (inFlight.current?.promise === request) {
+          inFlight.current = null;
+          if (refreshQueued.current && userId.current === requestUserId) {
+            refreshQueued.current = false;
+            void refreshNotifications();
+          }
+        }
       }
     })();
     inFlight.current = { userId: requestUserId, promise: request };
     return request;
   }, []);
+
+  const reconcileNotifications = useCallback(() => {
+    if (!userId.current) return;
+    if (inFlight.current?.userId === userId.current) refreshQueued.current = true;
+    void refreshNotifications();
+  }, [refreshNotifications]);
+
+  useEffect(() => subscribe((event) => {
+    if (event.type === "notification.created") reconcileNotifications();
+  }), [subscribe, reconcileNotifications]);
+
+  useEffect(() => {
+    if (reconciliationRevision > 0) reconcileNotifications();
+  }, [reconciliationRevision, reconcileNotifications]);
+
+  useEffect(() => {
+    const listener = Notifications.addNotificationReceivedListener(() => {
+      reconcileNotifications();
+    });
+    return () => listener.remove();
+  }, [reconcileNotifications]);
 
   const markReadLocally = useCallback((id: string) => {
     setNotifications((current) => current.map((item) => item.id === id ? { ...item, read: true } : item));
@@ -79,6 +110,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (sessionLoading || isBootstrapPath) return;
     if (snapshotUserId.current !== (user?.id || null)) {
       snapshotUserId.current = user?.id || null;
+      refreshQueued.current = false;
       setNotifications([]);
       setError(null);
     }

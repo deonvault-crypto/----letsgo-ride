@@ -25,6 +25,9 @@ jest.mock("expo-secure-store", () => ({
 
 jest.mock("expo-notifications", () => ({
   setNotificationHandler: jest.fn(),
+  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponseAsync: jest.fn(async () => null),
+  clearLastNotificationResponseAsync: jest.fn(async () => undefined),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   getPermissionsAsync: jest.fn(async () => ({ granted: false })),
   requestPermissionsAsync: jest.fn(async () => ({ granted: true })),

@@ -5,9 +5,10 @@
   "description": "LetsGoRide Operations Control Center",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node --check public/support-conversations.js"
+    "check": "node --check server.js && node --check public/app.js && node --check public/support-conversations.js && node --check public/communications.js"
   },
   "engines": {
     "node": ">=20"
   }
 }
+

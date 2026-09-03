@@ -2,7 +2,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect, useRef } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import * as Notifications from "expo-notifications";
+import { NotificationResponseRouter } from "../components/notifications/NotificationResponseRouter";
 
 import { PermissionReminder } from "../components/permissions/PermissionReminder";
 import { PendingReviewReminder } from "../components/reviews/PendingReviewReminder";
@@ -12,30 +12,13 @@ import { NotificationProvider } from "../contexts/NotificationContext";
 import { RealtimeProvider } from "../contexts/RealtimeContext";
 import { SessionProvider, useSession } from "../contexts/SessionContext";
 import { getActiveHailingTrip, getHailingDriverStatus } from "../services/hailingService";
-import { resolveNotificationRoute } from "../services/notificationRouting";
 import { getActiveCourierDelivery } from "../services/operationsService";
-import { configureNotificationHandler } from "../services/pushNotificationService";
 
 // Define native background tasks from the app entry tree. Importing these modules
 // registers TaskManager tasks but does not start location tracking.
 import "../services/hailingBackgroundLocation";
 import "../services/courierBackgroundLocation";
 
-function NotificationResponseRouter() {
-  const router = useRouter();
-  const { user } = useSession();
-
-  useEffect(() => { configureNotificationHandler(); }, []);
-  useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data || {};
-      const route = resolveNotificationRoute({ data, role: user?.role });
-      if (route) router.push(route as never);
-    });
-    return () => subscription.remove();
-  }, [router, user?.role]);
-  return null;
-}
 
 function ActiveJobRecoveryRouter() {
   const router = useRouter();
@@ -134,3 +117,4 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+

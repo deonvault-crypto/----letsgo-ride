@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { AppState, AppStateStatus } from "react-native";
+import * as Notifications from "expo-notifications";
 
 import { NotificationProvider, useNotifications } from "../contexts/NotificationContext";
 import { listNotifications } from "../services/notificationService";
@@ -40,6 +41,17 @@ describe("NotificationProvider", () => {
   afterEach(() => jest.restoreAllMocks());
 
   const wrapper = ({ children }: { children: ReactNode }) => <NotificationProvider>{children}</NotificationProvider>;
+
+  it("reconciles a push received while an older inbox request is running", async () => {
+    let complete!: (value: typeof notices) => void;
+    (listNotifications as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    const { result } = renderHook(() => useNotifications(), { wrapper });
+    const receive = (Notifications.addNotificationReceivedListener as jest.Mock).mock.calls[0][0];
+    act(() => receive({}));
+    await act(async () => complete([]));
+    await waitFor(() => expect(result.current.notifications).toHaveLength(2));
+    expect(listNotifications).toHaveBeenCalledTimes(2);
+  });
 
   it("shares one snapshot and updates unread state locally", async () => {
     const { result } = renderHook(() => useNotifications(), { wrapper });

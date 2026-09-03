@@ -16,6 +16,8 @@ function opaqueId(value: unknown) {
 }
 
 export function resolveNotificationRoute({ data = {}, notificationType, role }: NotificationRouteInput): string | null {
+  const notificationId = opaqueId(data?.notification_id);
+  if (data?.notification_target === "announcement") return role && notificationId ? `/(shared)/announcement/${notificationId}` : null;
   const target = typeof data?.notification_target === "string" ? data.notification_target : "";
   const restaurantId = opaqueId(data?.restaurant_id);
   const deliveryId = opaqueId(data?.delivery_id);
@@ -66,3 +68,4 @@ export function resolveNotificationRoute({ data = {}, notificationType, role }: 
   if (reportId && role) return "/(shared)/safety";
   return null;
 }
+
