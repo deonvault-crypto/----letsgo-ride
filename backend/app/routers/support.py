@@ -20,6 +20,7 @@ async def create_message(payload: SupportMessageBody, user=Depends(get_current_u
         "user_email": user.get("email"),
         "user_phone": user.get("phone") or payload.phone,
         "status": "received",
+        "realtime_version": 1,
         "created_at": timestamp,
         "updated_at": timestamp,
         **payload.model_dump(),
