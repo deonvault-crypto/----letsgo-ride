@@ -1,4 +1,4 @@
-name: LetsGoRide iOS 42 TestFlight Retry Once
+name: LetsGoRide iOS 42 Submission Status Only
 on:
   push:
     branches:
@@ -7,62 +7,33 @@ on:
       - .github/workflows/ios42-testflight-upload-only.yml
 permissions:
   contents: read
-concurrency:
-  group: letsgoride-ios42-testflight-upload
-  cancel-in-progress: false
 jobs:
-  retry:
-    name: Retry exact iOS 42 submission once
-    if: github.run_attempt == 1
+  status:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Retry known failed submission and await result
+      - name: Read existing submission status only
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           node <<'NODE'
           (async () => {
-            async function graphql(query, variables) {
+            for (const submissionId of ['a43a6667-85dc-4eba-8251-484e3b260095', 'c66ab82e-522e-47bd-8f28-053e08a5b201']) {
               const response = await fetch('https://api.expo.dev/graphql', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', authorization: 'Bearer ' + process.env.EXPO_TOKEN },
-                body: JSON.stringify({ query, variables }),
+                body: JSON.stringify({
+                  query: 'query($submissionId: ID!) { submissions { byId(submissionId: $submissionId) { id status error { errorCode message } } } }',
+                  variables: { submissionId }
+                }),
                 signal: AbortSignal.timeout(30000)
               });
               const data = await response.json();
               if (!response.ok || data.errors) throw new Error(JSON.stringify(data.errors || { status: response.status }));
-              return data.data;
+              console.log(JSON.stringify(data.data.submissions.byId));
             }
-            const query = 'query($submissionId: ID!) { submissions { byId(submissionId: $submissionId) { id status canRetry submittedBuild { id } error { errorCode message } logFiles } } }';
-            const previous = (await graphql(query, { submissionId: 'a43a6667-85dc-4eba-8251-484e3b260095' })).submissions.byId;
-            if (previous.status !== 'ERRORED' || !previous.canRetry || previous.submittedBuild.id !== 'b5ae0ea3-0d4e-4f3c-8346-16aba29421f5') throw new Error('Submission retry preconditions not met');
-            const mutation = 'mutation($parentSubmissionId: ID!) { submission { retrySubmission(parentSubmissionId: $parentSubmissionId) { submission { id status } } } }';
-            const retried = (await graphql(mutation, { parentSubmissionId: previous.id })).submission.retrySubmission.submission;
-            console.log('Retry submission:', JSON.stringify(retried));
-            const deadline = Date.now() + 10 * 60 * 1000;
-            while (Date.now() < deadline) {
-              const current = (await graphql(query, { submissionId: retried.id })).submissions.byId;
-              console.log(JSON.stringify({ id: current.id, status: current.status, error: current.error, logCount: current.logFiles.length }));
-              if (current.status === 'FINISHED') return;
-              if (['ERRORED', 'CANCELED'].includes(current.status)) {
-                for (const url of current.logFiles) {
-                  const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
-                  const logs = await response.text();
-                  for (const line of logs.split('\n')) {
-                    try {
-                      const entry = JSON.parse(line);
-                      if (entry.level >= 40 || /invalid|validation|error|closed|version|already|failed/i.test(entry.msg || '')) console.log(String(entry.msg || '').replace(/https?:\/\/\S+/g, '[URL omitted]'));
-                    } catch {}
-                  }
-                }
-                throw new Error('Retried submission ended in ' + current.status);
-              }
-              await new Promise(resolve => setTimeout(resolve, 20000));
-            }
-            throw new Error('Timed out waiting; inspect the recorded retry ID before any further action');
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
