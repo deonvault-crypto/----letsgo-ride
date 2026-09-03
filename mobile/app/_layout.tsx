@@ -1,8 +1,8 @@
 import { Stack, useRouter, useSegments } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { NotificationResponseRouter } from "../components/notifications/NotificationResponseRouter";
+import { NotificationNavigationContext, NotificationResponseRouter } from "../components/notifications/NotificationResponseRouter";
 
 import { PermissionReminder } from "../components/permissions/PermissionReminder";
 import { PendingReviewReminder } from "../components/reviews/PendingReviewReminder";
@@ -21,6 +21,7 @@ import "../services/courierBackgroundLocation";
 
 
 function ActiveJobRecoveryRouter() {
+  const notificationNavigation = useContext(NotificationNavigationContext);
   const router = useRouter();
   const { user, loading, isGuest } = useSession();
   const attemptedFor = useRef<string | null>(null);
@@ -32,12 +33,13 @@ function ActiveJobRecoveryRouter() {
     if (attemptedFor.current === recoveryKey) return;
     attemptedFor.current = recoveryKey;
     let settled = false;
+    const shouldYield = () => settled || notificationNavigation?.current === recoveryKey;
 
     void (async () => {
       try {
         if (user.role === "driver") {
           const status = await getHailingDriverStatus();
-          if (settled) return;
+          if (shouldYield()) return;
           if (status.active_trip?.id) {
             router.replace(`/(driver)/hailing/trip/${status.active_trip.id}` as never);
           } else if (status.offer?.id) {
@@ -47,11 +49,11 @@ function ActiveJobRecoveryRouter() {
         }
         if (user.role === "courier") {
           const active = await getActiveCourierDelivery();
-          if (!settled && active?.id) router.replace(`/(courier)/delivery/${active.id}` as never);
+          if (!shouldYield() && active?.id) router.replace(`/(courier)/delivery/${active.id}` as never);
           return;
         }
         const active = await getActiveHailingTrip();
-        if (settled || !active?.id) return;
+        if (shouldYield() || !active?.id) return;
         if (active.status === "SEARCHING") router.replace("/(customer)/hail" as never);
         else router.replace(`/(customer)/hail/trip/${active.id}` as never);
       } catch {
@@ -61,7 +63,7 @@ function ActiveJobRecoveryRouter() {
     })();
 
     return () => { settled = true; };
-  }, [isGuest, loading, router, user?.id, user?.role]);
+  }, [isGuest, loading, router, user?.id, user?.role, notificationNavigation]);
   return null;
 }
 
@@ -86,11 +88,13 @@ function SessionShellRouter() {
 }
 
 export default function RootLayout() {
+  const notificationNavigation = useRef<string | null>(null);
   return (
     <SafeAreaProvider>
       <SessionProvider>
         <RealtimeProvider>
           <NotificationProvider>
+            <NotificationNavigationContext.Provider value={notificationNavigation}>
             <NotificationResponseRouter />
             <SessionShellRouter />
             <ActiveJobRecoveryRouter />
@@ -111,6 +115,7 @@ export default function RootLayout() {
                 <PendingReviewReminder />
               </FoodBasketProvider>
             </LocationDraftProvider>
+            </NotificationNavigationContext.Provider>
           </NotificationProvider>
         </RealtimeProvider>
       </SessionProvider>

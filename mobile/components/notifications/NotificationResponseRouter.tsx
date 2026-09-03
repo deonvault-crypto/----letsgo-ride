@@ -1,19 +1,24 @@
-import { useEffect, useRef } from "react";
-import { useRouter } from "expo-router";
+import { createContext, useContext, useEffect, useRef } from "react";
+import { useRouter, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { useSession } from "../../contexts/SessionContext";
 import { resolveNotificationRoute } from "../../services/notificationRouting";
 import { configureNotificationHandler } from "../../services/pushNotificationService";
 
+export const NotificationNavigationContext = createContext<{ current: string | null } | null>(null);
+
 export function NotificationResponseRouter() {
   const router = useRouter();
+  const segments = useSegments();
+  const routeGroup = String(segments[0] || "");
+  const navigationIntent = useContext(NotificationNavigationContext);
   const { user, loading } = useSession();
   const handled = useRef<string | null>(null);
   useEffect(() => { configureNotificationHandler(); }, []);
   useEffect(() => {
     let active = true;
     const receive = (response: Notifications.NotificationResponse | null) => {
-      if (!active || loading || !user || !response) return;
+      if (!active || loading || !user || !response || !routeGroup || routeGroup === "index" || routeGroup === "(auth)") return;
       const id = response.notification.request.identifier;
       if (handled.current === id) return;
       const data = response.notification.request.content.data || {};
@@ -21,12 +26,13 @@ export function NotificationResponseRouter() {
       const route = resolveNotificationRoute({ data, role: user.role });
       if (!route) return;
       handled.current = id;
+      if (navigationIntent) navigationIntent.current = `${user.id}:${user.role}`;
       router.push(route as never);
       void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
     };
     const subscription = Notifications.addNotificationResponseReceivedListener(receive);
     void Notifications.getLastNotificationResponseAsync().then(receive).catch(() => undefined);
     return () => { active = false; subscription.remove(); };
-  }, [router, loading, user?.id, user?.role]);
+  }, [router, loading, user?.id, user?.role, routeGroup, navigationIntent]);
   return null;
 }

@@ -101,9 +101,19 @@ describe("focused settings controls", () => {
     expect(screen.queryByRole("button", { name: "Delete Account" })).toBeNull();
     expect(screen.queryByText("Legal & support")).toBeNull();
 
-    expect(screen.getByText("Enable phone notifications first, then choose exactly which updates you want.")).toBeOnTheScreen();
-    expect(screen.queryByLabelText("Service updates")).toBeNull();
+    expect(screen.getByLabelText("Service updates").props.disabled).toBe(false);
+    expect(screen.getByLabelText("Offers and product news").props.value).toBe(false);
+    expect(screen.getByLabelText("Offers and product news").props.disabled).toBe(false);
     expect(updateNotificationPreferences).not.toHaveBeenCalled();
+  });
+
+  it("records explicit marketing consent while phone notifications are off", async () => {
+    (updateNotificationPreferences as jest.Mock).mockResolvedValueOnce({ marketing_messages: true, marketing_consent_version: 1 });
+    const screen = render(<SettingsScreen />);
+    await waitFor(() => expect(screen.getByLabelText("Offers and product news").props.disabled).toBe(false));
+    fireEvent(screen.getByLabelText("Offers and product news"), "valueChange", true);
+    await waitFor(() => expect(updateNotificationPreferences).toHaveBeenCalledWith({ marketing_messages: true, marketing_consent_version: 1 }));
+    expect(enablePhoneNotifications).not.toHaveBeenCalled();
   });
 
   it("uses a short biometric explanation only when the user enables it", async () => {
@@ -149,3 +159,4 @@ describe("focused settings controls", () => {
     expect(serviceUpdatesSwitch.props.disabled).toBe(false);
   });
 });
+
