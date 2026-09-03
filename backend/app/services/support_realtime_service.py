@@ -29,6 +29,8 @@ async def update_versioned_support_message(
 
 
 async def _audience(ticket: Dict[str, Any]) -> RealtimeAudience:
+    if database.db is None:
+        database.memory.setdefault("ops_staff", [])
     staff_rows = await database.find_many(
         "ops_staff",
         {"enabled": {"$ne": False}},
@@ -49,12 +51,7 @@ async def _audience(ticket: Dict[str, Any]) -> RealtimeAudience:
 
 
 async def publish_support_realtime(ticket: Dict[str, Any], event_type: str) -> bool:
-    """Best-effort support notification with no message body in the realtime payload.
-
-    Authorized clients reconcile the protected thread endpoint after receiving this
-    signal. Keeping conversation text out of Redis/WebSocket events minimizes the
-    amount of support content carried through the realtime transport.
-    """
+    """Best-effort support signal without conversation text in the event payload."""
     try:
         published = await realtime_event_service.publish(
             realtime_event_service.build_event(
