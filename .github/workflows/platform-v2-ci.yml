@@ -28,7 +28,7 @@ jobs:
     # main must not spend a second full CI run on GitHub's synthetic merge SHA.
     if: github.event_name != 'pull_request' || github.head_ref != 'platform-v2-m1-m6'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: mobile
