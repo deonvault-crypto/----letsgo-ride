@@ -46,6 +46,26 @@ jobs:
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
       - run: npm ci --no-audit --no-fund
+      - name: Match the production build environment
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const env = require('./eas.json').build.production.env;
+          const expected = {
+            EXPO_PUBLIC_API_BASE_URL: 'https://letsgoride-v2-production.onrender.com',
+            EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB: 'false',
+          };
+          for (const [name, value] of Object.entries(expected)) {
+            if (env[name] !== value) throw new Error('Review production setting: ' + name);
+            fs.appendFileSync(process.env.GITHUB_ENV, name + '=' + value + '\n');
+            process.env[name] = value;
+          }
+          const check = require('node:path').join(process.env.RUNNER_TEMP, 'verify-update-environment.cjs');
+          fs.writeFileSync(check, `const expected = ${JSON.stringify(expected)};\nfor (const [name, value] of Object.entries(expected)) { if (process.env[name] !== value) throw new Error('Update environment differs from store builds: ' + name); }\nconsole.log('Production API and authentication settings match the store builds.');\n`);
+          require('node:child_process').execFileSync('npx', ['--yes', 'eas-cli@23.2.0', 'env:exec', 'production', 'node "' + check + '"', '--non-interactive'], { stdio: 'inherit', env: process.env });
+          NODE
       - name: Publish compatible changes for the next app launch
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
