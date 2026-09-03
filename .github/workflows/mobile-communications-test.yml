@@ -1,0 +1,187 @@
+name: LetsGoRide Communications Test Builds
+
+on:
+  push:
+    branches:
+      - build/mobile-communications-test
+    paths:
+      - .github/workflows/mobile-communications-test.yml
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: letsgoride-mobile-communications-test
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Verify communications candidate and successful CI
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify exact candidate and unchanged release configuration
+        run: |
+          node <<'NODE'
+          const assert = require('assert/strict');
+          const { execFileSync } = require('child_process');
+          const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+          const source = 'c6776667a63abc3057105a9be5253730997f5014';
+          const base = 'fde7df4040cfd71c1d9faa871a206d5de402c6ea';
+          assert.equal(git('rev-parse', 'HEAD^'), source);
+          assert.equal(git('diff', '--name-only', source, 'HEAD'), '.github/workflows/mobile-communications-test.yml');
+          assert.deepEqual(git('diff', '--name-only', base, source).split('\n').sort(), [".github/workflows/mobile-ota-update.yml",".github/workflows/platform-v2-ci.yml","backend/app/main.py","backend/app/models/communications.py","backend/app/routers/communications.py","backend/app/routers/notifications.py","backend/app/services/communications_service.py","backend/app/services/notification_service.py","backend/tests/test_communications.py","docs/OPS_COMMUNICATIONS_AUDIT_2026-09-03.md","mobile/__tests__/communications-updates.test.ts","mobile/__tests__/notification-cold-start.test.tsx","mobile/__tests__/notification-provider.test.tsx","mobile/__tests__/ops-communications-ui.test.ts","mobile/__tests__/settings-flow.test.tsx","mobile/app.json","mobile/app/(shared)/announcement/[id].tsx","mobile/app/(shared)/app-updates.tsx","mobile/app/(shared)/notifications.tsx","mobile/app/(shared)/settings.tsx","mobile/app/_layout.tsx","mobile/components/notifications/NotificationResponseRouter.tsx","mobile/contexts/NotificationContext.tsx","mobile/eas.json","mobile/jest.setup.ts","mobile/package-lock.json","mobile/package.json","mobile/services/announcementService.ts","mobile/services/appUpdateService.ts","mobile/services/notificationRouting.ts","mobile/services/notificationService.ts","mobile/types/notification.types.ts","ops-web/package.json","ops-web/public/app.js","ops-web/public/communications.css","ops-web/public/communications.js","ops-web/public/index.html"]);
+          const original = JSON.parse(git('show', base + ':mobile/app.json'));
+          const current = require('./app.json');
+          assert.equal(current.expo.version, '2.0.3');
+          assert.equal(current.expo.android.package, 'com.letsgo.ride');
+          assert.equal(current.expo.ios.bundleIdentifier, 'co.zw.letsgoride');
+          assert.equal(current.expo.extra.eas.projectId, '6a3f6705-1e96-4f17-b884-b928baebf0ba');
+          assert.deepEqual(current.expo.runtimeVersion, { policy: 'fingerprint' });
+          assert.deepEqual(current.expo.updates, { url: 'https://u.expo.dev/6a3f6705-1e96-4f17-b884-b928baebf0ba', checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 0 });
+          current.expo.runtimeVersion = original.expo.runtimeVersion;
+          delete current.expo.updates;
+          current.expo.version = original.expo.version;
+          assert.deepEqual(current, original);
+          const eas = require('./eas.json');
+          assert.equal(eas.build.production.env.EXPO_PUBLIC_API_BASE_URL, 'https://letsgoride-v2-production.onrender.com');
+          assert.equal(eas.build.production.autoIncrement, true);
+          assert.equal(eas.build.production.channel, 'production');
+          assert.equal(require('./package.json').dependencies['expo-updates'], '~29.0.20');
+          const originalEas = JSON.parse(git('show', base + ':mobile/eas.json'));
+          const comparableEas = JSON.parse(JSON.stringify(eas));
+          delete comparableEas.build.production.channel;
+          assert.deepEqual(comparableEas, originalEas);
+          assert.equal(eas.cli.appVersionSource, 'remote');
+          assert.equal(eas.submit.production.ios.ascAppId, '6772862281');
+          console.log('Verified communications candidate, version 2.0.3 and existing production configuration.');
+          NODE
+      - name: Require production CI for the exact candidate commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node <<'NODE'
+          (async () => {
+            const source = 'c6776667a63abc3057105a9be5253730997f5014';
+            const deadline = Date.now() + 20 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const response = await fetch('https://api.github.com/repos/' + process.env.GITHUB_REPOSITORY + '/actions/runs?head_sha=' + source + '&per_page=20', {
+                headers: { Authorization: 'Bearer ' + process.env.GH_TOKEN, Accept: 'application/vnd.github+json' },
+                signal: AbortSignal.timeout(30000)
+              });
+              if (!response.ok) throw new Error('CI query failed: ' + response.status);
+              const runs = (await response.json()).workflow_runs.filter(run =>
+                run.name === 'LetsGoRide Production CI' && run.head_sha === source && run.event === 'push'
+              ).sort((a, b) => b.id - a.id);
+              const latest = runs[0];
+              if (latest?.status === 'completed') {
+                if (latest.conclusion !== 'success') throw new Error('Candidate CI did not pass; no builds started.');
+                console.log('Exact candidate CI passed: ' + latest.html_url);
+                return;
+              }
+              console.log('Waiting for exact candidate CI.');
+              await new Promise(resolve => setTimeout(resolve, 20000));
+            }
+            throw new Error('CI wait timed out; no builds started.');
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+
+  build:
+    name: Build ${{ matrix.platform }} for device testing
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            eas_platform: ANDROID
+            identifier: com.letsgo.ride
+            previous_number: 28
+          - platform: ios
+            eas_platform: IOS
+            identifier: co.zw.letsgoride
+            previous_number: 44
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build version 2.0.3
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          BUILD_PLATFORM: ${{ matrix.platform }}
+        run: npx --yes eas-cli@23.2.0 build --platform "$BUILD_PLATFORM" --profile production --non-interactive --wait --json > "$RUNNER_TEMP/communications-build.json"
+      - name: Verify the exact finished binary
+        id: built
+        env:
+          BUILD_PLATFORM: ${{ matrix.platform }}
+          EXPECTED_PLATFORM: ${{ matrix.eas_platform }}
+          EXPECTED_IDENTIFIER: ${{ matrix.identifier }}
+          PREVIOUS_NUMBER: ${{ matrix.previous_number }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const assert = require('assert/strict');
+          const output = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/communications-build.json', 'utf8'));
+          const builds = Array.isArray(output) ? output : [output];
+          assert.equal(builds.length, 1);
+          const build = builds[0];
+          assert.equal(build.platform, process.env.EXPECTED_PLATFORM);
+          assert.equal(build.status, 'FINISHED');
+          assert.equal(build.appVersion, '2.0.3');
+          assert.equal(build.appIdentifier, process.env.EXPECTED_IDENTIFIER);
+          assert.equal(build.gitCommitHash, process.env.GITHUB_SHA);
+          assert.ok(Number.isInteger(Number(build.appBuildVersion)));
+          assert.ok(Number(build.appBuildVersion) > Number(process.env.PREVIOUS_NUMBER));
+          assert.match(build.id, /^[a-f0-9-]{36}$/);
+          const manifest = {
+            id: build.id,
+            platform: build.platform,
+            status: build.status,
+            version: build.appVersion,
+            buildNumber: build.appBuildVersion,
+            gitCommitHash: build.gitCommitHash,
+            candidateCommit: 'c6776667a63abc3057105a9be5253730997f5014',
+            buildUrl: 'https://expo.dev/accounts/dawtonadeveloper/projects/letsgoride-mobile/builds/' + build.id,
+            artifactUrl: build.artifacts?.applicationArchiveUrl || build.artifacts?.buildUrl
+          };
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/communications-' + process.env.BUILD_PLATFORM + '-manifest.json', JSON.stringify(manifest, null, 2));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'id=' + build.id + '\n');
+          console.log(JSON.stringify(manifest));
+          NODE
+      - name: Save test-build manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: communications-${{ matrix.platform }}-manifest
+          path: ${{ runner.temp }}/communications-${{ matrix.platform }}-manifest.json
+          if-no-files-found: error
+      - name: Upload this iOS build to TestFlight
+        if: matrix.platform == 'ios'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          IOS_BUILD_ID: ${{ steps.built.outputs.id }}
+        run: npx --yes eas-cli@23.2.0 submit --platform ios --profile production --id "$IOS_BUILD_ID" --non-interactive --wait --verbose
+      - name: Read App Store and TestFlight status
+        if: matrix.platform == 'ios'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli@23.2.0 submit:status --platform ios --profile production --non-interactive
