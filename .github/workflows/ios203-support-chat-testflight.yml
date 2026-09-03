@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 3
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -33,13 +33,14 @@ jobs:
       - name: Prove version-only app change and isolated build workflow
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "0e194e08cfac347b8f865ddc013ececc74b65a4a"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/ios203-support-chat-testflight.yml"
-          test "$(git diff --name-only b8cf4084b29315620ad5f7d2ba026e95ac3d215a HEAD^)" = "mobile/app.json"
+          git cat-file -e 48d627a433f5bc62013ba548ebdbb5d717ed7e32^{commit}
+          test "$(git diff --name-only 48d627a433f5bc62013ba548ebdbb5d717ed7e32 HEAD)" = ".github/workflows/ios203-support-chat-testflight.yml"
+          git diff --name-only b8cf4084b29315620ad5f7d2ba026e95ac3d215a 48d627a433f5bc62013ba548ebdbb5d717ed7e32 > "$RUNNER_TEMP/version-changed-files.txt"
           git show b8cf4084b29315620ad5f7d2ba026e95ac3d215a:mobile/app.json > "$RUNNER_TEMP/original-app.json"
           node <<'NODE'
           const fs = require('fs');
           const assert = require('assert/strict');
+          assert.deepEqual(fs.readFileSync(process.env.RUNNER_TEMP + '/version-changed-files.txt', 'utf8').trim().split('\n').sort(), ['mobile/__tests__/release-config.test.ts', 'mobile/app.json']);
           const original = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/original-app.json', 'utf8'));
           const current = require('./app.json');
           assert.equal(current.expo.version, '2.0.3');
@@ -56,7 +57,7 @@ jobs:
         run: |
           node <<'NODE'
           (async () => {
-            const source = '0e194e08cfac347b8f865ddc013ececc74b65a4a';
+            const source = '48d627a433f5bc62013ba548ebdbb5d717ed7e32';
             const deadline = Date.now() + 20 * 60 * 1000;
             while (Date.now() < deadline) {
               const response = await fetch('https://api.github.com/repos/' + process.env.GITHUB_REPOSITORY + '/actions/runs?head_sha=' + source + '&per_page=20', {
