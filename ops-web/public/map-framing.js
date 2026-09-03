@@ -31,11 +31,19 @@
   }
 
   function useZimbabweOverview(instance, options = {}) {
-    return originalFitBounds.call(instance, ZIMBABWE_BOUNDS, {
-      padding: DEFAULT_PADDING,
-      maxZoom: 8,
-      animate: options.animate,
-    });
+    const padding = L.point(DEFAULT_PADDING[0], DEFAULT_PADDING[1]);
+    const calculatedZoom = instance.getBoundsZoom(ZIMBABWE_BOUNDS, false, padding);
+    const safeZoom = Number.isFinite(calculatedZoom) ? Math.min(8, calculatedZoom) : 6;
+
+    // Call Leaflet's original setView directly. Do not route through fitBounds
+    // here: fitBounds itself ends by calling setView, which would recurse back
+    // into this guard and can overflow the browser call stack.
+    return originalSetView.call(
+      instance,
+      ZIMBABWE_BOUNDS.getCenter(),
+      safeZoom,
+      { animate: options.animate },
+    );
   }
 
   L.Map.prototype.setView = function setViewWithOpsGuard(center, zoom, options) {
