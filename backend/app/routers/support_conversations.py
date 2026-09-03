@@ -8,6 +8,7 @@ from app.database import database
 from app.ops_auth import effective_ops_role, get_ops_user
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification, notify_admins
+from app.services.support_realtime_service import publish_support_realtime, update_versioned_support_message
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -173,11 +174,13 @@ async def customer_support_reply(
     )
     timestamp = now_iso()
     next_status = "received" if ticket.get("status") in {"resolved", "closed"} else (ticket.get("status") or "received")
-    await database.update_one("support_messages", message_id, {
+    updated_ticket = await update_versioned_support_message(message_id, {
         "status": next_status,
         "updated_at": timestamp,
         "last_customer_reply_at": timestamp,
     })
+    if updated_ticket:
+        await publish_support_realtime(updated_ticket, "support_message.customer_replied")
     await notify_admins(
         "support_message",
         "Customer replied to support",
@@ -224,12 +227,14 @@ async def ops_support_reply(
         message=payload.message,
     )
     timestamp = now_iso()
-    await database.update_one("support_messages", message_id, {
+    updated_ticket = await update_versioned_support_message(message_id, {
         "status": status,
         "admin_notes": payload.message,
         "last_staff_reply_at": timestamp,
         "updated_at": timestamp,
     })
+    if updated_ticket:
+        await publish_support_realtime(updated_ticket, "support_message.staff_replied")
     if ticket.get("user_id"):
         await create_app_notification(
             ticket["user_id"],
