@@ -4,18 +4,23 @@
   "scripts": {
     "studio": "remotion studio src/index.ts",
     "render:vertical": "remotion render src/index.ts LetsGoRideVertical out/letsgoride-vertical.mp4",
-    "render:landscape": "remotion render src/index.ts LetsGoRideLandscape out/letsgoride-landscape.mp4"
+    "render:landscape": "remotion render src/index.ts LetsGoRideLandscape out/letsgoride-landscape.mp4",
+    "render:launch": "remotion render src/index.ts LetsGoRideZimbabweLaunch out/LetsGoRide-Zimbabwe-Launch.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p",
+    "typecheck": "tsc --noEmit",
+    "soundtrack": "node scripts/make-soundtrack.mjs",
+    "prestudio": "node scripts/make-soundtrack.mjs",
+    "prerender:launch": "node scripts/make-soundtrack.mjs"
   },
   "dependencies": {
-    "@remotion/cli": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "remotion": "latest"
+    "@remotion/cli": "4.0.520",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.520"
   },
   "devDependencies": {
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "typescript": "latest"
+    "@types/node": "26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "7.0.2"
   }
 }
