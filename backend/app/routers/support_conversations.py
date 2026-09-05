@@ -1,6 +1,6 @@
 from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import get_current_user
@@ -75,6 +75,18 @@ def _safe_started_ticket(ticket: Dict[str, Any]) -> Dict[str, Any]:
         "status": ticket.get("status"),
         "created_at": ticket.get("created_at"),
         "updated_at": ticket.get("updated_at"),
+    }
+
+
+def _safe_recipient(user: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": user.get("id"),
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "phone": user.get("phone"),
+        "city": user.get("city"),
+        "role": user.get("role") or "passenger",
+        "status": user.get("status") or "active",
     }
 
 
@@ -215,6 +227,29 @@ async def customer_support_reply(
         {"support_message_id": message_id},
     )
     return api_success(_safe_thread_message(created))
+
+
+@router.get("/ops/support/recipients")
+async def ops_support_recipients(
+    search: str = Query(default="", max_length=200),
+    limit: int = Query(default=40, ge=1, le=100),
+    user=Depends(get_ops_user),
+):
+    term = search.strip().lower()
+    rows = await database.find_many("users")
+    candidates = []
+    for row in rows:
+        if row.get("status") == "deleted":
+            continue
+        haystack = " ".join(str(row.get(field) or "") for field in ("name", "email", "phone", "city", "role")).lower()
+        if term and term not in haystack:
+            continue
+        candidates.append(row)
+    candidates.sort(key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""), reverse=True)
+    return api_success({
+        "count": len(candidates),
+        "items": [_safe_recipient(row) for row in candidates[:limit]],
+    })
 
 
 @router.post("/ops/support/conversations")
