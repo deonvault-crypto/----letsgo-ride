@@ -132,7 +132,13 @@ $('#nav').addEventListener('click', event => {
   if (button) openView(button.dataset.view);
 });
 
-$('#refreshBtn').addEventListener('click', () => openView(state.currentView));
+$('#refreshBtn').addEventListener('click', () => {
+  if (state.currentView === 'overview' && document.getElementById('opsMap')) {
+    window.location.reload();
+    return;
+  }
+  void openView(state.currentView);
+});
 
 const TITLES = {
   overview: 'Operations overview',
@@ -469,24 +475,8 @@ function openSupportAction(row) {
   };
 }
 
-function usersTable(rows) {
-  if (!rows.length) return '<div class="empty">No people found.</div>';
-  return `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Product role</th><th>Ops role</th><th>Status</th><th>ID</th></tr></thead><tbody>${rows.map(row => `<tr><td><div class="row-title">${esc(row.name || '—')}</div><div class="row-sub">${esc(row.city || '')}</div></td><td>${esc(row.email || '—')}<div class="row-sub">${esc(row.phone || '')}</div></td><td>${badge(row.role)}</td><td>${row.operations_role ? badge(row.operations_role) : '—'}</td><td>${badge(row.status || 'active')}</td><td class="codeish">${esc(row.id)}</td></tr>`).join('')}</tbody></table></div>`;
-}
-
 async function renderUsers() {
-  $('#usersView').innerHTML = `<section class="panel"><div class="panel-head"><div><h2>People</h2><p>Customers, drivers, couriers, merchants and administrators.</p></div><div class="toolbar"><input id="userSearch" placeholder="Search name, email or phone"><select id="userRole"><option value="">All roles</option><option value="passenger">Customer</option><option value="driver">Driver</option><option value="courier">Courier</option><option value="merchant">Merchant</option><option value="admin">Admin</option></select></div></div><div id="usersTable"></div></section>`;
-  const load = async () => {
-    const params = new URLSearchParams();
-    if ($('#userSearch').value.trim()) params.set('search', $('#userSearch').value.trim());
-    if ($('#userRole').value) params.set('role', $('#userRole').value);
-    const data = await request(`/ops/users?${params}`);
-    $('#usersTable').innerHTML = usersTable(data.items);
-  };
-  let timer;
-  $('#userSearch').oninput = () => { clearTimeout(timer); timer = setTimeout(load, 250); };
-  $('#userRole').onchange = load;
-  await load();
+  throw new Error('People workspace renderer was not initialized.');
 }
 
 function simpleTable(rows, columns) {
@@ -531,14 +521,7 @@ function openSafetyAction(reportId, currentStatus) {
 }
 
 async function renderVerifications() {
-  const data = await request('/ops/verifications');
-  $('#verificationsView').innerHTML = `<section class="panel"><div class="panel-head"><div><h2>Driver verification queue</h2><p>Manager review is read-only here. Approval/rejection remains an Admin action.</p></div></div>${simpleTable(data.items, [
-    { label: 'Driver', render: r => `<div class="row-title">${esc(r.name || 'Driver')}</div><div class="row-sub">${esc(r.email || r.phone || '')}</div>` },
-    { label: 'City', key: 'city' },
-    { label: 'Verification', render: r => badge(r.verification_status) },
-    { label: 'Submitted', render: r => fmt(r.verification_submitted_at) },
-    { label: 'Updated', render: r => fmt(r.updated_at) },
-  ])}</section>`;
+  throw new Error('Verification workspace renderer was not initialized.');
 }
 
 function staffTable(data) {
@@ -615,4 +598,3 @@ async function renderAudit() {
 }
 
 boot();
-
