@@ -52,4 +52,15 @@ async def get_admin_user(
     user = await get_current_user(authorization, request)
     if user.get("role") != "admin":
         api_error("Admin access is required.", 403)
+
+    # A protected administrator must never be able to invalidate the same
+    # credential that authorizes this request. The People workspace can manage
+    # other accounts, but self-suspension/self-deletion would immediately lock
+    # the only active operator out of Ops. Keep this guard at the auth boundary
+    # so it remains effective even if a future UI accidentally exposes the action.
+    if request is not None and request.method.upper() == "PATCH":
+        path = request.url.path.rstrip("/")
+        if path == f"/admin/users/{user.get('id')}/status":
+            api_error("You cannot suspend or delete your own administrator account.", 400)
+
     return user
