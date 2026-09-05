@@ -64,8 +64,10 @@
     const badgeNode = document.getElementById('workforceBadge');
     if (!badgeNode) return;
     const count = applications.filter(item => ACTIONABLE.has(String(item.status || '').toUpperCase())).length;
-    badgeNode.hidden = count === 0;
-    badgeNode.textContent = count ? String(count) : '';
+    const hidden = count === 0;
+    const text = count ? String(count) : '';
+    if (badgeNode.hidden !== hidden) badgeNode.hidden = hidden;
+    if (badgeNode.textContent !== text) badgeNode.textContent = text;
   }
 
   function filterRows() {
