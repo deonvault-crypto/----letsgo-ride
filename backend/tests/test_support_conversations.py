@@ -9,8 +9,10 @@ from app.routers.support_conversations import (
     CustomerSupportReplyBody,
     OpsSupportNoteBody,
     OpsSupportReplyBody,
+    OpsSupportStartBody,
     customer_support_reply,
     customer_support_thread,
+    ops_start_support_conversation,
     ops_support_internal_note,
     ops_support_reply,
     ops_support_thread,
@@ -95,6 +97,82 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stored["message"], "My driver did not arrive.")
         self.assertEqual(stored["status"], "received")
         self.realtime_publish.assert_not_awaited()
+
+    async def test_ops_can_start_conversation_and_customer_sees_staff_first(self):
+        response = await ops_start_support_conversation(
+            OpsSupportStartBody(
+                user_id=self.customer["id"],
+                subject="Driver documents",
+                message="Hi, we need one clearer photo of your driver licence.",
+            ),
+            user=self.cs_ops,
+        )
+        created = response["data"]
+        self.assertEqual(created["user_id"], self.customer["id"])
+        self.assertEqual(created["status"], "open")
+
+        stored = await database.find_one("support_messages", {"id": created["id"]})
+        self.assertEqual(stored["initial_sender_type"], "staff")
+        self.assertTrue(stored["initiated_by_ops"])
+        self.assertEqual(stored["message"], "Hi, we need one clearer photo of your driver licence.")
+
+        customer_thread = await customer_support_thread(created["id"], user=self.customer)
+        items = customer_thread["data"]["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["sender_type"], "staff")
+        self.assertEqual(items[0]["sender_name"], "LetsGoRide Support")
+        self.assertEqual(items[0]["message"], "Hi, we need one clearer photo of your driver licence.")
+
+        notifications = await database.find_many("app_notifications", {"user_id": self.customer["id"]})
+        self.assertTrue(any(item.get("data", {}).get("support_message_id") == created["id"] for item in notifications))
+
+        audit = await database.find_many("audit_logs", {"target_id": created["id"]})
+        self.assertTrue(any(item.get("action") == "ops_support_conversation_started" for item in audit))
+
+        self.realtime_publish.assert_awaited_once()
+        published = self.realtime_publish.await_args.args[0]
+        self.assertEqual(published.envelope.type, "support_message.staff_started")
+        self.assertEqual(published.envelope.resource_id, created["id"])
+        self.assertNotIn("message", published.envelope.payload)
+
+    async def test_customer_can_reply_to_staff_initiated_conversation(self):
+        created = (await ops_start_support_conversation(
+            OpsSupportStartBody(
+                user_id=self.customer["id"],
+                subject="Account check",
+                message="Please confirm the city shown on your profile.",
+            ),
+            user=self.cs_ops,
+        ))["data"]
+        self.realtime_publish.reset_mock()
+
+        reply = await customer_support_reply(
+            created["id"],
+            CustomerSupportReplyBody(message="I am in Harare."),
+            user=self.customer,
+        )
+        self.assertEqual(reply["data"]["sender_type"], "customer")
+
+        thread = await ops_support_thread(created["id"], user=self.cs_ops)
+        self.assertEqual(
+            [item["sender_type"] for item in thread["data"]["items"]],
+            ["staff", "customer"],
+        )
+        self.assertEqual(thread["data"]["items"][-1]["message"], "I am in Harare.")
+
+    async def test_ops_cannot_start_conversation_for_deleted_or_unknown_user(self):
+        await database.update_one("users", self.other_customer["id"], {"status": "deleted"})
+        for user_id in (self.other_customer["id"], "missing-user"):
+            with self.assertRaises(HTTPException) as error:
+                await ops_start_support_conversation(
+                    OpsSupportStartBody(
+                        user_id=user_id,
+                        subject="Account support",
+                        message="Please contact LetsGoRide Support.",
+                    ),
+                    user=self.cs_ops,
+                )
+            self.assertEqual(error.exception.status_code, 404)
 
     async def test_ops_reply_persists_thread_and_publishes_scoped_realtime_signal(self):
         response = await ops_support_reply(
