@@ -20,6 +20,7 @@ from app.services.auth_service import (
     create_email_user,
     create_or_update_user,
     find_user_by_email,
+    find_user_by_pending_email,
     find_user_by_phone,
     find_user_by_token,
     public_user,
@@ -43,6 +44,7 @@ from pymongo.errors import DuplicateKeyError
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+INACTIVE_ACCOUNT_STATUSES = {"deleted", "suspended"}
 
 
 def _require_public_customer_signup(role: str) -> None:
@@ -51,6 +53,14 @@ def _require_public_customer_signup(role: str) -> None:
             "Driver, Courier and Merchant accounts use their own reviewed onboarding. Public signup creates a customer account.",
             403,
         )
+
+
+def _inactive_account(user) -> bool:
+    return bool(user) and str(user.get("status") or "active").strip().lower() in INACTIVE_ACCOUNT_STATUSES
+
+
+async def _email_account(email: str):
+    return await find_user_by_email(email) or await find_user_by_pending_email(email)
 
 
 @router.post("/request-otp")
@@ -104,6 +114,11 @@ async def email_register(payload: EmailRegisterBody, request: Request):
 async def email_login(payload: EmailLoginBody, request: Request):
     await rate_limit_service.enforce(request, "auth-email-login-short", RateLimit(5, 60), identity=payload.email)
     await rate_limit_service.enforce(request, "auth-email-login-long", RateLimit(20, 3600), identity=payload.email)
+    candidate = await find_user_by_email(payload.email)
+    if _inactive_account(candidate):
+        # Keep the public response indistinguishable from a bad credential while
+        # preventing a disabled account from minting a fresh session token.
+        api_error("Invalid email or password.", 401)
     try:
         user = await verify_email_user(payload.email, payload.password)
     except PermissionError:
@@ -116,6 +131,9 @@ async def email_login(payload: EmailLoginBody, request: Request):
 @router.post("/verify-email")
 async def verify_email(payload: VerifyEmailBody, request: Request):
     await rate_limit_service.enforce(request, "auth-email-verify", RateLimit(10, 900), identity=payload.email)
+    candidate = await _email_account(payload.email)
+    if _inactive_account(candidate):
+        api_error("Invalid or expired verification code.", 400)
     user = await verify_email_code(payload.email, payload.code)
     if not user:
         api_error("Invalid or expired verification code.", 400)
@@ -133,6 +151,9 @@ async def verify_email(payload: VerifyEmailBody, request: Request):
 @router.post("/resend-email-verification")
 async def resend_verification(payload: ResendEmailVerificationBody, request: Request):
     await rate_limit_service.enforce(request, "auth-email-resend", RateLimit(3, 3600), identity=payload.email)
+    candidate = await _email_account(payload.email)
+    if _inactive_account(candidate):
+        api_error("Account not found.", 404)
     try:
         user = await resend_email_verification(payload.email)
     except RuntimeError as error:
@@ -151,10 +172,13 @@ async def resend_verification(payload: ResendEmailVerificationBody, request: Req
 @router.post("/forgot-password")
 async def forgot_password(payload: ForgotPasswordBody, request: Request):
     await rate_limit_service.enforce(request, "auth-password-forgot", RateLimit(3, 3600), identity=payload.email)
-    try:
-        await start_password_reset(payload.email)
-    except RuntimeError as error:
-        api_error(str(error), 503)
+    candidate = await find_user_by_email(payload.email)
+    if not _inactive_account(candidate):
+        try:
+            await start_password_reset(payload.email)
+        except RuntimeError as error:
+            api_error(str(error), 503)
+    # The response is deliberately identical for missing and disabled accounts.
     return api_success({"message": "If the account exists, a reset code will be sent."})
 
 
@@ -163,6 +187,9 @@ async def reset_password(payload: ResetPasswordBody, request: Request):
     await rate_limit_service.enforce(request, "auth-password-reset", RateLimit(10, 3600), identity=payload.email)
     if payload.confirm_password and payload.password != payload.confirm_password:
         api_error("Passwords do not match.", 400)
+    candidate = await find_user_by_email(payload.email)
+    if _inactive_account(candidate):
+        api_error("That code is incorrect or expired. Please request a new code.", 400)
     ok = await reset_email_password(payload.email, payload.code, payload.password)
     if not ok:
         api_error("That code is incorrect or expired. Please request a new code.", 400)
