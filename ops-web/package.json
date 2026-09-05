@@ -5,7 +5,7 @@
   "description": "LetsGoRide Operations Control Center",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node --check public/map-framing.js && node --check public/live-map.js && node --check public/support-conversations.js && node --check public/communications.js"
+    "check": "node --check server.js && node --check public/app.js && node --check public/map-framing.js && node --check public/live-map.js && node --check public/support-conversations.js && node --check public/communications.js && node --check public/control-center-v2.js"
   },
   "engines": {
     "node": ">=20"
