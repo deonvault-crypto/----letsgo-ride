@@ -21,7 +21,6 @@ from app.services.stripe_reconciliation_service import stripe_payment_reconcilia
 from app.services.stripe_runtime_guard import StripeVerificationUnavailable, ensure_stripe_runtime_binding
 from app.services.worker_finance_index_service import ensure_worker_finance_indexes
 from app.services.communications_service import communications_worker, ensure_communications_indexes
-from app.services.legacy_media_migration_service import migrate_legacy_profile_photos
 from app.utils import api_success
 
 
@@ -116,11 +115,6 @@ async def on_startup():
     global communications_stop_event, communications_task
     await realtime_event_service.start()
     await ensure_admin_seed_user()
-    if settings.is_production:
-        # Migration is deliberately asynchronous so a slow legacy media host can
-        # never hold production readiness hostage. It is idempotent and only
-        # touches users whose profile_photo_url still points at our retired host.
-        asyncio.create_task(migrate_legacy_profile_photos())
     if settings.stripe_configured:
         # Wrong live-account identity is a fatal configuration error and still
         # bubbles out. A temporary Stripe outage only degrades payment features;
