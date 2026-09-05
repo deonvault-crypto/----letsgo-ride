@@ -1,9 +1,8 @@
 (() => {
   'use strict';
 
-  function normalize(value) {
-    return String(value || '').trim().toLowerCase();
-  }
+  let workforceApplicationId = '';
+  let verificationDriverId = '';
 
   function recipientFromUser(user) {
     if (!user?.id) return null;
@@ -26,58 +25,20 @@
     return recipientFromUser(user);
   }
 
-  async function currentWorkforceApplication() {
-    const dialog = document.getElementById('workforceApplicationDialog');
-    if (!dialog?.open) return null;
-
-    const name = dialog.querySelector('.workforce-review-head h2')?.textContent?.trim() || '';
-    const contact = [...dialog.querySelectorAll('.verification-review-contact span')].map(node => node.textContent?.trim() || '');
-    const phone = contact[1] || '';
-
-    const matchingCards = [...document.querySelectorAll('[data-workforce-application]')].filter(card => {
-      const cardName = card.querySelector('.workforce-identity strong')?.textContent?.trim() || '';
-      const cardText = card.textContent || '';
-      return cardName === name && (!phone || phone === '—' || cardText.includes(phone));
-    });
-    if (matchingCards.length !== 1) return null;
-
-    const applicationId = matchingCards[0].dataset.workforceApplication;
+  async function applicationById(applicationId) {
     if (!applicationId) return null;
     const applications = await request('/operations/admin/applications');
-    return (Array.isArray(applications) ? applications : []).find(item => String(item.id) === String(applicationId)) || null;
-  }
-
-  async function currentVerificationDetail() {
-    const dialog = document.getElementById('verificationWorkspaceDialog');
-    if (!dialog?.open) return null;
-
-    const name = dialog.querySelector('.verification-review-head h2')?.textContent?.trim() || '';
-    const contact = [...dialog.querySelectorAll('.verification-review-contact span')].map(node => node.textContent?.trim() || '');
-    const email = normalize(contact[0]);
-    const phone = normalize(contact[1]);
-
-    const matchingCards = [...document.querySelectorAll('[data-review-verification]')].filter(button => {
-      const card = button.closest('.verification-card, article, tr');
-      if (!card) return false;
-      const text = normalize(card.textContent);
-      return Boolean(
-        (email && email !== '—' && text.includes(email)) ||
-        (phone && phone !== '—' && text.includes(phone)) ||
-        (name && text.includes(normalize(name)))
-      );
-    });
-    if (matchingCards.length !== 1) return null;
-
-    const driverId = matchingCards[0].dataset.reviewVerification;
-    if (!driverId) return null;
-    return request(`/admin/verifications/${encodeURIComponent(driverId)}`);
+    if (!Array.isArray(applications)) return null;
+    return applications.find(item => String(item.id || '') === String(applicationId)) || null;
   }
 
   async function messageWorkforceApplicant(button) {
     button.disabled = true;
     try {
-      const application = await currentWorkforceApplication();
-      if (!application?.user_id) throw new Error('This application is not linked to a LetsGoRide account.');
+      const application = await applicationById(workforceApplicationId);
+      if (!application) throw new Error('This worker application could not be loaded from production.');
+      if (!application.user_id) throw new Error('This worker application is not linked to a LetsGoRide account.');
+
       const recipient = await recipientForUserId(application.user_id);
       if (!recipient) throw new Error('The linked LetsGoRide account could not be loaded for messaging.');
 
@@ -96,9 +57,11 @@
   async function messageVerificationApplicant(button) {
     button.disabled = true;
     try {
-      const detail = await currentVerificationDetail();
+      if (!verificationDriverId) throw new Error('This verification record could not be identified.');
+      const detail = await request(`/admin/verifications/${encodeURIComponent(verificationDriverId)}`);
       const userId = detail?.user?.id || detail?.driver?.user_id;
       if (!userId) throw new Error('This verification is not linked to a LetsGoRide account.');
+
       const recipient = await recipientForUserId(userId);
       if (!recipient) throw new Error('The linked LetsGoRide account could not be loaded for messaging.');
 
@@ -116,19 +79,34 @@
   }
 
   document.addEventListener('click', event => {
-    const workforceButton = event.target.closest?.('[data-message-workforce]');
-    if (workforceButton) {
+    const workforceReview = event.target.closest?.('[data-review-workforce]');
+    if (workforceReview?.dataset.reviewWorkforce) {
+      workforceApplicationId = workforceReview.dataset.reviewWorkforce;
+    }
+
+    const verificationReview = event.target.closest?.('[data-review-verification]');
+    if (verificationReview?.dataset.reviewVerification) {
+      verificationDriverId = verificationReview.dataset.reviewVerification;
+    }
+
+    const personVerification = event.target.closest?.('[data-person-verification]');
+    if (personVerification?.dataset.personVerification) {
+      verificationDriverId = personVerification.dataset.personVerification;
+    }
+
+    const workforceMessage = event.target.closest?.('[data-message-workforce]');
+    if (workforceMessage) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      void messageWorkforceApplicant(workforceButton);
+      void messageWorkforceApplicant(workforceMessage);
       return;
     }
 
-    const verificationButton = event.target.closest?.('[data-message-applicant]');
-    if (verificationButton && document.getElementById('verificationWorkspaceDialog')?.open) {
+    const verificationMessage = event.target.closest?.('[data-message-applicant]');
+    if (verificationMessage && document.getElementById('verificationWorkspaceDialog')?.open) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      void messageVerificationApplicant(verificationButton);
+      void messageVerificationApplicant(verificationMessage);
     }
   }, true);
 })();
