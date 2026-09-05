@@ -1,6 +1,6 @@
 from typing import Any, Dict, Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import get_current_user
@@ -41,6 +41,13 @@ class OpsSupportNoteBody(BaseModel):
     note: str = Field(min_length=1, max_length=5000)
 
 
+class OpsSupportStartBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: str = Field(min_length=1, max_length=128)
+    subject: str = Field(min_length=2, max_length=160)
+    message: str = Field(min_length=1, max_length=5000)
+
+
 def _safe_thread_message(row: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": row.get("id"),
@@ -56,6 +63,33 @@ def _safe_thread_message(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _safe_started_ticket(ticket: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": ticket.get("id"),
+        "user_id": ticket.get("user_id"),
+        "user_name": ticket.get("user_name"),
+        "user_email": ticket.get("user_email"),
+        "user_phone": ticket.get("user_phone"),
+        "subject": ticket.get("subject"),
+        "message": ticket.get("message"),
+        "status": ticket.get("status"),
+        "created_at": ticket.get("created_at"),
+        "updated_at": ticket.get("updated_at"),
+    }
+
+
+def _safe_recipient(user: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": user.get("id"),
+        "name": user.get("name"),
+        "email": user.get("email"),
+        "phone": user.get("phone"),
+        "city": user.get("city"),
+        "role": user.get("role") or "passenger",
+        "status": user.get("status") or "active",
+    }
+
+
 async def _ticket(message_id: str) -> Dict[str, Any]:
     ticket = await database.find_one("support_messages", {"id": message_id})
     if not ticket:
@@ -64,12 +98,17 @@ async def _ticket(message_id: str) -> Dict[str, Any]:
 
 
 def _initial_message(ticket: Dict[str, Any]) -> Dict[str, Any]:
+    initiated_by_staff = str(ticket.get("initial_sender_type") or "").strip().lower() == "staff"
     return {
         "id": f"{ticket['id']}:initial",
         "support_message_id": ticket["id"],
-        "sender_type": "customer",
-        "sender_user_id": ticket.get("user_id"),
-        "sender_name": ticket.get("user_name") or ticket.get("user_email") or "Customer",
+        "sender_type": "staff" if initiated_by_staff else "customer",
+        "sender_user_id": None if initiated_by_staff else ticket.get("user_id"),
+        "sender_name": (
+            ticket.get("initial_sender_name") or "LetsGoRide Support"
+            if initiated_by_staff
+            else ticket.get("user_name") or ticket.get("user_email") or "Customer"
+        ),
         "sender_ops_role": None,
         "message": ticket.get("message") or "",
         "is_internal": False,
@@ -188,6 +227,76 @@ async def customer_support_reply(
         {"support_message_id": message_id},
     )
     return api_success(_safe_thread_message(created))
+
+
+@router.get("/ops/support/recipients")
+async def ops_support_recipients(
+    search: str = Query(default="", max_length=200),
+    limit: int = Query(default=40, ge=1, le=100),
+    user=Depends(get_ops_user),
+):
+    term = search.strip().lower()
+    rows = await database.find_many("users")
+    candidates = []
+    for row in rows:
+        if row.get("status") == "deleted":
+            continue
+        haystack = " ".join(str(row.get(field) or "") for field in ("name", "email", "phone", "city", "role")).lower()
+        if term and term not in haystack:
+            continue
+        candidates.append(row)
+    candidates.sort(key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""), reverse=True)
+    return api_success({
+        "count": len(candidates),
+        "items": [_safe_recipient(row) for row in candidates[:limit]],
+    })
+
+
+@router.post("/ops/support/conversations")
+async def ops_start_support_conversation(
+    payload: OpsSupportStartBody,
+    user=Depends(get_ops_user),
+):
+    target = await database.find_one("users", {"id": payload.user_id})
+    if not target or target.get("status") == "deleted":
+        api_error("User not found or no longer available for support messaging.", 404)
+
+    timestamp = now_iso()
+    ticket = {
+        "id": new_id(),
+        "user_id": target.get("id"),
+        "user_name": target.get("name"),
+        "user_email": target.get("email"),
+        "user_phone": target.get("phone"),
+        "subject": payload.subject.strip(),
+        "message": payload.message.strip(),
+        "status": "open",
+        "initial_sender_type": "staff",
+        "initial_sender_name": "LetsGoRide Support",
+        "initiated_by_ops": True,
+        "realtime_version": 1,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "last_staff_reply_at": timestamp,
+    }
+    created = await database.insert_one("support_messages", ticket)
+    await publish_support_realtime(created, "support_message.staff_started")
+    await create_app_notification(
+        target["id"],
+        "support_reply",
+        "LetsGoRide Support",
+        "LetsGoRide Support started a conversation with you. Open Support to reply.",
+        {"support_message_id": created["id"]},
+    )
+    await write_audit_log(
+        actor_user_id=user.get("id"),
+        actor_role=f"ops:{effective_ops_role(user)}",
+        action="ops_support_conversation_started",
+        target_type="support_message",
+        target_id=created["id"],
+        metadata={"customer_user_id": target.get("id")},
+    )
+    return api_success(_safe_started_ticket(created))
 
 
 @router.get("/ops/support/messages/{message_id}/thread")
