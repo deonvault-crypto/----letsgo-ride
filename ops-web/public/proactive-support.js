@@ -3,6 +3,7 @@
 
   let selectedRecipient = null;
   let searchTimer = null;
+  let verificationDriverId = '';
 
   function actionDialog() {
     return document.getElementById('actionDialog');
@@ -162,6 +163,7 @@
     if (state?.me?.ops_role === 'admin') {
       const detail = await request(`/admin/users/${encodeURIComponent(userId)}`);
       const user = detail.user || {};
+      if (String(user.id || '') !== String(userId)) return null;
       return {
         id: user.id,
         name: user.name,
@@ -173,17 +175,7 @@
       };
     }
     const data = await request(`/ops/support/recipients?search=${encodeURIComponent(userId)}&limit=100`);
-    return (data.items || []).find(item => item.id === userId) || null;
-  }
-
-  async function recipientForContact(contact) {
-    if (!contact || contact === '—') return null;
-    const data = await request(`/ops/support/recipients?search=${encodeURIComponent(contact)}&limit=20`);
-    const normalized = String(contact).trim().toLowerCase();
-    return (data.items || []).find(item =>
-      String(item.email || '').trim().toLowerCase() === normalized ||
-      String(item.phone || '').trim().toLowerCase() === normalized
-    ) || (data.items || [])[0] || null;
+    return (data.items || []).find(item => String(item.id || '') === String(userId)) || null;
   }
 
   function enhanceSupportInbox() {
@@ -230,11 +222,9 @@
 
   function enhanceVerificationWorkspace() {
     const dialog = document.getElementById('verificationWorkspaceDialog');
-    if (!dialog?.open) return;
+    if (!dialog?.open || !verificationDriverId) return;
     const head = dialog.querySelector('.verification-review-head');
     if (!head || head.querySelector('[data-message-applicant]')) return;
-    const contact = head.querySelector('.verification-review-contact span')?.textContent?.trim() || '';
-    if (!contact || contact === '—') return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'secondary';
@@ -243,9 +233,12 @@
     button.addEventListener('click', async () => {
       try {
         button.disabled = true;
-        const recipient = await recipientForContact(contact);
-        if (!recipient) throw new Error('The applicant account could not be matched for messaging.');
-        const name = dialog.querySelector('.verification-review-head h2')?.textContent?.trim() || 'driver';
+        const detail = await request(`/admin/verifications/${encodeURIComponent(verificationDriverId)}`);
+        const userId = detail?.user?.id || detail?.driver?.user_id;
+        if (!userId) throw new Error('This verification is not linked to a LetsGoRide account.');
+        const recipient = await recipientForUserId(userId);
+        if (!recipient) throw new Error('The linked LetsGoRide account could not be loaded for messaging.');
+        const name = detail?.driver?.name || detail?.user?.name || recipient.name || 'driver';
         dialog.close();
         openComposer(recipient, {
           subject: 'LetsGoRide verification',
@@ -265,6 +258,17 @@
     enhancePersonWorkspace();
     enhanceVerificationWorkspace();
   }
+
+  document.addEventListener('click', event => {
+    const verificationReview = event.target.closest?.('[data-review-verification]');
+    if (verificationReview?.dataset.reviewVerification) {
+      verificationDriverId = verificationReview.dataset.reviewVerification;
+    }
+    const personVerification = event.target.closest?.('[data-person-verification]');
+    if (personVerification?.dataset.personVerification) {
+      verificationDriverId = personVerification.dataset.personVerification;
+    }
+  }, true);
 
   const observer = new MutationObserver(enhance);
   observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open'] });
