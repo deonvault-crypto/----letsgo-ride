@@ -1,0 +1,11 @@
+LetsGoRide e-hailing SEO cluster targets
+
+Primary intent covered by this batch:
+- e-hailing Zimbabwe
+- ride app Zimbabwe
+- taxi app Harare
+- book a ride Harare
+- driver app Zimbabwe (supported by existing /drive-zimbabwe/ page)
+
+Architecture note:
+This batch intentionally avoids creating separate thin pages for every close keyword synonym. /ehailing-zimbabwe/ acts as the national ride-search hub, while /rides-harare/ covers local Harare ride-booking intent and /drive-zimbabwe/ covers driver intent.
