@@ -186,14 +186,20 @@
     }
   }
 
-  async function matchRecipient(item) {
-    const query = item.phone || item.full_name || '';
-    const data = await request(`/ops/support/recipients?search=${encodeURIComponent(query)}&limit=20`);
-    const phone = String(item.phone || '').replace(/\s+/g, '');
-    return (data.items || []).find(candidate => String(candidate.phone || '').replace(/\s+/g, '') === phone)
-      || (data.items || []).find(candidate => String(candidate.name || '').trim().toLowerCase() === String(item.full_name || '').trim().toLowerCase())
-      || (data.items || [])[0]
-      || null;
+  async function recipientForUserId(userId) {
+    if (!userId) return null;
+    const detail = await request(`/admin/users/${encodeURIComponent(userId)}`);
+    const user = detail.user || {};
+    if (String(user.id || '') !== String(userId)) return null;
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      city: user.city,
+      role: user.role,
+      status: user.status,
+    };
   }
 
   function openDecision(item, status, parentDialog) {
@@ -302,12 +308,13 @@
       const button = event.currentTarget;
       try {
         button.disabled = true;
-        const recipient = await matchRecipient(item);
-        if (!recipient) throw new Error('The applicant account could not be matched for messaging.');
+        if (!item.user_id) throw new Error('This worker application is not linked to a LetsGoRide account.');
+        const recipient = await recipientForUserId(item.user_id);
+        if (!recipient) throw new Error('The linked LetsGoRide account could not be loaded for messaging.');
         dialog.close();
         window.openOpsProactiveSupport?.(recipient, {
           subject: `LetsGoRide ${String(item.product || 'worker')} application`,
-          message: `Hi ${item.full_name || 'there'}, we are reviewing your LetsGoRide application and need to confirm some information with you.`,
+          message: `Hi ${item.full_name || recipient.name || 'there'}, we are reviewing your LetsGoRide application and need to confirm some information with you.`,
         });
       } catch (error) {
         toast(error.message, true);
@@ -345,9 +352,9 @@
   window.openView = workforceAwareOpenView;
   try { openView = workforceAwareOpenView; } catch {}
 
-  const observer = new MutationObserver(() => {
-    ensureNavigation();
-    updateBadge();
-  });
-  observer.observe(document.getElementById('nav') || document.body, { childList: true, subtree: true });
+  const nav = document.getElementById('nav');
+  if (nav) {
+    const observer = new MutationObserver(ensureNavigation);
+    observer.observe(nav, { childList: true });
+  }
 })();
