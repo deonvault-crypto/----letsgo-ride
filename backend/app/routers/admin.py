@@ -15,7 +15,10 @@ from app.models.user import AdminRoleUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
-from app.services.data_retention_consistency_service import actionable_shared_ride_request_counts
+from app.services.data_retention_consistency_service import (
+    actionable_shared_ride_request_counts,
+    active_verified_driver_count,
+)
 from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, is_final_trip_status
 from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
 from app.services.ride_request_realtime_service import publish_ride_request_realtime, ride_request_event_type, update_versioned_ride_request
@@ -198,16 +201,6 @@ def _report_open(status: Optional[str]) -> bool:
 
 @router.get("/overview")
 async def overview(admin=Depends(get_admin_user)):
-    verified_filter = {
-        "$or": [
-            {"verification_status": {"$in": sorted(VERIFIED_DRIVER_VERIFICATION_STATUSES)}},
-            {
-                "verification_status": {"$exists": False},
-                "verified": True,
-                "status": {"$in": ["approved", "active"]},
-            },
-        ]
-    }
     pending_filter = {
         "verification_status": {"$in": sorted(PENDING_DRIVER_VERIFICATION_STATUSES)}
     }
@@ -237,7 +230,7 @@ async def overview(admin=Depends(get_admin_user)):
         database.count("users"),
         database.count("rides"),
         database.count("ride_requests"),
-        database.count("drivers", verified_filter),
+        active_verified_driver_count(),
         database.count("drivers", pending_filter),
         database.count("rides", {"status": {"$in": active_ride_statuses}}),
         actionable_shared_ride_request_counts(),
