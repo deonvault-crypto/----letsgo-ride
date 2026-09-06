@@ -94,6 +94,23 @@
   margin-left: auto;
 }
 
+.support-thread-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(20, 90, 45, .12);
+}
+
+.support-thread-actions .link-btn {
+  font-size: 12px;
+}
+
+.support-delete-link {
+  color: #b42318;
+}
+
 .support-composer {
   margin-top: 16px;
 }

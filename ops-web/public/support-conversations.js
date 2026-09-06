@@ -2,12 +2,16 @@
   const SUPPORT_REALTIME_URL = 'wss://letsgoride-v2-production.onrender.com/realtime';
   let supportRealtimeSocket = null;
   let supportRealtimeRetry = null;
-  let supportRealtimeTarget = null;
   let supportRealtimeGeneration = 0;
+  let supportRealtimeToken = '';
+  let activeThreadId = null;
+  let activeThreadReload = null;
+  let activeThreadItems = [];
+  const seenSupportEvents = new Set();
 
   function stopSupportRealtime() {
     supportRealtimeGeneration += 1;
-    supportRealtimeTarget = null;
+    supportRealtimeToken = '';
     if (supportRealtimeRetry) {
       clearTimeout(supportRealtimeRetry);
       supportRealtimeRetry = null;
@@ -15,8 +19,9 @@
     const socket = supportRealtimeSocket;
     supportRealtimeSocket = null;
     if (socket) {
-      try { socket.close(1000, 'support dialog closed'); } catch {}
+      try { socket.close(1000, 'ops support realtime stopped'); } catch {}
     }
+    setRealtimeState('Offline');
   }
 
   function setRealtimeState(label) {
@@ -24,19 +29,86 @@
     if (element) element.textContent = label;
   }
 
-  function startSupportRealtime(messageId, reloadThread) {
+  async function refreshSupportBadge() {
+    if (!state?.token) return;
+    try {
+      const data = await request('/ops/overview');
+      const badgeNode = document.getElementById('supportBadge');
+      if (!badgeNode) return;
+      const count = Number(data.open_support_cases || 0);
+      badgeNode.hidden = !Number.isFinite(count) || count <= 0;
+      badgeNode.textContent = count > 0 ? String(count) : '';
+    } catch {
+      // Keep realtime notifications non-blocking if overview metrics are temporarily unavailable.
+    }
+  }
+
+  async function refreshSupportQueue() {
+    if (state?.currentView !== 'support' || typeof renderSupport !== 'function') return;
+    try { await renderSupport(); } catch {}
+  }
+
+  async function handleSupportRealtimeMessage(message) {
+    if (!message || typeof message !== 'object') return;
+    if (message.type === 'realtime.ready') {
+      setRealtimeState('Live');
+      return;
+    }
+    if (message.type === 'realtime.ping') {
+      if (supportRealtimeSocket?.readyState === WebSocket.OPEN) {
+        supportRealtimeSocket.send(JSON.stringify({ type: 'realtime.pong' }));
+      }
+      return;
+    }
+    if (message.event_id && supportRealtimeSocket?.readyState === WebSocket.OPEN) {
+      supportRealtimeSocket.send(JSON.stringify({ type: 'realtime.ack', event_id: message.event_id }));
+    }
+    if (message.resource_type !== 'support_message') return;
+
+    if (message.event_id) {
+      if (seenSupportEvents.has(message.event_id)) return;
+      seenSupportEvents.add(message.event_id);
+      if (seenSupportEvents.size > 200) {
+        const oldest = seenSupportEvents.values().next().value;
+        if (oldest) seenSupportEvents.delete(oldest);
+      }
+    }
+
+    if (message.type === 'support_message.customer_replied') {
+      toast('New customer reply in Support.');
+      void refreshSupportBadge();
+      void refreshSupportQueue();
+    }
+
+    if (activeThreadId && message.resource_id === activeThreadId && typeof activeThreadReload === 'function') {
+      try { await activeThreadReload(); } catch {}
+    }
+  }
+
+  function ensureSupportRealtime() {
+    const token = String(state?.token || '');
+    if (!token) {
+      stopSupportRealtime();
+      return;
+    }
+    if (
+      supportRealtimeSocket &&
+      supportRealtimeToken === token &&
+      [WebSocket.OPEN, WebSocket.CONNECTING].includes(supportRealtimeSocket.readyState)
+    ) return;
+
     stopSupportRealtime();
-    supportRealtimeTarget = messageId;
+    supportRealtimeToken = token;
     const generation = supportRealtimeGeneration;
 
     const connect = () => {
-      if (generation !== supportRealtimeGeneration || supportRealtimeTarget !== messageId || !state.token) return;
+      if (generation !== supportRealtimeGeneration || supportRealtimeToken !== token || state?.token !== token) return;
       setRealtimeState('Connecting…');
       let socket;
       try {
         socket = new WebSocket(SUPPORT_REALTIME_URL, [
           'letsgoride.realtime.v1',
-          `letsgoride.auth.${state.token}`,
+          `letsgoride.auth.${token}`,
         ]);
       } catch {
         supportRealtimeRetry = setTimeout(connect, 1500);
@@ -51,21 +123,7 @@
         if (generation !== supportRealtimeGeneration || supportRealtimeSocket !== socket || typeof event.data !== 'string') return;
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
-        if (!message || typeof message !== 'object') return;
-        if (message.type === 'realtime.ready') {
-          setRealtimeState('Live');
-          return;
-        }
-        if (message.type === 'realtime.ping') {
-          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'realtime.pong' }));
-          return;
-        }
-        if (message.event_id && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'realtime.ack', event_id: message.event_id }));
-        }
-        if (message.resource_type === 'support_message' && message.resource_id === messageId) {
-          void reloadThread().catch(() => undefined);
-        }
+        void handleSupportRealtimeMessage(message);
       };
       socket.onerror = () => undefined;
       socket.onclose = event => {
@@ -75,7 +133,7 @@
           setRealtimeState('Session expired');
           return;
         }
-        if (supportRealtimeTarget === messageId && $('#actionDialog')?.open) {
+        if (state?.token === token) {
           setRealtimeState('Reconnecting…');
           supportRealtimeRetry = setTimeout(connect, 1500);
         }
@@ -83,6 +141,11 @@
     };
 
     connect();
+  }
+
+  function canManageStaffMessage(item) {
+    if (!item || item.synthetic || item.sender_type !== 'staff' || item.is_internal) return false;
+    return state?.me?.ops_role === 'admin' || String(item.sender_user_id || '') === String(state?.me?.id || '');
   }
 
   function threadMessageHtml(item) {
@@ -98,15 +161,23 @@
       item.sender_type === 'customer' ? 'customer-message' : 'staff-message',
       internal ? 'internal-message' : '',
     ].filter(Boolean).join(' ');
-    return `<article class="${classes}">
+    const controls = canManageStaffMessage(item)
+      ? `<div class="support-thread-actions">
+          <button type="button" class="link-btn" data-support-edit-message="${esc(item.id)}">Edit</button>
+          <button type="button" class="link-btn support-delete-link" data-support-delete-message="${esc(item.id)}">Delete</button>
+        </div>`
+      : '';
+    return `<article class="${classes}" data-support-thread-message="${esc(item.id || '')}">
       <div class="support-thread-meta"><strong>${esc(sender)}</strong>${role}<span>${fmt(item.created_at)}</span></div>
       <p>${esc(item.message || '')}</p>
+      ${controls}
     </article>`;
   }
 
   function renderThreadItems(items) {
-    if (!items?.length) return '<div class="empty">No conversation messages yet.</div>';
-    return items.map(threadMessageHtml).join('');
+    activeThreadItems = items || [];
+    if (!activeThreadItems.length) return '<div class="empty">No conversation messages yet.</div>';
+    return activeThreadItems.map(threadMessageHtml).join('');
   }
 
   // Deliberately overrides only the Support "Handle" action from app.js.
@@ -181,9 +252,56 @@
       return next;
     };
 
+    activeThreadId = row.id;
+    activeThreadReload = reloadThread;
+    ensureSupportRealtime();
     const threadContainer = $('#supportThread');
     threadContainer.scrollTop = threadContainer.scrollHeight;
-    startSupportRealtime(row.id, reloadThread);
+
+    threadContainer.onclick = async event => {
+      const editButton = event.target.closest('[data-support-edit-message]');
+      const deleteButton = event.target.closest('[data-support-delete-message]');
+      if (!editButton && !deleteButton) return;
+      const messageId = editButton?.dataset.supportEditMessage || deleteButton?.dataset.supportDeleteMessage;
+      const item = activeThreadItems.find(candidate => String(candidate.id) === String(messageId));
+      if (!item || !canManageStaffMessage(item)) return;
+
+      if (editButton) {
+        const nextMessage = window.prompt('Edit support reply', item.message || '');
+        if (nextMessage === null) return;
+        const cleaned = nextMessage.trim();
+        if (!cleaned) return toast('A support reply cannot be empty.', true);
+        editButton.disabled = true;
+        try {
+          await request(`/ops/support/messages/${encodeURIComponent(row.id)}/thread/${encodeURIComponent(messageId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ message: cleaned }),
+          });
+          toast('Support reply edited.');
+          await reloadThread();
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          editButton.disabled = false;
+        }
+      }
+
+      if (deleteButton) {
+        if (!window.confirm('Delete this support reply? This removes the reply from the customer conversation.')) return;
+        deleteButton.disabled = true;
+        try {
+          await request(`/ops/support/messages/${encodeURIComponent(row.id)}/thread/${encodeURIComponent(messageId)}`, {
+            method: 'DELETE',
+          });
+          toast('Support reply deleted.');
+          await reloadThread();
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          deleteButton.disabled = false;
+        }
+      }
+    };
 
     $('#supportReplyForm').onsubmit = async event => {
       event.preventDefault();
@@ -251,7 +369,23 @@
   };
 
   $('#actionDialog').addEventListener('close', () => {
-    stopSupportRealtime();
+    activeThreadId = null;
+    activeThreadReload = null;
+    activeThreadItems = [];
     $('#actionDialog').classList.remove('support-dialog');
   });
+
+  const previousShowApp = showApp;
+  showApp = function showAppWithSupportRealtime() {
+    previousShowApp();
+    ensureSupportRealtime();
+  };
+
+  document.getElementById('logoutBtn')?.addEventListener('click', stopSupportRealtime, true);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state?.token) ensureSupportRealtime();
+  });
+  setTimeout(() => {
+    if (state?.token) ensureSupportRealtime();
+  }, 0);
 })();
