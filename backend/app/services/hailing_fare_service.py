@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
-import os
 from typing import Any, Dict
 
 from app.database import database
@@ -13,6 +12,7 @@ from app.utils import new_id, now_iso
 
 QUOTE_TTL_SECONDS = 180
 LAUNCH_RIDE_CLASSES = {"ECONOMY", "COMFORT", "XL"}
+PERMANENT_DRIVER_COMMISSION_PERCENT = 0.0
 # These values mirror the Zimbabwe launch pricing table. They are also a compatibility
 # bridge for cities seeded before Comfort/XL were turned on: old `enabled=false`
 # flags must not make the customer UI advertise a class that the quote engine rejects.
@@ -64,19 +64,6 @@ def quote_expired(quote: Dict[str, Any]) -> bool:
         return True
 
 
-def _driver_launch_full_fare_enabled() -> bool:
-    """Keep Ride Now Driver deductions at zero during the introductory launch.
-
-    Production defaults to the introductory policy so a missed environment variable
-    cannot accidentally charge Drivers. Set DRIVER_LAUNCH_FULL_FARE=false when the
-    introductory period is deliberately ended.
-    """
-    configured = os.getenv("DRIVER_LAUNCH_FULL_FARE")
-    if configured is not None:
-        return configured.strip().lower() in {"1", "true", "yes", "on"}
-    return os.getenv("APP_ENV", "development").strip().lower() == "production"
-
-
 def public_route(route: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize provider-internal routing fields into the stable mobile API contract."""
     distance_km = route.get("distance_km")
@@ -124,8 +111,10 @@ def calculate_fare(
     minimum_fare = money(float(class_pricing.get("minimum_fare") or 0))
     subtotal = money(base_fare + distance_fare + time_fare + booking_fee)
     total_fare = money(max(minimum_fare, subtotal * surge))
-    configured_percent = float(class_pricing.get("platform_commission_percent") or 0)
-    commission_percent = 0.0 if _driver_launch_full_fare_enabled() else configured_percent
+    # Permanent business policy: LetsGoRide does not deduct a percentage commission
+    # from the Driver's ride fare. Legacy/admin-stored percentages are retained for
+    # historical compatibility but cannot change effective Driver earnings.
+    commission_percent = PERMANENT_DRIVER_COMMISSION_PERCENT
     platform_commission = money(total_fare * commission_percent / 100)
     driver_earnings = money(max(0, total_fare - platform_commission))
     return {
