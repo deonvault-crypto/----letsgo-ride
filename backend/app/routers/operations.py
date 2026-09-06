@@ -16,6 +16,10 @@ from app.models.operations import (
     WorkerApplicationReviewBody,
 )
 from app.services.courier_earnings_service import courier_earnings_summary
+from app.services.data_retention_consistency_service import (
+    reconcile_worker_application_status,
+    reconcile_worker_application_statuses,
+)
 from app.services.operations_service import (
     active_courier_delivery,
     admin_courier_deliveries,
@@ -33,6 +37,7 @@ from app.services.operations_service import (
     set_courier_online,
 )
 from app.services.workforce_service import (
+    APPLICATION_STATUSES,
     available_courier_shifts,
     book_courier_shift,
     cancel_courier_shift_booking,
@@ -41,6 +46,7 @@ from app.services.workforce_service import (
     list_my_applications,
     list_worker_applications_for_admin,
     my_courier_shift_bookings,
+    public_application,
     review_worker_application,
     save_worker_application,
     submit_worker_application,
@@ -72,7 +78,8 @@ def _require_admin(user) -> None:
 
 @router.get("/applications/my")
 async def my_worker_applications(user=Depends(get_current_user)):
-    return api_success(await list_my_applications(user))
+    applications = await list_my_applications(user)
+    return api_success(await reconcile_worker_application_statuses(applications))
 
 
 @router.post("/applications")
@@ -120,7 +127,13 @@ async def admin_worker_applications(
 ):
     _require_admin(user)
     try:
-        return api_success(await list_worker_applications_for_admin(status, product))
+        if status and status not in APPLICATION_STATUSES:
+            raise ValueError("Unsupported application status.")
+        applications = await list_worker_applications_for_admin(None, product)
+        applications = await reconcile_worker_application_statuses(applications)
+        if status:
+            applications = [item for item in applications if item.get("status") == status]
+        return api_success(applications)
     except ValueError as exc:
         api_error(str(exc), 400)
 
@@ -133,6 +146,16 @@ async def admin_review_worker_application(
 ):
     _require_admin(user)
     try:
+        existing = await database.find_one("worker_applications", {"id": application_id})
+        if existing:
+            reconciled = await reconcile_worker_application_status(public_application(existing))
+            if reconciled.get("status") == "APPROVED" and existing.get("status") != "APPROVED":
+                if payload.status != "APPROVED":
+                    api_error(
+                        "This Driver is already approved. The retained Worker application is historical and cannot be rejected.",
+                        409,
+                    )
+                return api_success(reconciled)
         return api_success(await review_worker_application(application_id, payload.status, payload.note, user))
     except PermissionError as exc:
         api_error(str(exc), 403)
