@@ -27,14 +27,28 @@ class HailingLaunchPricingTests(unittest.IsolatedAsyncioTestCase):
 
         economy = city["pricing"]["ECONOMY"]
         self.assertEqual(economy, DEFAULT_CITY_PRICING["ECONOMY"])
+        # Legacy/configured percentages may remain in city records for compatibility,
+        # but the effective Driver commission is permanently zero.
         self.assertEqual(economy["platform_commission_percent"], 3.0)
         self.assertEqual(economy["booking_fee"], 0.0)
         self.assertEqual(economy["minimum_fare"], 1.0)
 
         fare = calculate_fare(city, "ECONOMY", 4.7, 15)
         self.assertEqual(fare["total_fare"], 2.15)
-        self.assertEqual(fare["platform_commission"], 0.06)
-        self.assertEqual(fare["estimated_driver_earnings"], 2.09)
+        self.assertEqual(fare["platform_commission_percent"], 0.0)
+        self.assertEqual(fare["platform_commission"], 0.0)
+        self.assertEqual(fare["estimated_driver_earnings"], 2.15)
+
+    async def test_effective_driver_commission_ignores_stored_percentage(self):
+        await seed_zimbabwe_service_areas()
+        city = await get_city("zw-harare")
+        city["pricing"]["ECONOMY"]["platform_commission_percent"] = 37.0
+
+        fare = calculate_fare(city, "ECONOMY", 4.7, 15)
+
+        self.assertEqual(fare["platform_commission_percent"], 0.0)
+        self.assertEqual(fare["platform_commission"], 0.0)
+        self.assertEqual(fare["estimated_driver_earnings"], fare["total_fare"])
 
     async def test_seed_migrates_only_exact_legacy_classes_and_preserves_admin_customization(self):
         await seed_zimbabwe_service_areas()
