@@ -1,0 +1,79 @@
+name: LetsGoRide Website Production CI
+
+on:
+  pull_request:
+    branches:
+      - website-production
+  push:
+    branches:
+      - website-production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: letsgoride-website-production-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  compliance:
+    name: Website legal and download compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required production files
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="frontend/public"
+          required=(
+            "index.html"
+            "download/index.html"
+            "privacy/index.html"
+            "privacy.html"
+            "terms/index.html"
+            "support/index.html"
+            "safety/index.html"
+            "delete-account/index.html"
+          )
+          for file in "${required[@]}"; do
+            test -s "$root/$file" || { echo "Missing or empty: $root/$file"; exit 1; }
+          done
+
+      - name: Verify direct privacy policy parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="frontend/public"
+          cmp -s "$root/privacy.html" "$root/privacy/index.html" || {
+            echo "/privacy.html must be byte-identical to /privacy policy source"
+            exit 1
+          }
+          if grep -Eqi 'http-equiv=.*refresh' "$root/privacy.html"; then
+            echo "/privacy.html must be a direct policy document, not a redirect"
+            exit 1
+          fi
+
+      - name: Verify official store links
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="frontend/public/download/index.html"
+          grep -Fq 'https://apps.apple.com/app/id6772862281' "$page"
+          grep -Fq 'https://play.google.com/store/apps/details?id=com.letsgo.ride' "$page"
+
+      - name: Smoke static routes locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8765 --directory frontend/public >/tmp/letsgoride-web.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          for path in / /download /privacy /privacy.html /terms /support /safety /delete-account; do
+            curl --fail --silent --show-error --location "http://127.0.0.1:8765$path" >/dev/null
+          done
