@@ -33,7 +33,7 @@ def test_rejected_verification_is_not_counted_as_pending_or_approved():
 def test_live_admin_overview_uses_counts_and_bounded_recent_tails():
     source = inspect.getsource(admin_router.overview)
     assert 'database.count("users")' in source
-    assert 'database.count("drivers", verified_filter)' in source
+    assert 'active_verified_driver_count()' in source
     assert 'limit=8' in source
     assert 'limit=6' in source
     assert 'database.find_many("users")' not in source

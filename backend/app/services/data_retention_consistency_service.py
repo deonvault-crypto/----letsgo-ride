@@ -21,6 +21,53 @@ APPROVED_DRIVER_STATES = {"approved", "verified", "active"}
 RECONCILABLE_WORKER_APPLICATION_STATUSES = {"SUBMITTED", "UNDER_REVIEW"}
 
 
+
+
+def _operational_verified_driver_record(row: Dict[str, Any] | None) -> bool:
+    if not row:
+        return False
+    verification_status = str(row.get("verification_status") or "").strip().lower()
+    if verification_status:
+        return verification_status in APPROVED_DRIVER_STATES
+    status = str(row.get("status") or "").strip().lower()
+    return row.get("verified") is True and status in {"approved", "active"}
+
+
+async def active_verified_driver_count() -> int:
+    """Count unique verified drivers whose linked user account is active."""
+
+    verified_filter = {
+        "$or": [
+            {"verification_status": {"$in": sorted(APPROVED_DRIVER_STATES)}},
+            {
+                "verification_status": {"$exists": False},
+                "verified": True,
+                "status": {"$in": ["approved", "active"]},
+            },
+        ]
+    }
+    drivers = await database.find_many("drivers", verified_filter)
+    user_ids = sorted(
+        {
+            str(driver.get("user_id") or "")
+            for driver in drivers
+            if driver.get("user_id") and _operational_verified_driver_record(driver)
+        }
+    )
+    if not user_ids:
+        return 0
+
+    users = await database.find_many(
+        "users",
+        {"id": {"$in": user_ids}, "status": "active"},
+    )
+    active_user_ids = {
+        str(user.get("id") or "")
+        for user in users
+        if user.get("id") and user.get("status") == "active"
+    }
+    return len(set(user_ids) & active_user_ids)
+
 def actionable_shared_ride_request_status_counts(
     requests: Iterable[Dict[str, Any]],
     rides: Iterable[Dict[str, Any]],

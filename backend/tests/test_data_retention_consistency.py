@@ -86,5 +86,54 @@ class DataRetentionConsistencyTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("status_source", reconciled)
 
 
+    async def test_approved_driver_with_active_user_is_counted_once(self):
+        drivers = [
+            {"id": "driver-1", "user_id": "user-active", "verification_status": "approved"},
+            {"id": "driver-2", "user_id": "user-active", "verification_status": "verified"},
+        ]
+        active_user = {"id": "user-active", "status": "active"}
+        with patch.object(
+            consistency.database,
+            "find_many",
+            AsyncMock(side_effect=[drivers, [active_user]]),
+        ):
+            count = await consistency.active_verified_driver_count()
+
+        self.assertEqual(count, 1)
+
+    async def test_approved_driver_with_deleted_user_is_not_counted_or_modified(self):
+        driver = {
+            "id": "driver-historical",
+            "user_id": "user-deleted",
+            "verification_status": "approved",
+            "status": "approved",
+        }
+        original_driver = dict(driver)
+        deleted_user = {"id": "user-deleted", "status": "deleted"}
+        with patch.object(
+            consistency.database,
+            "find_many",
+            AsyncMock(side_effect=[[driver], [deleted_user]]),
+        ):
+            count = await consistency.active_verified_driver_count()
+
+        self.assertEqual(count, 0)
+        self.assertEqual(driver, original_driver)
+
+    async def test_pending_driver_is_not_counted(self):
+        pending_driver = {
+            "id": "driver-pending",
+            "user_id": "user-active",
+            "verification_status": "pending",
+            "status": "pending",
+        }
+        find_many = AsyncMock(return_value=[pending_driver])
+        with patch.object(consistency.database, "find_many", find_many):
+            count = await consistency.active_verified_driver_count()
+
+        self.assertEqual(count, 0)
+        find_many.assert_awaited_once()
+
+
 if __name__ == "__main__":
     unittest.main()
