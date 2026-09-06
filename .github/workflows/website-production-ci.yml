@@ -53,7 +53,7 @@ jobs:
             echo "/privacy.html must be byte-identical to /privacy policy source"
             exit 1
           }
-          if grep -Eqi 'http-equiv=["'"']?refresh' "$root/privacy.html"; then
+          if grep -Eqi 'http-equiv=.*refresh' "$root/privacy.html"; then
             echo "/privacy.html must be a direct policy document, not a redirect"
             exit 1
           fi
