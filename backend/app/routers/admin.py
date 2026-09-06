@@ -15,6 +15,7 @@ from app.models.user import AdminRoleUpdateBody
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
+from app.services.data_retention_consistency_service import actionable_shared_ride_request_counts
 from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, is_final_trip_status
 from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
 from app.services.ride_request_realtime_service import publish_ride_request_realtime, ride_request_event_type, update_versioned_ride_request
@@ -222,8 +223,7 @@ async def overview(admin=Depends(get_admin_user)):
         verified_driver_count,
         pending_verification_count,
         active_ride_count,
-        pending_request_count,
-        confirmed_booking_count,
+        actionable_request_counts,
         support_count,
         open_support_count,
         report_count,
@@ -240,8 +240,7 @@ async def overview(admin=Depends(get_admin_user)):
         database.count("drivers", verified_filter),
         database.count("drivers", pending_filter),
         database.count("rides", {"status": {"$in": active_ride_statuses}}),
-        database.count("ride_requests", {"status": "pending"}),
-        database.count("ride_requests", {"status": "confirmed"}),
+        actionable_shared_ride_request_counts(),
         database.count("support_messages"),
         database.count("support_messages", {"status": {"$nin": ["resolved", "closed"]}}),
         database.count("reports"),
@@ -252,6 +251,8 @@ async def overview(admin=Depends(get_admin_user)):
         database.find_many("support_messages", sort=[("updated_at", -1)], limit=6),
         database.find_many("reports", sort=[("updated_at", -1)], limit=6),
     )
+    pending_request_count = actionable_request_counts["pending"]
+    confirmed_booking_count = actionable_request_counts["confirmed"]
 
     activities = []
     for request in recent_requests:
