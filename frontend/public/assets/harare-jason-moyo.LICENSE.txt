@@ -1,0 +1,14 @@
+Jason Moyo ave Harare
+
+File: harare-jason-moyo.jpg
+Photographer: Itaisibanda
+Date photographed: 22 January 2021
+Source: https://commons.wikimedia.org/wiki/File:Jason_Moyo_ave_Harare.jpg
+Original: https://upload.wikimedia.org/wikipedia/commons/3/35/Jason_Moyo_ave_Harare.jpg
+License: Creative Commons Attribution-ShareAlike 4.0 International
+License URL: https://creativecommons.org/licenses/by-sa/4.0/
+
+The website uses Wikimedia's 1280 x 720 resized version of the photograph,
+with a responsive CSS crop. That adapted display retains the CC BY-SA 4.0 license.
+The photograph's license applies to this image, not to the website's code,
+branding, or other assets. No endorsement by the photographer is implied.
