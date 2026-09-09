@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { AppState, AppStateStatus } from "react-native";
 
 import { startDriverBackgroundTripTracking, stopDriverBackgroundTripTracking } from "../../services/hailingBackgroundLocation";
+import {
+  publishHailingDriverLocation,
+  publishHailingDriverLocationError,
+} from "../../services/hailingDriverLocationStore";
 import { getHailingConfig, getHailingDriverStatus, updateHailingDriverPresence, updateHailingTripLocation } from "../../services/hailingService";
 import { DeviceLocation, watchForegroundLocation } from "../../services/locationService";
 import type { HailingTripStatus } from "../../types/hailing.types";
@@ -21,7 +25,6 @@ export function HailingDriverLocationSync() {
   const backgroundTripId = useRef<string | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const generation = useRef(0);
-  const sendInFlight = useRef(false);
   const reconciliationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
   const featureEnabled = useRef<boolean | null>(null);
@@ -54,18 +57,48 @@ export function HailingDriverLocationSync() {
     activeTarget.current = target;
     const watchGeneration = generation.current;
     const activeTrip = target.kind === "trip";
-    try {
-      const nextSubscription = await watchForegroundLocation((location) => {
-        if (!mounted.current || watchGeneration !== generation.current || sendInFlight.current) return;
-        sendInFlight.current = true;
+    let sending = false;
+    let pendingLocation: DeviceLocation | null = null;
+
+    const send = async (location: DeviceLocation) => {
+      if (!mounted.current || watchGeneration !== generation.current) return;
+      publishHailingDriverLocation(location);
+      if (sending) {
+        pendingLocation = location;
+        return;
+      }
+      sending = true;
+      try {
         const payload = locationPayload(location);
-        const request = target.kind === "trip" && target.tripId ? updateHailingTripLocation(target.tripId, payload) : updateHailingDriverPresence(payload);
-        void request.catch(() => undefined).finally(() => { sendInFlight.current = false; });
-      }, () => undefined, activeTrip ? { timeInterval: 5000, distanceInterval: 10 } : { timeInterval: 12000, distanceInterval: 35 });
+        if (target.kind === "trip" && target.tripId) await updateHailingTripLocation(target.tripId, payload);
+        else await updateHailingDriverPresence(payload);
+      } catch (error) {
+        if (mounted.current && watchGeneration === generation.current) {
+          publishHailingDriverLocationError(error instanceof Error ? error : new Error("Unable to sync live driver location."));
+        }
+      } finally {
+        sending = false;
+        if (mounted.current && watchGeneration === generation.current && pendingLocation) {
+          const next = pendingLocation;
+          pendingLocation = null;
+          void send(next);
+        }
+      }
+    };
+
+    try {
+      const nextSubscription = await watchForegroundLocation(
+        (location) => void send(location),
+        (error) => publishHailingDriverLocationError(error),
+        activeTrip ? { timeInterval: 4000, distanceInterval: 5 } : { timeInterval: 12000, distanceInterval: 35 },
+      );
       if (!mounted.current || watchGeneration !== generation.current || appState.current !== "active") { nextSubscription.remove(); return; }
       subscription.current = nextSubscription;
-    } catch {
-      if (watchGeneration === generation.current) subscription.current = null;
+    } catch (error) {
+      if (watchGeneration === generation.current) {
+        subscription.current = null;
+        publishHailingDriverLocationError(error instanceof Error ? error : new Error("Live driver location could not start."));
+      }
     }
   }, [stopForegroundWatch]);
 

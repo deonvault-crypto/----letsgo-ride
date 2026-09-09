@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 
-import { updateHailingDriverPresence, updateHailingTripLocation } from "../services/hailingService";
-import { DeviceLocation, watchForegroundLocation } from "../services/locationService";
+import {
+  subscribeHailingDriverLocation,
+  subscribeHailingDriverLocationError,
+} from "../services/hailingDriverLocationStore";
+import type { DeviceLocation } from "../services/locationService";
 
 
 type HailingDriverLocationSyncOptions = {
@@ -12,13 +15,12 @@ type HailingDriverLocationSyncOptions = {
 };
 
 /**
- * Keeps the authoritative Ride Now driver position fresh while the app is active.
- * The watcher is intentionally single-flight: if GPS produces another point while
- * a request is in flight, only the newest point is retained and sent next.
+ * Exposes the latest Ride Now driver position to map screens without creating
+ * another GPS watcher. The driver layout owns the single authoritative watcher
+ * and network publisher; screens only subscribe to its local location stream.
  */
 export function useHailingDriverLocationSync({
   enabled,
-  tripId,
   onLocation,
   onError,
 }: HailingDriverLocationSyncOptions) {
@@ -30,55 +32,16 @@ export function useHailingDriverLocationSync({
   useEffect(() => {
     if (!enabled) return undefined;
 
-    let active = true;
-    let subscription: { remove: () => void } | null = null;
-    let sending = false;
-    let pending: DeviceLocation | null = null;
-
-    const send = async (location: DeviceLocation) => {
-      if (!active) return;
+    const unsubscribeLocation = subscribeHailingDriverLocation((location) => {
       onLocationRef.current?.(location);
-      if (sending) {
-        pending = location;
-        return;
-      }
-      sending = true;
-      try {
-        const payload = {
-          location: { latitude: location.latitude, longitude: location.longitude },
-          heading: location.heading,
-          speed: location.speed,
-          accuracy: location.accuracy,
-        };
-        if (tripId) await updateHailingTripLocation(tripId, payload);
-        else await updateHailingDriverPresence(payload);
-      } catch (error) {
-        if (active) onErrorRef.current?.(error instanceof Error ? error : new Error("Unable to sync live driver location."));
-      } finally {
-        sending = false;
-        if (active && pending) {
-          const next = pending;
-          pending = null;
-          void send(next);
-        }
-      }
-    };
-
-    void watchForegroundLocation(
-      (location) => void send(location),
-      (error) => onErrorRef.current?.(error),
-      { timeInterval: 4000, distanceInterval: 5 },
-    ).then((next) => {
-      if (!active) next.remove();
-      else subscription = next;
-    }).catch((error) => {
-      if (active) onErrorRef.current?.(error instanceof Error ? error : new Error("Live driver location could not start."));
+    });
+    const unsubscribeError = subscribeHailingDriverLocationError((error) => {
+      onErrorRef.current?.(error);
     });
 
     return () => {
-      active = false;
-      pending = null;
-      subscription?.remove();
+      unsubscribeLocation();
+      unsubscribeError();
     };
-  }, [enabled, tripId]);
+  }, [enabled]);
 }
