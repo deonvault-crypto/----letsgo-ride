@@ -3,10 +3,11 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 
 import { v2Theme } from "../../constants/v2Theme";
+import type { ProductNavRole } from "../../navigation/roleRoutes";
 
 const useSafePathname: typeof usePathname = typeof usePathname === "function" ? usePathname : (() => "");
 
-export type NavRole = "customer" | "driver" | "courier" | "merchant";
+export type NavRole = ProductNavRole;
 
 type NavItem = {
   label: string;
