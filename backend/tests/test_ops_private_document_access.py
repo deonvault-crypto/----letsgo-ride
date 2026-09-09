@@ -1,10 +1,14 @@
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import HTTPException
 
 from app.database import COLLECTION_NAMES, database
 from app.routers.operations_private_documents import admin_worker_document
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class OpsPrivateDocumentAccessTests(unittest.IsolatedAsyncioTestCase):
@@ -50,6 +54,16 @@ class OpsPrivateDocumentAccessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.body, b"private-document")
         self.assertEqual(response.media_type, "image/jpeg")
         self.assertEqual(response.headers.get("cache-control"), "no-store")
+
+    def test_ops_protected_document_viewer_never_fetches_ticket_url(self):
+        viewer = (REPO_ROOT / "ops-web" / "public" / "protected-document-viewer.js").read_text(encoding="utf-8")
+        index = (REPO_ROOT / "ops-web" / "public" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("parsed.searchParams.has('document_token')", viewer)
+        self.assertIn("const directPath = parsed.pathname.replace(/\\/view$/, '');", viewer)
+        self.assertIn("fetch(directPath", viewer)
+        self.assertNotIn("fetch(parsed", viewer)
+        self.assertLess(index.index("protected-document-viewer.js"), index.index("control-center-v2.js"))
 
 
 if __name__ == "__main__":
