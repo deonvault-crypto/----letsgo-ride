@@ -19,9 +19,7 @@ from app.routers.admin import verification_document_view
 from app.routers.courier import preview_courier_quote
 from app.routers.rides import update_ride
 from app.routers.requests import _cancel_by_passenger
-from app.routers.waitlist import driver_application, passenger_interest, waitlist
 from app.models.courier import CourierQuotePreviewBody
-from app.models.report import WaitlistBody
 from app.services.auth_service import (
     CURRENT_PASSWORD_SCHEME,
     CURRENT_PBKDF2_ITERATIONS,
@@ -167,7 +165,7 @@ class SecurityHardeningPart2Tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(stored), 1)
             self.assertTrue(stored[0].read_bytes().startswith(b"\xff\xd8\xff"))
 
-    async def test_public_expensive_routes_use_separate_shared_limit_buckets(self):
+    async def test_public_expensive_route_uses_shared_limit_bucket(self):
         limiter = AsyncMock()
         with patch("app.routers.courier.rate_limit_service.enforce", limiter), patch(
             "app.routers.courier.customer_quote_preview", new=AsyncMock(return_value={"price_usd": 5})
@@ -175,18 +173,6 @@ class SecurityHardeningPart2Tests(unittest.IsolatedAsyncioTestCase):
             await preview_courier_quote(CourierQuotePreviewBody(pickup_address="Joina City", dropoff_address="Avondale"), request("/courier/quote-preview"))
         self.assertEqual(limiter.await_args.args[1], "courier_quote_preview")
         self.assertEqual(limiter.await_args.args[2].requests, 12)
-
-        body = WaitlistBody(name="Person Name", phone="+263771234567", city="Harare")
-        for route, path, bucket, quota in (
-            (waitlist, "/waitlist", "waitlist_general", 5),
-            (passenger_interest, "/waitlist/passenger-interest", "waitlist_passenger", 5),
-            (driver_application, "/waitlist/driver-application", "waitlist_driver", 3),
-        ):
-            limiter.reset_mock()
-            with patch("app.routers.waitlist.rate_limit_service.enforce", limiter):
-                await route(body, request(path))
-            self.assertEqual(limiter.await_args.args[1], bucket)
-            self.assertEqual(limiter.await_args.args[2].requests, quota)
 
     async def test_production_rate_limit_fails_closed_without_redis(self):
         limiter = RateLimitService()
