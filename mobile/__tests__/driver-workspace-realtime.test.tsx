@@ -92,16 +92,15 @@ describe("Driver workspace realtime", () => {
     renderHook(() => useDriverWorkspace(), { wrapper });
     await waitFor(() => expect(getDriverWorkspace).toHaveBeenCalledTimes(1));
     const workspace = fs.readFileSync(path.join(__dirname, "../contexts/DriverWorkspaceContext.tsx"), "utf8");
-    const ridesHook = fs.readFileSync(path.join(__dirname, "../hooks/useDriverRides.ts"), "utf8");
     const home = fs.readFileSync(path.join(__dirname, "../app/(driver)/home.tsx"), "utf8");
     const trips = fs.readFileSync(path.join(__dirname, "../app/(driver)/trips.tsx"), "utf8");
     expect(workspace).toContain("getDriverWorkspace");
     expect(workspace).toContain("requests");
     expect(workspace).toContain("subscribe");
-    expect(ridesHook).not.toContain("useLiveRefresh");
-    expect(ridesHook).toContain("useDriverWorkspace");
     expect(home).not.toContain("useLiveRefresh");
     expect(trips).not.toContain("useLiveRefresh");
+    expect(trips).toContain("useDriverWorkspace");
+    expect(trips).not.toContain("useDriverRides");
   });
 
   it("inserts Ride and Request events once and derives stable metrics", async () => {
