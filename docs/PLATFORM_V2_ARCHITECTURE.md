@@ -1,6 +1,6 @@
 # LetsGoRide Platform V2 Architecture
 
-Status: active design and implementation branch
+Status: production architecture reference for the `platform-v2-m1-m6` source line.
 
 ## Product domains
 

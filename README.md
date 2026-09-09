@@ -21,6 +21,7 @@ Permanent GitHub automation is intentionally limited to:
 
 - `LetsGoRide Production CI` — typecheck, automated tests, Android policy checks, backend tests and production smoke checks.
 - `LetsGoRide Mobile Production Release` — manual production-only native release.
+- `LetsGoRide Reviewed App Update` — manual production OTA release, gated on green CI for the exact source commit plus update-compatibility and production-environment checks.
 
 Automated tests remain in the repository because they protect production releases; they are not runtime modes and cannot be selected by app users.
 

@@ -1,3 +1,7 @@
+# Historical snapshot — 2026-08-22
+
+This file preserves the former Platform V2 feature-branch merge policy for traceability. It predates the current production source model and is not current release policy.
+
 # Platform V2 Merge Policy
 
 - `main` remains the stable line.
