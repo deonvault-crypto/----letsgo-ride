@@ -11,6 +11,7 @@ import { LocationDraftProvider } from "../contexts/LocationDraftContext";
 import { NotificationProvider } from "../contexts/NotificationContext";
 import { RealtimeProvider } from "../contexts/RealtimeContext";
 import { SessionProvider, useSession } from "../contexts/SessionContext";
+import { homeRouteForRole, isRoleShellGroup, shellGroupForRole } from "../navigation/roleRoutes";
 import { getActiveHailingTrip, getHailingDriverStatus } from "../services/hailingService";
 import { getActiveCourierDelivery } from "../services/operationsService";
 
@@ -74,14 +75,9 @@ function SessionShellRouter() {
   useEffect(() => {
     const routeGroup = segments[0];
     if (loading || !routeGroup || routeGroup === "(auth)") return;
-    const roleHome = user?.role === "admin" ? "/(admin)/dashboard"
-      : user?.role === "driver" ? "/(driver)/home"
-        : user?.role === "courier" ? "/(courier)/home"
-          : user?.role === "merchant" ? "/(merchant)/home"
-            : "/(customer)/home";
-    const roleGroups = ["(customer)", "(driver)", "(courier)", "(merchant)", "(admin)"];
-    if (!roleGroups.includes(String(routeGroup))) return;
-    const expectedGroup = roleHome.slice(1, roleHome.indexOf(")") + 1);
+    if (!isRoleShellGroup(routeGroup)) return;
+    const roleHome = homeRouteForRole(user?.role);
+    const expectedGroup = shellGroupForRole(user?.role);
     if ((isGuest || user) && routeGroup !== expectedGroup) router.replace(roleHome as never);
   }, [isGuest, loading, router, segments, user]);
   return null;
