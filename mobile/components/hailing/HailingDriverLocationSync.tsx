@@ -8,6 +8,7 @@ import {
 } from "../../services/hailingDriverLocationStore";
 import { getHailingConfig, getHailingDriverStatus, updateHailingDriverPresence, updateHailingTripLocation } from "../../services/hailingService";
 import { DeviceLocation, watchForegroundLocation } from "../../services/locationService";
+import { ApiRequestError } from "../../services/api";
 import type { HailingTripStatus } from "../../types/hailing.types";
 
 const STATUS_REFRESH_MS = 8000;
@@ -28,6 +29,7 @@ export function HailingDriverLocationSync() {
   const reconciliationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mounted = useRef(true);
   const featureEnabled = useRef<boolean | null>(null);
+  const eligibilityBackoff = useRef(false);
 
   const stopForegroundWatch = useCallback(() => {
     generation.current += 1;
@@ -110,6 +112,7 @@ export function HailingDriverLocationSync() {
         if (!config.enabled) { stopAllTracking(); return; }
       }
       const status = await getHailingDriverStatus();
+      eligibilityBackoff.current = false;
       if (!mounted.current) return;
       if (!status.online) { stopAllTracking(); return; }
       const activeTrip = status.active_trip;
@@ -122,7 +125,11 @@ export function HailingDriverLocationSync() {
         if (appState.current === "active") await startLocationWatch({ kind: "presence" });
         else stopForegroundWatch();
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 403) {
+        eligibilityBackoff.current = true;
+        stopAllTracking();
+      }
       // Transient network/status failures leave an already-running background task alone.
     }
   }, [ensureBackgroundTrip, startLocationWatch, stopAllTracking, stopForegroundWatch]);
@@ -131,7 +138,7 @@ export function HailingDriverLocationSync() {
     mounted.current = true;
     const schedule = () => {
       if (reconciliationTimer.current) clearTimeout(reconciliationTimer.current);
-      const delay = featureEnabled.current === false ? DISABLED_REFRESH_MS : STATUS_REFRESH_MS;
+      const delay = featureEnabled.current === false || eligibilityBackoff.current ? DISABLED_REFRESH_MS : STATUS_REFRESH_MS;
       reconciliationTimer.current = setTimeout(async () => { await reconcile(); if (mounted.current) schedule(); }, delay);
     };
     void reconcile().finally(schedule);
