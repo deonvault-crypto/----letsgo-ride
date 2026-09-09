@@ -23,17 +23,15 @@ Open the project in Expo Go using the LAN QR code.
 
 ## API Base URL
 
-The mobile API base URL is defined in:
+The mobile app reads its API origin from the `EXPO_PUBLIC_API_BASE_URL` environment variable in `mobile/constants/config.ts`. Non-development builds require this value to be configured explicitly.
+
+The production EAS profile currently sets:
 
 ```text
-mobile/constants/config.ts
+https://letsgoride-v2-production.onrender.com
 ```
 
-Current live URL:
-
-```text
-https://letsgoride-backend.onrender.com
-```
+Development falls back to `http://127.0.0.1:8000` when `EXPO_PUBLIC_API_BASE_URL` is not set.
 
 ## Authentication
 
