@@ -173,8 +173,10 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_lifecycle_sweeper_uses_versioned_mutations_for_boarding_in_progress_and_complete(self):
         now = datetime.now(ZIMBABWE_TZ)
-        boarding = await self.insert_ride("boarding", date=now.strftime("%Y-%m-%d"), time=(now + timedelta(minutes=5)).strftime("%H:%M"))
-        in_progress = await self.insert_ride("auto-start", date=now.strftime("%Y-%m-%d"), time=(now - timedelta(minutes=1)).strftime("%H:%M"))
+        boarding_at = now + timedelta(minutes=5)
+        in_progress_at = now - timedelta(minutes=1)
+        boarding = await self.insert_ride("boarding", date=boarding_at.strftime("%Y-%m-%d"), time=boarding_at.strftime("%H:%M"))
+        in_progress = await self.insert_ride("auto-start", date=in_progress_at.strftime("%Y-%m-%d"), time=in_progress_at.strftime("%H:%M"))
         completed = await self.insert_ride(
             "auto-complete", status="IN_PROGRESS", date=(now - timedelta(days=1)).strftime("%Y-%m-%d"),
             time=now.strftime("%H:%M"), estimated_duration_minutes=15,
