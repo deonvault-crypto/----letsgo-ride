@@ -168,11 +168,28 @@ async def communications_worker(stop_event):
 
 async def campaign_metrics(campaign_id):
     query = {"campaign_id": campaign_id}
-    counts = await asyncio.gather(
-        database.count("app_notifications", query),
-        database.count("app_notifications", {**query, "delivered_push": True}),
-        database.count("app_notifications", {**query, "read": True}),
-        database.count("app_notifications", {**query, "push_status": {"$in": ["unknown", "sending"]}}),
-        database.count("app_notifications", {**query, "push_status": {"$nin": ["inbox_only", "disabled_by_preference", "no_active_tokens", "expo_ticket_success", "expo_partial_failure", "sending", "unknown"]}}),
-    )
-    return dict(zip(("inbox_created", "push_accepted", "read", "push_unknown", "push_failed"), counts))
+    if database.db is None:
+        counts = await asyncio.gather(
+            database.count("app_notifications", query),
+            database.count("app_notifications", {**query, "delivered_push": True}),
+            database.count("app_notifications", {**query, "read": True}),
+            database.count("app_notifications", {**query, "push_status": {"$in": ["unknown", "sending"]}}),
+            database.count("app_notifications", {**query, "push_status": {"$nin": ["inbox_only", "disabled_by_preference", "no_active_tokens", "expo_ticket_success", "expo_partial_failure", "sending", "unknown"]}}),
+        )
+        return dict(zip(("inbox_created", "push_accepted", "read", "push_unknown", "push_failed"), counts))
+
+    rows = await database.db["app_notifications"].aggregate([
+        {"$match": query},
+        {"$group": {
+            "_id": None,
+            "inbox_created": {"$sum": 1},
+            "push_accepted": {"$sum": {"$cond": [{"$eq": ["$delivered_push", True]}, 1, 0]}},
+            "read": {"$sum": {"$cond": [{"$eq": ["$read", True]}, 1, 0]}},
+            "push_unknown": {"$sum": {"$cond": [{"$in": ["$push_status", ["unknown", "sending"]]}, 1, 0]}},
+            "push_failed": {"$sum": {"$cond": [{"$not": [{"$in": ["$push_status", ["inbox_only", "disabled_by_preference", "no_active_tokens", "expo_ticket_success", "expo_partial_failure", "sending", "unknown"]]}]}, 1, 0]}},
+        }},
+        {"$project": {"_id": 0}},
+    ]).to_list(length=1)
+    if rows:
+        return rows[0]
+    return {"inbox_created": 0, "push_accepted": 0, "read": 0, "push_unknown": 0, "push_failed": 0}
