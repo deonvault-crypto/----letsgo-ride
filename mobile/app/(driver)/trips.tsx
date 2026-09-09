@@ -7,7 +7,7 @@ import { ErrorState } from "../../components/states/ErrorState";
 import { LoadingState } from "../../components/states/LoadingState";
 import { Screen } from "../../components/ui/Screen";
 import { v2Theme } from "../../constants/v2Theme";
-import { useDriverRides } from "../../hooks/useDriverRides";
+import { useDriverWorkspace } from "../../contexts/DriverWorkspaceContext";
 import { Ride } from "../../types/ride.types";
 import { formatStatus } from "../../utils/formatStatus";
 
@@ -15,7 +15,7 @@ const TERMINAL_STATUSES = new Set(["COMPLETED", "CANCELLED", "EXPIRED", "complet
 
 export default function DriverTripsScreen() {
   const router = useRouter();
-  const { rides: ownRides, loading, error, reload } = useDriverRides();
+  const { rides: ownRides, loading, error, reconcile: reload } = useDriverWorkspace();
   const active = ownRides.filter((ride) => !TERMINAL_STATUSES.has(String(ride.status)));
   const history = ownRides.filter((ride) => TERMINAL_STATUSES.has(String(ride.status)));
 
