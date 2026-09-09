@@ -1,12 +1,15 @@
 # LetsGoRide
 
-Production repository for the LetsGoRide mobile app, API and public website.
+Production repository for the LetsGoRide mobile app, API and operations dashboard.
+
+The public website is intentionally isolated on the `website-production` branch under `frontend/` and is deployed independently from that branch.
 
 ## Production surfaces
 
 - Mobile: `mobile/` — Expo/React Native
 - API: `backend/` — FastAPI
-- Website: `frontend/`
+- Operations dashboard: `ops-web/`
+- Public website source: `website-production` branch → `frontend/`
 - Public site: https://letsgoride.site
 - Production API: https://letsgoride-v2-production.onrender.com
 
@@ -28,3 +31,4 @@ Automated tests remain in the repository because they protect production release
 - Production email delivery fails closed if Resend is unavailable.
 - Production Stripe mode requires live credentials when enabled.
 - No staging, preview, demo-seed or TestFlight build profile is part of the active release configuration.
+- Website changes belong on `website-production`, not on `platform-v2-m1-m6`.
