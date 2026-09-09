@@ -20,6 +20,8 @@ describe("Build 34 release recovery contract", () => {
     const layout = readMobile("app/_layout.tsx");
     expect(layout).toContain("function ActiveJobRecoveryRouter()");
     expect(layout).toContain('["passenger", "driver", "courier"]');
+    expect(layout).toContain("sessionValidated");
+    expect(layout).toContain("if (loading || !sessionValidated || isGuest || !user?.id) return;");
     expect(layout).toContain("getActiveHailingTrip");
     expect(layout).toContain("getHailingDriverStatus");
     expect(layout).toContain("getActiveCourierDelivery");

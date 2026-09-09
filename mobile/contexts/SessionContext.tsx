@@ -9,6 +9,7 @@ import { User } from "../types/user.types";
 type SessionState = {
   user: User | null;
   loading: boolean;
+  sessionValidated: boolean;
   error: string | null;
   isGuest: boolean;
   refreshSession: () => Promise<void>;
@@ -20,6 +21,7 @@ type SessionState = {
 const defaultSession: SessionState = {
   user: null,
   loading: true,
+  sessionValidated: false,
   error: null,
   isGuest: false,
   refreshSession: async () => undefined,
@@ -38,16 +40,18 @@ function isAuthenticationFailure(error: unknown) {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionValidated, setSessionValidated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState(false);
   const mounted = useRef(true);
   const generation = useRef(0);
   const inFlight = useRef<{ generation: number; promise: Promise<void> } | null>(null);
 
-  const applyUser = useCallback((nextUser: User) => {
+  const applyUser = useCallback((nextUser: User, validated = true) => {
     if (!mounted.current) return;
     setUser(nextUser);
     setIsGuest(false);
+    setSessionValidated(validated);
     setError(null);
     setLoading(false);
     void writeSessionUserSnapshot(nextUser);
@@ -55,7 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const updateUser = useCallback((nextUser: User) => {
     generation.current += 1;
-    applyUser(nextUser);
+    applyUser(nextUser, true);
   }, [applyUser]);
 
   const invalidateSession = useCallback(async () => {
@@ -74,12 +78,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (mounted.current) {
             setUser(null);
             setIsGuest(true);
+            setSessionValidated(true);
             setError(null);
           }
           return;
         }
         const nextUser = await getCurrentUser();
-        if (generation.current === requestGeneration) applyUser(nextUser);
+        if (generation.current === requestGeneration) applyUser(nextUser, true);
       } catch (nextError) {
         if (generation.current !== requestGeneration) return;
         if (isAuthenticationFailure(nextError)) {
@@ -109,6 +114,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       generation.current += 1;
       setUser(null);
       setIsGuest(true);
+      setSessionValidated(true);
       setError(null);
       setLoading(false);
     });
@@ -119,11 +125,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!signedIn) {
         setUser(null);
         setIsGuest(true);
+        setSessionValidated(true);
         setError(null);
         setLoading(false);
         return;
       }
-      if (cachedUser) applyUser(cachedUser);
+      if (cachedUser) applyUser(cachedUser, false);
       else setLoading(false);
       void refreshSession();
     })();
@@ -145,7 +152,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refreshSession]);
 
   return (
-    <SessionContext.Provider value={{ user, loading, error, isGuest, refreshSession, updateUser, invalidateSession, logout }}>
+    <SessionContext.Provider value={{ user, loading, sessionValidated, error, isGuest, refreshSession, updateUser, invalidateSession, logout }}>
       {children}
     </SessionContext.Provider>
   );

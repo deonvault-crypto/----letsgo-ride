@@ -24,11 +24,11 @@ import "../services/courierBackgroundLocation";
 function ActiveJobRecoveryRouter() {
   const notificationNavigation = useContext(NotificationNavigationContext);
   const router = useRouter();
-  const { user, loading, isGuest } = useSession();
+  const { user, loading, sessionValidated, isGuest } = useSession();
   const attemptedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (loading || isGuest || !user?.id) return;
+    if (loading || !sessionValidated || isGuest || !user?.id) return;
     if (!["passenger", "driver", "courier"].includes(String(user.role))) return;
     const recoveryKey = `${user.id}:${user.role}`;
     if (attemptedFor.current === recoveryKey) return;
@@ -64,7 +64,7 @@ function ActiveJobRecoveryRouter() {
     })();
 
     return () => { settled = true; };
-  }, [isGuest, loading, router, user?.id, user?.role, notificationNavigation]);
+  }, [isGuest, loading, notificationNavigation, router, sessionValidated, user?.id, user?.role]);
   return null;
 }
 
