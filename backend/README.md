@@ -13,8 +13,10 @@ FastAPI backend for the LetsGoRide mobile product.
 
 ## Start Backend
 
+From the repository root:
+
 ```powershell
-cd C:\Users\mmm\----letsgo-ride\backend
+cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
