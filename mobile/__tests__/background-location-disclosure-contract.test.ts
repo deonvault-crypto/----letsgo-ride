@@ -29,6 +29,17 @@ describe("background location disclosure contracts", () => {
     expect(driver).toContain("Allow while working");
   });
 
+  it("backs off Driver Ride Now location reconciliation when eligibility is rejected", () => {
+    const sync = read("components/hailing/HailingDriverLocationSync.tsx");
+
+    expect(sync).toContain('import { ApiRequestError } from "../../services/api"');
+    expect(sync).toContain("error instanceof ApiRequestError && error.status === 403");
+    expect(sync).toContain("eligibilityBackoff.current = true");
+    expect(sync).toContain("eligibilityBackoff.current = false");
+    expect(sync).toContain("featureEnabled.current === false || eligibilityBackoff.current");
+    expect(sync).toContain("DISABLED_REFRESH_MS");
+  });
+
   it("preserves Courier delivery and online-availability behavior", () => {
     const courier = read("components/courier/CourierBackgroundLocationPrompt.tsx");
 
