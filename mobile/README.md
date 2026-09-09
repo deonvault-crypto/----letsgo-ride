@@ -13,8 +13,10 @@ Expo Router TypeScript mobile app for LetsGoRide.
 
 ## Start Mobile
 
-```powershell
-cd C:\Users\mmm\----letsgo-ride\mobile
+From the repository root:
+
+```bash
+cd mobile
 npm install
 npx expo start --lan --port 8082 -c
 ```
@@ -51,32 +53,26 @@ Development falls back to `http://127.0.0.1:8000` when `EXPO_PUBLIC_API_BASE_URL
 
 ### Build Requirements
 
-- macOS or Linux required to build iOS native code
-- Xcode 15.0+ for iOS 15+ support
-- CocoaPods for native dependency management
 - EAS CLI: `npm install -g eas-cli`
+- EAS cloud iOS builds can be triggered from Windows, macOS, or Linux; the native build runs on EAS infrastructure.
+- macOS, Xcode, and CocoaPods are required only when building or working with the iOS native project locally.
+- This repository intentionally defines only the `production` EAS build profile.
 
-### iOS Prebuild Process
+### iOS EAS Build Process
 
-1. On macOS, run:
+For the configured production release build:
 
-   ```bash
-   npx expo prebuild --platform ios --clean
-   ```
+```bash
+npx eas build --platform ios --profile production
+```
 
-   This generates the native iOS project with the configured Expo plugins.
+For local iOS native-project work on macOS, you can generate the native project with:
 
-2. Validate the build:
+```bash
+npx expo prebuild --platform ios --clean
+```
 
-   ```bash
-   npx eas build --platform ios --profile development
-   ```
-
-3. For production releases:
-
-   ```bash
-   npx eas build --platform ios --profile production
-   ```
+There is no `development`, `preview`, staging, or TestFlight EAS build profile in the current repository configuration.
 
 ### Driver Verification
 
