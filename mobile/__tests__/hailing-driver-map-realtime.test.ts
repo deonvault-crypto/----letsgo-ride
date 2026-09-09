@@ -31,16 +31,22 @@ describe("Ride Now Driver map-first realtime contracts", () => {
     expect(hooks).not.toContain("4500");
   });
 
-  it("keeps live Driver GPS syncing active in the workspace and active trip", () => {
+  it("uses one authoritative foreground GPS watcher while keeping live Driver map updates", () => {
     const workspace = read("app/(driver)/hailing.tsx");
     const trip = read("app/(driver)/hailing/trip/[id].tsx");
+    const coordinator = read("components/hailing/HailingDriverLocationSync.tsx");
     const sync = read("hooks/useHailingDriverLocationSync.ts");
 
     expect(workspace).toContain("useHailingDriverLocationSync");
     expect(trip).toContain("useHailingDriverLocationSync");
-    expect(sync).toContain("updateHailingDriverPresence");
-    expect(sync).toContain("updateHailingTripLocation");
-    expect(sync).toContain("timeInterval: 4000");
+    expect(coordinator).toContain("updateHailingDriverPresence");
+    expect(coordinator).toContain("updateHailingTripLocation");
+    expect(coordinator).toContain("watchForegroundLocation");
+    expect(coordinator).toContain("timeInterval: 4000");
+    expect(coordinator).toContain("publishHailingDriverLocation");
+    expect(sync).toContain("subscribeHailingDriverLocation");
+    expect(sync).not.toContain("watchForegroundLocation");
+    expect(sync).not.toContain("updateHailingTripLocation");
   });
 
   it("routes a background Ride Now offer notification directly to the Driver map workspace", () => {
