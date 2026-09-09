@@ -6,7 +6,6 @@ This directory separates current engineering references from historical implemen
 
 - `PLATFORM_V2_ARCHITECTURE.md`
 - `PLATFORM_V2_DESIGN_TOKENS.md`
-- `PLATFORM_V2_MERGE_POLICY.md`
 - `PLATFORM_V2_TECH_DECISIONS.md`
 - `security/`
 
@@ -14,4 +13,4 @@ Code, tests, CI configuration, and the current production branch take precedence
 
 ## Historical material
 
-`archive/` contains dated reviews, launch checkpoints, completed workplans, milestone plans, superseded product requirements, and retired infrastructure plans. Keep them for traceability, but do not treat them as current state without checking the codebase first.
+`archive/` contains dated reviews, launch checkpoints, completed workplans, milestone plans, superseded product requirements, retired infrastructure plans, and superseded branch policies. Keep them for traceability, but do not treat them as current state without checking the codebase first.
