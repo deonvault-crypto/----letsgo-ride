@@ -23,8 +23,8 @@ import {
   productRoleFromParam,
 } from "../../navigation/roleRoutes";
 import type { ProductNavRole } from "../../navigation/roleRoutes";
+import { AppTopBar } from "../layout/AppTopBar";
 import { BottomNav } from "../layout/BottomNav";
-import { Header } from "../layout/Header";
 
 const useSafeSegments: typeof useSegments = typeof useSegments === "function" ? useSegments : (() => [] as never);
 const useSafeLocalSearchParams: typeof useLocalSearchParams = typeof useLocalSearchParams === "function" ? useLocalSearchParams : (() => ({} as never));
@@ -99,7 +99,7 @@ export function Screen({
       >
         <View style={styles.frame}>
           {showHeader ? (
-            <Header
+            <AppTopBar
               title={title}
               showBack={resolvedShowBack}
               fallbackRoute={resolvedFallback}
