@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 
 import { EmptyState } from "../states/EmptyState";
 import { ErrorState } from "../states/ErrorState";
@@ -12,8 +12,7 @@ import { Screen } from "../ui/Screen";
 import { StatusBadge } from "../ui/StatusBadge";
 import { colors } from "../../constants/colors";
 import { spacing } from "../../constants/spacing";
-import { useRealtime } from "../../contexts/RealtimeContext";
-import { useScreenReconciliation } from "../../hooks/useScreenReconciliation";
+import { useAdminReconciliation } from "../../hooks/useAdminReconciliation";
 import {
   AdminAuditLog,
   AdminOverview,
@@ -44,9 +43,6 @@ import { AdminVerificationListItem } from "../../types/verification.types";
 import { formatStatus } from "../../utils/formatStatus";
 import { canonicalRideStatus, tripStatusLabel, tripStatusTone } from "../../utils/tripLifecycle";
 
-const ADMIN_CONNECTED_RECONCILIATION_MS = 15000;
-const ADMIN_RECOVERY_RECONCILIATION_MS = 8000;
-
 const VERIFIED_DRIVER_STATUSES = new Set(["approved", "verified", "active"]);
 const PENDING_DRIVER_STATUSES = new Set([
   "pending",
@@ -54,22 +50,6 @@ const PENDING_DRIVER_STATUSES = new Set([
   "pending_auto_check",
   "needs_review",
   "needs_resubmission",
-]);
-
-const ADMIN_EVENT_RESOURCES = new Set([
-  "user",
-  "driver",
-  "verification",
-  "ride",
-  "ride_request",
-  "hailing_trip",
-  "courier_delivery",
-  "food_order",
-  "support_message",
-  "safety_report",
-  "worker_application",
-  "notification",
-  "profile_photo",
 ]);
 
 type AdminSection = "overview" | "profile_photos" | "verifications" | "support" | "safety" | "bookings" | "users" | "rides" | "audit";
@@ -84,7 +64,6 @@ type ReasonAction = {
 
 export default function AdminControlCenter() {
   const router = useRouter();
-  const { connectionState, reconciliationRevision, subscribe, reconnect } = useRealtime();
   const [active, setActive] = useState<AdminSection>("overview");
   const activeRef = useRef<AdminSection>("overview");
   activeRef.current = active;
@@ -110,8 +89,7 @@ export default function AdminControlCenter() {
 
   const hasLoaded = useRef(false);
   const coreInFlight = useRef<Promise<void> | null>(null);
-  const sectionInFlight = useRef<Promise<void> | null>(null);
-  const seenRevision = useRef(reconciliationRevision);
+  const sectionInFlight = useRef<Partial<Record<AdminSection, Promise<void>>>>({});
 
   const loadCore = useCallback(() => {
     if (coreInFlight.current) return coreInFlight.current;
@@ -148,9 +126,13 @@ export default function AdminControlCenter() {
   }, []);
 
   const loadSection = useCallback((section: AdminSection) => {
-    if (section === "overview" || section === "profile_photos" || section === "verifications") return Promise.resolve();
-    if (sectionInFlight.current) return sectionInFlight.current;
+    if (section === "overview" || section === "profile_photos" || section === "verifications") {
+      setSectionLoading(false);
+      return Promise.resolve();
+    }
     setSectionLoading(true);
+    const inFlight = sectionInFlight.current[section];
+    if (inFlight) return inFlight;
 
     let request!: Promise<void>;
     request = (async () => {
@@ -163,49 +145,19 @@ export default function AdminControlCenter() {
     })()
       .catch((err) => setError(err instanceof Error ? err.message : "Unable to refresh this admin section."))
       .finally(() => {
-        setSectionLoading(false);
-        if (sectionInFlight.current === request) sectionInFlight.current = null;
+        if (sectionInFlight.current[section] === request) delete sectionInFlight.current[section];
+        if (activeRef.current === section) setSectionLoading(false);
       });
-    sectionInFlight.current = request;
+    sectionInFlight.current[section] = request;
     return request;
   }, []);
 
   const refreshVisible = useCallback(async () => {
-    await loadCore();
-    await loadSection(activeRef.current);
+    const section = activeRef.current;
+    await Promise.all([loadCore(), loadSection(section)]);
   }, [loadCore, loadSection]);
 
-  useScreenReconciliation(refreshVisible);
-
-  useEffect(() => subscribe((event) => {
-    if (!ADMIN_EVENT_RESOURCES.has(String(event.resource_type))) return;
-    void refreshVisible();
-  }), [refreshVisible, subscribe]);
-
-  useEffect(() => {
-    if (seenRevision.current === reconciliationRevision) return;
-    seenRevision.current = reconciliationRevision;
-    void refreshVisible();
-  }, [reconciliationRevision, refreshVisible]);
-
-  useFocusEffect(useCallback(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const schedule = () => {
-      const delay = connectionState === "connected" ? ADMIN_CONNECTED_RECONCILIATION_MS : ADMIN_RECOVERY_RECONCILIATION_MS;
-      timer = setTimeout(async () => {
-        await refreshVisible();
-        if (!cancelled) schedule();
-      }, delay);
-    };
-
-    schedule();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [connectionState, refreshVisible]));
+  const { connectionState, reconnect } = useAdminReconciliation(refreshVisible);
 
   const switchSection = useCallback((section: AdminSection) => {
     setActive(section);
