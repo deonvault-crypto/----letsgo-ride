@@ -1,5 +1,5 @@
 {
-  "reviewedAt": "2026-09-01",
+  "reviewedAt": "2026-09-09",
   "expiresOn": "2026-09-30",
   "scope": "Expo SDK 54 mobile build and navigation dependency chains",
   "allowedAdvisories": [
@@ -26,6 +26,12 @@
       "package": "uuid",
       "severity": "moderate",
       "reason": "Transitive xcode/Expo config-plugin build chain. npm's available remediation requires the breaking Expo 57 upgrade."
+    },
+    {
+      "id": "GHSA-2883-xcg3-v3hh",
+      "package": "js-yaml",
+      "severity": "high",
+      "reason": "New 2026-09-01 advisory currently reaches Expo/Jest build and test tooling through js-yaml 4.3.1 and 3.15.1. Patched 4.3.2/3.15.2 releases exist, but the lockfile has not yet been safely regenerated and validated against Expo SDK 54. Temporary reviewed exception only; dependency resolution must be updated before this policy expires."
     }
   ]
 }
