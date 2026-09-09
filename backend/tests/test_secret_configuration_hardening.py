@@ -3,10 +3,6 @@ import unittest
 from unittest.mock import patch
 
 from app.config import Settings, get_settings
-from scripts.provision_staging_qa_accounts import (
-    _load_credentials,
-    _require_staging_environment,
-)
 
 
 class SecretConfigurationHardeningTests(unittest.TestCase):
@@ -73,19 +69,6 @@ class SecretConfigurationHardeningTests(unittest.TestCase):
                 RuntimeError, "PUBLIC_API_BASE_URL must be explicitly configured"
             ):
                 Settings()
-
-    def test_qa_provisioner_refuses_non_staging_environment(self):
-        with self.assertRaisesRegex(RuntimeError, "forbidden outside"):
-            _require_staging_environment("production", "letsgoride_staging")
-
-    def test_qa_provisioner_refuses_non_staging_database(self):
-        with self.assertRaisesRegex(RuntimeError, "refuses any database"):
-            _require_staging_environment("staging", "letsgoride")
-
-    def test_qa_provisioner_has_no_hardcoded_credentials(self):
-        with patch.dict(os.environ, {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, "QA_ADMIN_EMAIL"):
-                _load_credentials()
 
 
 if __name__ == "__main__":

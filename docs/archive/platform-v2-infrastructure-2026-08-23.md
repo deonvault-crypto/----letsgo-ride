@@ -1,3 +1,7 @@
+# Historical snapshot — 2026-08-23
+
+This file preserves the former `docs/platform-v2-infrastructure.md` for traceability. It describes an earlier staging-era infrastructure plan and is **not** the current LetsGoRide production state.
+
 # LetsGoRide Platform V2 Infrastructure
 
 This document is the operational map for Platform V2. GitHub is the source of truth for code. Production and staging must remain intentionally separated.
