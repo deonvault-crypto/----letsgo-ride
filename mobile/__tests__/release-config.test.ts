@@ -30,6 +30,13 @@ describe("production release configuration", () => {
     );
   });
 
+  it("rejects every non-production EAS build profile", () => {
+    expect(validate("development", "https://letsgoride-v2-production.onrender.com")).toThrow();
+    expect(validate("preview", "https://letsgoride-v2-staging.onrender.com")).toThrow();
+    expect(validate("staging", "https://letsgoride-v2-staging.onrender.com")).toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com")).not.toThrow();
+  });
+
   it("rejects legacy, staging, credentialed, and path-scoped production API URLs", () => {
     expect(validate("production", "https://letsgoride-v2-production.onrender.com")).not.toThrow();
     expect(validate("production", "https://letsgoride-backend.onrender.com")).toThrow();
