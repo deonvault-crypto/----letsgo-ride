@@ -40,10 +40,10 @@ Development falls back to `http://127.0.0.1:8000` when `EXPO_PUBLIC_API_BASE_URL
 - Phone numbers are optional during signup and required before booking or posting rides.
 - Optional biometric login can be enabled after a successful login.
 
-## Current Product Limits
+## Current Product Notes
 
-- No real payments yet.
-- No maps SDK yet.
+- Ride Now includes Stripe card-payment support in source; availability is gated by payment configuration.
+- Maps use `react-native-maps`; Android release builds require the configured Google Maps API key.
 - No KYC provider yet.
 - Driver verification uses LetsGoRide document review.
 
