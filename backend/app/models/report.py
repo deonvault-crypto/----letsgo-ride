@@ -30,12 +30,3 @@ class SupportMessageBody(BaseModel):
     @classmethod
     def phone_has_country_code(cls, value: Optional[str]) -> Optional[str]:
         return validate_international_phone(value)
-
-
-class WaitlistBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=2, max_length=120)
-    phone: str = Field(min_length=6, max_length=32)
-    city: Optional[str] = Field(default=None, max_length=120)
-    interest: Optional[str] = Field(default=None, max_length=600)
