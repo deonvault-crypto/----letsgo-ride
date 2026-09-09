@@ -73,6 +73,16 @@ function proxyApi(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  const requestPath = (req.url || '/').split('?')[0];
+  if (req.method === 'GET' && requestPath === '/health/live') {
+    res.writeHead(200, {
+      ...securityHeaders('.json'),
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    return res.end(JSON.stringify({ success: true, data: { status: 'alive', service: 'letsgoride-ops' } }));
+  }
+
   if ((req.url || '').startsWith('/api/')) {
     return proxyApi(req, res);
   }
