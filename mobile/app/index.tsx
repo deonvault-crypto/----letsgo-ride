@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, StyleSheet, Text, View } from "react-native";
 
 import { useSession } from "../contexts/SessionContext";
+import { homeRouteForRole } from "../navigation/roleRoutes";
 
 export const STANDARD_LAUNCH_MS = 1250;
 export const REDUCED_MOTION_LAUNCH_MS = 350;
@@ -39,11 +40,7 @@ export default function IndexScreen() {
     if (loading) return undefined;
     let active = true;
     async function decideRoute() {
-      let destination = "/(customer)/home";
-      if (user?.role === "admin") destination = "/(admin)/dashboard";
-      else if (user?.role === "driver") destination = "/(driver)/home";
-      else if (user?.role === "courier") destination = "/(courier)/home";
-      else if (user?.role === "merchant") destination = "/(merchant)/home";
+      const destination = homeRouteForRole(user?.role);
       const launchMs = reduceMotion ? REDUCED_MOTION_LAUNCH_MS : STANDARD_LAUNCH_MS;
       const remaining = Math.max(0, launchMs - (Date.now() - launchedAt.current));
       if (remaining) await wait(remaining);
