@@ -43,6 +43,7 @@ describe("SessionProvider", () => {
     const { result } = renderHook(() => useSession(), { wrapper });
 
     await waitFor(() => expect(result.current.user).toEqual(passengerUser));
+    expect(result.current.sessionValidated).toBe(true);
     expect(getCurrentUser).toHaveBeenCalledTimes(1);
 
     currentState = "background";
@@ -57,6 +58,7 @@ describe("SessionProvider", () => {
     const { result } = renderHook(() => useSession(), { wrapper });
     await waitFor(() => expect(result.current.isGuest).toBe(true));
     expect(result.current.user).toBeNull();
+    expect(result.current.sessionValidated).toBe(true);
     expect(getCurrentUser).not.toHaveBeenCalled();
   });
 
@@ -69,6 +71,7 @@ describe("SessionProvider", () => {
     const updated = { ...passengerUser, name: "Updated Name" };
     act(() => publishSessionUser(updated));
     expect(result.current.user).toEqual(updated);
+    expect(result.current.sessionValidated).toBe(true);
     expect(getCurrentUser).toHaveBeenCalledTimes(1);
   });
 
@@ -82,8 +85,10 @@ describe("SessionProvider", () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.user).toEqual(passengerUser);
+    expect(result.current.sessionValidated).toBe(false);
     expect(getCurrentUser).toHaveBeenCalledTimes(1);
     await act(async () => { resolveUser(passengerUser); await reconciliation; });
+    await waitFor(() => expect(result.current.sessionValidated).toBe(true));
   });
 
   it("does not let an older session response overwrite a newer login", async () => {
@@ -102,5 +107,6 @@ describe("SessionProvider", () => {
     });
 
     expect(result.current.user).toEqual(newerUser);
+    expect(result.current.sessionValidated).toBe(true);
   });
 });
