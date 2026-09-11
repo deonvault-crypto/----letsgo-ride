@@ -63,6 +63,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Report unused TypeScript symbols
+        continue-on-error: true
+        run: npx tsc --noEmit --noUnusedLocals --noUnusedParameters
+
       - name: Verify Android API and release policy
         run: npm run verify:android
 
@@ -121,6 +125,12 @@ jobs:
 
       - name: Compile Python package
         run: python -m compileall -q app scripts tests
+
+      - name: Report unused Python imports and variables
+        continue-on-error: true
+        run: |
+          pip install 'ruff==0.13.2'
+          ruff check app scripts tests --select F401,F841
 
       - name: Import API application
         run: python -c "from app.main import app; assert app.title == 'LetsGoRide API'"
