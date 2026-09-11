@@ -1,6 +1,5 @@
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -197,7 +196,6 @@ class SecurityHardeningPart2Tests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(await verify_email_user("legacy@example.com", "WrongPassword!2026"))
 
     async def test_high_value_cross_account_access_is_rejected(self):
-        customer_a = {"id": "customer-a", "role": "passenger"}
         customer_b = {"id": "customer-b", "role": "passenger"}
         courier_a = {"id": "courier-a", "role": "courier"}
         merchant_b = {"id": "merchant-b", "role": "merchant"}

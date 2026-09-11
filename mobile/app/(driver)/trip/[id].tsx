@@ -20,7 +20,7 @@ import { listConversations } from "../../../services/conversationService";
 import { listPendingReviews } from "../../../services/reviewService";
 import { acceptRideRequest, cancelPassengerRideRequest, declineRideRequest, endTrip, getRide, startTrip } from "../../../services/ridesService";
 import { Conversation } from "../../../types/conversation.types";
-import { Ride, RideRequest } from "../../../types/ride.types";
+import { RideRequest } from "../../../types/ride.types";
 import { PendingReview } from "../../../types/review.types";
 import { formatTripDate } from "../../../utils/formatDate";
 import { formatStatus } from "../../../utils/formatStatus";
