@@ -68,7 +68,7 @@ class CommunicationsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await database.count("app_notifications"), 0)
         self.push.assert_not_awaited()
         await database.update_one("notification_preferences", "old", {"marketing_consent_version": 1})
-        row = await self.queued(payload)
+        await self.queued(payload)
         # Consent withdrawn after approval is respected.
         await database.update_one("notification_preferences", "old", {"marketing_messages": False})
         await service.process_campaign_batch(); await service.process_campaign_batch()

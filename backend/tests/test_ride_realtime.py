@@ -25,7 +25,6 @@ from app.services.ride_request_realtime_service import (
 )
 from app.services.ride_service import (
     ZIMBABWE_TZ,
-    apply_ride_lifecycle,
     create_ride,
     disable_live_location,
     end_trip,

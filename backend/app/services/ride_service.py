@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from app.database import database
 from app.services.audit_service import write_audit_log
-from app.services.notification_service import create_app_notification, notify_users
+from app.services.notification_service import notify_users
 from app.services.profile_photo_service import absolute_profile_photo_url
 from app.services.review_service import completed_trips_count_for_user, public_review_summary_for_user
 from app.services.ride_realtime_service import (
