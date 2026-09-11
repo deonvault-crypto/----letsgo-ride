@@ -30,6 +30,7 @@ from app.services.ride_service import (
     disable_live_location,
     list_public_rides,
     list_user_rides,
+    search_rides,
     end_trip,
     live_trip_state,
     start_trip,
@@ -266,6 +267,38 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
             driver_rows = await list_user_rides(self.driver)
         self.assertEqual(len(driver_rows), 1)
         self.assertEqual(lifecycle.await_count, 1)
+
+    async def test_public_search_pushes_status_date_and_seats_into_query(self):
+        search_date = "2099-09-01"
+        rides = (
+            self.future_ride("matching", date=search_date, available_seats=2),
+            self.future_ride("legacy-open", date=search_date, status="open", available_seats=3),
+            self.future_ride("insufficient-seats", date=search_date, available_seats=1),
+            self.future_ride("completed", date=search_date, status="COMPLETED", available_seats=4),
+            self.future_ride("other-date", date="2099-09-02", available_seats=4),
+        )
+        for ride in rides:
+            await database.insert_one("rides", ride)
+
+        original_find_many = database.find_many
+        with patch.object(database, "find_many", side_effect=original_find_many) as find_many:
+            results = await search_rides(
+                origin="Harare",
+                seats=2,
+                date=search_date,
+                current_user=self.passenger,
+            )
+
+        ride_queries = [
+            call.args[1] for call in find_many.await_args_list
+            if len(call.args) > 1 and call.args[0] == "rides"
+        ]
+        self.assertEqual(len(ride_queries), 1)
+        self.assertEqual(ride_queries[0]["date"], search_date)
+        self.assertEqual(ride_queries[0]["available_seats"], {"$gte": 2})
+        self.assertIn("SCHEDULED", ride_queries[0]["status"]["$in"])
+        self.assertIn("open", ride_queries[0]["status"]["$in"])
+        self.assertEqual({ride["id"] for ride in results}, {"matching", "legacy-open"})
 
     async def test_live_state_rejects_unrelated_customer(self):
         ride = await self.insert_ride(status="IN_PROGRESS", live_tracking_enabled=True)

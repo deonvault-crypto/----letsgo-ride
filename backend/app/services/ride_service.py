@@ -292,8 +292,28 @@ async def enrich_ride(
     return enriched
 
 
-async def list_public_rides(current_user: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    rides = await database.find_many("rides")
+async def list_public_rides(
+    current_user: Optional[Dict[str, Any]] = None,
+    *,
+    minimum_seats: int = 0,
+    departure_date: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    today = datetime.now(ZIMBABWE_TZ).date().isoformat()
+    filters: Dict[str, Any] = {
+        "status": {"$in": [
+            TRIP_STATUS_SCHEDULED,
+            TRIP_STATUS_BOARDING,
+            "scheduled",
+            "boarding",
+            "OPEN",
+            "open",
+        ]},
+        "date": departure_date if departure_date else {"$gte": today},
+    }
+    if minimum_seats > 0:
+        filters["available_seats"] = {"$gte": minimum_seats}
+
+    rides = await database.find_many("rides", filters)
     rows = []
     for ride in rides:
         lifecycle_ride = await apply_ride_lifecycle(ride)
@@ -318,10 +338,14 @@ async def search_rides(
     date: Optional[str] = None,
     current_user: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    rides = await list_public_rides(current_user)
+    normalized_date = (date or "").strip()
+    rides = await list_public_rides(
+        current_user,
+        minimum_seats=seats,
+        departure_date=normalized_date or None,
+    )
     normalized_origin = (origin or "").strip().lower()
     normalized_destination = (destination or "").strip().lower()
-    normalized_date = (date or "").strip()
 
     results = []
     for ride in rides:
