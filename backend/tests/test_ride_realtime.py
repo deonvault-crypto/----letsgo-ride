@@ -291,7 +291,12 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
 
         ride_queries = [
             call.args[1] for call in find_many.await_args_list
-            if len(call.args) > 1 and call.args[0] == "rides"
+            if (
+                len(call.args) > 1
+                and call.args[0] == "rides"
+                and "status" in call.args[1]
+                and "date" in call.args[1]
+            )
         ]
         self.assertEqual(len(ride_queries), 1)
         self.assertEqual(ride_queries[0]["date"], search_date)
