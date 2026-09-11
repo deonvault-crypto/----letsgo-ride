@@ -4,7 +4,7 @@ from typing import Any, Dict
 from app.database import database
 from app.services.courier_scale_service import list_user_deliveries_scaled
 from app.services.food_scale_service import list_customer_orders_scaled
-from app.services.ride_request_realtime_service import enrich_ride_request
+from app.services.ride_request_realtime_service import enrich_ride_requests
 
 
 ACTIVITY_RIDE_LIMIT = 50
@@ -23,9 +23,7 @@ async def get_customer_activity(user: Dict[str, Any]) -> Dict[str, Any]:
         list_customer_orders_scaled(user),
         list_user_deliveries_scaled(user),
     )
-    enriched_rides = await asyncio.gather(
-        *(enrich_ride_request(request, user) for request in ride_requests),
-    )
+    enriched_rides = await enrich_ride_requests(ride_requests, user)
     return {
         "rides": list(enriched_rides),
         "food_orders": food_orders,
