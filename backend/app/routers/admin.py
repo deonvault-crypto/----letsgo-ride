@@ -19,7 +19,7 @@ from app.services.data_retention_consistency_service import (
     actionable_shared_ride_request_counts,
     active_verified_driver_count,
 )
-from app.services.ride_service import TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS, TRIP_STATUS_SCHEDULED, apply_ride_lifecycle, canonical_trip_status, is_final_trip_status
+from app.services.ride_service import apply_ride_lifecycle, canonical_trip_status, is_final_trip_status
 from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
 from app.services.ride_request_realtime_service import publish_ride_request_realtime, ride_request_event_type, update_versioned_ride_request
 from app.services.verification_service import (

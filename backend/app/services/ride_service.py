@@ -1,15 +1,14 @@
-import asyncio
-import logging
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app.database import database
 from app.services.audit_service import write_audit_log
-from app.services.notification_service import create_app_notification, notify_users
+from app.services.notification_service import notify_users
 from app.services.profile_photo_service import absolute_profile_photo_url
 from app.services.review_service import completed_trips_count_for_user, public_review_summary_for_user
 from app.services.ride_realtime_service import (
     insert_versioned_ride,
+    legacy_ride_status,
     publish_ride_realtime,
     ride_event_type,
     ride_realtime_version,
@@ -17,8 +16,6 @@ from app.services.ride_realtime_service import (
 )
 from app.utils import new_id, now_iso
 
-
-logger = logging.getLogger(__name__)
 
 ZIMBABWE_TZ = timezone(timedelta(hours=2))
 TRIP_STATUS_DRAFT = "DRAFT"
@@ -43,10 +40,6 @@ def canonical_trip_status(status: Optional[str]) -> str:
         "CANCELLED": TRIP_STATUS_CANCELLED,
     }
     return legacy.get(normalized, normalized)
-
-
-def is_active_trip_status(status: Optional[str]) -> bool:
-    return canonical_trip_status(status) in {TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}
 
 
 def is_final_trip_status(status: Optional[str]) -> bool:
@@ -93,11 +86,6 @@ def boarding_starts_datetime(ride: Dict[str, Any]) -> Optional[datetime]:
     if not departure_at:
         return None
     return departure_at - timedelta(minutes=BOARDING_WINDOW_MINUTES)
-
-
-async def confirmed_request_count(ride_id: str) -> int:
-    requests = await database.find_many("ride_requests", {"ride_id": ride_id})
-    return len([request for request in requests if request.get("status") == "confirmed"])
 
 
 async def confirmed_passenger_user_ids(ride_id: str) -> List[str]:
@@ -217,23 +205,6 @@ async def sweep_ride_lifecycle() -> Dict[str, int]:
     return {"checked": len(rides), "changed": changed}
 
 
-async def ride_lifecycle_sweeper(stop_event: asyncio.Event) -> None:
-    while not stop_event.is_set():
-        try:
-            await sweep_ride_lifecycle()
-        except Exception as exc:
-            logger.warning("ride_lifecycle_sweep_failed error=%s", str(exc)[:300])
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=60)
-        except asyncio.TimeoutError:
-            continue
-
-
-def has_ride_departed(ride: Dict[str, Any]) -> bool:
-    departure_at = ride_departure_datetime(ride)
-    return bool(departure_at and departure_at <= datetime.now(ZIMBABWE_TZ))
-
-
 def public_ride_status(ride: Dict[str, Any]) -> str:
     return canonical_trip_status(ride.get("status"))
 
@@ -256,8 +227,14 @@ def _public_driver_photo_url(user: Optional[Dict[str, Any]]) -> Optional[str]:
     return absolute_profile_photo_url(str(photo_url))
 
 
-async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    ride = await apply_ride_lifecycle(ride)
+async def enrich_ride(
+    ride: Dict[str, Any],
+    current_user: Optional[Dict[str, Any]] = None,
+    *,
+    reconcile_lifecycle: bool = True,
+) -> Dict[str, Any]:
+    if reconcile_lifecycle:
+        ride = await apply_ride_lifecycle(ride)
     enriched = dict(ride)
     driver_user_id = ride.get("user_id")
     if not driver_user_id and ride.get("driver_id"):
@@ -271,14 +248,7 @@ async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any
     status = public_ride_status(ride)
     now = datetime.now(ZIMBABWE_TZ)
     enriched["status"] = status
-    enriched["legacy_status"] = {
-        TRIP_STATUS_SCHEDULED: "open",
-        TRIP_STATUS_BOARDING: "open",
-        TRIP_STATUS_IN_PROGRESS: "departed",
-        TRIP_STATUS_COMPLETED: "completed",
-        TRIP_STATUS_CANCELLED: "cancelled",
-        TRIP_STATUS_EXPIRED: "departed",
-    }.get(status, str(status).lower())
+    enriched["legacy_status"] = legacy_ride_status(status)
     enriched["departure_at"] = departure_at.isoformat() if departure_at else None
     enriched["boarding_starts_at"] = boarding_at.isoformat() if boarding_at else None
     enriched["estimated_arrival_at"] = estimated_arrival_at.isoformat() if estimated_arrival_at else None
@@ -316,13 +286,33 @@ async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any
     return enriched
 
 
-async def list_public_rides(current_user: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    rides = await database.find_many("rides")
+async def list_public_rides(
+    current_user: Optional[Dict[str, Any]] = None,
+    *,
+    minimum_seats: int = 0,
+    departure_date: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    today = datetime.now(ZIMBABWE_TZ).date().isoformat()
+    filters: Dict[str, Any] = {
+        "status": {"$in": [
+            TRIP_STATUS_SCHEDULED,
+            TRIP_STATUS_BOARDING,
+            "scheduled",
+            "boarding",
+            "OPEN",
+            "open",
+        ]},
+        "date": departure_date if departure_date else {"$gte": today},
+    }
+    if minimum_seats > 0:
+        filters["available_seats"] = {"$gte": minimum_seats}
+
+    rides = await database.find_many("rides", filters)
     rows = []
     for ride in rides:
         lifecycle_ride = await apply_ride_lifecycle(ride)
         if is_bookable_public_ride(lifecycle_ride):
-            rows.append(await enrich_ride(lifecycle_ride, current_user))
+            rows.append(await enrich_ride(lifecycle_ride, current_user, reconcile_lifecycle=False))
     return rows
 
 
@@ -331,7 +321,7 @@ async def list_user_rides(current_user: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = []
     for ride in rides:
         lifecycle_ride = await apply_ride_lifecycle(ride)
-        rows.append(await enrich_ride(lifecycle_ride, current_user))
+        rows.append(await enrich_ride(lifecycle_ride, current_user, reconcile_lifecycle=False))
     return sorted(rows, key=lambda item: item.get("departure_at") or item.get("date") or "", reverse=True)
 
 
@@ -342,10 +332,14 @@ async def search_rides(
     date: Optional[str] = None,
     current_user: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    rides = await list_public_rides(current_user)
+    normalized_date = (date or "").strip()
+    rides = await list_public_rides(
+        current_user,
+        minimum_seats=seats,
+        departure_date=normalized_date or None,
+    )
     normalized_origin = (origin or "").strip().lower()
     normalized_destination = (destination or "").strip().lower()
-    normalized_date = (date or "").strip()
 
     results = []
     for ride in rides:

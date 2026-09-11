@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import WebSocketDisconnect
 from pydantic import ValidationError
 
-from app.models.event import PublishedRealtimeEvent, RealtimeAudience
+from app.models.event import RealtimeAudience
 from app.routers.realtime import _handle_client_message, realtime_socket
 from app.services.event_service import RealtimeEventService
 from app.services.pubsub_service import PubSubTransport, RedisPubSubTransport

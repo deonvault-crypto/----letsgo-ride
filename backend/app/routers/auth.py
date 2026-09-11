@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 
-from app.config import get_settings
 from app.auth import get_current_user
 from app.models.user import (
     EmailLoginBody,
@@ -18,11 +17,8 @@ from app.services.auth_service import (
     DuplicateVerifiedEmailError,
     ExistingUnverifiedEmailError,
     create_email_user,
-    create_or_update_user,
     find_user_by_email,
     find_user_by_pending_email,
-    find_user_by_phone,
-    find_user_by_token,
     public_user,
     resend_email_verification,
     reset_email_password,

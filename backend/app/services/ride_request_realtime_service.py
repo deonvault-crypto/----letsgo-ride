@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.database import database
 from app.models.event import RealtimeAudience
@@ -107,25 +108,52 @@ def ride_request_event_type(request: Dict[str, Any], *, created: bool = False) -
     return "ride_request.updated"
 
 
-async def enrich_ride_request(request: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+async def enrich_ride_requests(
+    requests: List[Dict[str, Any]],
+    user: Dict[str, Any],
+    *,
+    rides_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
     from app.services.ride_service import enrich_ride
 
-    enriched = dict(request)
-    ride = await database.find_one("rides", {"id": request.get("ride_id")}) if request.get("ride_id") else None
-    passenger = await database.find_one("users", {"id": request.get("user_id")}) if request.get("user_id") else None
-    if ride:
-        enriched["ride_snapshot"] = await enrich_ride(ride, user)
-    if passenger:
-        enriched["passenger_name"] = passenger.get("name") or request.get("passenger_name")
-        enriched["passenger_profile_photo_url"] = passenger.get("profile_photo_url") or request.get("passenger_profile_photo_url")
-        enriched["passenger_verification_status"] = passenger.get("verification_status") or request.get("passenger_verification_status")
-    enriched.pop("passenger_phone", None)
-    return enriched
+    ride_ids = sorted({str(request.get("ride_id")) for request in requests if request.get("ride_id")})
+    passenger_ids = sorted({str(request.get("user_id")) for request in requests if request.get("user_id")})
+
+    if rides_by_id is None:
+        rides = await database.find_many("rides", {"id": {"$in": ride_ids}}) if ride_ids else []
+        rides_by_id = {str(ride.get("id")): ride for ride in rides if ride.get("id")}
+
+    passengers = await database.find_many("users", {"id": {"$in": passenger_ids}}) if passenger_ids else []
+    passengers_by_id = {str(passenger.get("id")): passenger for passenger in passengers if passenger.get("id")}
+
+    ride_snapshots = await asyncio.gather(
+        *(enrich_ride(rides_by_id[ride_id], user) for ride_id in ride_ids if ride_id in rides_by_id),
+    )
+    snapshots_by_id = {str(snapshot.get("id")): snapshot for snapshot in ride_snapshots if snapshot.get("id")}
+
+    enriched_requests = []
+    for request in requests:
+        enriched = dict(request)
+        ride_snapshot = snapshots_by_id.get(str(request.get("ride_id") or ""))
+        passenger = passengers_by_id.get(str(request.get("user_id") or ""))
+        if ride_snapshot:
+            enriched["ride_snapshot"] = ride_snapshot
+        if passenger:
+            enriched["passenger_name"] = passenger.get("name") or request.get("passenger_name")
+            enriched["passenger_profile_photo_url"] = passenger.get("profile_photo_url") or request.get("passenger_profile_photo_url")
+            enriched["passenger_verification_status"] = passenger.get("verification_status") or request.get("passenger_verification_status")
+        enriched.pop("passenger_phone", None)
+        enriched_requests.append(enriched)
+    return enriched_requests
+
+
+async def enrich_ride_request(request: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
+    return (await enrich_ride_requests([request], user))[0]
 
 
 async def list_driver_ride_requests(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     rides = await database.find_many("rides", {"user_id": user.get("id")})
-    ride_ids = {ride["id"] for ride in rides}
-    requests = await database.find_many("ride_requests", {"ride_id": {"$in": sorted(ride_ids)}}) if ride_ids else []
+    rides_by_id = {str(ride.get("id")): ride for ride in rides if ride.get("id")}
+    requests = await database.find_many("ride_requests", {"ride_id": {"$in": sorted(rides_by_id)}}) if rides_by_id else []
     scoped = [request for request in requests if request.get("user_id") != user.get("id")]
-    return [await enrich_ride_request(request, user) for request in scoped]
+    return await enrich_ride_requests(scoped, user, rides_by_id=rides_by_id)

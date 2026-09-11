@@ -190,6 +190,10 @@ class Database:
             [("user_id", 1), ("updated_at", -1)],
             name="driver_rides_workspace",
         )
+        await self.db["rides"].create_index(
+            [("status", 1), ("date", 1), ("available_seats", 1)],
+            name="public_rides_availability",
+        )
         await self.db["ride_requests"].create_index(
             [("ride_id", 1), ("status", 1), ("updated_at", -1)],
             name="ride_requests_by_ride",

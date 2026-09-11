@@ -15,6 +15,7 @@ from app.services.event_service import realtime_event_service
 from app.services.realtime_connection_manager import RealtimePrincipal, principal_can_receive
 from app.services.ride_realtime_service import (
     insert_versioned_ride,
+    legacy_ride_status,
     ride_realtime_version,
     update_versioned_ride,
 )
@@ -25,9 +26,11 @@ from app.services.ride_request_realtime_service import (
 )
 from app.services.ride_service import (
     ZIMBABWE_TZ,
-    apply_ride_lifecycle,
     create_ride,
     disable_live_location,
+    list_public_rides,
+    list_user_rides,
+    search_rides,
     end_trip,
     live_trip_state,
     start_trip,
@@ -98,6 +101,15 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
 
     def publications(self, resource_type):
         return [call.args[0] for call in self.publish.await_args_list if call.args[0].envelope.resource_type == resource_type]
+
+    def test_legacy_ride_status_mapping_has_one_canonical_source(self):
+        self.assertEqual(legacy_ride_status("SCHEDULED"), "open")
+        self.assertEqual(legacy_ride_status("BOARDING"), "open")
+        self.assertEqual(legacy_ride_status("IN_PROGRESS"), "departed")
+        self.assertEqual(legacy_ride_status("COMPLETED"), "completed")
+        self.assertEqual(legacy_ride_status("CANCELLED"), "cancelled")
+        self.assertEqual(legacy_ride_status("EXPIRED"), "departed")
+        self.assertEqual(legacy_ride_status("CUSTOM"), "custom")
 
     async def test_versions_initialize_legacy_at_zero_and_increment_atomically(self):
         self.assertEqual(ride_realtime_version({"id": "legacy"}), 0)
@@ -250,6 +262,57 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
         accepted = await _accept_request(request, ride, self.driver)
         self.assertEqual(accepted["status"], "confirmed")
         self.assertEqual((await database.find_one("rides", {"id": ride["id"]}))["available_seats"], 1)
+
+    async def test_ride_lists_reconcile_lifecycle_once_per_ride(self):
+        await self.insert_ride()
+        lifecycle = AsyncMock(side_effect=lambda ride: ride)
+        with patch("app.services.ride_service.apply_ride_lifecycle", lifecycle):
+            public_rows = await list_public_rides(self.passenger)
+        self.assertEqual(len(public_rows), 1)
+        self.assertEqual(lifecycle.await_count, 1)
+
+        lifecycle.reset_mock()
+        with patch("app.services.ride_service.apply_ride_lifecycle", lifecycle):
+            driver_rows = await list_user_rides(self.driver)
+        self.assertEqual(len(driver_rows), 1)
+        self.assertEqual(lifecycle.await_count, 1)
+
+    async def test_public_search_pushes_status_date_and_seats_into_query(self):
+        search_date = "2099-09-01"
+        rides = (
+            self.future_ride("matching", date=search_date, available_seats=2),
+            self.future_ride("legacy-open", date=search_date, status="open", available_seats=3),
+            self.future_ride("insufficient-seats", date=search_date, available_seats=1),
+            self.future_ride("completed", date=search_date, status="COMPLETED", available_seats=4),
+            self.future_ride("other-date", date="2099-09-02", available_seats=4),
+        )
+        for ride in rides:
+            await database.insert_one("rides", ride)
+
+        original_find_many = database.find_many
+        with patch.object(database, "find_many", side_effect=original_find_many) as find_many:
+            results = await search_rides(
+                origin="Harare",
+                seats=2,
+                date=search_date,
+                current_user=self.passenger,
+            )
+
+        ride_queries = [
+            call.args[1] for call in find_many.await_args_list
+            if (
+                len(call.args) > 1
+                and call.args[0] == "rides"
+                and "status" in call.args[1]
+                and "date" in call.args[1]
+            )
+        ]
+        self.assertEqual(len(ride_queries), 1)
+        self.assertEqual(ride_queries[0]["date"], search_date)
+        self.assertEqual(ride_queries[0]["available_seats"], {"$gte": 2})
+        self.assertIn("SCHEDULED", ride_queries[0]["status"]["$in"])
+        self.assertIn("open", ride_queries[0]["status"]["$in"])
+        self.assertEqual({ride["id"] for ride in results}, {"matching", "legacy-open"})
 
     async def test_live_state_rejects_unrelated_customer(self):
         ride = await self.insert_ride(status="IN_PROGRESS", live_tracking_enabled=True)

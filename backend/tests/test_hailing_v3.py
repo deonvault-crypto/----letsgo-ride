@@ -11,7 +11,6 @@ from app.services.hailing_city_service import get_city, resolve_service_area, se
 from app.services.hailing_fare_service import calculate_fare, create_quote
 from app.services.hailing_trip_service import (
     accept_offer,
-    active_trip_for_user,
     cancel_trip,
     confirm_passenger_boarding,
     complete_trip,

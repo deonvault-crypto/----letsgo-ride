@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Image, Linking, Modal, StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 
 import { ErrorState } from "../../../components/states/ErrorState";
 import { LoadingState } from "../../../components/states/LoadingState";
@@ -21,7 +21,6 @@ import { formatStatus } from "../../../utils/formatStatus";
 import { isPendingVerificationStatus, isVerifiedStatus, needsVerificationReview } from "../../../utils/verificationStatus";
 
 export default function AdminVerificationDetailScreen() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [detail, setDetail] = useState<AdminVerificationDetail | null>(null);
   const [notes, setNotes] = useState("");
