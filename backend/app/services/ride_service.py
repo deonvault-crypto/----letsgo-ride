@@ -226,8 +226,14 @@ def _public_driver_photo_url(user: Optional[Dict[str, Any]]) -> Optional[str]:
     return absolute_profile_photo_url(str(photo_url))
 
 
-async def enrich_ride(ride: Dict[str, Any], current_user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    ride = await apply_ride_lifecycle(ride)
+async def enrich_ride(
+    ride: Dict[str, Any],
+    current_user: Optional[Dict[str, Any]] = None,
+    *,
+    reconcile_lifecycle: bool = True,
+) -> Dict[str, Any]:
+    if reconcile_lifecycle:
+        ride = await apply_ride_lifecycle(ride)
     enriched = dict(ride)
     driver_user_id = ride.get("user_id")
     if not driver_user_id and ride.get("driver_id"):
@@ -292,7 +298,7 @@ async def list_public_rides(current_user: Optional[Dict[str, Any]] = None) -> Li
     for ride in rides:
         lifecycle_ride = await apply_ride_lifecycle(ride)
         if is_bookable_public_ride(lifecycle_ride):
-            rows.append(await enrich_ride(lifecycle_ride, current_user))
+            rows.append(await enrich_ride(lifecycle_ride, current_user, reconcile_lifecycle=False))
     return rows
 
 
@@ -301,7 +307,7 @@ async def list_user_rides(current_user: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = []
     for ride in rides:
         lifecycle_ride = await apply_ride_lifecycle(ride)
-        rows.append(await enrich_ride(lifecycle_ride, current_user))
+        rows.append(await enrich_ride(lifecycle_ride, current_user, reconcile_lifecycle=False))
     return sorted(rows, key=lambda item: item.get("departure_at") or item.get("date") or "", reverse=True)
 
 

@@ -28,6 +28,8 @@ from app.services.ride_service import (
     apply_ride_lifecycle,
     create_ride,
     disable_live_location,
+    list_public_rides,
+    list_user_rides,
     end_trip,
     live_trip_state,
     start_trip,
@@ -250,6 +252,20 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
         accepted = await _accept_request(request, ride, self.driver)
         self.assertEqual(accepted["status"], "confirmed")
         self.assertEqual((await database.find_one("rides", {"id": ride["id"]}))["available_seats"], 1)
+
+    async def test_ride_lists_reconcile_lifecycle_once_per_ride(self):
+        await self.insert_ride()
+        lifecycle = AsyncMock(side_effect=lambda ride: ride)
+        with patch("app.services.ride_service.apply_ride_lifecycle", lifecycle):
+            public_rows = await list_public_rides(self.passenger)
+        self.assertEqual(len(public_rows), 1)
+        self.assertEqual(lifecycle.await_count, 1)
+
+        lifecycle.reset_mock()
+        with patch("app.services.ride_service.apply_ride_lifecycle", lifecycle):
+            driver_rows = await list_user_rides(self.driver)
+        self.assertEqual(len(driver_rows), 1)
+        self.assertEqual(lifecycle.await_count, 1)
 
     async def test_live_state_rejects_unrelated_customer(self):
         ride = await self.insert_ride(status="IN_PROGRESS", live_tracking_enabled=True)
