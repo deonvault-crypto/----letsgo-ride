@@ -34,7 +34,7 @@ async def update_versioned_ride(
     )
 
 
-def _legacy_status(status: Any) -> str:
+def legacy_ride_status(status: Any) -> str:
     normalized = str(status or "SCHEDULED").upper()
     return {
         "SCHEDULED": "open",
@@ -52,7 +52,7 @@ def safe_ride_payload(ride: Dict[str, Any]) -> Dict[str, Any]:
         "id": ride.get("id"),
         "realtime_version": ride_realtime_version(ride),
         "status": status,
-        "legacy_status": _legacy_status(status),
+        "legacy_status": legacy_ride_status(status),
         "driver_user_id": ride.get("user_id"),
         "driver_name": ride.get("driver_name"),
         "vehicle": ride.get("vehicle"),

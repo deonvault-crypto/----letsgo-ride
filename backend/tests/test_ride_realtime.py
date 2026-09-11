@@ -15,6 +15,7 @@ from app.services.event_service import realtime_event_service
 from app.services.realtime_connection_manager import RealtimePrincipal, principal_can_receive
 from app.services.ride_realtime_service import (
     insert_versioned_ride,
+    legacy_ride_status,
     ride_realtime_version,
     update_versioned_ride,
 )
@@ -101,6 +102,15 @@ class RideRealtimeTests(unittest.IsolatedAsyncioTestCase):
 
     def publications(self, resource_type):
         return [call.args[0] for call in self.publish.await_args_list if call.args[0].envelope.resource_type == resource_type]
+
+    def test_legacy_ride_status_mapping_has_one_canonical_source(self):
+        self.assertEqual(legacy_ride_status("SCHEDULED"), "open")
+        self.assertEqual(legacy_ride_status("BOARDING"), "open")
+        self.assertEqual(legacy_ride_status("IN_PROGRESS"), "departed")
+        self.assertEqual(legacy_ride_status("COMPLETED"), "completed")
+        self.assertEqual(legacy_ride_status("CANCELLED"), "cancelled")
+        self.assertEqual(legacy_ride_status("EXPIRED"), "departed")
+        self.assertEqual(legacy_ride_status("CUSTOM"), "custom")
 
     async def test_versions_initialize_legacy_at_zero_and_increment_atomically(self):
         self.assertEqual(ride_realtime_version({"id": "legacy"}), 0)

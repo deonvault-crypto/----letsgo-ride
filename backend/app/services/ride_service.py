@@ -8,6 +8,7 @@ from app.services.profile_photo_service import absolute_profile_photo_url
 from app.services.review_service import completed_trips_count_for_user, public_review_summary_for_user
 from app.services.ride_realtime_service import (
     insert_versioned_ride,
+    legacy_ride_status,
     publish_ride_realtime,
     ride_event_type,
     ride_realtime_version,
@@ -247,14 +248,7 @@ async def enrich_ride(
     status = public_ride_status(ride)
     now = datetime.now(ZIMBABWE_TZ)
     enriched["status"] = status
-    enriched["legacy_status"] = {
-        TRIP_STATUS_SCHEDULED: "open",
-        TRIP_STATUS_BOARDING: "open",
-        TRIP_STATUS_IN_PROGRESS: "departed",
-        TRIP_STATUS_COMPLETED: "completed",
-        TRIP_STATUS_CANCELLED: "cancelled",
-        TRIP_STATUS_EXPIRED: "departed",
-    }.get(status, str(status).lower())
+    enriched["legacy_status"] = legacy_ride_status(status)
     enriched["departure_at"] = departure_at.isoformat() if departure_at else None
     enriched["boarding_starts_at"] = boarding_at.isoformat() if boarding_at else None
     enriched["estimated_arrival_at"] = estimated_arrival_at.isoformat() if estimated_arrival_at else None
