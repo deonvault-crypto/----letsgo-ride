@@ -63,7 +63,7 @@ class CommunicationsTests(unittest.IsolatedAsyncioTestCase):
     async def test_marketing_requires_explicit_new_consent_and_rechecks_at_delivery(self):
         payload = self.body().model_copy(update={"kind": "marketing", "push": True})
         await database.insert_one("notification_preferences", {"id": "old", "user_id": "customer", "marketing_messages": True})
-        row = await self.queued(payload)
+        await self.queued(payload)
         await service.process_campaign_batch()
         self.assertEqual(await database.count("app_notifications"), 0)
         self.push.assert_not_awaited()
