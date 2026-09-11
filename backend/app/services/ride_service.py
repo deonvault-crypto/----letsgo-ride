@@ -1,5 +1,3 @@
-import asyncio
-import logging
 from datetime import datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -17,8 +15,6 @@ from app.services.ride_realtime_service import (
 )
 from app.utils import new_id, now_iso
 
-
-logger = logging.getLogger(__name__)
 
 ZIMBABWE_TZ = timezone(timedelta(hours=2))
 TRIP_STATUS_DRAFT = "DRAFT"
@@ -43,10 +39,6 @@ def canonical_trip_status(status: Optional[str]) -> str:
         "CANCELLED": TRIP_STATUS_CANCELLED,
     }
     return legacy.get(normalized, normalized)
-
-
-def is_active_trip_status(status: Optional[str]) -> bool:
-    return canonical_trip_status(status) in {TRIP_STATUS_BOARDING, TRIP_STATUS_IN_PROGRESS}
 
 
 def is_final_trip_status(status: Optional[str]) -> bool:
@@ -93,11 +85,6 @@ def boarding_starts_datetime(ride: Dict[str, Any]) -> Optional[datetime]:
     if not departure_at:
         return None
     return departure_at - timedelta(minutes=BOARDING_WINDOW_MINUTES)
-
-
-async def confirmed_request_count(ride_id: str) -> int:
-    requests = await database.find_many("ride_requests", {"ride_id": ride_id})
-    return len([request for request in requests if request.get("status") == "confirmed"])
 
 
 async def confirmed_passenger_user_ids(ride_id: str) -> List[str]:
@@ -215,23 +202,6 @@ async def sweep_ride_lifecycle() -> Dict[str, int]:
         if before != after:
             changed += 1
     return {"checked": len(rides), "changed": changed}
-
-
-async def ride_lifecycle_sweeper(stop_event: asyncio.Event) -> None:
-    while not stop_event.is_set():
-        try:
-            await sweep_ride_lifecycle()
-        except Exception as exc:
-            logger.warning("ride_lifecycle_sweep_failed error=%s", str(exc)[:300])
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=60)
-        except asyncio.TimeoutError:
-            continue
-
-
-def has_ride_departed(ride: Dict[str, Any]) -> bool:
-    departure_at = ride_departure_datetime(ride)
-    return bool(departure_at and departure_at <= datetime.now(ZIMBABWE_TZ))
 
 
 def public_ride_status(ride: Dict[str, Any]) -> str:
