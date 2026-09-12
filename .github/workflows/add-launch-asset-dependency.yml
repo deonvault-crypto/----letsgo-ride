@@ -1,0 +1,67 @@
+name: Add Expo asset dependency
+
+on:
+  push:
+    branches:
+      - feat/premium-launch-intro
+    paths:
+      - .github/workflows/add-launch-asset-dependency.yml
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/premium-launch-intro
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install current dependencies
+        working-directory: mobile
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Add SDK-compatible asset package
+        working-directory: mobile
+        run: npx expo install expo-asset --npm
+
+      - name: Verify exact dependency scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const pkg = require('./mobile/package.json');
+          const lock = require('./mobile/package-lock.json');
+          if (pkg.dependencies['expo-asset'] !== '~12.0.13') {
+            throw new Error(`Unexpected expo-asset range: ${pkg.dependencies['expo-asset']}`);
+          }
+          if (lock.packages['node_modules/expo-asset']?.version !== '12.0.13') {
+            throw new Error(`Unexpected resolved expo-asset version: ${lock.packages['node_modules/expo-asset']?.version}`);
+          }
+          NODE
+          changed="$(git diff --name-only)"
+          test "$changed" = $'mobile/package-lock.json\nmobile/package.json' || {
+            echo "Unexpected files changed by expo install:"
+            printf '%s\n' "$changed"
+            exit 1
+          }
+
+      - name: Commit dependency files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile/package.json mobile/package-lock.json
+          git commit -m 'chore(mobile): add Expo asset preloader'
+          git push origin HEAD:feat/premium-launch-intro
