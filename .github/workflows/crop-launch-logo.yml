@@ -1,0 +1,57 @@
+name: Crop native launch wordmark
+
+on:
+  push:
+    branches:
+      - feat/premium-launch-intro
+    paths:
+      - .github/workflows/crop-launch-logo.yml
+
+permissions:
+  contents: write
+
+jobs:
+  crop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/premium-launch-intro
+          fetch-depth: 0
+
+      - name: Install image tooling
+        run: python3 -m pip install --quiet pillow
+
+      - name: Crop splash wordmark to visible bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          path = Path('mobile/assets/branding/native-splash-logo.png')
+          image = Image.open(path).convert('RGBA')
+          bbox = image.getchannel('A').getbbox()
+          if not bbox:
+              raise SystemExit('Native splash wordmark has no visible pixels')
+          cropped = image.crop(bbox)
+          if cropped.width < 700 or cropped.height < 90:
+              raise SystemExit(f'Unexpected cropped wordmark size: {cropped.size}')
+          cropped.save(path, optimize=True)
+          verify = Image.open(path).convert('RGBA')
+          if verify.getchannel('A').getbbox() != (0, 0, verify.width, verify.height):
+              raise SystemExit('Native splash wordmark still contains transparent outer padding')
+          print('native splash wordmark:', verify.size)
+          PY
+
+      - name: Commit cropped native wordmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile/assets/branding/native-splash-logo.png
+          git commit -m 'fix(mobile): crop native splash wordmark'
+          git push origin HEAD:feat/premium-launch-intro
