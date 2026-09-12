@@ -1,0 +1,88 @@
+name: LetsGoRide Launch Intro Build Only
+
+on:
+  push:
+    branches:
+      - build/launch-intro-binaries-20260912
+    paths:
+      - .github/workflows/launch-intro-build-only.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate exact production mobile source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify mobile tree is identical to merged production SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --quiet c826bd793f79f0b88025ffd4feef6ecad88f028a HEAD -- mobile
+          test "$(git rev-parse c826bd793f79f0b88025ffd4feef6ecad88f028a:mobile)" = "$(git rev-parse HEAD:mobile)"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Verify Expo authentication
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest whoami --non-interactive
+
+  android:
+    name: Queue Android production build only
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Queue Android EAS build without store submission
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile production --non-interactive --no-wait --json | tee /tmp/android-eas-build.json
+
+  ios:
+    name: Queue iOS production build only
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+      - name: Queue iOS EAS build without store submission
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform ios --profile production --non-interactive --no-wait --json | tee /tmp/ios-eas-build.json
