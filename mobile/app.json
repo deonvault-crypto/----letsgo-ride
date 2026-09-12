@@ -54,6 +54,15 @@
     "plugins": [
       "expo-router",
       [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0F14",
+          "image": "./assets/branding/native-splash-logo.png",
+          "imageWidth": 240,
+          "resizeMode": "contain"
+        }
+      ],
+      [
         "expo-secure-store",
         {
           "configureAndroidBackup": false
@@ -109,11 +118,6 @@
       ],
       "expo-font"
     ],
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FAF7F0"
-    },
     "runtimeVersion": {
       "policy": "fingerprint"
     },

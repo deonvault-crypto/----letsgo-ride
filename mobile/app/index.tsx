@@ -1,11 +1,17 @@
 import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from "react-native";
 
 import { useSession } from "../contexts/SessionContext";
 import { homeRouteForRole } from "../navigation/roleRoutes";
 
-export const STANDARD_LAUNCH_MS = 1250;
+const INTRO_BACKGROUND = require("../assets/branding/intro-bg.jpg");
+const INTRO_WORDMARK = require("../assets/branding/intro-wordmark.png");
+const INTRO_SUBCOPY = require("../assets/branding/intro-subcopy.png");
+const INTRO_TAGLINE = require("../assets/branding/intro-tagline.png");
+
+export const STANDARD_LAUNCH_MS = 1350;
 export const REDUCED_MOTION_LAUNCH_MS = 350;
 
 function wait(ms: number) {
@@ -15,29 +21,139 @@ function wait(ms: number) {
 export default function IndexScreen() {
   const router = useRouter();
   const { user, loading } = useSession();
-  const reveal = useRef(new Animated.Value(0)).current;
-  const routeProgress = useRef(new Animated.Value(0)).current;
-  const finish = useRef(new Animated.Value(0)).current;
   const launchedAt = useRef(Date.now());
   const [reduceMotion, setReduceMotion] = useState(false);
 
+  const sceneOpacity = useRef(new Animated.Value(0)).current;
+  const sceneScale = useRef(new Animated.Value(1.04)).current;
+  const wordmarkOpacity = useRef(new Animated.Value(0)).current;
+  const wordmarkY = useRef(new Animated.Value(10)).current;
+  const subcopyOpacity = useRef(new Animated.Value(0)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const screenOpacity = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
     let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => { if (active) setReduceMotion(enabled); });
-    return () => { active = false; };
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    reveal.setValue(0); routeProgress.setValue(0); finish.setValue(0);
+    sceneOpacity.setValue(0);
+    sceneScale.setValue(reduceMotion ? 1 : 1.04);
+    wordmarkOpacity.setValue(0);
+    wordmarkY.setValue(reduceMotion ? 0 : 10);
+    subcopyOpacity.setValue(0);
+    taglineOpacity.setValue(0);
+    screenOpacity.setValue(1);
+
+    const smoothOut = Easing.out(Easing.cubic);
     const animation = reduceMotion
-      ? Animated.sequence([Animated.timing(reveal, { toValue: 1, duration: 220, useNativeDriver: true }), Animated.timing(finish, { toValue: 1, duration: 100, useNativeDriver: true })])
-      : Animated.sequence([Animated.timing(reveal, { toValue: 1, duration: 260, useNativeDriver: true }), Animated.timing(routeProgress, { toValue: 1, duration: 650, useNativeDriver: true }), Animated.timing(finish, { toValue: 1, duration: 180, useNativeDriver: true })]);
+      ? Animated.parallel([
+          Animated.timing(sceneOpacity, {
+            toValue: 1,
+            duration: 220,
+            easing: smoothOut,
+            useNativeDriver: true,
+          }),
+          Animated.timing(wordmarkOpacity, {
+            toValue: 1,
+            duration: 220,
+            easing: smoothOut,
+            useNativeDriver: true,
+          }),
+          Animated.timing(subcopyOpacity, {
+            toValue: 1,
+            duration: 220,
+            easing: smoothOut,
+            useNativeDriver: true,
+          }),
+          Animated.timing(taglineOpacity, {
+            toValue: 1,
+            duration: 220,
+            easing: smoothOut,
+            useNativeDriver: true,
+          }),
+        ])
+      : Animated.parallel([
+          Animated.timing(sceneOpacity, {
+            toValue: 1,
+            duration: 450,
+            easing: smoothOut,
+            useNativeDriver: true,
+          }),
+          Animated.timing(sceneScale, {
+            toValue: 1,
+            duration: 1200,
+            easing: smoothOut,
+            useNativeDriver: true,
+          }),
+          Animated.sequence([
+            Animated.delay(250),
+            Animated.parallel([
+              Animated.timing(wordmarkOpacity, {
+                toValue: 1,
+                duration: 500,
+                easing: smoothOut,
+                useNativeDriver: true,
+              }),
+              Animated.timing(wordmarkY, {
+                toValue: 0,
+                duration: 500,
+                easing: smoothOut,
+                useNativeDriver: true,
+              }),
+            ]),
+          ]),
+          Animated.sequence([
+            Animated.delay(500),
+            Animated.timing(subcopyOpacity, {
+              toValue: 1,
+              duration: 450,
+              easing: smoothOut,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.delay(850),
+            Animated.timing(taglineOpacity, {
+              toValue: 1,
+              duration: 250,
+              easing: smoothOut,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.delay(1150),
+            Animated.timing(screenOpacity, {
+              toValue: 0,
+              duration: 200,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+        ]);
+
     animation.start();
     return () => animation.stop();
-  }, [finish, reduceMotion, reveal, routeProgress]);
+  }, [
+    reduceMotion,
+    sceneOpacity,
+    sceneScale,
+    screenOpacity,
+    subcopyOpacity,
+    taglineOpacity,
+    wordmarkOpacity,
+    wordmarkY,
+  ]);
 
   useEffect(() => {
     if (loading) return undefined;
+
     let active = true;
     async function decideRoute() {
       const destination = homeRouteForRole(user?.role);
@@ -46,46 +162,75 @@ export default function IndexScreen() {
       if (remaining) await wait(remaining);
       if (active) router.replace(destination as never);
     }
+
     void decideRoute();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [loading, reduceMotion, router, user?.role]);
 
-  const routeWidth = routeProgress.interpolate({ inputRange: [0, 1], outputRange: [0.08, 1] });
-  const travel = routeProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 224] });
-  const exitOpacity = finish.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] });
-
   return (
-    <View style={styles.root}>
-      <Animated.View style={[styles.content, { opacity: Animated.multiply(reveal, exitOpacity), transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
-        <Text accessibilityRole="header" style={styles.wordmark}>Lets<Text style={styles.go}>Go</Text>Ride</Text>
-        <Text style={styles.tagline}>MOVE · EAT · SEND</Text>
-        <View accessibilityLabel="LetsGoRide is getting ready" style={styles.routeStage}>
-          <View style={styles.routeBase} />
-          <Animated.View style={[styles.routeActive, { transform: [{ scaleX: routeWidth }] }]} />
-          <View style={styles.startPoint}><View style={styles.startCore} /></View>
-          <Animated.View style={[styles.vehiclePoint, { transform: [{ translateX: reduceMotion ? 224 : travel }] }]} />
-          <View style={styles.endPoint} />
-        </View>
-        <Text style={styles.copy}>Zimbabwe moves with LetsGoRide.</Text>
+    <View
+      accessibilityLabel="LetsGoRide Zimbabwe. People, places, possibilities."
+      style={styles.root}
+    >
+      <StatusBar hidden />
+      <Animated.View style={[styles.stage, { opacity: screenOpacity }]}>
+        <Animated.Image
+          source={INTRO_BACKGROUND}
+          resizeMode="cover"
+          style={[
+            styles.fullFrame,
+            {
+              opacity: sceneOpacity,
+              transform: [{ scale: sceneScale }],
+            },
+          ]}
+        />
+        <View pointerEvents="none" style={styles.cinematicWash} />
+        <Animated.Image
+          source={INTRO_WORDMARK}
+          resizeMode="cover"
+          style={[
+            styles.fullFrame,
+            {
+              opacity: wordmarkOpacity,
+              transform: [{ translateY: wordmarkY }],
+            },
+          ]}
+        />
+        <Animated.Image
+          source={INTRO_SUBCOPY}
+          resizeMode="cover"
+          style={[styles.fullFrame, { opacity: subcopyOpacity }]}
+        />
+        <Animated.Image
+          source={INTRO_TAGLINE}
+          resizeMode="cover"
+          style={[styles.fullFrame, { opacity: taglineOpacity }]}
+        />
       </Animated.View>
-      <Text style={styles.footer}>RIDE · FOOD · COURIER</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#F7F4EC", alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
-  content: { width: "100%", maxWidth: 360, alignItems: "center" },
-  wordmark: { color: "#111111", fontSize: 42, lineHeight: 48, fontWeight: "900", letterSpacing: -2 },
-  go: { color: "#23834A" },
-  tagline: { marginTop: 6, color: "#686A66", fontSize: 9, fontWeight: "900", letterSpacing: 2.1 },
-  routeStage: { width: 258, height: 54, marginTop: 44, justifyContent: "center" },
-  routeBase: { position: "absolute", left: 14, right: 14, height: 2, borderRadius: 1, backgroundColor: "#D3D2CC" },
-  routeActive: { position: "absolute", left: 14, width: 230, height: 2, borderRadius: 1, backgroundColor: "#111111" },
-  startPoint: { position: "absolute", left: 7, width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: "#111111", backgroundColor: "#F7F4EC", alignItems: "center", justifyContent: "center" },
-  startCore: { width: 4, height: 4, borderRadius: 2, backgroundColor: "#111111" },
-  vehiclePoint: { position: "absolute", left: 10, width: 10, height: 10, borderRadius: 5, backgroundColor: "#111111", borderWidth: 2, borderColor: "#F7F4EC" },
-  endPoint: { position: "absolute", right: 5, width: 18, height: 18, borderRadius: 5, backgroundColor: "#23834A", borderWidth: 3, borderColor: "#F7F4EC" },
-  copy: { marginTop: 24, color: "#353733", fontSize: 13, fontWeight: "800" },
-  footer: { position: "absolute", bottom: 34, color: "#9A9B96", fontSize: 8, fontWeight: "900", letterSpacing: 1.6 },
+  root: {
+    flex: 1,
+    backgroundColor: "#0B0F14",
+  },
+  stage: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#0B0F14",
+    overflow: "hidden",
+  },
+  fullFrame: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  cinematicWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5, 9, 13, 0.05)",
+  },
 });
