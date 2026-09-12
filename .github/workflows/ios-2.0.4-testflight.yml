@@ -25,8 +25,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin platform-v2-m1-m6 --depth=1
-          mobile_changes="$(git diff --name-only origin/platform-v2-m1-m6...HEAD -- mobile)"
+          git fetch origin c826bd793f79f0b88025ffd4feef6ecad88f028a --depth=1
+          mobile_changes="$(git diff --name-only c826bd793f79f0b88025ffd4feef6ecad88f028a HEAD -- mobile)"
           test "$mobile_changes" = "mobile/app.json"
           node -e "const a=require('./mobile/app.json'); if(a.expo.version!=='2.0.4') process.exit(1)"
 
