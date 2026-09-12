@@ -31,13 +31,22 @@ describe("startup performance architecture", () => {
     expect(source).not.toContain("expo-av");
   });
 
-  it("keeps the native splash matte, minimal, and locally bundled", () => {
+  it("uses the Expo native splash plugin with a matte local wordmark", () => {
     const appJson = JSON.parse(read("app.json"));
-    expect(appJson.expo.splash).toEqual({
-      image: "./assets/branding/native-splash-logo.png",
-      resizeMode: "contain",
-      backgroundColor: "#0B0F14",
-    });
+    const splashPlugin = appJson.expo.plugins.find(
+      (plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen",
+    );
+
+    expect(splashPlugin).toEqual([
+      "expo-splash-screen",
+      {
+        backgroundColor: "#0B0F14",
+        image: "./assets/branding/native-splash-logo.png",
+        imageWidth: 240,
+        resizeMode: "contain",
+      },
+    ]);
+    expect(appJson.expo.splash).toBeUndefined();
   });
 
   it("defers realtime, notification snapshots, and permission inspection until after the index route", () => {
