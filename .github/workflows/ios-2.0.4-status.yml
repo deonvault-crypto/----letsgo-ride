@@ -36,7 +36,7 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli@latest submit:view ce783d8f-80c0-4890-9512-7c6e8f5a3108 --platform ios --json
+        run: npx eas-cli@latest submit:view ce783d8f-80c0-4890-9512-7c6e8f5a3108 --json
       - name: Check App Store Connect/TestFlight status
         working-directory: mobile
         env:
