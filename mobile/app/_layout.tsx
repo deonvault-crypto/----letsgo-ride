@@ -97,7 +97,6 @@ function SessionShellRouter() {
 export default function RootLayout() {
   const notificationNavigation = useRef<string | null>(null);
   const [launchAssetsReady, setLaunchAssetsReady] = useState(false);
-  const nativeSplashHidden = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -117,45 +116,43 @@ export default function RootLayout() {
   }, []);
 
   const onLayoutRootView = useCallback(() => {
-    if (!launchAssetsReady || nativeSplashHidden.current) return;
-    nativeSplashHidden.current = true;
-    void SplashScreen.hideAsync();
+    if (launchAssetsReady) void SplashScreen.hideAsync();
   }, [launchAssetsReady]);
 
+  if (!launchAssetsReady) return null;
+
   return (
-    <View style={{ flex: 1, backgroundColor: "#0B0F14" }} onLayout={onLayoutRootView}>
-      {launchAssetsReady ? (
-        <SafeAreaProvider>
-          <SessionProvider>
-            <RealtimeProvider>
-              <NotificationProvider>
-                <NotificationNavigationContext.Provider value={notificationNavigation}>
-                <NotificationResponseRouter />
-                <SessionShellRouter />
-                <ActiveJobRecoveryRouter />
-                <PermissionReminder />
-                <LocationDraftProvider>
-                  <FoodBasketProvider>
-                    <StatusBar style="dark" />
-                    <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220, animationTypeForReplace: "push" }}>
-                      <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
-                      <Stack.Screen name="(shared)/location-picker" options={{ gestureEnabled: false, animation: "none" }} />
-                    </Stack>
-                    <PendingReviewReminder />
-                  </FoodBasketProvider>
-                </LocationDraftProvider>
-                </NotificationNavigationContext.Provider>
-              </NotificationProvider>
-            </RealtimeProvider>
-          </SessionProvider>
-        </SafeAreaProvider>
-      ) : null}
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <SafeAreaProvider>
+        <SessionProvider>
+          <RealtimeProvider>
+            <NotificationProvider>
+              <NotificationNavigationContext.Provider value={notificationNavigation}>
+              <NotificationResponseRouter />
+              <SessionShellRouter />
+              <ActiveJobRecoveryRouter />
+              <PermissionReminder />
+              <LocationDraftProvider>
+                <FoodBasketProvider>
+                  <StatusBar style="dark" />
+                  <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220, animationTypeForReplace: "push" }}>
+                    <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(shared)/location-picker" options={{ gestureEnabled: false, animation: "none" }} />
+                  </Stack>
+                  <PendingReviewReminder />
+                </FoodBasketProvider>
+              </LocationDraftProvider>
+              </NotificationNavigationContext.Provider>
+            </NotificationProvider>
+          </RealtimeProvider>
+        </SessionProvider>
+      </SafeAreaProvider>
     </View>
   );
 }
