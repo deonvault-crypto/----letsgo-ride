@@ -110,9 +110,9 @@
       "expo-font"
     ],
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/branding/native-splash-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FAF7F0"
+      "backgroundColor": "#0B0F14"
     },
     "runtimeVersion": {
       "policy": "fingerprint"
