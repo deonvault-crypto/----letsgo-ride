@@ -1,9 +1,12 @@
+import { Asset } from "expo-asset";
 import { Stack, useRouter, useSegments } from "expo-router";
-import { useContext, useEffect, useRef } from "react";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { NotificationNavigationContext, NotificationResponseRouter } from "../components/notifications/NotificationResponseRouter";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { NotificationNavigationContext, NotificationResponseRouter } from "../components/notifications/NotificationResponseRouter";
 import { PermissionReminder } from "../components/permissions/PermissionReminder";
 import { PendingReviewReminder } from "../components/reviews/PendingReviewReminder";
 import { FoodBasketProvider } from "../contexts/FoodBasketContext";
@@ -20,6 +23,14 @@ import { getActiveCourierDelivery } from "../services/operationsService";
 import "../services/hailingBackgroundLocation";
 import "../services/courierBackgroundLocation";
 
+void SplashScreen.preventAutoHideAsync();
+
+const LAUNCH_ASSETS = [
+  require("../assets/branding/intro-bg.jpg"),
+  require("../assets/branding/intro-wordmark.png"),
+  require("../assets/branding/intro-subcopy.png"),
+  require("../assets/branding/intro-tagline.png"),
+];
 
 function ActiveJobRecoveryRouter() {
   const notificationNavigation = useContext(NotificationNavigationContext);
@@ -85,37 +96,63 @@ function SessionShellRouter() {
 
 export default function RootLayout() {
   const notificationNavigation = useRef<string | null>(null);
+  const [launchAssetsReady, setLaunchAssetsReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void Asset.loadAsync(LAUNCH_ASSETS)
+      .catch(() => {
+        // The assets are bundled locally. If decoding fails unexpectedly, do not
+        // strand the user behind the native splash; the intro can still render.
+      })
+      .finally(() => {
+        if (mounted) setLaunchAssetsReady(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const onLayoutRootView = useCallback(() => {
+    if (launchAssetsReady) void SplashScreen.hideAsync();
+  }, [launchAssetsReady]);
+
+  if (!launchAssetsReady) return null;
+
   return (
-    <SafeAreaProvider>
-      <SessionProvider>
-        <RealtimeProvider>
-          <NotificationProvider>
-            <NotificationNavigationContext.Provider value={notificationNavigation}>
-            <NotificationResponseRouter />
-            <SessionShellRouter />
-            <ActiveJobRecoveryRouter />
-            <PermissionReminder />
-            <LocationDraftProvider>
-              <FoodBasketProvider>
-                <StatusBar style="dark" />
-                <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220, animationTypeForReplace: "push" }}>
-                  <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
-                  <Stack.Screen name="(shared)/location-picker" options={{ gestureEnabled: false, animation: "none" }} />
-                </Stack>
-                <PendingReviewReminder />
-              </FoodBasketProvider>
-            </LocationDraftProvider>
-            </NotificationNavigationContext.Provider>
-          </NotificationProvider>
-        </RealtimeProvider>
-      </SessionProvider>
-    </SafeAreaProvider>
+    <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+      <SafeAreaProvider>
+        <SessionProvider>
+          <RealtimeProvider>
+            <NotificationProvider>
+              <NotificationNavigationContext.Provider value={notificationNavigation}>
+              <NotificationResponseRouter />
+              <SessionShellRouter />
+              <ActiveJobRecoveryRouter />
+              <PermissionReminder />
+              <LocationDraftProvider>
+                <FoodBasketProvider>
+                  <StatusBar style="dark" />
+                  <Stack screenOptions={{ headerShown: false, animation: "fade", animationDuration: 220, animationTypeForReplace: "push" }}>
+                    <Stack.Screen name="index" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(auth)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(customer)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(driver)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(courier)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(merchant)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(admin)" options={{ gestureEnabled: false, animation: "fade" }} />
+                    <Stack.Screen name="(shared)/location-picker" options={{ gestureEnabled: false, animation: "none" }} />
+                  </Stack>
+                  <PendingReviewReminder />
+                </FoodBasketProvider>
+              </LocationDraftProvider>
+              </NotificationNavigationContext.Provider>
+            </NotificationProvider>
+          </RealtimeProvider>
+        </SessionProvider>
+      </SafeAreaProvider>
+    </View>
   );
 }
-
