@@ -1,0 +1,89 @@
+name: Import premium launch assets
+
+on:
+  push:
+    branches:
+      - feat/premium-launch-intro
+    paths:
+      - .github/workflows/import-premium-launch-assets.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/premium-launch-intro
+          fetch-depth: 0
+
+      - name: Install image tooling
+        run: python3 -m pip install --quiet pillow
+
+      - name: Import approved Harare artwork and build native wordmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p mobile/assets/branding
+
+          curl --fail --location --retry 3 \
+            'https://d2ol7oe51mr4n9.cloudfront.net/user_3JCPOLC91AGSHolZkdVov39uU0k/6670fd95-6300-413a-b045-46a8ee4bd7cd.jpg' \
+            --output mobile/assets/branding/intro-bg.jpg
+
+          echo '896ad2b5ed8894ce3b66b2cdc3ab2c3f3b2081e3612531ecfbe84731f494d9ba  mobile/assets/branding/intro-bg.jpg' | sha256sum --check --strict
+
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          source = Image.open('mobile/assets/images/letsgo-wordmark.png').convert('RGBA')
+          pixels = source.load()
+
+          for y in range(source.height):
+              for x in range(source.width):
+                  r, g, b, a = pixels[x, y]
+                  if a == 0:
+                      continue
+                  is_green = g > 90 and g > r * 1.35 and g > b * 1.15
+                  if is_green:
+                      pixels[x, y] = (32, 217, 90, a)
+                  else:
+                      pixels[x, y] = (255, 255, 255, a)
+
+          bbox = source.getbbox()
+          if not bbox:
+              raise SystemExit('LetsGoRide wordmark had no visible pixels')
+          source = source.crop(bbox)
+          target_width = 820
+          target_height = round(source.height * target_width / source.width)
+          source = source.resize((target_width, target_height), Image.Resampling.LANCZOS)
+
+          canvas = Image.new('RGBA', (1024, 1024), (0, 0, 0, 0))
+          canvas.alpha_composite(source, ((1024 - target_width) // 2, (1024 - target_height) // 2))
+          output = Path('mobile/assets/branding/native-splash-logo.png')
+          canvas.save(output, optimize=True)
+
+          intro = Image.open('mobile/assets/branding/intro-bg.jpg')
+          if intro.size != (864, 1536):
+              raise SystemExit(f'Unexpected intro artwork dimensions: {intro.size}')
+          if canvas.size != (1024, 1024):
+              raise SystemExit(f'Unexpected native splash dimensions: {canvas.size}')
+          print('launch assets verified:', intro.size, canvas.size)
+          PY
+
+      - name: Commit exact launch assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile/assets/branding/intro-bg.jpg mobile/assets/branding/native-splash-logo.png
+          if git diff --cached --quiet; then
+            echo 'Launch assets already match; nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'feat(mobile): add premium launch artwork'
+          git push origin HEAD:feat/premium-launch-intro
