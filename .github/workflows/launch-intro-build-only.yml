@@ -1,4 +1,4 @@
-name: LetsGoRide Launch Intro Build Status
+name: LetsGoRide iOS Build 46 TestFlight Submit
 
 on:
   push:
@@ -11,10 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  status:
-    name: Check EAS build statuses only
+  submit-ios:
+    name: Submit existing iOS Build 46 to App Store Connect
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,13 +27,13 @@ jobs:
       - name: Install dependencies
         working-directory: mobile
         run: npm ci --no-audit --no-fund
-      - name: Android build status
-        working-directory: mobile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas-cli@latest build:view 670f21e6-e2c9-484e-8c03-f1445f73d63d --json
-      - name: iOS build status
+      - name: Verify exact iOS build is finished
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx eas-cli@latest build:view 8a8b56b5-4c37-4c94-83a8-e3d69c14191d --json
+      - name: Submit iOS Build 46 to App Store Connect TestFlight only
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest submit --platform ios --profile production --id 8a8b56b5-4c37-4c94-83a8-e3d69c14191d --non-interactive
