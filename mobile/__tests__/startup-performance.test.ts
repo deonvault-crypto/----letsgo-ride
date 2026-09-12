@@ -33,10 +33,12 @@ describe("startup performance architecture", () => {
 
   it("uses the Expo native splash plugin with a matte local wordmark", () => {
     const appJson = JSON.parse(read("app.json"));
+    const packageJson = JSON.parse(read("package.json"));
     const splashPlugin = appJson.expo.plugins.find(
       (plugin: unknown) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen",
     );
 
+    expect(packageJson.dependencies["expo-splash-screen"]).toBe("~31.0.13");
     expect(splashPlugin).toEqual([
       "expo-splash-screen",
       {
