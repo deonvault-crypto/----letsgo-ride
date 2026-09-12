@@ -27,8 +27,18 @@ jobs:
       - name: Install dependencies
         working-directory: mobile
         run: npm ci --no-audit --no-fund
-      - name: Check exact EAS build and attached submission
+      - name: Check exact EAS build
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx eas-cli@latest build:view 9a04f26a-afa3-401a-91d8-3dbf7e1a0241 --json
+      - name: Check exact TestFlight submission
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest submit:view ce783d8f-80c0-4890-9512-7c6e8f5a3108 --platform ios --json
+      - name: Check App Store Connect/TestFlight status
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest submit:status --platform ios --profile production --json --non-interactive
