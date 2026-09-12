@@ -51,6 +51,22 @@ describe("startup performance architecture", () => {
     expect(appJson.expo.splash).toBeUndefined();
   });
 
+  it("holds the native splash until every local cinematic layer is preloaded", () => {
+    const layout = read("app/_layout.tsx");
+    const packageJson = JSON.parse(read("package.json"));
+
+    expect(packageJson.dependencies["expo-asset"]).toBe("~12.0.13");
+    expect(layout).toContain("SplashScreen.preventAutoHideAsync");
+    expect(layout).toContain("Asset.loadAsync(LAUNCH_ASSETS)");
+    expect(layout).toContain("intro-bg.jpg");
+    expect(layout).toContain("intro-wordmark.png");
+    expect(layout).toContain("intro-subcopy.png");
+    expect(layout).toContain("intro-tagline.png");
+    expect(layout).toContain("if (!launchAssetsReady) return null");
+    expect(layout).toContain("SplashScreen.hideAsync");
+    expect(layout).toContain("onLayout={onLayoutRootView}");
+  });
+
   it("defers realtime, notification snapshots, and permission inspection until after the index route", () => {
     expect(read("contexts/RealtimeContext.tsx")).toContain('pathname === "/"');
     expect(read("contexts/NotificationContext.tsx")).toContain('pathname === "/"');
