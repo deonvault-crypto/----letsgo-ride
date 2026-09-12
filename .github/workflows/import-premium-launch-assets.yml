@@ -49,8 +49,6 @@ jobs:
           if approved.size != (864, 1536):
               raise SystemExit(f'Unexpected approved artwork dimensions: {approved.size}')
 
-          # Clean cinematic background plate: preserve the approved framing while
-          # removing the baked-in brand copy so each text layer can animate cleanly.
           clean = Image.open('/tmp/letsgoride-launch/clean.png').convert('RGB')
           target_ratio = 9 / 16
           current_ratio = clean.width / clean.height
@@ -65,8 +63,6 @@ jobs:
           clean = clean.resize((864, 1536), Image.Resampling.LANCZOS)
           clean.save(out_dir / 'intro-bg.jpg', 'JPEG', quality=88, optimize=True, progressive=True)
 
-          # Extract exact approved typography from the user's chosen artwork instead
-          # of re-typesetting it with a near-match font.
           arr = np.asarray(approved).astype(np.float32)
           r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
           mx, mn = arr.max(axis=2), arr.min(axis=2)
@@ -90,11 +86,11 @@ jobs:
               layer.save(out_dir / name, optimize=True)
               return layer
 
-          brand = build_layer('intro-brand-lockup.png', 95, 410, 775, 700)
-          tagline = build_layer('intro-tagline.png', 200, 1350, 690, 1425)
+          wordmark_layer = build_layer('intro-wordmark.png', 95, 395, 775, 555)
+          build_layer('intro-subcopy.png', 150, 545, 730, 720)
+          build_layer('intro-tagline.png', 200, 1350, 690, 1425)
 
-          # Native splash: exact approved wordmark only, on a transparent 1024 canvas.
-          wordmark = brand.crop((100, 420, 770, 550))
+          wordmark = wordmark_layer.crop((95, 395, 775, 555))
           bbox = wordmark.getbbox()
           if not bbox:
               raise SystemExit('Could not extract LetsGoRide wordmark')
@@ -108,13 +104,15 @@ jobs:
 
           checks = {
               'intro-bg.jpg': Image.open(out_dir / 'intro-bg.jpg').size,
-              'intro-brand-lockup.png': Image.open(out_dir / 'intro-brand-lockup.png').size,
+              'intro-wordmark.png': Image.open(out_dir / 'intro-wordmark.png').size,
+              'intro-subcopy.png': Image.open(out_dir / 'intro-subcopy.png').size,
               'intro-tagline.png': Image.open(out_dir / 'intro-tagline.png').size,
               'native-splash-logo.png': Image.open(out_dir / 'native-splash-logo.png').size,
           }
           expected = {
               'intro-bg.jpg': (864, 1536),
-              'intro-brand-lockup.png': (864, 1536),
+              'intro-wordmark.png': (864, 1536),
+              'intro-subcopy.png': (864, 1536),
               'intro-tagline.png': (864, 1536),
               'native-splash-logo.png': (1024, 1024),
           }
@@ -131,12 +129,13 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
             mobile/assets/branding/intro-bg.jpg \
-            mobile/assets/branding/intro-brand-lockup.png \
+            mobile/assets/branding/intro-wordmark.png \
+            mobile/assets/branding/intro-subcopy.png \
             mobile/assets/branding/intro-tagline.png \
             mobile/assets/branding/native-splash-logo.png
           if git diff --cached --quiet; then
             echo 'Launch assets already match; nothing to commit.'
             exit 0
           fi
-          git commit -m 'feat(mobile): layer premium launch artwork'
+          git commit -m 'feat(mobile): split premium launch typography'
           git push origin HEAD:feat/premium-launch-intro
