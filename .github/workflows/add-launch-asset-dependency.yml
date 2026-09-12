@@ -33,7 +33,7 @@ jobs:
 
       - name: Add SDK-compatible asset package
         working-directory: mobile
-        run: npx expo install expo-asset --npm
+        run: npm install expo-asset@~12.0.13 --save --ignore-scripts --no-audit --no-fund
 
       - name: Verify exact dependency scope
         shell: bash
@@ -51,7 +51,7 @@ jobs:
           NODE
           changed="$(git diff --name-only)"
           test "$changed" = $'mobile/package-lock.json\nmobile/package.json' || {
-            echo "Unexpected files changed by expo install:"
+            echo "Unexpected files changed by npm install:"
             printf '%s\n' "$changed"
             exit 1
           }
