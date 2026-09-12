@@ -1,0 +1,54 @@
+name: LetsGoRide iOS 2.0.4 TestFlight
+
+on:
+  push:
+    branches:
+      - release/ios-2.0.4-testflight
+    paths:
+      - .github/workflows/ios-2.0.4-testflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-submit-ios:
+    name: Build iOS 2.0.4 and submit to TestFlight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Verify release branch changes are limited to version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin platform-v2-m1-m6 --depth=1
+          mobile_changes="$(git diff --name-only origin/platform-v2-m1-m6...HEAD -- mobile)"
+          test "$mobile_changes" = "mobile/app.json"
+          node -e "const a=require('./mobile/app.json'); if(a.expo.version!=='2.0.4') process.exit(1)"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify Expo authentication
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest whoami --non-interactive
+
+      - name: Queue iOS 2.0.4 production build with TestFlight auto-submit
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform ios --profile production --non-interactive --auto-submit --no-wait --json
