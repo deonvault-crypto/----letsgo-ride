@@ -180,6 +180,30 @@
     return activeThreadItems.map(threadMessageHtml).join('');
   }
 
+  function syncLifecycleControls(thread) {
+    const closed = thread?.status === 'closed';
+    const waiting = ['waiting_for_agent', 'received', 'open'].includes(thread?.status);
+    const assigned = $('#supportAssignedState');
+    if (assigned) {
+      assigned.textContent = closed
+        ? 'Conversation closed — customer replies are locked.'
+        : thread?.assigned_support_name
+          ? `Handling: ${thread.assigned_support_name}`
+          : waiting
+            ? 'Waiting for a support specialist to join.'
+            : 'No support specialist assigned.';
+    }
+    const join = $('#supportJoinConversation');
+    if (join) join.hidden = !waiting || closed;
+    const reply = $('#supportConversationReply');
+    if (reply) {
+      reply.disabled = closed;
+      reply.placeholder = closed ? 'Closed conversations cannot receive new replies.' : 'Write a reply. The customer will be notified in the app.';
+    }
+    const submit = $('#supportReplyForm button[type="submit"]');
+    if (submit) submit.disabled = closed;
+  }
+
   // Deliberately overrides only the Support "Handle" action from app.js.
   // All existing navigation, cases, roles and mobile-facing APIs remain unchanged.
   openSupportAction = async function openSupportConversation(row) {
@@ -191,7 +215,7 @@
     }
 
     const customer = thread.customer || {};
-    const statuses = ['received', 'open', 'in_review', 'resolved', 'closed'];
+    const statuses = ['waiting_for_agent', 'active', 'in_review', 'resolved', 'closed'];
     $('#actionDialogBody').innerHTML = `
       <div class="support-conversation-head">
         <div>
@@ -207,6 +231,11 @@
         ${customer.phone || row.user_phone ? `<span>${esc(customer.phone || row.user_phone)}</span>` : ''}
         <span class="codeish">${esc(row.id)}</span>
         <span class="codeish" id="supportRealtimeState">Connecting…</span>
+      </div>
+
+      <div class="support-customer-strip">
+        <span id="supportAssignedState"></span>
+        <button id="supportJoinConversation" class="secondary" type="button">Join conversation</button>
       </div>
 
       <section class="support-thread" id="supportThread" aria-live="polite">
@@ -248,6 +277,7 @@
       container.innerHTML = renderThreadItems(next.items);
       const status = $('#supportConversationStatus');
       if (status) status.value = next.status || status.value;
+      syncLifecycleControls(next);
       container.scrollTop = container.scrollHeight;
       return next;
     };
@@ -257,6 +287,21 @@
     ensureSupportRealtime();
     const threadContainer = $('#supportThread');
     threadContainer.scrollTop = threadContainer.scrollHeight;
+    syncLifecycleControls(thread);
+
+    $('#supportJoinConversation').onclick = async () => {
+      const button = $('#supportJoinConversation');
+      button.disabled = true;
+      try {
+        await request(`/ops/support/messages/${encodeURIComponent(row.id)}/join`, { method: 'POST' });
+        toast('You joined the conversation. The customer was notified.');
+        await reloadThread();
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    };
 
     threadContainer.onclick = async event => {
       const editButton = event.target.closest('[data-support-edit-message]');
@@ -331,15 +376,15 @@
       const button = $('#supportSaveStatus');
       button.disabled = true;
       try {
-        await request(`/ops/support/messages/${encodeURIComponent(row.id)}`, {
+        const nextStatus = $('#supportConversationStatus').value;
+        await request(`/ops/support/messages/${encodeURIComponent(row.id)}/lifecycle`, {
           method: 'PATCH',
-          body: JSON.stringify({
-            status: $('#supportConversationStatus').value,
-            reply: null,
-          }),
+          body: JSON.stringify({ status: nextStatus }),
         });
-        toast('Support status updated.');
+        toast(nextStatus === 'closed' ? 'Conversation closed for staff and customer.' : 'Support status updated.');
         await reloadThread();
+        void refreshSupportBadge();
+        void refreshSupportQueue();
       } catch (error) {
         toast(error.message, true);
       } finally {

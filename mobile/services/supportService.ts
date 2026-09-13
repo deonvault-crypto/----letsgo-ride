@@ -25,6 +25,10 @@ export type SupportThread = {
   support_message_id: string;
   subject?: string | null;
   status: string;
+  assigned_support_user_id?: string | null;
+  assigned_support_name?: string | null;
+  support_joined_at?: string | null;
+  closed_at?: string | null;
   items: SupportThreadItem[];
 };
 

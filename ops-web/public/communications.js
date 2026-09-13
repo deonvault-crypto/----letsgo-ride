@@ -52,18 +52,38 @@
     else if (state.currentView === 'communications' && state.token) startRealtime();
   });
 
+  async function scheduleEngagementSeries() {
+    if (!isAdmin()) return;
+    const confirmed = confirm('Schedule 4 passenger re-engagement notifications over 12 days? They send at 17:00 Harare time and ONLY to people who explicitly enabled “Offers and product news”.');
+    if (!confirmed) return;
+    try {
+      const result = await request('/ops/communications/engagement-series', {
+        method: 'POST',
+        body: JSON.stringify({ roles: ['passenger'], send_hour: 17 }),
+      });
+      toast(`Scheduled ${result.campaigns?.length || 4} opt-in re-engagement notifications.`);
+      await window.renderCommunications();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
   window.renderCommunications = async () => {
     const token = state.token;
     const rows = await request('/ops/communications');
     if (token !== state.token || state.currentView !== 'communications') return;
     $('#communicationsView').innerHTML = `
-      <div class="comms-toolbar"><p>Announcements, offers and alerts sent to the app inbox.</p>${canWrite() ? '<button id="newAnnouncement" class="primary">New announcement</button>' : ''}</div>
+      <div class="comms-toolbar">
+        <div><p>Announcements, offers and alerts sent to the app inbox.</p><p class="muted">Re-engagement series use four different messages across 12 days and respect marketing opt-in plus device notification permission.</p></div>
+        <div class="modal-actions">${isAdmin() ? '<button id="scheduleEngagement" class="secondary">Schedule re-engagement</button>' : ''}${canWrite() ? '<button id="newAnnouncement" class="primary">New announcement</button>' : ''}</div>
+      </div>
       <p id="communicationsActivity" role="status" hidden></p>
       <div class="table-wrap"><table><thead><tr><th>Announcement</th><th>Type</th><th>Status</th><th>Send time</th><th></th></tr></thead><tbody>
-      ${rows.map(row => `<tr><td>${esc(row.title)}</td><td>${esc(kinds[row.kind])}</td><td>${esc(row.status)}</td><td>${row.scheduled_at ? esc(fmt(row.scheduled_at)) : 'When published'}</td><td><button class="ghost" data-announcement="${esc(row.id)}">Open</button></td></tr>`).join('')}
+      ${rows.map(row => `<tr><td>${esc(row.title)}${row.engagement_series_id ? '<br><span class="muted">Re-engagement series</span>' : ''}</td><td>${esc(kinds[row.kind])}</td><td>${esc(row.status)}</td><td>${row.scheduled_at ? esc(fmt(row.scheduled_at)) : 'When published'}</td><td><button class="ghost" data-announcement="${esc(row.id)}">Open</button></td></tr>`).join('')}
       </tbody></table>${rows.length ? '' : '<p class="empty">No announcements yet.</p>'}</div>
       <div id="announcementWorkspace"></div>`;
     $('#newAnnouncement')?.addEventListener('click', () => editDraft());
+    $('#scheduleEngagement')?.addEventListener('click', scheduleEngagementSeries);
     $$('#communicationsView [data-announcement]').forEach(button => button.addEventListener('click', () => showAnnouncement(button.dataset.announcement).catch(error => toast(error.message, true))));
     startRealtime();
   };
@@ -118,11 +138,12 @@
       <div class="comms-toolbar"><h2>${esc(row.title)}</h2><span>${esc(row.status)}</span></div>
       <p class="comms-message">${esc(row.body)}</p><p>Action: ${esc(actions[row.action])}</p>
       <p>${esc(kinds[row.kind])} · ${esc(row.roles.join(', '))} · ${row.push ? 'Inbox and eligible phone notifications' : 'Inbox only'}</p>
+      ${row.engagement_series_id ? `<p class="muted">Re-engagement series ${esc(String(row.engagement_sequence || ''))} · series ${esc(row.engagement_series_id)}</p>` : ''}
       ${preview ? `<p>${preview.matching_accounts} matching accounts. ${preview.marketing_requires_consent ? 'Only explicit offers opt-ins will receive this message.' : ''} Eligibility is checked again at delivery.</p>` : ''}
       <p>Send: ${row.scheduled_at ? esc(fmt(row.scheduled_at)) : 'When published'} · Expires: ${esc(fmt(row.expires_at))}</p>
       <dl class="comms-counts"><div><dt>Inboxes</dt><dd>${detail.metrics.inbox_created}</dd></div><div><dt>Accepted by push provider</dt><dd>${detail.metrics.push_accepted}</dd></div><div><dt>Read in app</dt><dd>${detail.metrics.read}</dd></div><div><dt>Push outcome unknown</dt><dd>${detail.metrics.push_unknown}</dd></div><div><dt>Push failures</dt><dd>${detail.metrics.push_failed}</dd></div></dl>
       <p class="muted">Provider acceptance does not prove phone delivery. Unknown attempts are not automatically repeated.</p>
-      <div class="comms-toolbar">${row.status === 'draft' && canWrite() ? '<button id="editAnnouncement" class="secondary">Edit draft</button>' : ''}${row.status === 'draft' && isAdmin() ? `<button id="publishAnnouncement" class="primary">${row.scheduled_at ? 'Schedule announcement' : 'Send announcement'}</button>` : ''}${['draft', 'queued', 'sending'].includes(row.status) && isAdmin() ? '<button id="cancelAnnouncement" class="secondary">Stop sending</button>' : ''}<button id="refreshAnnouncement" class="ghost">Refresh delivery</button></div>
+      <div class="comms-toolbar">${row.status === 'draft' && canWrite() ? '<button id="editAnnouncement" class="secondary">Edit draft</button>' : ''}${row.status === 'draft' && isAdmin() ? `<button id="publishAnnouncement" class="primary">${row.scheduled_at ? 'Schedule announcement' : 'Send announcement'}</button>` : ''}${['draft', 'queued', 'sending'].includes(row.status) && isAdmin() ? '<button id="cancelAnnouncement" class="secondary">Stop sending</button>' : ''}${row.engagement_series_id && ['draft', 'queued', 'sending'].includes(row.status) && isAdmin() ? '<button id="cancelEngagementSeries" class="secondary">Cancel whole series</button>' : ''}<button id="refreshAnnouncement" class="ghost">Refresh delivery</button></div>
       <p id="announcementActionError" class="error" role="alert" hidden></p></section>`;
     $('#editAnnouncement')?.addEventListener('click', () => editDraft(row));
     $('#refreshAnnouncement').addEventListener('click', () => showAnnouncement(id).catch(error => toast(error.message, true)));
@@ -142,6 +163,18 @@
     });
     $('#cancelAnnouncement')?.addEventListener('click', event => {
       if (confirm('Stop further sending? Messages already sent cannot be recalled, and an in-flight notification may finish.')) void mutate(event.currentTarget, 'cancel');
+    });
+    $('#cancelEngagementSeries')?.addEventListener('click', async event => {
+      if (!confirm('Cancel every unsent notification in this re-engagement series? Messages already delivered cannot be recalled.')) return;
+      event.currentTarget.disabled = true;
+      try {
+        await request(`/ops/communications/engagement-series/${encodeURIComponent(row.engagement_series_id)}/cancel`, { method: 'POST' });
+        toast('Re-engagement series cancelled.');
+        await window.renderCommunications();
+      } catch (error) {
+        const output = $('#announcementActionError');
+        if (output) { output.hidden = false; output.textContent = error.message; }
+      } finally { event.currentTarget.disabled = false; }
     });
   }
 

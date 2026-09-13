@@ -20,7 +20,11 @@ async def create_message(payload: SupportMessageBody, user=Depends(get_current_u
         "user_name": user.get("name"),
         "user_email": user.get("email"),
         "user_phone": user.get("phone") or payload.phone,
-        "status": "received",
+        "status": "waiting_for_agent",
+        "assigned_support_user_id": None,
+        "assigned_support_name": None,
+        "support_joined_at": None,
+        "closed_at": None,
         "realtime_version": 1,
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -30,7 +34,7 @@ async def create_message(payload: SupportMessageBody, user=Depends(get_current_u
     await notify_admins(
         "support_message",
         "New support message",
-        f"{user.get('name') or 'A user'} sent a support message.",
+        f"{user.get('name') or 'A user'} is waiting for Customer Support.",
         {"support_message_id": created["id"]},
     )
     await publish_support_realtime(created, "support_message.created")

@@ -176,6 +176,58 @@ class CommunicationsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status_code, 200)
         self.assertFalse((await database.find_one("device_push_tokens", {"id": "old-token"}))["active"])
 
+    async def test_reengagement_series_is_admin_only_bounded_and_cancellable(self):
+        self.actor = self.manager
+        denied = await self.client.post("/ops/communications/engagement-series", json={"roles": ["passenger"], "send_hour": 17})
+        self.assertEqual(denied.status_code, 403)
+
+        self.actor = self.admin
+        response = await self.client.post("/ops/communications/engagement-series", json={"roles": ["passenger"], "send_hour": 17})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(len(data["campaigns"]), 4)
+        self.assertTrue(data["marketing_requires_consent"])
+        self.assertEqual(data["timezone"], "Africa/Harare")
+        self.assertEqual({row["engagement_series_id"] for row in data["campaigns"]}, {data["series_id"]})
+        self.assertEqual([row["engagement_sequence"] for row in data["campaigns"]], [1, 2, 3, 4])
+        self.assertTrue(all(row["status"] == "queued" for row in data["campaigns"]))
+        self.assertTrue(all(row["kind"] == "marketing" and row["push"] for row in data["campaigns"]))
+        self.assertTrue(all(row["roles"] == ["passenger"] for row in data["campaigns"]))
+
+        scheduled = [datetime.fromisoformat(row["scheduled_at"]) for row in data["campaigns"]]
+        self.assertEqual([(scheduled[index] - scheduled[0]).days for index in range(4)], [0, 3, 7, 12])
+
+        overlap = await self.client.post("/ops/communications/engagement-series", json={"roles": ["passenger"], "send_hour": 17})
+        self.assertEqual(overlap.status_code, 409)
+
+        cancel = await self.client.post(f'/ops/communications/engagement-series/{data["series_id"]}/cancel')
+        self.assertEqual(cancel.status_code, 200)
+        self.assertEqual(cancel.json()["data"]["cancelled_campaigns"], 4)
+        stored = await database.find_many("ops_campaigns", {"engagement_series_id": data["series_id"]})
+        self.assertEqual({row["status"] for row in stored}, {"cancelled"})
+
+    async def test_reengagement_delivery_still_requires_explicit_marketing_opt_in(self):
+        self.actor = self.admin
+        response = await self.client.post("/ops/communications/engagement-series", json={"roles": ["passenger"], "send_hour": 17})
+        self.assertEqual(response.status_code, 200)
+        first = response.json()["data"]["campaigns"][0]
+
+        await database.insert_one("notification_preferences", {
+            "id": "engagement-consent",
+            "user_id": self.customer["id"],
+            "marketing_messages": True,
+            "marketing_consent_version": 1,
+        })
+        await database.update_one("ops_campaigns", first["id"], {"next_attempt_at": now_iso()})
+        await service.process_campaign_batch()
+
+        notices = await database.find_many("app_notifications", {"campaign_id": first["id"]})
+        self.assertEqual(len(notices), 1)
+        self.assertEqual(notices[0]["user_id"], self.customer["id"])
+        self.assertEqual(notices[0]["type"], "marketing")
+        self.assertTrue(notices[0]["delivered_push"])
+        self.assertEqual(self.push.await_count, 1)
+
     async def test_store_information_is_admin_controlled_and_urls_cannot_be_injected(self):
         payload = {"platform": "ios", "version": "2.0.3", "notes": "Support conversations", "available_in_store": False, "reason": "Prepare release"}
         self.assertEqual((await self.client.post("/ops/app-updates", json=payload)).status_code, 403)

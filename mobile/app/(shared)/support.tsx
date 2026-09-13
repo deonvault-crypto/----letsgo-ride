@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { EmptyState } from "../../components/states/EmptyState";
@@ -113,6 +113,7 @@ export default function SupportScreen() {
       setSelectedMessageId(created.id);
       setThread(null);
       setThreadError("");
+      await loadThread(created.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send support message.");
     } finally {
@@ -121,7 +122,7 @@ export default function SupportScreen() {
   }
 
   async function sendReply() {
-    if (!selectedMessageId || !reply.trim()) return;
+    if (!selectedMessageId || !reply.trim() || thread?.status === "closed") return;
     try {
       setSendingReply(true);
       setThreadError("");
@@ -129,7 +130,10 @@ export default function SupportScreen() {
       setReply("");
       setThread((current) => current ? {
         ...current,
-        status: current.status === "resolved" || current.status === "closed" ? "received" : current.status,
+        status: current.status === "resolved" ? "waiting_for_agent" : current.status,
+        assigned_support_user_id: current.status === "resolved" ? null : current.assigned_support_user_id,
+        assigned_support_name: current.status === "resolved" ? null : current.assigned_support_name,
+        support_joined_at: current.status === "resolved" ? null : current.support_joined_at,
         items: [...current.items.filter((item) => item.id !== created.id), created],
       } : current);
       await loadMessages();
@@ -159,6 +163,13 @@ export default function SupportScreen() {
     setReply("");
   }
 
+  function startNewConversation() {
+    closeConversation();
+    setSubject(initialSubject);
+    setMessage("");
+    setError("");
+  }
+
   return (
     <Screen title="Support" showBack fallbackRoute="/(shared)/account" navRole={navRole} refreshing={false} onRefresh={refreshScreen}>
       <Text style={styles.title}>Support</Text>
@@ -180,22 +191,32 @@ export default function SupportScreen() {
                 <StatusBadge label={formatStatus(thread.status)} tone="success" />
               </View>
 
+              <SupportLifecycleBanner thread={thread} />
               <SupportTranscript key={thread.support_message_id} thread={thread} />
 
-              <Text style={styles.replyLabel}>Reply</Text>
-              <AppInput
-                label="Message"
-                value={reply}
-                onChangeText={setReply}
-                placeholder="Type a message to support..."
-                multiline
-              />
-              <AppButton
-                title="Send reply"
-                loading={sendingReply}
-                onPress={sendReply}
-                disabled={!reply.trim()}
-              />
+              {thread.status === "closed" ? (
+                <View style={styles.closedActions}>
+                  <Text style={styles.closedCopy}>This conversation is closed. If you still need help, start a new support conversation so our team can handle it as a new request.</Text>
+                  <AppButton title="Start new conversation" onPress={startNewConversation} />
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.replyLabel}>{thread.status === "resolved" ? "Still need help?" : "Reply"}</Text>
+                  <AppInput
+                    label="Message"
+                    value={reply}
+                    onChangeText={setReply}
+                    placeholder={thread.status === "resolved" ? "Tell us what still needs attention..." : "Type a message to support..."}
+                    multiline
+                  />
+                  <AppButton
+                    title={thread.status === "resolved" ? "Reopen conversation" : "Send reply"}
+                    loading={sendingReply}
+                    onPress={sendReply}
+                    disabled={!reply.trim()}
+                  />
+                </>
+              )}
             </>
           ) : null}
         </View>
@@ -232,6 +253,60 @@ export default function SupportScreen() {
       )}
     </Screen>
   );
+}
+
+function SupportLifecycleBanner({ thread }: { thread: SupportThread }) {
+  if (["waiting_for_agent", "received", "open"].includes(thread.status)) {
+    return (
+      <View style={styles.lifecycleCard}>
+        <View style={styles.lifecycleIcon}>
+          <ActivityIndicator size="small" color={colors.primaryGreen} />
+        </View>
+        <View style={styles.lifecycleCopy}>
+          <Text style={styles.lifecycleTitle}>Connecting you to Customer Support…</Text>
+          <Text style={styles.lifecycleBody}>Your message has been received. A support specialist will join shortly, and we’ll notify you when they do.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (["active", "in_review"].includes(thread.status)) {
+    return (
+      <View style={styles.lifecycleCard}>
+        <View style={[styles.lifecycleDot, styles.lifecycleDotActive]} />
+        <View style={styles.lifecycleCopy}>
+          <Text style={styles.lifecycleTitle}>You’re connected to LetsGoRide Support</Text>
+          <Text style={styles.lifecycleBody}>{thread.assigned_support_name ? `${thread.assigned_support_name} is handling this conversation.` : "A support specialist is handling this conversation."}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (thread.status === "resolved") {
+    return (
+      <View style={styles.lifecycleCard}>
+        <View style={styles.lifecycleDot} />
+        <View style={styles.lifecycleCopy}>
+          <Text style={styles.lifecycleTitle}>Conversation marked resolved</Text>
+          <Text style={styles.lifecycleBody}>If something still needs attention, reply below and the conversation will return to the support queue.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (thread.status === "closed") {
+    return (
+      <View style={[styles.lifecycleCard, styles.lifecycleCardClosed]}>
+        <View style={styles.lifecycleDot} />
+        <View style={styles.lifecycleCopy}>
+          <Text style={styles.lifecycleTitle}>Conversation closed</Text>
+          <Text style={styles.lifecycleBody}>Replies are disabled on closed conversations.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return null;
 }
 
 const SupportTranscript = memo(function SupportTranscript({ thread }: { thread: SupportThread }) {
@@ -337,6 +412,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+  lifecycleCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    backgroundColor: colors.elevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    padding: spacing.md,
+  },
+  lifecycleCardClosed: {
+    opacity: 0.88,
+  },
+  lifecycleIcon: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lifecycleDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 5,
+    backgroundColor: colors.mutedText,
+  },
+  lifecycleDotActive: {
+    backgroundColor: colors.primaryGreen,
+  },
+  lifecycleCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  lifecycleTitle: {
+    color: colors.whiteText,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  lifecycleBody: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   transcript: {
     gap: spacing.sm,
     paddingVertical: spacing.sm,
@@ -394,5 +512,16 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 18,
     marginTop: spacing.sm,
+  },
+  closedActions: {
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+  },
+  closedCopy: {
+    color: colors.mutedText,
+    fontSize: 13,
+    lineHeight: 20,
   },
 });

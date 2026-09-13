@@ -68,7 +68,15 @@ class OpsCaseStatusBody(BaseModel):
 
 class OpsSupportStatusBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    status: Literal["received", "open", "in_review", "resolved", "closed"]
+    status: Literal[
+        "received",
+        "open",
+        "waiting_for_agent",
+        "active",
+        "in_review",
+        "resolved",
+        "closed",
+    ]
     reply: Optional[str] = Field(default=None, max_length=5000)
 
 
