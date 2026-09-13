@@ -7,13 +7,16 @@ from app.database import database
 from app.ops_auth import get_ops_user
 from app.routers.support_conversations import (
     CustomerSupportReplyBody,
+    OpsSupportLifecycleBody,
     OpsSupportNoteBody,
     OpsSupportReplyBody,
     OpsSupportStartBody,
     customer_support_reply,
     customer_support_thread,
+    ops_join_support_conversation,
     ops_start_support_conversation,
     ops_support_internal_note,
+    ops_support_lifecycle,
     ops_support_reply,
     ops_support_thread,
 )
@@ -72,7 +75,7 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         self.cs_ops = await get_ops_user(self.cs_user)
 
         # Deliberately omit realtime_version to prove existing production tickets
-        # safely enter the versioned realtime path on their first public reply.
+        # safely enter the versioned realtime path on their first public change.
         await database.insert_one("support_messages", {
             "id": "support-1",
             "user_id": self.customer["id"],
@@ -109,7 +112,9 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         )
         created = response["data"]
         self.assertEqual(created["user_id"], self.customer["id"])
-        self.assertEqual(created["status"], "open")
+        self.assertEqual(created["status"], "active")
+        self.assertEqual(created["assigned_support_name"], "Support Agent")
+        self.assertTrue(created["support_joined_at"])
 
         stored = await database.find_one("support_messages", {"id": created["id"]})
         self.assertEqual(stored["initial_sender_type"], "staff")
@@ -122,6 +127,8 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(items[0]["sender_type"], "staff")
         self.assertEqual(items[0]["sender_name"], "LetsGoRide Support")
         self.assertEqual(items[0]["message"], "Hi, we need one clearer photo of your driver licence.")
+        self.assertEqual(customer_thread["data"]["status"], "active")
+        self.assertEqual(customer_thread["data"]["assigned_support_name"], "Support Agent")
 
         notifications = await database.find_many("app_notifications", {"user_id": self.customer["id"]})
         self.assertTrue(any(item.get("data", {}).get("support_message_id") == created["id"] for item in notifications))
@@ -174,6 +181,21 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertEqual(error.exception.status_code, 404)
 
+    async def test_ops_join_assigns_agent_and_notifies_customer(self):
+        response = await ops_join_support_conversation("support-1", user=self.cs_ops)
+        self.assertEqual(response["data"]["status"], "active")
+        self.assertEqual(response["data"]["assigned_support_name"], "Support Agent")
+        self.assertTrue(response["data"]["support_joined_at"])
+
+        stored = await database.find_one("support_messages", {"id": "support-1"})
+        self.assertEqual(stored["assigned_support_user_id"], self.cs_user["id"])
+        self.assertEqual(stored["status"], "active")
+
+        notifications = await database.find_many("app_notifications", {"user_id": self.customer["id"]})
+        self.assertTrue(any(item.get("title") == "LetsGoRide Support joined your chat" for item in notifications))
+        published = self.realtime_publish.await_args.args[0]
+        self.assertEqual(published.envelope.type, "support_message.staff_joined")
+
     async def test_ops_reply_persists_thread_and_publishes_scoped_realtime_signal(self):
         response = await ops_support_reply(
             "support-1",
@@ -188,6 +210,7 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stored["admin_notes"], "We are checking this for you.")
         self.assertTrue(stored.get("last_staff_reply_at"))
         self.assertEqual(stored.get("realtime_version"), 1)
+        self.assertEqual(stored.get("assigned_support_user_id"), self.cs_user["id"])
 
         self.realtime_publish.assert_awaited_once()
         published = self.realtime_publish.await_args.args[0]
@@ -240,23 +263,44 @@ class SupportConversationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reply_error.exception.status_code, 404)
         self.realtime_publish.assert_not_awaited()
 
-    async def test_customer_reply_reopens_closed_ticket_and_notifies_support_realtime(self):
-        await database.update_one("support_messages", "support-1", {"status": "closed"})
+    async def test_closed_ticket_is_terminal_for_customer_and_new_chat_is_required(self):
+        await ops_support_lifecycle(
+            "support-1",
+            OpsSupportLifecycleBody(status="closed"),
+            user=self.cs_ops,
+        )
+        self.realtime_publish.reset_mock()
+
+        with self.assertRaises(HTTPException) as reply_error:
+            await customer_support_reply(
+                "support-1",
+                CustomerSupportReplyBody(message="I still need help with this."),
+                user=self.customer,
+            )
+        self.assertEqual(reply_error.exception.status_code, 409)
+
+        stored = await database.find_one("support_messages", {"id": "support-1"})
+        self.assertEqual(stored["status"], "closed")
+        self.assertTrue(stored.get("closed_at"))
+        self.assertIsNone(stored.get("last_customer_reply_at"))
+        thread = await customer_support_thread("support-1", user=self.customer)
+        self.assertEqual(len(thread["data"]["items"]), 1)
+        self.realtime_publish.assert_not_awaited()
+
+        notifications = await database.find_many("app_notifications", {"user_id": self.customer["id"]})
+        self.assertTrue(any(item.get("title") == "Support conversation closed" for item in notifications))
+
+    async def test_resolved_ticket_can_be_reopened_into_waiting_queue(self):
+        await database.update_one("support_messages", "support-1", {"status": "resolved"})
         response = await customer_support_reply(
             "support-1",
-            CustomerSupportReplyBody(message="I still need help with this."),
+            CustomerSupportReplyBody(message="One more thing needs attention."),
             user=self.customer,
         )
         self.assertEqual(response["data"]["sender_type"], "customer")
-
         stored = await database.find_one("support_messages", {"id": "support-1"})
-        self.assertEqual(stored["status"], "received")
+        self.assertEqual(stored["status"], "waiting_for_agent")
         self.assertTrue(stored.get("last_customer_reply_at"))
-        self.assertEqual(stored.get("realtime_version"), 1)
-        published = self.realtime_publish.await_args.args[0]
-        self.assertEqual(published.envelope.type, "support_message.customer_replied")
-        self.assertEqual(published.envelope.resource_id, "support-1")
-        self.assertNotIn("message", published.envelope.payload)
 
 
 if __name__ == "__main__":
