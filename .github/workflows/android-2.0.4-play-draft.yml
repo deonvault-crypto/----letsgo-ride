@@ -1,0 +1,46 @@
+name: LetsGoRide Android 2.0.4 Play Draft Upload
+
+on:
+  push:
+    branches:
+      - release/android-2.0.4-play-draft-20260913
+    paths:
+      - .github/workflows/android-2.0.4-play-draft.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-2.0.4-play-draft-20260913
+  cancel-in-progress: false
+
+jobs:
+  queue-build-and-submit:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify exact production app source
+        run: |
+          git diff --exit-code 1e43af3586d2feda23ae02f7752c0b3bf7a1221c HEAD -- mobile ":(exclude)mobile/eas.json"
+          node -e "const a=require('./mobile/app.json').expo; if(a.version!=='2.0.4') throw new Error('Expected app version 2.0.4'); if(a.android.package!=='com.letsgo.ride') throw new Error('Unexpected Android package');"
+          node -e "const e=require('./mobile/eas.json'); const s=e.submit['play-upload-draft'].android; if(s.track!=='production'||s.releaseStatus!=='draft') throw new Error('Draft Play upload profile is not safe');"
+
+      - name: Queue production Android AAB and draft Play upload
+        working-directory: mobile
+        run: |
+          npx eas-cli@24.3.0 build --platform android --profile production --auto-submit-with-profile play-upload-draft --non-interactive --no-wait --json | tee /tmp/android-build.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('/tmp/android-build.json', 'utf8'));
+          const build = Array.isArray(data) ? data[0] : data;
+          if (!build?.id) throw new Error('EAS did not return an Android build ID');
+          console.log(`Queued EAS Android build: ${build.id}`);
+          console.log(`App version: ${build.appVersion || 'resolved by EAS'}`);
+          console.log(`Build version: ${build.appBuildVersion || 'remote auto-increment pending'}`);
+          NODE
