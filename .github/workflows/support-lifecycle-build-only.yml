@@ -1,0 +1,57 @@
+name: LetsGoRide Support Lifecycle Build Only
+
+on:
+  push:
+    branches:
+      - build/support-lifecycle-binaries-20260913
+    paths:
+      - .github/workflows/support-lifecycle-build-only.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: support-lifecycle-build-only-20260913
+  cancel-in-progress: false
+
+jobs:
+  validate-production-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Verify mobile source is identical to merged production
+        run: |
+          git diff --exit-code e92a67fdd30a6533bc8250cdef78e5fa221108a0 HEAD -- mobile
+
+  queue-builds:
+    needs: validate-production-source
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, android]
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Queue EAS production build only
+        run: npx eas-cli@latest build --platform ${{ matrix.platform }} --profile production --non-interactive --no-wait
