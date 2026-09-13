@@ -31,9 +31,22 @@ jobs:
           node -e "const a=require('./mobile/app.json').expo; if(a.version!=='2.0.4') throw new Error('Expected app version 2.0.4'); if(a.android.package!=='com.letsgo.ride') throw new Error('Unexpected Android package');"
           node -e "const e=require('./mobile/eas.json'); const s=e.submit['play-upload-draft'].android; if(s.track!=='production'||s.releaseStatus!=='draft') throw new Error('Draft Play upload profile is not safe');"
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
       - name: Queue production Android AAB and draft Play upload
         working-directory: mobile
+        shell: bash
         run: |
+          set -euo pipefail
           npx eas-cli@24.3.0 build --platform android --profile production --auto-submit-with-profile play-upload-draft --non-interactive --no-wait --json | tee /tmp/android-build.json
           node - <<'NODE'
           const fs = require('fs');
