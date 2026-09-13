@@ -16,10 +16,14 @@ jobs:
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Read Android EAS build status
+        working-directory: mobile
         run: npx eas-cli@24.3.0 build:view abc52b59-1047-4125-b9b5-373ebbadf80b --json
