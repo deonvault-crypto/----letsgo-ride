@@ -22,6 +22,6 @@ jobs:
         working-directory: mobile
         run: |
           echo '=== BUILD ==='
-          npx eas-cli@24.3.0 build:view c7e88198-280b-4ab0-a732-2c74d07b1fe7 --json --non-interactive || true
+          npx eas-cli@24.3.0 build:view c7e88198-280b-4ab0-a732-2c74d07b1fe7 --json || true
           echo '=== SUBMISSION ==='
-          npx eas-cli@24.3.0 submit:view 31f64efb-d86c-49f8-bf3e-8d7c51973e31 --json --non-interactive || true
+          npx eas-cli@24.3.0 submit:view 31f64efb-d86c-49f8-bf3e-8d7c51973e31 --json || true
