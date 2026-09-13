@@ -48,6 +48,7 @@
     "typecheck": "tsc --noEmit",
     "verify:android": "node scripts/verify-android-config.js",
     "eas-build-pre-install": "node scripts/validate-build-env.js",
+    "eas-build-post-install": "node scripts/patch-stripe-xcode26.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
