@@ -14,7 +14,7 @@ from app.utils import api_error, api_success, new_id, now_iso
 
 router = APIRouter(tags=["support-conversations"])
 THREAD_COLLECTION = "support_thread_messages"
-SUPPORT_STATUSES = {"received", "open", "in_review", "resolved", "closed"}
+SUPPORT_STATUSES = {"received", "open", "waiting_for_agent", "active", "in_review", "resolved", "closed"}
 
 
 def _ensure_thread_collection() -> None:
@@ -33,7 +33,16 @@ class CustomerSupportReplyBody(BaseModel):
 class OpsSupportReplyBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=5000)
-    status: Optional[Literal["received", "open", "in_review", "resolved", "closed"]] = None
+    status: Optional[Literal[
+        "received", "open", "waiting_for_agent", "active", "in_review", "resolved", "closed"
+    ]] = None
+
+
+class OpsSupportLifecycleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal[
+        "received", "open", "waiting_for_agent", "active", "in_review", "resolved", "closed"
+    ]
 
 
 class OpsSupportNoteBody(BaseModel):
@@ -63,6 +72,18 @@ def _safe_thread_message(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _thread_state(ticket: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "support_message_id": ticket.get("id"),
+        "subject": ticket.get("subject"),
+        "status": ticket.get("status"),
+        "assigned_support_user_id": ticket.get("assigned_support_user_id"),
+        "assigned_support_name": ticket.get("assigned_support_name"),
+        "support_joined_at": ticket.get("support_joined_at"),
+        "closed_at": ticket.get("closed_at"),
+    }
+
+
 def _safe_started_ticket(ticket: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": ticket.get("id"),
@@ -73,6 +94,8 @@ def _safe_started_ticket(ticket: Dict[str, Any]) -> Dict[str, Any]:
         "subject": ticket.get("subject"),
         "message": ticket.get("message"),
         "status": ticket.get("status"),
+        "assigned_support_name": ticket.get("assigned_support_name"),
+        "support_joined_at": ticket.get("support_joined_at"),
         "created_at": ticket.get("created_at"),
         "updated_at": ticket.get("updated_at"),
     }
@@ -180,15 +203,44 @@ async def _insert_thread_message(
     return await database.insert_one(THREAD_COLLECTION, row)
 
 
+async def _notify_customer_status(ticket: Dict[str, Any], previous_status: str) -> None:
+    user_id = ticket.get("user_id")
+    if not user_id:
+        return
+    status = ticket.get("status")
+    if status == "closed":
+        await create_app_notification(
+            user_id,
+            "support_reply",
+            "Support conversation closed",
+            "LetsGoRide Support closed this conversation. Start a new conversation if you still need help.",
+            {"support_message_id": ticket["id"]},
+        )
+    elif status == "resolved" and previous_status != "resolved":
+        await create_app_notification(
+            user_id,
+            "support_reply",
+            "Support conversation resolved",
+            "LetsGoRide Support marked your conversation as resolved. You can reply if you still need help.",
+            {"support_message_id": ticket["id"]},
+        )
+    elif status == "active" and previous_status != "active":
+        await create_app_notification(
+            user_id,
+            "support_reply",
+            "LetsGoRide Support joined your chat",
+            "A support specialist has joined your conversation. Open Support to continue chatting.",
+            {"support_message_id": ticket["id"]},
+        )
+
+
 @router.get("/support/messages/{message_id}/thread")
 async def customer_support_thread(message_id: str, user=Depends(get_current_user)):
     ticket = await _ticket(message_id)
     if ticket.get("user_id") != user.get("id"):
         api_error("Support conversation not found.", 404)
     return api_success({
-        "support_message_id": ticket["id"],
-        "subject": ticket.get("subject"),
-        "status": ticket.get("status"),
+        **_thread_state(ticket),
         "items": await _thread(ticket, include_internal=False),
     })
 
@@ -202,6 +254,8 @@ async def customer_support_reply(
     ticket = await _ticket(message_id)
     if ticket.get("user_id") != user.get("id"):
         api_error("Support conversation not found.", 404)
+    if ticket.get("status") == "closed":
+        api_error("This support conversation is closed. Start a new conversation if you still need help.", 409)
 
     created = await _insert_thread_message(
         ticket,
@@ -212,12 +266,21 @@ async def customer_support_reply(
         message=payload.message,
     )
     timestamp = now_iso()
-    next_status = "received" if ticket.get("status") in {"resolved", "closed"} else (ticket.get("status") or "received")
-    updated_ticket = await update_versioned_support_message(message_id, {
+    was_resolved = ticket.get("status") == "resolved"
+    next_status = "waiting_for_agent" if was_resolved else (ticket.get("status") or "waiting_for_agent")
+    updates: Dict[str, Any] = {
         "status": next_status,
         "updated_at": timestamp,
         "last_customer_reply_at": timestamp,
-    })
+    }
+    if was_resolved:
+        updates.update({
+            "assigned_support_user_id": None,
+            "assigned_support_name": None,
+            "support_joined_at": None,
+            "closed_at": None,
+        })
+    updated_ticket = await update_versioned_support_message(message_id, updates)
     if updated_ticket:
         await publish_support_realtime(updated_ticket, "support_message.customer_replied")
     await notify_admins(
@@ -270,10 +333,14 @@ async def ops_start_support_conversation(
         "user_phone": target.get("phone"),
         "subject": payload.subject.strip(),
         "message": payload.message.strip(),
-        "status": "open",
+        "status": "active",
         "initial_sender_type": "staff",
         "initial_sender_name": "LetsGoRide Support",
         "initiated_by_ops": True,
+        "assigned_support_user_id": user.get("id"),
+        "assigned_support_name": user.get("name") or user.get("email") or "LetsGoRide Support",
+        "support_joined_at": timestamp,
+        "closed_at": None,
         "realtime_version": 1,
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -303,9 +370,7 @@ async def ops_start_support_conversation(
 async def ops_support_thread(message_id: str, user=Depends(get_ops_user)):
     ticket = await _ticket(message_id)
     return api_success({
-        "support_message_id": ticket["id"],
-        "subject": ticket.get("subject"),
-        "status": ticket.get("status"),
+        **_thread_state(ticket),
         "customer": {
             "id": ticket.get("user_id"),
             "name": ticket.get("user_name"),
@@ -316,6 +381,90 @@ async def ops_support_thread(message_id: str, user=Depends(get_ops_user)):
     })
 
 
+@router.post("/ops/support/messages/{message_id}/join")
+async def ops_join_support_conversation(message_id: str, user=Depends(get_ops_user)):
+    ticket = await _ticket(message_id)
+    if ticket.get("status") == "closed":
+        api_error("This support conversation is closed. Reopen it before joining.", 409)
+
+    assigned_user_id = ticket.get("assigned_support_user_id")
+    if assigned_user_id and assigned_user_id != user.get("id") and ticket.get("status") == "active":
+        api_error(f"This conversation is already being handled by {ticket.get('assigned_support_name') or 'another support specialist'}.", 409)
+
+    previous_status = str(ticket.get("status") or "waiting_for_agent")
+    timestamp = now_iso()
+    updated_ticket = await update_versioned_support_message(message_id, {
+        "status": "active",
+        "assigned_support_user_id": user.get("id"),
+        "assigned_support_name": user.get("name") or user.get("email") or "LetsGoRide Support",
+        "support_joined_at": ticket.get("support_joined_at") or timestamp,
+        "closed_at": None,
+        "updated_at": timestamp,
+    })
+    if not updated_ticket:
+        api_error("Support conversation could not be updated.", 409)
+    await publish_support_realtime(updated_ticket, "support_message.staff_joined")
+    await _notify_customer_status(updated_ticket, previous_status)
+    await write_audit_log(
+        actor_user_id=user.get("id"),
+        actor_role=f"ops:{effective_ops_role(user)}",
+        action="ops_support_joined",
+        target_type="support_message",
+        target_id=message_id,
+        metadata={"previous_status": previous_status},
+    )
+    return api_success(_thread_state(updated_ticket))
+
+
+@router.patch("/ops/support/messages/{message_id}/lifecycle")
+async def ops_support_lifecycle(
+    message_id: str,
+    payload: OpsSupportLifecycleBody,
+    user=Depends(get_ops_user),
+):
+    ticket = await _ticket(message_id)
+    previous_status = str(ticket.get("status") or "received")
+    timestamp = now_iso()
+    updates: Dict[str, Any] = {"status": payload.status, "updated_at": timestamp}
+
+    if payload.status == "closed":
+        updates["closed_at"] = timestamp
+        updates["closed_by_user_id"] = user.get("id")
+    else:
+        updates["closed_at"] = None
+        updates["closed_by_user_id"] = None
+
+    if payload.status == "waiting_for_agent":
+        updates.update({
+            "assigned_support_user_id": None,
+            "assigned_support_name": None,
+            "support_joined_at": None,
+        })
+    elif payload.status == "active":
+        updates.update({
+            "assigned_support_user_id": user.get("id"),
+            "assigned_support_name": user.get("name") or user.get("email") or "LetsGoRide Support",
+            "support_joined_at": ticket.get("support_joined_at") or timestamp,
+        })
+
+    updated_ticket = await update_versioned_support_message(message_id, updates)
+    if not updated_ticket:
+        api_error("Support conversation could not be updated.", 409)
+
+    event_type = "support_message.staff_joined" if payload.status == "active" and previous_status != "active" else "support_message.status_changed"
+    await publish_support_realtime(updated_ticket, event_type)
+    await _notify_customer_status(updated_ticket, previous_status)
+    await write_audit_log(
+        actor_user_id=user.get("id"),
+        actor_role=f"ops:{effective_ops_role(user)}",
+        action="ops_support_status_changed",
+        target_type="support_message",
+        target_id=message_id,
+        metadata={"from": previous_status, "to": payload.status},
+    )
+    return api_success(_thread_state(updated_ticket))
+
+
 @router.post("/ops/support/messages/{message_id}/reply")
 async def ops_support_reply(
     message_id: str,
@@ -323,9 +472,14 @@ async def ops_support_reply(
     user=Depends(get_ops_user),
 ):
     ticket = await _ticket(message_id)
-    status = payload.status or ticket.get("status") or "in_review"
+    if ticket.get("status") == "closed":
+        api_error("This support conversation is closed. Reopen it before replying.", 409)
+
+    status = payload.status or ticket.get("status") or "active"
     if status not in SUPPORT_STATUSES:
         api_error("Invalid support status.", 400)
+    if status in {"received", "open", "waiting_for_agent"}:
+        status = "active"
 
     created = await _insert_thread_message(
         ticket,
@@ -336,20 +490,36 @@ async def ops_support_reply(
         message=payload.message,
     )
     timestamp = now_iso()
-    updated_ticket = await update_versioned_support_message(message_id, {
+    previous_status = str(ticket.get("status") or "received")
+    updates: Dict[str, Any] = {
         "status": status,
         "admin_notes": payload.message,
         "last_staff_reply_at": timestamp,
         "updated_at": timestamp,
-    })
+        "assigned_support_user_id": ticket.get("assigned_support_user_id") or user.get("id"),
+        "assigned_support_name": ticket.get("assigned_support_name") or user.get("name") or user.get("email") or "LetsGoRide Support",
+        "support_joined_at": ticket.get("support_joined_at") or timestamp,
+    }
+    if status == "closed":
+        updates.update({"closed_at": timestamp, "closed_by_user_id": user.get("id")})
+    else:
+        updates.update({"closed_at": None, "closed_by_user_id": None})
+
+    updated_ticket = await update_versioned_support_message(message_id, updates)
     if updated_ticket:
         await publish_support_realtime(updated_ticket, "support_message.staff_replied")
     if ticket.get("user_id"):
+        if status == "closed":
+            title = "Support replied and closed the conversation"
+            body = "LetsGoRide Support sent a final reply and closed this conversation. Open Support to read it."
+        else:
+            title = "Support replied"
+            body = "LetsGoRide Support replied to your conversation. Open Support for details."
         await create_app_notification(
             ticket["user_id"],
             "support_reply",
-            "Support replied",
-            "LetsGoRide Support replied to your case. Open Support for details.",
+            title,
+            body,
             {"support_message_id": message_id},
         )
     await write_audit_log(
@@ -358,7 +528,7 @@ async def ops_support_reply(
         action="ops_support_replied",
         target_type="support_message",
         target_id=message_id,
-        metadata={"status": status, "thread_message_id": created.get("id")},
+        metadata={"status": status, "previous_status": previous_status, "thread_message_id": created.get("id")},
     )
     return api_success(_safe_thread_message(created))
 
