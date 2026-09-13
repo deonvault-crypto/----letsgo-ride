@@ -1,4 +1,9 @@
+from datetime import datetime, timedelta, timezone
+from typing import Literal
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import get_current_user
 from app.database import database
@@ -9,6 +14,35 @@ from app.services.communications_service import STORE_URLS, audience_filter, cam
 from app.utils import api_error, api_success, new_id, now_iso
 
 router = APIRouter(tags=["communications"])
+
+HARARE_TZ = ZoneInfo("Africa/Harare")
+ENGAGEMENT_OFFSETS_DAYS = (0, 3, 7, 12)
+ENGAGEMENT_MESSAGES = (
+    (
+        "Keep LetsGoRide close 🚗",
+        "Need to move, send, order or earn? Open LetsGoRide and see what’s available when you need it.",
+    ),
+    (
+        "Where are you headed next? 📍",
+        "LetsGoRide is ready when you are. Open the app and keep moving.",
+    ),
+    (
+        "Your next move starts here",
+        "Rides, deliveries and more are waiting when you need them. Open LetsGoRide anytime.",
+    ),
+    (
+        "Still going places? 🚗",
+        "LetsGoRide is here for your next trip, delivery or order whenever you’re ready.",
+    ),
+)
+
+
+class EngagementSeriesBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    roles: list[Literal["passenger", "driver", "courier", "merchant"]] = Field(
+        default_factory=lambda: ["passenger"], min_length=1, max_length=4
+    )
+    send_hour: int = Field(default=17, ge=8, le=20)
 
 
 def public_campaign(row):
@@ -34,6 +68,14 @@ async def campaign_or_404(campaign_id):
     return row
 
 
+def _next_harare_send(hour: int) -> datetime:
+    now_local = datetime.now(timezone.utc).astimezone(HARARE_TZ)
+    candidate = now_local.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if candidate <= now_local + timedelta(minutes=15):
+        candidate += timedelta(days=1)
+    return candidate.astimezone(timezone.utc)
+
+
 @router.get("/ops/communications")
 async def list_campaigns(limit: int = Query(default=50, ge=1, le=100), user=Depends(get_ops_user)):
     rows = await database.find_many("ops_campaigns", sort=[("created_at", -1)], limit=limit)
@@ -47,6 +89,87 @@ async def create_campaign(payload: CampaignBody, user=Depends(get_ops_manager)):
            "created_at": stamp, "updated_at": stamp, "created_by": user["id"], "processed_count": 0, "skipped_count": 0}
     await audit(user, "draft_created", row["id"], {"kind": row["kind"], "revision": 1})
     return api_success(public_campaign(await database.insert_one("ops_campaigns", row)))
+
+
+@router.post("/ops/communications/engagement-series")
+async def schedule_engagement_series(payload: EngagementSeriesBody, user=Depends(get_ops_admin)):
+    active = await database.find_many(
+        "ops_campaigns",
+        {"status": {"$in": ["queued", "sending"]}},
+        sort=[("created_at", -1)],
+        limit=100,
+    )
+    if any(row.get("engagement_series_id") for row in active):
+        api_error("A re-engagement series is already scheduled. Cancel it before creating another one.", 409)
+
+    stamp = now_iso()
+    series_id = new_id()
+    start = _next_harare_send(payload.send_hour)
+    roles = sorted(set(payload.roles))
+    created = []
+
+    for sequence, (offset_days, copy) in enumerate(zip(ENGAGEMENT_OFFSETS_DAYS, ENGAGEMENT_MESSAGES), start=1):
+        scheduled = start + timedelta(days=offset_days)
+        campaign_id = new_id()
+        row = {
+            "id": campaign_id,
+            "revision": 1,
+            "status": "queued",
+            "kind": "marketing",
+            "roles": roles,
+            "user_ids": [],
+            "title": copy[0],
+            "body": copy[1],
+            "action": "none",
+            "push": True,
+            "scheduled_at": scheduled.isoformat(),
+            "expires_at": (scheduled + timedelta(hours=36)).isoformat(),
+            "created_at": stamp,
+            "updated_at": stamp,
+            "created_by": user["id"],
+            "published_by": user["id"],
+            "published_at": stamp,
+            "audience_cutoff": scheduled.isoformat(),
+            "priority": 0,
+            "next_attempt_at": scheduled.isoformat(),
+            "processed_count": 0,
+            "skipped_count": 0,
+            "engagement_series_id": series_id,
+            "engagement_sequence": sequence,
+        }
+        created.append(public_campaign(await database.insert_one("ops_campaigns", row)))
+
+    await audit(user, "engagement_series_scheduled", series_id, {
+        "roles": roles,
+        "send_hour_harare": payload.send_hour,
+        "campaign_ids": [row["id"] for row in created],
+        "marketing_requires_consent": True,
+    })
+    return api_success({
+        "series_id": series_id,
+        "timezone": "Africa/Harare",
+        "marketing_requires_consent": True,
+        "campaigns": created,
+    })
+
+
+@router.post("/ops/communications/engagement-series/{series_id}/cancel")
+async def cancel_engagement_series(series_id: str, user=Depends(get_ops_admin)):
+    rows = await database.find_many("ops_campaigns", {"engagement_series_id": series_id}, limit=20)
+    if not rows:
+        api_error("Re-engagement series not found.", 404)
+    cancelled = 0
+    for row in rows:
+        if row.get("status") not in {"draft", "queued", "sending"}:
+            continue
+        updated = await database.update_one_if(
+            "ops_campaigns",
+            {"id": row["id"], "status": {"$in": ["draft", "queued", "sending"]}},
+            {"status": "cancelled", "updated_at": now_iso(), "cancelled_by": user["id"]},
+        )
+        cancelled += int(updated is not None)
+    await audit(user, "engagement_series_cancelled", series_id, {"cancelled_campaigns": cancelled})
+    return api_success({"series_id": series_id, "cancelled_campaigns": cancelled})
 
 
 @router.patch("/ops/communications/{campaign_id}")
