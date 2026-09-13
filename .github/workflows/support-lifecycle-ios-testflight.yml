@@ -1,0 +1,67 @@
+name: LetsGoRide Support Lifecycle iOS TestFlight
+
+on:
+  push:
+    branches:
+      - build/support-lifecycle-ios-testflight-20260913
+    paths:
+      - .github/workflows/support-lifecycle-ios-testflight.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: support-lifecycle-ios-testflight-20260913
+  cancel-in-progress: false
+
+jobs:
+  build-and-submit-ios:
+    runs-on: macos-15
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_LOCAL_BUILD_SKIP_CLEANUP: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify exact production source
+        run: |
+          test "$(git rev-parse HEAD^1 2>/dev/null || true)" != ""
+          git diff --exit-code 5d14c9677cc9e98425aae216719fbb6899e0133c HEAD -- mobile
+          node -e "const a=require('./mobile/app.json'); if(a.expo.version!=='2.0.4') throw new Error('Expected 2.0.4'); if(a.expo.ios.bundleIdentifier!=='co.zw.letsgoride') throw new Error('Unexpected bundle id');"
+
+      - name: Pin Xcode 16.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          sw_vers
+          xcodebuild -version
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build signed iOS IPA locally
+        working-directory: mobile
+        run: npx eas-cli@24.3.0 build --platform ios --profile production --local --non-interactive --output "$GITHUB_WORKSPACE/letsgoride-support-ios-204.ipa"
+
+      - name: Submit IPA to App Store Connect TestFlight
+        working-directory: mobile
+        run: npx eas-cli@24.3.0 submit --platform ios --profile production --path "$GITHUB_WORKSPACE/letsgoride-support-ios-204.ipa" --non-interactive
+
+      - name: Upload IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: letsgoride-support-ios-204
+          path: letsgoride-support-ios-204.ipa
+          if-no-files-found: warn
+          retention-days: 7
