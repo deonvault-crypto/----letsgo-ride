@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Verify mobile source is identical to merged production
         run: git diff --exit-code e92a67fdd30a6533bc8250cdef78e5fa221108a0 HEAD -- mobile
