@@ -30,7 +30,7 @@ jobs:
         run: |
           git diff --exit-code 5d14c9677cc9e98425aae216719fbb6899e0133c HEAD -- mobile ":(exclude)mobile/package.json" ":(exclude)mobile/scripts/patch-stripe-xcode26.js"
           node -e "const a=require('./mobile/app.json'); if(a.expo.version!=='2.0.4') throw new Error('Expected 2.0.4'); if(a.expo.ios.bundleIdentifier!=='co.zw.letsgoride') throw new Error('Unexpected bundle id');"
-          node -e "const p=require('./mobile/package.json'); if(p.dependencies['@stripe/stripe-react-native']!=='0.50.3') throw new Error('Stripe version changed unexpectedly'); if(p.scripts['eas-build-post-install']!=='node scripts/patch-stripe-xcode26.js') throw new Error('Missing scoped Xcode 26 patch hook');"
+          node -e "const p=require('./mobile/package.json'); if(p.dependencies['@stripe/stripe-react-native']!=='0.50.3') throw new Error('Stripe version changed unexpectedly'); if(p.scripts.postinstall!=='node scripts/patch-stripe-xcode26.js') throw new Error('Missing pre-fingerprint Xcode 26 patch hook'); if(p.scripts['eas-build-post-install']) throw new Error('Late EAS patch hook must be absent');"
           test -f mobile/scripts/patch-stripe-xcode26.js
 
       - name: Pin Apple-accepted Xcode 26.3
@@ -47,9 +47,11 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Install dependencies
+      - name: Install dependencies and patch Stripe before fingerprinting
         working-directory: mobile
-        run: npm ci
+        run: |
+          npm ci
+          node -e "const fs=require('fs'); const p='node_modules/@stripe/stripe-react-native/ios/StripeSwiftInterop.h'; const s=fs.readFileSync(p,'utf8'); if(!s.includes('typedef NS_ENUM(NSInteger, STPPaymentStatus);')) throw new Error('Stripe compatibility patch not applied before EAS fingerprinting'); if(s.includes('typedef NS_ENUM(NSUInteger, STPPaymentStatus);')) throw new Error('Old Stripe enum declaration still present');"
 
       - name: Build signed iOS IPA locally
         working-directory: mobile
