@@ -1,0 +1,25 @@
+name: LetsGoRide Support Lifecycle Build Status
+
+on:
+  push:
+    branches:
+      - build/support-lifecycle-binaries-20260913
+    paths:
+      - .github/workflows/support-lifecycle-build-status.yml
+
+permissions:
+  contents: read
+
+jobs:
+  android-status:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Read Android EAS build status
+        run: npx eas-cli@24.3.0 build:view abc52b59-1047-4125-b9b5-373ebbadf80b --json
