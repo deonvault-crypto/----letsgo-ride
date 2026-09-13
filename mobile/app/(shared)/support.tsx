@@ -139,7 +139,6 @@ export default function SupportScreen() {
       await loadMessages();
     } catch (err) {
       setThreadError(err instanceof Error ? err.message : "Unable to send your reply.");
-      if (selectedMessageId) await loadThread(selectedMessageId, true);
     } finally {
       setSendingReply(false);
     }
