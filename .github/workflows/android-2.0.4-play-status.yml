@@ -1,0 +1,27 @@
+name: LetsGoRide Android 2.0.4 Play Status
+
+on:
+  push:
+    branches:
+      - release/android-2.0.4-play-draft-20260913
+    paths:
+      - .github/workflows/android-2.0.4-play-status.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check-status:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check exact Android build and Play submission
+        working-directory: mobile
+        run: |
+          echo '=== BUILD ==='
+          npx eas-cli@24.3.0 build:view c7e88198-280b-4ab0-a732-2c74d07b1fe7 --json --non-interactive || true
+          echo '=== SUBMISSION ==='
+          npx eas-cli@24.3.0 submit:view 31f64efb-d86c-49f8-bf3e-8d7c51973e31 --json --non-interactive || true
