@@ -28,7 +28,7 @@ function securityHeaders(ext) {
     'Cache-Control': ext === '.html' ? 'no-store' : 'public, max-age=3600',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
-    'Referrer-Policy': 'no-referrer',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://letsgoride-v2-production.onrender.com; img-src 'self' data: https://tile.openstreetmap.org https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   };
