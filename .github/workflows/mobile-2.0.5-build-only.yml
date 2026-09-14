@@ -1,0 +1,73 @@
+name: LetsGoRide 2.0.5 Build Only
+
+on:
+  push:
+    branches:
+      - ops/mobile-2.0.5-build-only
+
+permissions:
+  contents: read
+
+concurrency:
+  group: letsgoride-mobile-2.0.5-build-only
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build reviewed 2.0.5 binaries only
+    if: github.ref == 'refs/heads/ops/mobile-2.0.5-build-only' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      RELEASE_SHA: c086d898c8bd618bd696c5a691d8796bb7e79448
+    steps:
+      - name: Checkout exact reviewed production SHA
+        uses: actions/checkout@v4
+        with:
+          ref: c086d898c8bd618bd696c5a691d8796bb7e79448
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove exact source pin
+        run: test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Verify production release configuration
+        run: node scripts/verify-production-release-config.js
+
+      - name: Verify Expo authentication
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli@23.2.0 whoami --non-interactive
+
+      - name: Start iOS and Android production builds without submission
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@23.2.0 build \
+            --platform all \
+            --profile production \
+            --non-interactive \
+            --no-wait \
+            --freeze-credentials \
+            --json > ../eas-builds.json
+          cat ../eas-builds.json
+
+      - name: Preserve build IDs
+        uses: actions/upload-artifact@v4
+        with:
+          name: letsgoride-2.0.5-eas-builds
+          path: eas-builds.json
+          if-no-files-found: error
+          retention-days: 7
