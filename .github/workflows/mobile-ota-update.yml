@@ -27,6 +27,8 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - name: Verify production release configuration
+        run: node scripts/verify-production-release-config.js
       - name: Require green CI on the exact production source
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,9 +42,7 @@ jobs:
             if (!response.ok) throw new Error('Cannot verify production CI.');
             const runs = (await response.json()).workflow_runs.filter(run => run.name === 'LetsGoRide Production CI' && run.event === 'push' && run.head_sha === process.env.GITHUB_SHA).sort((a, b) => b.id - a.id);
             if (runs[0]?.conclusion !== 'success') throw new Error('Exact production CI must pass before publishing.');
-            const app = require('./app.json').expo;
-            if (app.runtimeVersion?.policy !== 'fingerprint' || app.updates?.url !== 'https://u.expo.dev/6a3f6705-1e96-4f17-b884-b928baebf0ba') throw new Error('Update compatibility configuration changed.');
-            console.log('Verified exact production source and fingerprint compatibility.');
+            console.log('Verified exact production source has green CI.');
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
       - run: npm ci --no-audit --no-fund
@@ -52,11 +52,8 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('node:fs');
+          const { EXPECTED_PRODUCTION_ENV: expected } = require('./scripts/verify-production-release-config');
           const env = require('./eas.json').build.production.env;
-          const expected = {
-            EXPO_PUBLIC_API_BASE_URL: 'https://letsgoride-v2-production.onrender.com',
-            EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB: 'false',
-          };
           for (const [name, value] of Object.entries(expected)) {
             if (env[name] !== value) throw new Error('Review production setting: ' + name);
             fs.appendFileSync(process.env.GITHUB_ENV, name + '=' + value + '\n');
