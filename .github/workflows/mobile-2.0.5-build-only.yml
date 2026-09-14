@@ -1,4 +1,4 @@
-name: LetsGoRide 2.0.5 Build Inspection
+name: LetsGoRide 2.0.5 Android Build Watch
 
 on:
   push:
@@ -9,20 +9,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: letsgoride-mobile-2.0.5-build-inspection
+  group: letsgoride-mobile-2.0.5-build-watch
   cancel-in-progress: false
 
 jobs:
-  inspect:
-    name: Inspect exact production EAS builds
+  watch:
+    name: Watch exact Android 2.0.5 build
     if: github.ref == 'refs/heads/ops/mobile-2.0.5-build-only' && github.run_attempt == 1
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: mobile
     env:
       RELEASE_SHA: c086d898c8bd618bd696c5a691d8796bb7e79448
+      BUILD_ID: 776ebcfb-f57f-4435-aee0-0ac3efcc59f2
     steps:
       - name: Checkout exact reviewed production SHA
         uses: actions/checkout@v4
@@ -47,23 +48,35 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx --yes eas-cli@23.2.0 whoami --non-interactive
 
-      - name: List EAS builds for exact production commit
+      - name: Watch existing Android build only
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           set -euo pipefail
-          npx --yes eas-cli@23.2.0 build:list \
-            --platform all \
-            --git-commit-hash "$RELEASE_SHA" \
-            --limit 10 \
-            --json \
-            --non-interactive > ../eas-builds-existing.json
-          cat ../eas-builds-existing.json
+          for attempt in $(seq 1 50); do
+            npx --yes eas-cli@23.2.0 build:view "$BUILD_ID" --json > ../android-build.json
+            status="$(node -e "const x=require('../android-build.json'); process.stdout.write(String(x.status || 'UNKNOWN'))")"
+            commit="$(node -e "const x=require('../android-build.json'); process.stdout.write(String(x.gitCommitHash || ''))")"
+            version="$(node -e "const x=require('../android-build.json'); process.stdout.write(String(x.appVersion || ''))")"
+            build_version="$(node -e "const x=require('../android-build.json'); process.stdout.write(String(x.appBuildVersion || ''))")"
+            test "$commit" = "$RELEASE_SHA"
+            test "$version" = "2.0.5"
+            test "$build_version" = "34"
+            echo "Android build status: $status"
+            case "$status" in
+              FINISHED) exit 0 ;;
+              ERRORED|CANCELED) exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "Android build did not reach a terminal state inside the watcher window."
+          exit 2
 
-      - name: Preserve inspection result
+      - name: Preserve final Android build record
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: letsgoride-2.0.5-eas-build-inspection
-          path: eas-builds-existing.json
-          if-no-files-found: error
+          name: letsgoride-2.0.5-android-build-final
+          path: android-build.json
+          if-no-files-found: warn
           retention-days: 7
