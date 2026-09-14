@@ -46,6 +46,7 @@
     "test": "jest --watchAll=false",
     "typecheck": "tsc --noEmit",
     "verify:android": "node scripts/verify-android-config.js",
+    "verify:release": "node scripts/verify-production-release-config.js",
     "eas-build-pre-install": "node scripts/validate-build-env.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
