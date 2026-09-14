@@ -7,6 +7,8 @@ This directory separates current engineering references from historical implemen
 - `PLATFORM_V2_ARCHITECTURE.md`
 - `PLATFORM_V2_DESIGN_TOKENS.md`
 - `PLATFORM_V2_TECH_DECISIONS.md`
+- `CONTROL_PLANE_OWNERSHIP.md`
+- `LEGACY_RETIREMENT_GATES.md`
 - `security/`
 
 Code, tests, CI configuration, and the current production branch take precedence if documentation becomes stale.
