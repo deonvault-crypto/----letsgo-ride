@@ -1,0 +1,43 @@
+name: Temporary cleanup CI wiring
+
+on:
+  push:
+    branches:
+      - chore/codebase-cleanup-2026-09
+    paths:
+      - .github/workflows/codebase-cleanup-ci-wire.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/codebase-cleanup-2026-09
+          fetch-depth: 0
+      - name: Wire canonical release verifier into CI
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/platform-v2-ci.yml')
+          text = path.read_text()
+          old = '''      - name: Verify Android API and release policy\n        run: npm run verify:android\n\n      - name: Unit tests\n'''
+          new = '''      - name: Verify Android API and release policy\n        run: npm run verify:android\n\n      - name: Verify production release configuration\n        run: npm run verify:release\n\n      - name: Unit tests\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one mobile CI insertion point, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+      - name: Commit CI wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/platform-v2-ci.yml
+          git commit -m "ci: verify canonical production release configuration"
+          git push origin HEAD:chore/codebase-cleanup-2026-09
