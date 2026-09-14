@@ -168,6 +168,11 @@ class AdminRoleUpdateBody(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
 
 
+class WorkModeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["driver", "courier"]
+
+
 class VerifyEmailBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=5, max_length=254)
