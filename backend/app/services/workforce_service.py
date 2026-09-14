@@ -88,13 +88,25 @@ async def list_my_applications(user: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 async def save_worker_application(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    if user.get("role") != "passenger":
-        raise PermissionError("Applications begin from a Customer account. Existing work accounts keep their current product access.")
+    current_role = str(user.get("role") or "passenger").strip().lower()
+    approved_products = {
+        str(value).strip().lower()
+        for value in (user.get("work_products") or [])
+        if str(value).strip().lower() in {"driver", "courier"}
+    }
+    if current_role in {"driver", "courier"}:
+        approved_products.add(current_role)
+    if current_role not in {"passenger", "driver", "courier"}:
+        raise PermissionError("Only Customer, Driver or Courier accounts can start a Driver or Courier application.")
     if not payload.get("accepted_terms"):
         raise ValueError("Accept the application declaration before continuing.")
     product = str(payload.get("product") or "")
     if product not in REQUIRED_DOCUMENTS:
         raise ValueError("Unsupported worker product.")
+    if product == "merchant" and current_role != "passenger":
+        raise PermissionError("Merchant onboarding requires a Customer account without another work product.")
+    if product in approved_products:
+        raise ValueError("This work product is already approved for your account.")
     legacy_area = str(payload.get("service_area") or "").strip().lower()
     inferred_area_id = next((area_id for area_id, name in SERVICE_AREAS.items() if legacy_area == name.lower() or legacy_area.startswith(f"{name.lower()} ")), "")
     payload["service_area_id"] = str(payload.get("service_area_id") or inferred_area_id)
@@ -298,13 +310,29 @@ async def review_worker_application(application_id: str, status: str, note: str 
         if not applicant:
             raise ValueError("Applicant account not found.")
         product = str(application.get("product") or "")
-        if applicant.get("role") not in {"passenger", product}:
-            raise ValueError("Applicant already belongs to another work product.")
+        current_role = str(applicant.get("role") or "passenger").strip().lower()
+        approved_products = {
+            str(value).strip().lower()
+            for value in (applicant.get("work_products") or [])
+            if str(value).strip().lower() in {"driver", "courier"}
+        }
+        if current_role in {"driver", "courier"}:
+            approved_products.add(current_role)
+        if product in {"driver", "courier"}:
+            if current_role not in {"passenger", "driver", "courier"}:
+                raise ValueError("Applicant already belongs to an incompatible work product.")
+            approved_products.add(product)
+            next_role = product if current_role == "passenger" else current_role
+        else:
+            if current_role not in {"passenger", product}:
+                raise ValueError("Applicant already belongs to another work product.")
+            next_role = product
         await database.update_one(
             "users",
             applicant["id"],
             {
-                "role": product,
+                "role": next_role,
+                "work_products": sorted(approved_products),
                 "name": application.get("full_name") or applicant.get("name"),
                 "phone": application.get("phone") or applicant.get("phone"),
                 "city": application.get("service_area") or applicant.get("city"),
@@ -372,7 +400,7 @@ async def review_worker_application(application_id: str, status: str, note: str 
         str(application.get("user_id") or ""),
         "worker_application",
         "Application update",
-        "Your application was approved. Sign in again to open your work product." if status == "APPROVED" else "Your application status changed. Open Work with LetsGoRide for details.",
+        "Your application was approved. Open Account to use your approved work mode." if status == "APPROVED" else "Your application status changed. Open Work with LetsGoRide for details.",
         {"application_id": application_id, "application_status": status, "product": application.get("product")},
     )
     return public_application(updated or application)
