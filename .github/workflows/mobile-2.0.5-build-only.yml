@@ -1,4 +1,4 @@
-name: LetsGoRide 2.0.5 Build Only
+name: LetsGoRide 2.0.5 Build Inspection
 
 on:
   push:
@@ -9,15 +9,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: letsgoride-mobile-2.0.5-build-only
+  group: letsgoride-mobile-2.0.5-build-inspection
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build reviewed 2.0.5 binaries only
+  inspect:
+    name: Inspect exact production EAS builds
     if: github.ref == 'refs/heads/ops/mobile-2.0.5-build-only' && github.run_attempt == 1
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: mobile
@@ -42,32 +42,28 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      - name: Verify production release configuration
-        run: node scripts/verify-production-release-config.js
-
       - name: Verify Expo authentication
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx --yes eas-cli@23.2.0 whoami --non-interactive
 
-      - name: Start iOS and Android production builds without submission
+      - name: List EAS builds for exact production commit
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           set -euo pipefail
-          npx --yes eas-cli@23.2.0 build \
+          npx --yes eas-cli@23.2.0 build:list \
             --platform all \
-            --profile production \
-            --non-interactive \
-            --no-wait \
-            --freeze-credentials \
-            --json > ../eas-builds.json
-          cat ../eas-builds.json
+            --git-commit-hash "$RELEASE_SHA" \
+            --limit 10 \
+            --json \
+            --non-interactive > ../eas-builds-existing.json
+          cat ../eas-builds-existing.json
 
-      - name: Preserve build IDs
+      - name: Preserve inspection result
         uses: actions/upload-artifact@v4
         with:
-          name: letsgoride-2.0.5-eas-builds
-          path: eas-builds.json
+          name: letsgoride-2.0.5-eas-build-inspection
+          path: eas-builds-existing.json
           if-no-files-found: error
           retention-days: 7
