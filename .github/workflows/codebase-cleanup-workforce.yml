@@ -1,0 +1,76 @@
+name: Temporary workforce cleanup
+
+on:
+  push:
+    branches:
+      - chore/codebase-cleanup-2026-09
+    paths:
+      - .github/workflows/codebase-cleanup-workforce.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/codebase-cleanup-2026-09
+          fetch-depth: 0
+
+      - name: Apply asserted workforce cleanup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/app/services/workforce_service.py')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one match, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once('import cloudinary.uploader\nimport cloudinary.utils\n', 'import cloudinary.uploader\n')
+          replace_once(
+              'from app.services.notification_service import create_app_notification\n',
+              'from app.services.notification_service import create_app_notification\nfrom app.services.work_product_service import approved_work_products, with_approved_work_product\n',
+          )
+          replace_once('ALLOWED_DOCUMENT_TYPES = {"image/jpeg", "image/png", "image/webp", "application/pdf"}\n', '')
+          replace_once(
+              '\n\ndef _safe_file_name(value: str) -> str:\n    return "".join(character for character in value if character.isalnum() or character in ("-", "_", ".")).strip(".") or "document"\n',
+              '',
+          )
+          replace_once(
+              '''    current_role = str(user.get("role") or "passenger").strip().lower()\n    approved_products = {\n        str(value).strip().lower()\n        for value in (user.get("work_products") or [])\n        if str(value).strip().lower() in {"driver", "courier"}\n    }\n    if current_role in {"driver", "courier"}:\n        approved_products.add(current_role)\n''',
+              '''    current_role = str(user.get("role") or "passenger").strip().lower()\n    approved_products = set(approved_work_products(user))\n''',
+          )
+          replace_once(
+              '''        current_role = str(applicant.get("role") or "passenger").strip().lower()\n        approved_products = {\n            str(value).strip().lower()\n            for value in (applicant.get("work_products") or [])\n            if str(value).strip().lower() in {"driver", "courier"}\n        }\n        if current_role in {"driver", "courier"}:\n            approved_products.add(current_role)\n        if product in {"driver", "courier"}:\n            if current_role not in {"passenger", "driver", "courier"}:\n                raise ValueError("Applicant already belongs to an incompatible work product.")\n            approved_products.add(product)\n            next_role = product if current_role == "passenger" else current_role\n''',
+              '''        current_role = str(applicant.get("role") or "passenger").strip().lower()\n        approved_products = set(approved_work_products(applicant))\n        if product in {"driver", "courier"}:\n            if current_role not in {"passenger", "driver", "courier"}:\n                raise ValueError("Applicant already belongs to an incompatible work product.")\n            approved_products = set(with_approved_work_product(applicant, product))\n            next_role = product if current_role == "passenger" else current_role\n''',
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Backend syntax and focused regression tests
+        working-directory: backend
+        run: |
+          python -m compileall -q app tests
+          python -m unittest tests.test_multi_work_product tests.test_product_experience
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/services/workforce_service.py
+          git diff --cached --check
+          git commit -m "refactor(workforce): centralize approved work-product logic"
+          git push origin HEAD:chore/codebase-cleanup-2026-09
