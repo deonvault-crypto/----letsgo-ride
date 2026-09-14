@@ -7,7 +7,6 @@ from typing import Any, Dict, List
 
 import cloudinary
 import cloudinary.uploader
-import cloudinary.utils
 from fastapi import UploadFile
 from pymongo.errors import DuplicateKeyError
 
@@ -16,6 +15,7 @@ from app.database import database
 from app.domain.zimbabwe_operations import SERVICE_AREAS, canonical_service_area, validate_vehicle_type
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification
+from app.services.work_product_service import approved_work_products, with_approved_work_product
 from app.utils import new_id, now_iso
 from app.services.upload_security_service import validate_upload
 
@@ -34,7 +34,6 @@ REQUIRED_DOCUMENTS = {
     "merchant": {"identity_document", "business_registration"},
 }
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
-ALLOWED_DOCUMENT_TYPES = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
 
 
 def _user_id(user: Dict[str, Any]) -> str:
@@ -51,10 +50,6 @@ def _parse_datetime(value: Any) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def _safe_file_name(value: str) -> str:
-    return "".join(character for character in value if character.isalnum() or character in ("-", "_", ".")).strip(".") or "document"
 
 
 def _public_document(document: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,13 +84,7 @@ async def list_my_applications(user: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 async def save_worker_application(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     current_role = str(user.get("role") or "passenger").strip().lower()
-    approved_products = {
-        str(value).strip().lower()
-        for value in (user.get("work_products") or [])
-        if str(value).strip().lower() in {"driver", "courier"}
-    }
-    if current_role in {"driver", "courier"}:
-        approved_products.add(current_role)
+    approved_products = set(approved_work_products(user))
     if current_role not in {"passenger", "driver", "courier"}:
         raise PermissionError("Only Customer, Driver or Courier accounts can start a Driver or Courier application.")
     if not payload.get("accepted_terms"):
@@ -311,17 +300,11 @@ async def review_worker_application(application_id: str, status: str, note: str 
             raise ValueError("Applicant account not found.")
         product = str(application.get("product") or "")
         current_role = str(applicant.get("role") or "passenger").strip().lower()
-        approved_products = {
-            str(value).strip().lower()
-            for value in (applicant.get("work_products") or [])
-            if str(value).strip().lower() in {"driver", "courier"}
-        }
-        if current_role in {"driver", "courier"}:
-            approved_products.add(current_role)
+        approved_products = set(approved_work_products(applicant))
         if product in {"driver", "courier"}:
             if current_role not in {"passenger", "driver", "courier"}:
                 raise ValueError("Applicant already belongs to an incompatible work product.")
-            approved_products.add(product)
+            approved_products = set(with_approved_work_product(applicant, product))
             next_role = product if current_role == "passenger" else current_role
         else:
             if current_role not in {"passenger", product}:
