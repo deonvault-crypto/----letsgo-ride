@@ -12,6 +12,7 @@ from app.models.user import (
     UserUpdate,
     VerifyEmailBody,
     VerifyOtpBody,
+    WorkModeBody,
 )
 from app.services.auth_service import (
     DuplicateVerifiedEmailError,
@@ -32,6 +33,9 @@ from app.services.account_deletion_service import (
     AccountDeletionBlockedError,
     delete_account,
 )
+from app.services.audit_service import write_audit_log
+from app.services.courier_state_service import ACTIVE_COURIER_STATUSES
+from app.services.hailing_state import ACTIVE_DRIVER_STATUSES
 from app.utils import api_error, api_success
 from app.database import database
 from app.utils import now_iso
@@ -41,6 +45,7 @@ from pymongo.errors import DuplicateKeyError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 INACTIVE_ACCOUNT_STATUSES = {"deleted", "suspended"}
+WORK_PRODUCTS = {"driver", "courier"}
 
 
 def _require_public_customer_signup(role: str) -> None:
@@ -53,6 +58,18 @@ def _require_public_customer_signup(role: str) -> None:
 
 def _inactive_account(user) -> bool:
     return bool(user) and str(user.get("status") or "active").strip().lower() in INACTIVE_ACCOUNT_STATUSES
+
+
+def _approved_work_products(user) -> list[str]:
+    products = {
+        str(value).strip().lower()
+        for value in (user.get("work_products") or [])
+        if str(value).strip().lower() in WORK_PRODUCTS
+    }
+    current = str(user.get("role") or "").strip().lower()
+    if current in WORK_PRODUCTS:
+        products.add(current)
+    return sorted(products)
 
 
 async def _email_account(email: str):
@@ -197,6 +214,59 @@ async def me(user=Depends(get_current_user)):
     return api_success(public_user(user))
 
 
+@router.post("/work-mode")
+async def switch_work_mode(payload: WorkModeBody, user=Depends(get_current_user)):
+    target = payload.role
+    products = _approved_work_products(user)
+    if target not in products:
+        api_error("That work mode has not been approved for this account.", 403)
+
+    current = str(user.get("role") or "").strip().lower()
+    if current == target:
+        return api_success(public_user(user))
+    if current not in {"passenger", "driver", "courier"}:
+        api_error("This account cannot switch work modes.", 403)
+
+    if current == "driver":
+        driver = await database.find_one("drivers", {"user_id": user["id"]})
+        if driver:
+            presence = await database.find_one("hailing_driver_presence", {"driver_id": driver["id"]})
+            if presence and str(presence.get("status") or "offline").lower() != "offline":
+                api_error("Go offline as a Driver before switching work mode.", 409)
+        active_trip = await database.find_one(
+            "hailing_trips",
+            {"driver_user_id": user["id"], "status": {"$in": sorted(ACTIVE_DRIVER_STATUSES)}},
+        )
+        if active_trip:
+            api_error("Complete or cancel the active Ride Now trip before switching work mode.", 409)
+
+    if current == "courier":
+        courier_profile = await database.find_one("courier_profiles", {"user_id": user["id"]})
+        if courier_profile and courier_profile.get("online") is True:
+            api_error("Go offline as a Courier before switching work mode.", 409)
+        active_delivery = await database.find_one(
+            "courier_deliveries",
+            {"courier_user_id": user["id"], "status": {"$in": sorted(ACTIVE_COURIER_STATUSES)}},
+        )
+        if active_delivery:
+            api_error("Complete the active delivery before switching work mode.", 409)
+
+    updated = await database.update_one(
+        "users",
+        user["id"],
+        {"role": target, "work_products": products, "updated_at": now_iso()},
+    )
+    await write_audit_log(
+        actor_user_id=str(user.get("id") or ""),
+        actor_role=current,
+        action="work_mode_switched",
+        target_type="user",
+        target_id=str(user.get("id") or ""),
+        metadata={"from_role": current, "to_role": target, "work_products": products},
+    )
+    return api_success(public_user(updated or {**user, "role": target, "work_products": products}))
+
+
 @router.patch("/me")
 async def update_me(payload: UserUpdate, request: Request, user=Depends(get_current_user)):
     workforce_identity_fields = {"email", "phone", "city", "bio", "travel_preferences"}
@@ -205,9 +275,10 @@ async def update_me(payload: UserUpdate, request: Request, user=Depends(get_curr
         api_error("Contact LetsGoRide Support to change verified account details.", 403)
     updates = {key: value for key, value in payload.model_dump().items() if value is not None}
 
-    # Product identity is immutable. Customer, Driver, Courier and Merchant are
-    # separate account types; changing profile details must never switch products.
+    # Product identity is controlled by reviewed onboarding and the work-mode
+    # switch endpoint; profile edits can never self-grant a work product.
     updates.pop("role", None)
+    updates.pop("work_products", None)
     updates.pop("email_verified", None)
     updates.pop("profile_photo_verified", None)
 
