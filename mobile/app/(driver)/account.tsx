@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AccountComplianceSections } from "../../components/account/AccountComplianceSections";
 import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
+import { WorkModeSwitcher } from "../../components/account/WorkModeSwitcher";
 import { Avatar } from "../../components/ui/Avatar";
 import { ListTile } from "../../components/ui/ListTile";
 import { Screen } from "../../components/ui/Screen";
@@ -86,6 +87,8 @@ export default function DriverAccountScreen() {
           <MaterialCommunityIcons name="pencil-outline" size={20} color={DRIVER_BLACK} />
         </Pressable>
       </View>
+
+      <WorkModeSwitcher />
 
       {!photoApproved ? (
         <Pressable

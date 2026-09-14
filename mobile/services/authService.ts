@@ -1,7 +1,7 @@
 import axios from "axios";
 
 import { api, requestData, saveToken, getToken, toFriendlyApiError } from "./api";
-import { User } from "../types/user.types";
+import { User, UserRole } from "../types/user.types";
 import { clearPrivateSessionState, publishSessionUser } from "./sessionLifecycle";
 import { disablePhoneNotifications } from "./pushNotificationService";
 import { stopAllDriverBackgroundLocation } from "./hailingBackgroundLocation";
@@ -78,6 +78,12 @@ export async function resetPassword(email: string, code: string, password: strin
 
 export async function getCurrentUser() {
   return requestData<User>({ method: "GET", url: "/auth/me" });
+}
+
+export async function switchWorkMode(role: Extract<UserRole, "driver" | "courier">) {
+  const user = await requestData<User>({ method: "POST", url: "/auth/work-mode", data: { role } });
+  publishSessionUser(user);
+  return user;
 }
 
 export async function updateCurrentUser(data: Partial<Pick<User, "phone" | "email" | "city" | "bio" | "travel_preferences" | "notification_trip_updates" | "notification_booking_requests" | "notification_support_replies" | "notification_safety_alerts" | "notification_marketing">>) {

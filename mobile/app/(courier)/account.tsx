@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 
 import { AccountDetailsSummary } from "../../components/account/AccountDetailsSummary";
+import { WorkModeSwitcher } from "../../components/account/WorkModeSwitcher";
 import { AccountComplianceSections } from "../../components/account/AccountComplianceSections";
 import { Avatar } from "../../components/ui/Avatar";
 import { Screen } from "../../components/ui/Screen";
@@ -41,6 +42,7 @@ export default function CourierAccountScreen() {
         <View style={styles.profileCopy}><Text numberOfLines={1} style={styles.name}>{application?.full_name || user?.name || "Courier"}</Text><Text style={styles.contact}>Courier account · {photoState}</Text></View>
         <MaterialCommunityIcons name="chevron-right" size={22} color={v2Theme.colors.inkTertiary} />
       </Pressable>
+      <WorkModeSwitcher />
       <AccountDetailsSummary rows={[{ label: "Full legal name", value: application?.full_name || user?.name || "Not added" }, { label: "Email", value: user?.email || "Not added" }, { label: "Phone", value: application?.phone || user?.phone || "Not added" }, { label: "Service city", value: application?.service_area || profile?.service_area || user?.city || "Not added" }]} note="These details were used to verify your Courier account. Contact support to request a correction." onRequestChange={() => router.push({ pathname: "/(shared)/support", params: { ...productParam, subject: "Account details change" } } as never)} />
       {error ? <Pressable accessibilityRole="button" onPress={load} style={styles.error}><Text style={styles.errorText}>{error}</Text><Text style={styles.retry}>Retry</Text></Pressable> : null}
       <View style={[styles.approval, profileApproved && photoApproved && styles.approvalGood]}><View style={styles.approvalIcon}><MaterialCommunityIcons name={profileApproved && photoApproved ? "shield-check" : "shield-outline"} size={25} color={profileApproved && photoApproved ? v2Theme.colors.brandStrong : v2Theme.colors.warning} /></View><View style={styles.flex}><Text style={styles.approvalTitle}>{profileApproved ? (photoApproved ? "Courier ready" : "Courier approved · photo check required") : "Courier review in progress"}</Text><Text style={styles.approvalBody}>{profileApproved ? (photoApproved ? "Online work and shift booking are enabled." : photoPending ? "Your application is approved. New online work opens after the submitted profile photo is approved." : photoRejected ? "Your application is approved, but the profile photo must be replaced and approved before new online work." : "Your application is approved. Add an Admin-approved profile photo before starting new online work.") : "Work access stays locked until admin approval."}</Text></View></View>

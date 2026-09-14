@@ -25,6 +25,7 @@ export type User = {
   notification_support_replies?: boolean;
   notification_safety_alerts?: boolean;
   notification_marketing?: boolean;
+  work_products?: Array<"driver" | "courier">;
   role: UserRole;
   rating?: number;
   token?: string;
