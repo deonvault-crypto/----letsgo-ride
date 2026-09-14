@@ -168,6 +168,39 @@ def _safe_audit_log(row: Dict[str, Any]) -> Dict[str, Any]:
     return safe
 
 
+def _exact_case_filters(
+    *,
+    status: Optional[str],
+    escalation_level: Optional[str],
+    assigned_to: Optional[str],
+    priority: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    clauses: List[Dict[str, Any]] = []
+    if status:
+        clauses.append({"status": status})
+    if escalation_level:
+        if escalation_level == "cs":
+            clauses.append({
+                "$or": [
+                    {"escalation_level": "cs"},
+                    {"escalation_level": {"$exists": False}},
+                    {"escalation_level": None},
+                    {"escalation_level": ""},
+                ]
+            })
+        else:
+            clauses.append({"escalation_level": escalation_level})
+    if assigned_to:
+        clauses.append({"assigned_user_id": assigned_to})
+    if priority:
+        clauses.append({"priority": priority})
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
+
+
 async def _source_record(source_type: str, source_id: Optional[str]) -> Optional[Dict[str, Any]]:
     if source_type == "manual":
         return None
@@ -238,8 +271,10 @@ async def _ops_role_for_user(target: Dict[str, Any]) -> Optional[str]:
     return role if role in {"cs", "manager"} else None
 
 
-async def _staff_row(staff: Dict[str, Any]) -> Dict[str, Any]:
-    user = await database.find_one("users", {"id": staff.get("user_id")})
+async def _staff_row(staff: Dict[str, Any], account: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    user = account
+    if user is None and staff.get("user_id"):
+        user = await database.find_one("users", {"id": staff.get("user_id")})
     return {
         "id": staff.get("id"),
         "user_id": staff.get("user_id"),
@@ -347,13 +382,17 @@ async def search_users(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many("users", sort=[("updated_at", -1)], limit=limit)
+    filters = {"role": role} if role else None
+    rows = await database.find_many(
+        "users",
+        filters,
+        sort=[("updated_at", -1)],
+        limit=None if search else limit,
+    )
     staff_rows = await database.find_many("ops_staff", {"enabled": {"$ne": False}}, limit=200)
     staff_by_user = {row.get("user_id"): row.get("role") for row in staff_rows}
     result = []
     for row in rows:
-        if role and row.get("role") != role:
-            continue
         if not _contains(row, search, ["name", "email", "phone", "city", "role", "status"]):
             continue
         safe = public_user(row)
@@ -361,6 +400,8 @@ async def search_users(
         safe.pop("ops_enabled", None)
         safe["operations_role"] = "admin" if row.get("role") == "admin" else staff_by_user.get(row.get("id"))
         result.append(safe)
+        if len(result) >= limit:
+            break
     return api_success({"count": len(result), "items": result})
 
 
@@ -375,12 +416,12 @@ async def support_messages(
         "support_messages",
         {"status": status} if status else None,
         sort=[("updated_at", -1)],
-        limit=limit,
+        limit=None if search else limit,
     )
     rows = [
         row for row in rows
         if _contains(row, search, ["subject", "message", "user_name", "user_email", "user_phone", "status"])
-    ]
+    ][:limit]
     return api_success({"count": len(rows), "items": [_safe_support(row) for row in rows]})
 
 
@@ -428,12 +469,12 @@ async def safety_reports(
         "reports",
         {"status": status} if status else None,
         sort=[("updated_at", -1)],
-        limit=limit,
+        limit=None if search else limit,
     )
     rows = [
         row for row in rows
         if _contains(row, search, ["report_type", "message", "description", "user_name", "user_email", "user_phone", "status"])
-    ]
+    ][:limit]
     return api_success({"count": len(rows), "items": [_safe_report(row) for row in rows]})
 
 
@@ -502,20 +543,25 @@ async def list_cases(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many("ops_cases", sort=[("updated_at", -1)], limit=limit)
+    filters = _exact_case_filters(
+        status=status,
+        escalation_level=escalation_level,
+        assigned_to=assigned_to,
+        priority=priority,
+    )
+    rows = await database.find_many(
+        "ops_cases",
+        filters,
+        sort=[("updated_at", -1)],
+        limit=None if search else limit,
+    )
     filtered = []
     for row in rows:
-        if status and row.get("status") != status:
-            continue
-        if escalation_level and _case_level(row) != escalation_level:
-            continue
-        if assigned_to and row.get("assigned_user_id") != assigned_to:
-            continue
-        if priority and row.get("priority") != priority:
-            continue
         if not _contains(row, search, ["case_number", "subject", "description", "status", "priority", "assigned_name"]):
             continue
         filtered.append(_safe_case(row))
+        if len(filtered) >= limit:
+            break
     return api_success({"count": len(filtered), "items": filtered})
 
 
@@ -759,7 +805,20 @@ async def list_staff(user=Depends(get_ops_manager)):
         sort=[("updated_at", -1)],
         limit=200,
     )
-    staff = [await _staff_row(row) for row in staff_records]
+    staff_user_ids = [
+        str(row.get("user_id"))
+        for row in staff_records
+        if row.get("user_id")
+    ]
+    staff_accounts = await database.find_many(
+        "users",
+        {"id": {"$in": staff_user_ids}},
+    ) if staff_user_ids else []
+    accounts_by_id = {str(row.get("id")): row for row in staff_accounts if row.get("id")}
+    staff = [
+        await _staff_row(row, accounts_by_id.get(str(row.get("user_id") or "")))
+        for row in staff_records
+    ]
     admins = await database.find_many(
         "users",
         {"role": "admin"},
@@ -844,7 +903,7 @@ async def provision_staff(
             "reason": payload.reason,
         },
     )
-    return api_success(await _staff_row(updated))
+    return api_success(await _staff_row(updated, target))
 
 
 @router.patch("/staff/{staff_id}")
@@ -874,7 +933,8 @@ async def update_staff(
         target_id=staff_id,
         metadata={"updates": updates, "reason": payload.reason},
     )
-    return api_success(await _staff_row(updated))
+    target = await database.find_one("users", {"id": updated.get("user_id")}) if updated.get("user_id") else None
+    return api_success(await _staff_row(updated, target))
 
 
 @router.get("/audit-logs")
@@ -882,17 +942,17 @@ async def audit_logs(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_manager),
 ):
+    is_admin = effective_ops_role(user) == "admin"
     rows = await database.find_many(
         "audit_logs",
         sort=[("created_at", -1)],
-        limit=limit * 3,
+        limit=limit if is_admin else None,
     )
-    if effective_ops_role(user) != "admin":
+    if not is_admin:
         rows = [
             row for row in rows
             if str(row.get("action") or "").startswith("ops_")
-        ]
-    rows = rows[:limit]
+        ][:limit]
     return api_success({
         "count": len(rows),
         "items": [_safe_audit_log(row) for row in rows],

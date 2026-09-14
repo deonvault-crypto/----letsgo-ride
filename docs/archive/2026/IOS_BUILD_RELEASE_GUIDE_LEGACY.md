@@ -1,5 +1,7 @@
 # iOS Build & Release Guide
 
+> Archived historical guide. This document is not authoritative for current production releases. Use the repository root README and the permanent GitHub Actions production release workflows instead.
+
 ## Prerequisites
 
 - macOS 12.0 or later

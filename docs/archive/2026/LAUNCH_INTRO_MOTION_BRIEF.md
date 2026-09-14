@@ -1,5 +1,7 @@
 # LetsGoRide premium launch intro
 
+> Archived implementation brief. The launch intro is already shipped product behavior; this file is retained only as historical design context.
+
 ## Production direction
 
 The production app uses a two-stage launch:

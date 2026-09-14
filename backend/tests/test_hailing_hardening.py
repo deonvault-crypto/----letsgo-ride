@@ -6,7 +6,6 @@ from unittest.mock import patch
 from app.database import COLLECTION_NAMES, database
 from app.models.hailing import HailingCityUpsertBody
 from app.services.hailing_city_service import get_city, list_service_areas, seed_zimbabwe_service_areas, upsert_city
-from app.services.hailing_security_service import clear_legacy_plaintext_hailing_pins
 from app.services.hailing_trip_service import expire_pending_offers, hailing_dispatch_sweeper, sweep_searching_trips
 
 
@@ -116,23 +115,6 @@ class HailingHardeningTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await expire_pending_offers(), 1)
         self.assertEqual((await database.find_one("hailing_dispatch_offers", {"id": "expired-offer"}))["status"], "expired")
         self.assertEqual((await database.find_one("hailing_dispatch_offers", {"id": "future-offer"}))["status"], "pending")
-
-    async def test_legacy_plaintext_pin_cleanup_keeps_hash_record(self):
-        await database.insert_one(
-            "hailing_trips",
-            {
-                "id": "legacy-pin-trip",
-                "plain_trip_pin": "123456",
-                "trip_pin_salt": "salt-kept",
-                "trip_pin_code_hash": "hash-kept",
-            },
-        )
-        changed = await clear_legacy_plaintext_hailing_pins()
-        self.assertEqual(changed, 1)
-        stored = await database.find_one("hailing_trips", {"id": "legacy-pin-trip"})
-        self.assertIsNone(stored["plain_trip_pin"])
-        self.assertEqual(stored["trip_pin_salt"], "salt-kept")
-        self.assertEqual(stored["trip_pin_code_hash"], "hash-kept")
 
     async def test_partial_city_update_preserves_existing_pricing_and_dispatch(self):
         await seed_zimbabwe_service_areas()

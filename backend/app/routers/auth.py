@@ -36,6 +36,7 @@ from app.services.account_deletion_service import (
 from app.services.audit_service import write_audit_log
 from app.services.courier_state_service import ACTIVE_COURIER_STATUSES
 from app.services.hailing_state import ACTIVE_DRIVER_STATUSES
+from app.services.work_product_service import approved_work_products
 from app.utils import api_error, api_success
 from app.database import database
 from app.utils import now_iso
@@ -45,7 +46,6 @@ from pymongo.errors import DuplicateKeyError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 INACTIVE_ACCOUNT_STATUSES = {"deleted", "suspended"}
-WORK_PRODUCTS = {"driver", "courier"}
 
 
 def _require_public_customer_signup(role: str) -> None:
@@ -58,18 +58,6 @@ def _require_public_customer_signup(role: str) -> None:
 
 def _inactive_account(user) -> bool:
     return bool(user) and str(user.get("status") or "active").strip().lower() in INACTIVE_ACCOUNT_STATUSES
-
-
-def _approved_work_products(user) -> list[str]:
-    products = {
-        str(value).strip().lower()
-        for value in (user.get("work_products") or [])
-        if str(value).strip().lower() in WORK_PRODUCTS
-    }
-    current = str(user.get("role") or "").strip().lower()
-    if current in WORK_PRODUCTS:
-        products.add(current)
-    return sorted(products)
 
 
 async def _email_account(email: str):
@@ -217,7 +205,7 @@ async def me(user=Depends(get_current_user)):
 @router.post("/work-mode")
 async def switch_work_mode(payload: WorkModeBody, user=Depends(get_current_user)):
     target = payload.role
-    products = _approved_work_products(user)
+    products = approved_work_products(user)
     if target not in products:
         api_error("That work mode has not been approved for this account.", 403)
 

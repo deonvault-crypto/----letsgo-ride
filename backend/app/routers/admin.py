@@ -12,6 +12,14 @@ from app.models.verification import VerificationStatusUpdateBody
 from app.models.request import RideRequestUpdateBody
 from app.models.ride import AdminRideStatusBody
 from app.models.user import AdminRoleUpdateBody
+from app.services.admin_read_service import (
+    enrich_admin_request,
+    enrich_admin_requests,
+    enrich_admin_ride,
+    enrich_admin_rides,
+    enrich_admin_user,
+    enrich_admin_users,
+)
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
@@ -19,7 +27,7 @@ from app.services.data_retention_consistency_service import (
     actionable_shared_ride_request_counts,
     active_verified_driver_count,
 )
-from app.services.ride_service import apply_ride_lifecycle, canonical_trip_status, is_final_trip_status
+from app.services.ride_service import canonical_trip_status, is_final_trip_status
 from app.services.ride_realtime_service import publish_ride_realtime, ride_event_type, update_versioned_ride
 from app.services.ride_request_realtime_service import publish_ride_request_realtime, ride_request_event_type, update_versioned_ride_request
 from app.services.verification_service import (
@@ -28,6 +36,7 @@ from app.services.verification_service import (
     public_verification_status,
 )
 from app.services.private_document_service import contained_legacy_document_path, private_document_service, private_provider_document_bytes
+from app.services.work_product_service import approved_work_products, with_approved_work_product
 from app.utils import api_error, api_success, now_iso
 
 
@@ -50,10 +59,6 @@ def _is_verified_driver_verification(status: Optional[str]) -> bool:
 
 def _is_pending_driver_verification(status: Optional[str]) -> bool:
     return str(status or "").strip().lower() in PENDING_DRIVER_VERIFICATION_STATUSES
-
-
-def _without_private_fields(rows):
-    return [public_user(row) for row in rows]
 
 
 def _public_document(document):
@@ -122,81 +127,11 @@ def _request_route(request: Dict[str, Any]) -> str:
     return f"{origin} to {destination}"
 
 
-def _request_status_counts(requests: List[Dict[str, Any]]) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
-    for request in requests:
-        status = request.get("status", "unknown")
-        counts[status] = counts.get(status, 0) + 1
-    return counts
-
-
-async def _enrich_admin_ride(ride: Dict[str, Any], requests: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-    ride = await apply_ride_lifecycle(ride)
-    ride_requests = requests if requests is not None else await database.find_many("ride_requests", {"ride_id": ride.get("id")})
-    driver = await database.find_one("users", {"id": ride.get("user_id")}) if ride.get("user_id") else None
-    conversations = await database.find_many("conversations", {"ride_id": ride.get("id")})
-    enriched = dict(ride)
-    enriched["status"] = canonical_trip_status(ride.get("status"))
-    enriched["request_count"] = len(ride_requests)
-    enriched["pending_request_count"] = len([item for item in ride_requests if item.get("status") == "pending"])
-    enriched["confirmed_booking_count"] = len([item for item in ride_requests if item.get("status") == "confirmed"])
-    enriched["cancelled_request_count"] = len([item for item in ride_requests if str(item.get("status", "")).startswith("cancelled")])
-    enriched["request_status_counts"] = _request_status_counts(ride_requests)
-    enriched["conversation_count"] = len(conversations)
-    if driver:
-        enriched["driver_profile_photo_url"] = driver.get("profile_photo_url")
-        enriched["driver_email"] = driver.get("email")
-        enriched["driver_phone"] = driver.get("phone")
-        enriched["driver_city"] = driver.get("city")
-        enriched["driver_account_status"] = driver.get("status")
-        enriched["driver_identity_status"] = public_verification_status(driver)
-    return enriched
-
-
-async def _enrich_admin_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    ride = await database.find_one("rides", {"id": request.get("ride_id")}) if request.get("ride_id") else None
-    driver = await database.find_one("users", {"id": ride.get("user_id")}) if ride and ride.get("user_id") else None
-    passenger = await database.find_one("users", {"id": request.get("user_id")}) if request.get("user_id") else None
-    conversations = await database.find_many("conversations", {"request_id": request.get("id")})
-    enriched = dict(request)
-    if ride:
-        enriched["ride"] = await _enrich_admin_ride(ride, [request])
-    if driver:
-        enriched["driver"] = public_user(driver)
-        enriched["driver_name"] = driver.get("name")
-        enriched["driver_email"] = driver.get("email")
-        enriched["driver_phone"] = driver.get("phone")
-    if passenger:
-        enriched["passenger"] = public_user(passenger)
-        enriched["passenger_email"] = passenger.get("email")
-        enriched["passenger_city"] = passenger.get("city")
-    enriched["conversation_count"] = len(conversations)
-    return enriched
-
-
-async def _enrich_admin_user(user: Dict[str, Any]) -> Dict[str, Any]:
-    rides = await database.find_many("rides", {"user_id": user.get("id")})
-    requests = await database.find_many("ride_requests", {"user_id": user.get("id")})
-    support_cases = await database.find_many("support_messages", {"user_id": user.get("id")})
-    reports = await database.find_many("reports", {"user_id": user.get("id")})
-    driver = await database.find_one("drivers", {"user_id": user.get("id")})
-    public = public_user(user)
-    public["posted_rides_count"] = len(rides)
-    public["ride_requests_count"] = len(requests)
-    public["confirmed_bookings_count"] = len([request for request in requests if request.get("status") == "confirmed"])
-    public["support_cases_count"] = len(support_cases)
-    public["safety_reports_count"] = len(reports)
-    public["driver_verification_status"] = public_verification_status(driver or user)
-    public["driver_status"] = (driver or {}).get("status")
-    return public
-
-
-def _support_open(status: Optional[str]) -> bool:
-    return status not in {"resolved", "closed"}
-
-
-def _report_open(status: Optional[str]) -> bool:
-    return status not in {"resolved", "dismissed"}
+def _related_ride_filter(ride_id: str, request_ids: List[str]) -> Dict[str, Any]:
+    clauses: List[Dict[str, Any]] = [{"ride_id": ride_id}]
+    if request_ids:
+        clauses.append({"request_id": {"$in": request_ids}})
+    return clauses[0] if len(clauses) == 1 else {"$or": clauses}
 
 
 @router.get("/overview")
@@ -330,14 +265,14 @@ async def list_users(
     limit: int = Query(default=80, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    users = await database.find_many("users")
+    filters: Dict[str, Any] = {}
+    if role:
+        filters["role"] = role
+    if status:
+        filters["status"] = status
+    users = await database.find_many("users", filters or None)
     rows = []
-    for user in users:
-        if role and user.get("role") != role:
-            continue
-        if status and user.get("status", "active") != status:
-            continue
-        enriched = await _enrich_admin_user(user)
+    for enriched in await enrich_admin_users(users):
         verification_status = enriched.get("driver_verification_status") or enriched.get("verification_status") or "not_started"
         if verification:
             requested_verification = str(verification).strip().lower()
@@ -361,14 +296,21 @@ async def user_detail(user_id: str, admin=Depends(get_admin_user)):
     user = await database.find_one("users", {"id": user_id})
     if not user:
         api_error("User not found.", 404)
-    rides = [await _enrich_admin_ride(ride) for ride in await database.find_many("rides", {"user_id": user_id})]
-    requests = [await _enrich_admin_request(request) for request in await database.find_many("ride_requests", {"user_id": user_id})]
-    support_cases = await database.find_many("support_messages", {"user_id": user_id})
-    safety_reports = await database.find_many("reports", {"user_id": user_id})
-    driver = await database.find_one("drivers", {"user_id": user_id})
+    rides_raw, requests_raw, support_cases, safety_reports, driver = await asyncio.gather(
+        database.find_many("rides", {"user_id": user_id}),
+        database.find_many("ride_requests", {"user_id": user_id}),
+        database.find_many("support_messages", {"user_id": user_id}),
+        database.find_many("reports", {"user_id": user_id}),
+        database.find_one("drivers", {"user_id": user_id}),
+    )
+    rides, requests, enriched_user = await asyncio.gather(
+        enrich_admin_rides(rides_raw),
+        enrich_admin_requests(requests_raw),
+        enrich_admin_user(user),
+    )
     return api_success(
         {
-            "user": await _enrich_admin_user(user),
+            "user": enriched_user,
             "driver": driver,
             "rides": _sort_recent(rides, 20),
             "requests": _sort_recent(requests, 20),
@@ -414,12 +356,34 @@ async def provision_user_product_role(
     existing = await database.find_one("users", {"id": user_id})
     if not existing:
         api_error("User not found.", 404)
-    previous_role = existing.get("role") or "passenger"
-    updated = await database.update_one(
-        "users",
-        user_id,
-        {"role": payload.role, "updated_at": now_iso()},
-    )
+    previous_role = str(existing.get("role") or "passenger").strip().lower()
+    updates: Dict[str, Any] = {"updated_at": now_iso()}
+
+    if payload.role in {"driver", "courier"}:
+        if previous_role not in {"passenger", "driver", "courier"}:
+            api_error("This account already belongs to an incompatible product role.", 409)
+        if payload.role == "driver":
+            profile = await database.find_one("drivers", {"user_id": user_id})
+            verification_status = public_verification_status(profile or {})
+            if not profile or not (
+                profile.get("verified") is True
+                or verification_status in VERIFIED_DRIVER_VERIFICATION_STATUSES
+            ):
+                api_error("Approve the Driver application before granting Driver access.", 409)
+        else:
+            profile = await database.find_one("courier_profiles", {"user_id": user_id})
+            if not profile or str(profile.get("status") or "").upper() != "APPROVED":
+                api_error("Approve the Courier application before granting Courier access.", 409)
+        products = with_approved_work_product(existing, payload.role)
+        updates["work_products"] = products
+        updates["role"] = payload.role if previous_role == "passenger" else previous_role
+    else:
+        products = approved_work_products(existing)
+        if products:
+            api_error("Remove Driver or Courier access before assigning an incompatible product role.", 409)
+        updates["role"] = payload.role
+
+    updated = await database.update_one("users", user_id, updates)
     await write_audit_log(
         actor_user_id=admin["id"],
         actor_role=admin.get("role"),
@@ -428,11 +392,13 @@ async def provision_user_product_role(
         target_id=user_id,
         metadata={
             "from_role": previous_role,
-            "to_role": payload.role,
+            "to_role": updates.get("role"),
+            "granted_product": payload.role if payload.role in {"driver", "courier"} else None,
+            "work_products": updates.get("work_products", approved_work_products(existing)),
             "reason": payload.reason,
         },
     )
-    return api_success(public_user(updated or existing))
+    return api_success(public_user(updated or {**existing, **updates}))
 
 
 @router.get("/rides")
@@ -443,10 +409,9 @@ async def admin_rides(
     limit: int = Query(default=80, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    rides = await database.find_many("rides")
+    rides = await enrich_admin_rides(await database.find_many("rides"))
     rows = []
-    for ride in rides:
-        enriched = await _enrich_admin_ride(ride)
+    for enriched in rides:
         if status and enriched.get("status", "open") != status:
             continue
         if filter == "pending_requests" and int(enriched.get("pending_request_count", 0)) == 0:
@@ -466,21 +431,19 @@ async def admin_ride_detail(ride_id: str, admin=Depends(get_admin_user)):
     ride = await database.find_one("rides", {"id": ride_id})
     if not ride:
         api_error("Ride not found.", 404)
-    ride_requests = [await _enrich_admin_request(request) for request in await database.find_many("ride_requests", {"ride_id": ride_id})]
-    support_cases = [
-        message
-        for message in await database.find_many("support_messages")
-        if message.get("ride_id") == ride_id or message.get("request_id") in {request.get("id") for request in ride_requests}
-    ]
-    safety_reports = [
-        report
-        for report in await database.find_many("reports")
-        if report.get("ride_id") == ride_id or report.get("request_id") in {request.get("id") for request in ride_requests}
-    ]
-    conversations = await database.find_many("conversations", {"ride_id": ride_id})
+    raw_requests = await database.find_many("ride_requests", {"ride_id": ride_id})
+    request_ids = [str(request.get("id")) for request in raw_requests if request.get("id")]
+    related_filter = _related_ride_filter(ride_id, request_ids)
+    ride_requests, support_cases, safety_reports, conversations, enriched_ride = await asyncio.gather(
+        enrich_admin_requests(raw_requests),
+        database.find_many("support_messages", related_filter),
+        database.find_many("reports", related_filter),
+        database.find_many("conversations", {"ride_id": ride_id}),
+        enrich_admin_ride(ride, raw_requests),
+    )
     return api_success(
         {
-            "ride": await _enrich_admin_ride(ride, ride_requests),
+            "ride": enriched_ride,
             "requests": _sort_recent(ride_requests, 40),
             "support_cases": _sort_recent(support_cases, 20),
             "safety_reports": _sort_recent(safety_reports, 20),
@@ -545,12 +508,9 @@ async def admin_requests(
     limit: int = Query(default=100, ge=1, le=250),
     admin=Depends(get_admin_user),
 ):
-    requests = await database.find_many("ride_requests")
+    raw_requests = await database.find_many("ride_requests", {"status": status} if status else None)
     rows = []
-    for request in requests:
-        enriched = await _enrich_admin_request(request)
-        if status and request.get("status") != status:
-            continue
+    for enriched in await enrich_admin_requests(raw_requests):
         if not _contains_search(
             {
                 **enriched,
@@ -571,15 +531,24 @@ async def admin_request_detail(request_id: str, admin=Depends(get_admin_user)):
     request = await database.find_one("ride_requests", {"id": request_id})
     if not request:
         api_error("Ride request not found.", 404)
-    conversations = await database.find_many("conversations", {"request_id": request_id})
-    messages = []
-    for conversation in conversations:
-        messages.extend(await database.find_many("messages", {"conversation_id": conversation.get("id")}))
-    support_cases = await database.find_many("support_messages", {"request_id": request_id})
-    safety_reports = await database.find_many("reports", {"request_id": request_id})
+    conversations, support_cases, safety_reports, enriched_request = await asyncio.gather(
+        database.find_many("conversations", {"request_id": request_id}),
+        database.find_many("support_messages", {"request_id": request_id}),
+        database.find_many("reports", {"request_id": request_id}),
+        enrich_admin_request(request),
+    )
+    conversation_ids = [
+        str(conversation.get("id"))
+        for conversation in conversations
+        if conversation.get("id")
+    ]
+    messages = await database.find_many(
+        "messages",
+        {"conversation_id": {"$in": conversation_ids}},
+    ) if conversation_ids else []
     return api_success(
         {
-            "request": await _enrich_admin_request(request),
+            "request": enriched_request,
             "conversations": conversations,
             "message_count": len(messages),
             "support_cases": _sort_recent(support_cases, 20),
@@ -667,8 +636,8 @@ async def admin_support_message_detail(message_id: str, admin=Depends(get_admin_
         {
             "message": message,
             "user": public_user(user) if user else None,
-            "ride": await _enrich_admin_ride(ride) if ride else None,
-            "request": await _enrich_admin_request(request) if request else None,
+            "ride": await enrich_admin_ride(ride) if ride else None,
+            "request": await enrich_admin_request(request) if request else None,
         }
     )
 
@@ -737,8 +706,8 @@ async def admin_report_detail(report_id: str, admin=Depends(get_admin_user)):
             "report": report,
             "reporter": public_user(user) if user else None,
             "reported_user": public_user(reported_user) if reported_user else None,
-            "ride": await _enrich_admin_ride(ride) if ride else None,
-            "request": await _enrich_admin_request(request) if request else None,
+            "ride": await enrich_admin_ride(ride) if ride else None,
+            "request": await enrich_admin_request(request) if request else None,
         }
     )
 
@@ -784,13 +753,14 @@ async def admin_audit_logs(
     limit: int = Query(default=60, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    logs = await database.find_many("audit_logs")
+    filters: Dict[str, Any] = {}
+    if action:
+        filters["action"] = action
+    if target_type:
+        filters["target_type"] = target_type
+    logs = await database.find_many("audit_logs", filters or None)
     rows = []
     for log in logs:
-        if action and log.get("action") != action:
-            continue
-        if target_type and log.get("target_type") != target_type:
-            continue
         safe_log = dict(log)
         metadata = dict(safe_log.get("metadata") or {})
         for key in list(metadata.keys()):
