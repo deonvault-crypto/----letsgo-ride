@@ -52,11 +52,16 @@ jobs:
           )
           replace_once(
               '''        current_role = str(applicant.get("role") or "passenger").strip().lower()\n        approved_products = {\n            str(value).strip().lower()\n            for value in (applicant.get("work_products") or [])\n            if str(value).strip().lower() in {"driver", "courier"}\n        }\n        if current_role in {"driver", "courier"}:\n            approved_products.add(current_role)\n        if product in {"driver", "courier"}:\n            if current_role not in {"passenger", "driver", "courier"}:\n                raise ValueError("Applicant already belongs to an incompatible work product.")\n            approved_products.add(product)\n            next_role = product if current_role == "passenger" else current_role\n''',
-              '''        current_role = str(applicant.get("role") or "passenger").strip().lower()\n        approved_products = set(approved_work_products(applicant))\n        if product in {"driver", "courier"}:\n            if current_role not in {"passenger", "driver", "courier"}:\n                raise ValueError("Applicant already belongs to an incompatible work product.")\n            approved_products = set(with_approved_work_product(applicant, product))\n            next_role = product if current_role == "passenger" else current_role\n''',
+              '''        current_role = str(applicant.get("role") or "passenger").strip().lower()\n        approved_products = set(approved_work_products(applicant))\n        if product in {"driver", "courier"}:\n            if current_role not in {"passenger", "driver", "courier"}:
+                raise ValueError("Applicant already belongs to an incompatible work product.")\n            approved_products = set(with_approved_work_product(applicant, product))\n            next_role = product if current_role == "passenger" else current_role\n''',
           )
 
           path.write_text(text)
           PY
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
 
       - name: Backend syntax and focused regression tests
         working-directory: backend
