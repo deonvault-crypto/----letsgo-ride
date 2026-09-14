@@ -13,7 +13,6 @@ from app.services.auth_service import ensure_admin_seed_user
 from app.services.background_worker_coordinator import background_worker_supervisor
 from app.services.event_service import realtime_event_service
 from app.services.hailing_city_service import seed_zimbabwe_service_areas
-from app.services.hailing_security_service import clear_legacy_plaintext_hailing_pins
 from app.services.product_hardening_storage_service import ensure_product_hardening_indexes
 from app.services.stripe_runtime_guard import StripeVerificationUnavailable, ensure_stripe_runtime_binding
 from app.services.worker_finance_index_service import ensure_worker_finance_indexes
@@ -112,7 +111,6 @@ async def on_startup():
             logger.error("stripe_runtime_degraded_on_startup error_type=%s", exc.__class__.__name__)
     if settings.hailing_enabled:
         await seed_zimbabwe_service_areas()
-        await clear_legacy_plaintext_hailing_pins()
         logger.info("hailing_runtime enabled=true bounded_dispatch=true")
     else:
         logger.info("hailing_runtime enabled=false dispatch_sweeper_started=false")
