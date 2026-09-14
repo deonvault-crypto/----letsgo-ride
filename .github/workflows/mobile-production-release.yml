@@ -23,16 +23,8 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci --no-audit --no-fund
-      - name: Verify production-only EAS contract
-        run: |
-          node <<'NODE'
-          const eas = require('./eas.json');
-          const builds = Object.keys(eas.build || {});
-          if (JSON.stringify(builds) !== JSON.stringify(['production'])) throw new Error(`Unexpected build profiles: ${builds.join(', ')}`);
-          if (eas.build.production.env.EXPO_PUBLIC_API_BASE_URL !== 'https://letsgoride-v2-production.onrender.com') throw new Error('Production API URL mismatch');
-          if (eas.submit.production.android.track !== 'production') throw new Error('Android is not targeting production');
-          if (eas.submit.production.android.releaseStatus !== 'completed') throw new Error('Android release status is not completed');
-          NODE
+      - name: Verify production release configuration
+        run: node scripts/verify-production-release-config.js
       - run: npm audit --audit-level=critical
       - run: npm run typecheck
       - run: npm test -- --runInBand
