@@ -92,10 +92,14 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
     if payment_method != "CASH_ON_DELIVERY":
         raise ValueError("That payment method is not available yet.")
 
+    requested_menu_item_ids = list(dict.fromkeys(str(item["menu_item_id"]) for item in requested_items))
+    menu_items = await database.find_many("menu_items", {"id": {"$in": requested_menu_item_ids}})
+    menu_items_by_id = {str(item.get("id") or ""): item for item in menu_items}
+
     item_snapshots: List[Dict[str, Any]] = []
     subtotal = 0.0
     for requested in requested_items:
-        menu_item = await database.find_one("menu_items", {"id": requested["menu_item_id"]})
+        menu_item = menu_items_by_id.get(str(requested["menu_item_id"]))
         if not menu_item or menu_item.get("restaurant_id") != restaurant["id"]:
             raise ValueError("One or more menu items are no longer available.")
         if not menu_item.get("is_available", True):
