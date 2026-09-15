@@ -27,6 +27,7 @@ from app.ops_auth import (
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
+from app.services.ops_user_search_service import search_ops_users
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -382,27 +383,7 @@ async def search_users(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_ops_user),
 ):
-    filters = {"role": role} if role else None
-    rows = await database.find_many(
-        "users",
-        filters,
-        sort=[("updated_at", -1)],
-        limit=None if search else limit,
-    )
-    staff_rows = await database.find_many("ops_staff", {"enabled": {"$ne": False}}, limit=200)
-    staff_by_user = {row.get("user_id"): row.get("role") for row in staff_rows}
-    result = []
-    for row in rows:
-        if not _contains(row, search, ["name", "email", "phone", "city", "role", "status"]):
-            continue
-        safe = public_user(row)
-        safe.pop("ops_role", None)
-        safe.pop("ops_enabled", None)
-        safe["operations_role"] = "admin" if row.get("role") == "admin" else staff_by_user.get(row.get("id"))
-        result.append(safe)
-        if len(result) >= limit:
-            break
-    return api_success({"count": len(result), "items": result})
+    return api_success(await search_ops_users(search, role, limit))
 
 
 @router.get("/support/messages")
