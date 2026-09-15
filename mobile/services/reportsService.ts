@@ -8,6 +8,8 @@ export type SafetyReport = {
   created_at?: string;
 };
 
+const REPORT_HISTORY_LIMIT = 100;
+
 export async function createReport(data: {
   report_type: string;
   message: string;
@@ -18,5 +20,5 @@ export async function createReport(data: {
 }
 
 export async function myReports() {
-  return requestData<SafetyReport[]>({ method: "GET", url: "/reports/my" });
+  return requestData<SafetyReport[]>({ method: "GET", url: `/reports/my?limit=${REPORT_HISTORY_LIMIT}` });
 }
