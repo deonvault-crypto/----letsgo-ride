@@ -27,8 +27,10 @@ PUBLIC_RESTAURANT_STATUSES = {"ACTIVE", "COMING_SOON"}
 
 
 async def list_restaurants() -> List[Dict[str, Any]]:
-    restaurants = await database.find_many("restaurants")
-    public = [item for item in restaurants if item.get("status") in PUBLIC_RESTAURANT_STATUSES]
+    public = await database.find_many(
+        "restaurants",
+        {"status": {"$in": sorted(PUBLIC_RESTAURANT_STATUSES)}},
+    )
     for item in public:
         item["is_orderable"] = bool(item.get("status") == "ACTIVE" and item.get("is_accepting_orders", True))
     return sorted(
@@ -49,10 +51,15 @@ async def get_restaurant(restaurant_id: str) -> Dict[str, Any]:
 
 async def get_restaurant_menu(restaurant_id: str) -> Dict[str, Any]:
     restaurant = await get_restaurant(restaurant_id)
-    categories = await database.find_many("menu_categories", {"restaurant_id": restaurant_id})
-    items = await database.find_many("menu_items", {"restaurant_id": restaurant_id})
-    categories = sorted(categories, key=lambda item: int(item.get("sort_order") or 0))
-    active_items = [item for item in items if item.get("is_available", True)]
+    categories = await database.find_many(
+        "menu_categories",
+        {"restaurant_id": restaurant_id},
+        sort=[("sort_order", 1)],
+    )
+    active_items = await database.find_many(
+        "menu_items",
+        {"restaurant_id": restaurant_id, "is_available": {"$ne": False}},
+    )
     return {
         "restaurant": restaurant,
         "categories": categories,
@@ -275,7 +282,7 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
             {
                 "food_order_id": order_id,
                 "restaurant_id": order.get("restaurant_id"),
-                "notification_target": "merchant_order",
+                "notification_target": "customer_food_order",
             },
         )
 
