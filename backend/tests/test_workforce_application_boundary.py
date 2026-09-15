@@ -42,6 +42,18 @@ class WorkforceApplicationBoundaryTests(unittest.IsolatedAsyncioTestCase):
             workforce_application_service.REQUIRED_DOCUMENTS,
         )
 
+    def test_secure_upload_and_review_ownership_remains_in_workforce_service(self):
+        self.assertEqual(
+            workforce_service.upload_worker_document.__module__,
+            "app.services.workforce_service",
+        )
+        self.assertEqual(
+            workforce_service.review_worker_application.__module__,
+            "app.services.workforce_service",
+        )
+        self.assertTrue(hasattr(workforce_service, "cloudinary"))
+        self.assertFalse(hasattr(workforce_application_service, "cloudinary"))
+
     async def test_my_application_ordering_is_pushed_to_database(self):
         user = {"id": "worker-app-order", "role": "passenger"}
         await database.insert_one(
