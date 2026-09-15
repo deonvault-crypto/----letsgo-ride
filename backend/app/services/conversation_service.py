@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.database import database
 from app.services.notification_service import create_app_notification
