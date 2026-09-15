@@ -35,8 +35,8 @@ router = APIRouter(prefix="/ops", tags=["operations-control-center"])
 CASE_LEVEL_ORDER = ["cs", "manager", "admin"]
 CASE_OPEN_STATUSES = {"open", "in_progress", "waiting_customer", "escalated"}
 FINAL_HAILING_STATUSES = {
-    "COMPLETED", "CANCELLED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "EXPIRED",
-    "completed", "cancelled", "cancelled_by_passenger", "cancelled_by_driver", "expired",
+    "COMPLETED", "CANCELLED", "CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER", "EXPIRED", "NO_DRIVER_FOUND",
+    "completed", "cancelled", "cancelled_by_passenger", "cancelled_by_driver", "expired", "no_driver_found",
 }
 FINAL_COURIER_STATUSES = {"DELIVERED", "COMPLETED", "CANCELLED", "delivered", "completed", "cancelled"}
 FINAL_FOOD_STATUSES = {"DELIVERED", "COMPLETED", "CANCELLED", "delivered", "completed", "cancelled"}
