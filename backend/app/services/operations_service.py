@@ -34,8 +34,11 @@ def _is_admin(user: Dict[str, Any]) -> bool:
 
 
 async def list_availability(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    items = await database.find_many("work_availability", {"user_id": _user_id(user)})
-    return sorted(items, key=lambda item: (str(item.get("date") or ""), str(item.get("start_time") or "")))
+    return await database.find_many(
+        "work_availability",
+        {"user_id": _user_id(user)},
+        sort=[("date", 1), ("start_time", 1)],
+    )
 
 
 async def create_availability(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
@@ -150,14 +153,14 @@ async def approve_courier_profile(profile_id: str, actor: Dict[str, Any]) -> Dic
 
 async def assigned_courier_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Return active work only. History must never hydrate the live workspace."""
-    deliveries = await database.find_many(
+    return await database.find_many(
         "courier_deliveries",
         {
             "courier_user_id": _user_id(user),
             "status": {"$in": sorted(ACTIVE_COURIER_STATUSES)},
         },
+        sort=[("updated_at", -1)],
     )
-    return sorted(deliveries, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
 
 
 async def active_courier_delivery(user: Dict[str, Any]) -> Dict[str, Any] | None:
@@ -176,19 +179,18 @@ async def active_courier_delivery(user: Dict[str, Any]) -> Dict[str, Any] | None
 
 
 async def courier_delivery_history(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    deliveries = await database.find_many(
+    return await database.find_many(
         "courier_deliveries",
         {
             "courier_user_id": _user_id(user),
             "status": {"$in": sorted(TERMINAL_COURIER_STATUSES)},
         },
+        sort=[("updated_at", -1)],
     )
-    return sorted(deliveries, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
 
 
 async def admin_courier_deliveries() -> List[Dict[str, Any]]:
-    deliveries = await database.find_many("courier_deliveries")
-    return sorted(deliveries, key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    return await database.find_many("courier_deliveries", sort=[("created_at", -1)])
 
 
 async def list_courier_offers(user: Dict[str, Any]) -> List[Dict[str, Any]]:

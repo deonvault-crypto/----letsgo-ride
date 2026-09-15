@@ -400,18 +400,6 @@ async def reconcile_hailing_card_payments() -> Dict[str, int]:
     return {"captured": captured, "released": released, "deferred": deferred}
 
 
-async def stripe_payment_reconciliation_sweeper(stop_event: asyncio.Event) -> None:
-    while not stop_event.is_set():
-        try:
-            await reconcile_hailing_card_payments()
-        except Exception as exc:
-            logger.warning("stripe_payment_reconciliation_failed error_type=%s", exc.__class__.__name__)
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=5)
-        except asyncio.TimeoutError:
-            continue
-
-
 def verify_webhook_signature(payload: bytes, signature_header: str, secret: str) -> None:
     timestamp = None
     signatures: list[str] = []

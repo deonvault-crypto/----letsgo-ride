@@ -184,11 +184,6 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
     return saved
 
 
-async def list_customer_orders(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    orders = await database.find_many("food_orders", {"customer_user_id": str(user.get("id") or "")})
-    return sorted(orders, key=lambda item: str(item.get("created_at") or ""), reverse=True)
-
-
 async def get_customer_order(order_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
     order = await database.find_one("food_orders", {"id": order_id})
     if not order:
@@ -196,12 +191,6 @@ async def get_customer_order(order_id: str, user: Dict[str, Any]) -> Dict[str, A
     if user.get("role") != "admin" and order.get("customer_user_id") != str(user.get("id") or ""):
         raise PermissionError("You do not have access to this order.")
     return order
-
-
-async def list_order_events(order_id: str, user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    await get_customer_order(order_id, user)
-    events = await database.find_many("food_order_events", {"order_id": order_id})
-    return sorted(events, key=lambda item: str(item.get("created_at") or ""))
 
 
 async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | None) -> Dict[str, Any]:
