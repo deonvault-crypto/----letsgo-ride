@@ -27,6 +27,7 @@ from app.ops_auth import (
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
+from app.services.ops_support_message_search_service import search_ops_support_messages
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -412,16 +413,7 @@ async def support_messages(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many(
-        "support_messages",
-        {"status": status} if status else None,
-        sort=[("updated_at", -1)],
-        limit=None if search else limit,
-    )
-    rows = [
-        row for row in rows
-        if _contains(row, search, ["subject", "message", "user_name", "user_email", "user_phone", "status"])
-    ][:limit]
+    rows = await search_ops_support_messages(search, status, limit)
     return api_success({"count": len(rows), "items": [_safe_support(row) for row in rows]})
 
 
