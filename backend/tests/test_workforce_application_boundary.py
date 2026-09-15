@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from app.database import COLLECTION_NAMES, database
 from app.services import workforce_application_service
+from app.services import workforce_review_service
 from app.services import workforce_service
 
 
@@ -41,18 +42,25 @@ class WorkforceApplicationBoundaryTests(unittest.IsolatedAsyncioTestCase):
             workforce_service.REQUIRED_DOCUMENTS,
             workforce_application_service.REQUIRED_DOCUMENTS,
         )
+        self.assertIs(
+            workforce_service.review_worker_application,
+            workforce_review_service.review_worker_application,
+        )
 
-    def test_secure_upload_and_review_ownership_remains_in_workforce_service(self):
+    def test_secure_upload_remains_in_compatibility_service(self):
         self.assertEqual(
             workforce_service.upload_worker_document.__module__,
             "app.services.workforce_service",
         )
-        self.assertEqual(
-            workforce_service.review_worker_application.__module__,
-            "app.services.workforce_service",
-        )
         self.assertTrue(hasattr(workforce_service, "cloudinary"))
         self.assertFalse(hasattr(workforce_application_service, "cloudinary"))
+        self.assertFalse(hasattr(workforce_review_service, "cloudinary"))
+
+    def test_review_provisioning_uses_dedicated_service(self):
+        self.assertEqual(
+            workforce_service.review_worker_application.__module__,
+            "app.services.workforce_review_service",
+        )
 
     async def test_my_application_ordering_is_pushed_to_database(self):
         user = {"id": "worker-app-order", "role": "passenger"}
