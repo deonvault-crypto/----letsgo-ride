@@ -99,9 +99,9 @@ async def update_courier_shift(shift_id: str, payload: Dict[str, Any], admin: Di
 
 async def list_courier_shifts(*, include_inactive: bool = False) -> List[Dict[str, Any]]:
     filters = {} if include_inactive else {"active": True}
-    rows = await database.find_many("courier_shifts", filters)
+    rows = await database.find_many("courier_shifts", filters, sort=[("starts_at", 1)])
     now = datetime.now(timezone.utc)
-    return [public_shift(row, now) for row in sorted(rows, key=lambda item: str(item.get("starts_at") or ""))]
+    return [public_shift(row, now) for row in rows]
 
 
 async def _require_approved_courier(user: Dict[str, Any]) -> Dict[str, Any]:
@@ -200,10 +200,13 @@ async def _decrement_shift_booking_count(shift_id: str) -> int:
 async def my_courier_shift_bookings(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     await _require_approved_courier(user)
     rows = await database.find_many("courier_shift_bookings", {"courier_user_id": _user_id(user)})
+    shift_ids = sorted({str(item.get("shift_id") or "") for item in rows if item.get("shift_id")})
+    shifts = await database.find_many("courier_shifts", {"id": {"$in": shift_ids}}) if shift_ids else []
+    shifts_by_id = {str(shift.get("id") or ""): shift for shift in shifts}
     now = datetime.now(timezone.utc)
     result = []
     for booking in rows:
-        shift = await database.find_one("courier_shifts", {"id": booking.get("shift_id")})
+        shift = shifts_by_id.get(str(booking.get("shift_id") or ""))
         if not shift:
             continue
         status = str(booking.get("status") or "")
