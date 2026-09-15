@@ -85,7 +85,7 @@ async def _resolve_hailing(transaction_id: str, reviewee_id: str, user: Dict[str
         reviewer_role, reviewee_role = "driver", "passenger"
     elif user_id == passenger_user_id:
         if reviewee_id != driver_user_id:
-            raise PermissionError("Passengers can only review the driver for this Ride Now trip.")
+            raise PermissionError("Passengers can only review the driver on this Ride Now trip.")
         reviewer_role, reviewee_role = "passenger", "driver"
     else:
         raise PermissionError("Only Ride Now trip participants can leave reviews.")
