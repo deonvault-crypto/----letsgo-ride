@@ -282,7 +282,7 @@ async def cancel_food_order(order_id: str, user: Dict[str, Any], reason: str | N
             {
                 "food_order_id": order_id,
                 "restaurant_id": order.get("restaurant_id"),
-                "notification_target": "customer_food_order",
+                "notification_target": "merchant_order",
             },
         )
 
