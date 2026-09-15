@@ -32,6 +32,8 @@ export type SupportThread = {
   items: SupportThreadItem[];
 };
 
+const SUPPORT_HISTORY_LIMIT = 100;
+
 export async function sendSupportMessage(data: {
   subject: string;
   message: string;
@@ -47,7 +49,7 @@ export async function sendSupportMessage(data: {
 export async function mySupportMessages() {
   return requestData<SupportMessage[]>({
     method: "GET",
-    url: "/support/messages/my",
+    url: `/support/messages/my?limit=${SUPPORT_HISTORY_LIMIT}`,
   });
 }
 
