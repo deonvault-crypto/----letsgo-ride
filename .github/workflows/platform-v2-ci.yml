@@ -22,6 +22,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-notification-sounds:
+    name: Prepare committed notification sounds
+    if: github.event_name == 'pull_request' && github.head_ref == 'cleanup/committed-notification-sounds'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: cleanup/committed-notification-sounds
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Generate, verify and commit deterministic notification sounds
+        run: node .github/scripts/prepare-notification-sounds.js
+
   mobile:
     name: Mobile typecheck and tests
     # platform-v2-m1-m6 is validated on its exact push SHA. Its long-lived PR to
@@ -261,4 +280,3 @@ jobs:
             grep -qi "LetsGoRide" "/tmp/${path}.html"
           done
           grep -qi "Delete your LetsGoRide account" /tmp/delete-account.html
-
