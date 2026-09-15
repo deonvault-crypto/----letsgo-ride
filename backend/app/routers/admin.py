@@ -24,6 +24,10 @@ from app.services.admin_read_service import (
     enrich_admin_rides,
     enrich_admin_user,
 )
+from app.services.admin_ride_request_list_service import (
+    list_admin_requests,
+    list_admin_rides,
+)
 from app.services.admin_user_list_service import list_admin_users
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
@@ -399,21 +403,14 @@ async def admin_rides(
     limit: int = Query(default=80, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    rides = await enrich_admin_rides(await database.find_many("rides"))
-    rows = []
-    for enriched in rides:
-        if status and enriched.get("status", "open") != status:
-            continue
-        if filter == "pending_requests" and int(enriched.get("pending_request_count", 0)) == 0:
-            continue
-        if filter == "full" and int(enriched.get("available_seats", 0)) > 0:
-            continue
-        if filter == "upcoming" and enriched.get("status", "open") == "cancelled":
-            continue
-        if not _contains_search(enriched, search, ["origin", "destination", "driver_name", "vehicle", "date", "status"]):
-            continue
-        rows.append(enriched)
-    return api_success({"count": len(rows), "items": _sort_recent(rows, limit)})
+    return api_success(
+        await list_admin_rides(
+            search=search,
+            status=status,
+            filter_name=filter,
+            limit=limit,
+        )
+    )
 
 
 @router.get("/rides/{ride_id}")
@@ -498,22 +495,13 @@ async def admin_requests(
     limit: int = Query(default=100, ge=1, le=250),
     admin=Depends(get_admin_user),
 ):
-    raw_requests = await database.find_many("ride_requests", {"status": status} if status else None)
-    rows = []
-    for enriched in await enrich_admin_requests(raw_requests):
-        if not _contains_search(
-            {
-                **enriched,
-                "route": _request_route(enriched),
-                "driver_name": enriched.get("driver_name"),
-                "passenger_name": enriched.get("passenger_name"),
-            },
-            search,
-            ["passenger_name", "driver_name", "passenger_email", "driver_email", "route", "status"],
-        ):
-            continue
-        rows.append(enriched)
-    return api_success({"count": len(rows), "items": _sort_recent(rows, limit)})
+    return api_success(
+        await list_admin_requests(
+            search=search,
+            status=status,
+            limit=limit,
+        )
+    )
 
 
 @router.get("/requests/{request_id}")
