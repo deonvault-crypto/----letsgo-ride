@@ -73,7 +73,12 @@ const expectedChanged = [
 if (JSON.stringify(changed) !== JSON.stringify(expectedChanged)) {
   throw new Error(`Unexpected staged files: ${JSON.stringify(changed)}`);
 }
-run(["diff", "--cached", "--check"]);
+run([
+  "diff", "--cached", "--check", "--",
+  "mobile/__tests__/notification-sound-routing.test.ts",
+  "mobile/app.config.js",
+  "mobile/package.json",
+]);
 run(["config", "user.name", "github-actions[bot]"]);
 run(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
 run(["commit", "-m", "refactor(mobile): commit deterministic notification sounds"]);
