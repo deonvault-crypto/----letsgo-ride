@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
@@ -27,6 +28,17 @@ def _money(value: Any) -> float:
         return 0.0
 
 
+def _distance_km(snapshots: List[Dict[str, Any]]) -> float | None:
+    if len(snapshots) < 2:
+        return None
+    travelled_meters = 0.0
+    for previous, current in zip(snapshots, snapshots[1:]):
+        segment = distance_meters(previous, current)
+        if segment is not None and segment < 10000:
+            travelled_meters += segment
+    return round(travelled_meters / 1000.0, 2)
+
+
 async def courier_earnings_summary(user: Dict[str, Any]) -> Dict[str, Any]:
     """Aggregate accrued delivery earnings without inventing settlement state."""
     user_id = str(user.get("id") or "")
@@ -39,6 +51,41 @@ async def courier_earnings_summary(user: Dict[str, Any]) -> Dict[str, Any]:
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=6)
     month_start = today_start.replace(day=1)
+    earliest_detail_start = min(week_start, month_start)
+
+    rows = sorted(
+        delivered,
+        key=lambda item: str(item.get("delivered_at") or item.get("updated_at") or ""),
+        reverse=True,
+    )
+    parsed_delivered_at = {
+        str(delivery.get("id") or ""): _parse_iso(delivery.get("delivered_at") or delivery.get("updated_at"))
+        for delivery in rows
+    }
+
+    detail_delivery_ids = {
+        str(delivery.get("id") or "")
+        for index, delivery in enumerate(rows)
+        if delivery.get("id")
+        and (
+            index < 10
+            or (
+                parsed_delivered_at.get(str(delivery.get("id") or "")) is not None
+                and parsed_delivered_at[str(delivery.get("id") or "")] >= earliest_detail_start
+            )
+        )
+    }
+    snapshots_by_delivery: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    if detail_delivery_ids:
+        snapshots = await database.find_many(
+            "courier_location_snapshots",
+            {"delivery_id": {"$in": sorted(detail_delivery_ids)}},
+            sort=[("recorded_at", 1)],
+        )
+        for snapshot in snapshots:
+            delivery_id = str(snapshot.get("delivery_id") or "")
+            if delivery_id:
+                snapshots_by_delivery[delivery_id].append(snapshot)
 
     total = 0.0
     today = 0.0
@@ -47,34 +94,18 @@ async def courier_earnings_summary(user: Dict[str, Any]) -> Dict[str, Any]:
     latest: List[Dict[str, Any]] = []
     period_rows: Dict[str, List[Dict[str, Any]]] = {"today": [], "week": [], "month": []}
 
-    rows = sorted(
-        delivered,
-        key=lambda item: str(item.get("delivered_at") or item.get("updated_at") or ""),
-        reverse=True,
-    )
-
     for delivery in rows:
+        delivery_id = str(delivery.get("id") or "")
         payout = _money(delivery.get("courier_payout_usd"))
         total += payout
-        delivered_at = _parse_iso(delivery.get("delivered_at") or delivery.get("updated_at"))
+        delivered_at = parsed_delivered_at.get(delivery_id)
         if delivered_at and delivered_at >= today_start:
             today += payout
         if delivered_at and delivered_at >= week_start:
             last_7_days += payout
-
         if delivered_at and delivered_at >= month_start:
             month += payout
 
-        snapshots = sorted(
-            await database.find_many("courier_location_snapshots", {"delivery_id": delivery.get("id")}),
-            key=lambda item: str(item.get("recorded_at") or ""),
-        )
-        travelled_meters = 0.0
-        for previous, current in zip(snapshots, snapshots[1:]):
-            segment = distance_meters(previous, current)
-            if segment is not None and segment < 10000:
-                travelled_meters += segment
-        distance_km = round(travelled_meters / 1000.0, 2) if len(snapshots) > 1 else None
         assigned_at = _parse_iso(delivery.get("assigned_at"))
         work_minutes = round(max(0, (delivered_at - assigned_at).total_seconds()) / 60) if delivered_at and assigned_at else None
         job = {
@@ -84,7 +115,7 @@ async def courier_earnings_summary(user: Dict[str, Any]) -> Dict[str, Any]:
             "source_type": delivery.get("source_type") or "COURIER_REQUEST",
             "pickup_address": delivery.get("pickup_address"),
             "dropoff_address": delivery.get("dropoff_address"),
-            "distance_km": distance_km,
+            "distance_km": _distance_km(snapshots_by_delivery.get(delivery_id, [])),
             "work_minutes": work_minutes,
             "payout_status": None,
         }
