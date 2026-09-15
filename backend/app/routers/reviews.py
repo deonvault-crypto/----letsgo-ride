@@ -2,12 +2,11 @@ from fastapi import APIRouter, Depends
 
 from app.auth import get_current_user
 from app.models.review import ReviewCreateBody
-from app.services.review_service import (
-    create_review,
-    pending_reviews_for_user,
+from app.services.review_read_service import (
     public_review_summary_for_restaurant,
     public_review_summary_for_user,
 )
+from app.services.review_service import create_review, pending_reviews_for_user
 from app.utils import api_error, api_success
 
 

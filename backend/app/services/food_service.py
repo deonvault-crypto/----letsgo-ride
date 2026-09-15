@@ -27,8 +27,10 @@ PUBLIC_RESTAURANT_STATUSES = {"ACTIVE", "COMING_SOON"}
 
 
 async def list_restaurants() -> List[Dict[str, Any]]:
-    restaurants = await database.find_many("restaurants")
-    public = [item for item in restaurants if item.get("status") in PUBLIC_RESTAURANT_STATUSES]
+    public = await database.find_many(
+        "restaurants",
+        {"status": {"$in": sorted(PUBLIC_RESTAURANT_STATUSES)}},
+    )
     for item in public:
         item["is_orderable"] = bool(item.get("status") == "ACTIVE" and item.get("is_accepting_orders", True))
     return sorted(
@@ -49,10 +51,15 @@ async def get_restaurant(restaurant_id: str) -> Dict[str, Any]:
 
 async def get_restaurant_menu(restaurant_id: str) -> Dict[str, Any]:
     restaurant = await get_restaurant(restaurant_id)
-    categories = await database.find_many("menu_categories", {"restaurant_id": restaurant_id})
-    items = await database.find_many("menu_items", {"restaurant_id": restaurant_id})
-    categories = sorted(categories, key=lambda item: int(item.get("sort_order") or 0))
-    active_items = [item for item in items if item.get("is_available", True)]
+    categories = await database.find_many(
+        "menu_categories",
+        {"restaurant_id": restaurant_id},
+        sort=[("sort_order", 1)],
+    )
+    active_items = await database.find_many(
+        "menu_items",
+        {"restaurant_id": restaurant_id, "is_available": {"$ne": False}},
+    )
     return {
         "restaurant": restaurant,
         "categories": categories,
@@ -92,10 +99,14 @@ async def create_food_order(payload: Dict[str, Any], user: Dict[str, Any]) -> Di
     if payment_method != "CASH_ON_DELIVERY":
         raise ValueError("That payment method is not available yet.")
 
+    requested_menu_item_ids = list(dict.fromkeys(str(item["menu_item_id"]) for item in requested_items))
+    menu_items = await database.find_many("menu_items", {"id": {"$in": requested_menu_item_ids}})
+    menu_items_by_id = {str(item.get("id") or ""): item for item in menu_items}
+
     item_snapshots: List[Dict[str, Any]] = []
     subtotal = 0.0
     for requested in requested_items:
-        menu_item = await database.find_one("menu_items", {"id": requested["menu_item_id"]})
+        menu_item = menu_items_by_id.get(str(requested["menu_item_id"]))
         if not menu_item or menu_item.get("restaurant_id") != restaurant["id"]:
             raise ValueError("One or more menu items are no longer available.")
         if not menu_item.get("is_available", True):

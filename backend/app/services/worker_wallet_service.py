@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from app.database import database
+from app.services.courier_wallet_service import courier_wallet_summary
 from app.services.driver_weekly_settlement_service import settlement_summary
-from app.services.worker_finance_service import wallet_summary as legacy_wallet_summary
 
 
 DRIVER_LEDGER_LIMIT = 100
@@ -92,4 +92,6 @@ async def wallet_summary(user: Dict[str, Any]) -> Dict[str, Any]:
     role = str(user.get("role") or "").strip().lower()
     if role == "driver":
         return await _driver_wallet(user)
-    return await legacy_wallet_summary(user)
+    if role == "courier":
+        return await courier_wallet_summary(user)
+    raise PermissionError("A Driver or Courier account is required.")

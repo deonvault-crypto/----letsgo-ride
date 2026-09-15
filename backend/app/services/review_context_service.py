@@ -27,8 +27,11 @@ def review_transaction_type(review: Dict[str, Any]) -> str:
 
 
 async def _confirmed_requests_for_ride(ride_id: str) -> list[Dict[str, Any]]:
-    requests = await database.find_many("ride_requests", {"ride_id": ride_id})
-    return [request for request in requests if request.get("status") == "confirmed" and request.get("user_id")]
+    requests = await database.find_many(
+        "ride_requests",
+        {"ride_id": ride_id, "status": "confirmed"},
+    )
+    return [request for request in requests if request.get("user_id")]
 
 
 async def _resolve_intercity(transaction_id: str, reviewee_id: str, user: Dict[str, Any]) -> Optional[ReviewContext]:

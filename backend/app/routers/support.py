@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user
 from app.database import database
@@ -42,7 +44,19 @@ async def create_message(payload: SupportMessageBody, user=Depends(get_current_u
 
 
 @router.get("/messages/my")
-async def my_messages(user=Depends(get_current_user)):
-    if user.get("role") == "admin":
-        return api_success(await database.find_many("support_messages"))
-    return api_success(await database.find_many("support_messages", {"user_id": user["id"]}))
+async def my_messages(
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+    user=Depends(get_current_user),
+):
+    filters = None if user.get("role") == "admin" else {"user_id": user["id"]}
+    if limit is None:
+        # Backward compatibility for already-shipped clients that expect the full list.
+        return api_success(await database.find_many("support_messages", filters))
+    return api_success(
+        await database.find_many(
+            "support_messages",
+            filters,
+            sort=[("updated_at", -1)],
+            limit=limit,
+        )
+    )

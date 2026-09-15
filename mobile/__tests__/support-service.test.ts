@@ -16,7 +16,7 @@ describe("customer support service", () => {
     jest.clearAllMocks();
   });
 
-  it("preserves the existing support ticket endpoints", async () => {
+  it("preserves the support ticket endpoints while bounding current history reads", async () => {
     mockRequestData.mockResolvedValueOnce({ id: "support-1" });
     mockRequestData.mockResolvedValueOnce([]);
 
@@ -30,7 +30,7 @@ describe("customer support service", () => {
     });
     expect(mockRequestData).toHaveBeenNthCalledWith(2, {
       method: "GET",
-      url: "/support/messages/my",
+      url: "/support/messages/my?limit=100",
     });
   });
 
