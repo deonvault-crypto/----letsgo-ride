@@ -12,14 +12,19 @@ from app.models.verification import VerificationStatusUpdateBody
 from app.models.request import RideRequestUpdateBody
 from app.models.ride import AdminRideStatusBody
 from app.models.user import AdminRoleUpdateBody
+from app.services.admin_bounded_read_service import (
+    list_admin_audit_logs,
+    list_admin_reports,
+    list_admin_support_messages,
+)
 from app.services.admin_read_service import (
     enrich_admin_request,
     enrich_admin_requests,
     enrich_admin_ride,
     enrich_admin_rides,
     enrich_admin_user,
-    enrich_admin_users,
 )
+from app.services.admin_user_list_service import list_admin_users
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
@@ -265,30 +270,15 @@ async def list_users(
     limit: int = Query(default=80, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    filters: Dict[str, Any] = {}
-    if role:
-        filters["role"] = role
-    if status:
-        filters["status"] = status
-    users = await database.find_many("users", filters or None)
-    rows = []
-    for enriched in await enrich_admin_users(users):
-        verification_status = enriched.get("driver_verification_status") or enriched.get("verification_status") or "not_started"
-        if verification:
-            requested_verification = str(verification).strip().lower()
-            if requested_verification in VERIFIED_DRIVER_VERIFICATION_STATUSES:
-                if not _is_verified_driver_verification(verification_status):
-                    continue
-            elif requested_verification in PENDING_DRIVER_VERIFICATION_STATUSES:
-                if not _is_pending_driver_verification(verification_status):
-                    continue
-            elif verification_status != requested_verification:
-                continue
-        if not _contains_search(enriched, search, ["name", "email", "phone", "city", "role", "status"]):
-            continue
-        rows.append(enriched)
-    rows = _sort_recent(rows, limit)
-    return api_success({"count": len(rows), "items": rows})
+    return api_success(
+        await list_admin_users(
+            search=search,
+            role=role,
+            status=status,
+            verification=verification,
+            limit=limit,
+        )
+    )
 
 
 @router.get("/users/{user_id}")
@@ -615,13 +605,8 @@ async def admin_support_messages(
     limit: int = Query(default=100, ge=1, le=250),
     admin=Depends(get_admin_user),
 ):
-    messages = await database.find_many("support_messages", {"status": status} if status else None)
-    rows = [
-        message
-        for message in messages
-        if _contains_search(message, search, ["subject", "message", "user_name", "user_email", "user_phone", "status"])
-    ]
-    return api_success({"count": len(rows), "items": _sort_recent(rows, limit)})
+    rows = await list_admin_support_messages(search=search, status=status, limit=limit)
+    return api_success({"count": len(rows), "items": rows})
 
 
 @router.get("/support/messages/{message_id}")
@@ -683,13 +668,8 @@ async def admin_reports(
     limit: int = Query(default=100, ge=1, le=250),
     admin=Depends(get_admin_user),
 ):
-    reports = await database.find_many("reports", {"status": status} if status else None)
-    rows = [
-        report
-        for report in reports
-        if _contains_search(report, search, ["report_type", "message", "user_name", "user_email", "user_phone", "status"])
-    ]
-    return api_success({"count": len(rows), "items": _sort_recent(rows, limit)})
+    rows = await list_admin_reports(search=search, status=status, limit=limit)
+    return api_success({"count": len(rows), "items": rows})
 
 
 @router.get("/reports/{report_id}")
@@ -753,12 +733,7 @@ async def admin_audit_logs(
     limit: int = Query(default=60, ge=1, le=200),
     admin=Depends(get_admin_user),
 ):
-    filters: Dict[str, Any] = {}
-    if action:
-        filters["action"] = action
-    if target_type:
-        filters["target_type"] = target_type
-    logs = await database.find_many("audit_logs", filters or None)
+    logs = await list_admin_audit_logs(action=action, target_type=target_type, limit=limit)
     rows = []
     for log in logs:
         safe_log = dict(log)
@@ -768,7 +743,7 @@ async def admin_audit_logs(
                 metadata[key] = "[redacted]"
         safe_log["metadata"] = metadata
         rows.append(safe_log)
-    return api_success({"count": len(rows), "items": _sort_recent(rows, limit)})
+    return api_success({"count": len(rows), "items": rows})
 
 
 @router.get("/verifications")
