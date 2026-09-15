@@ -9,6 +9,7 @@ from app.ops_auth import effective_ops_role, get_ops_user
 from app.services.audit_service import write_audit_log
 from app.services.notification_service import create_app_notification, notify_admins
 from app.services.support_realtime_service import publish_support_realtime, update_versioned_support_message
+from app.services.support_recipient_service import search_support_recipients
 from app.utils import api_error, api_success, new_id, now_iso
 
 
@@ -298,20 +299,10 @@ async def ops_support_recipients(
     limit: int = Query(default=40, ge=1, le=100),
     user=Depends(get_ops_user),
 ):
-    term = search.strip().lower()
-    rows = await database.find_many("users")
-    candidates = []
-    for row in rows:
-        if row.get("status") == "deleted":
-            continue
-        haystack = " ".join(str(row.get(field) or "") for field in ("name", "email", "phone", "city", "role")).lower()
-        if term and term not in haystack:
-            continue
-        candidates.append(row)
-    candidates.sort(key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""), reverse=True)
+    result = await search_support_recipients(search, limit)
     return api_success({
-        "count": len(candidates),
-        "items": [_safe_recipient(row) for row in candidates[:limit]],
+        "count": result["count"],
+        "items": [_safe_recipient(row) for row in result["items"]],
     })
 
 
