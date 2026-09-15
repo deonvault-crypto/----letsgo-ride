@@ -27,6 +27,12 @@ from app.ops_auth import (
 from app.services.audit_service import write_audit_log
 from app.services.auth_service import public_user
 from app.services.notification_service import create_app_notification
+from app.services.ops_bounded_read_service import (
+    list_ops_audit_logs,
+    search_ops_cases,
+    search_ops_safety_reports,
+    search_ops_support_messages,
+)
 from app.services.ops_user_search_service import search_ops_users
 from app.utils import api_error, api_success, new_id, now_iso
 
@@ -393,16 +399,7 @@ async def support_messages(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many(
-        "support_messages",
-        {"status": status} if status else None,
-        sort=[("updated_at", -1)],
-        limit=None if search else limit,
-    )
-    rows = [
-        row for row in rows
-        if _contains(row, search, ["subject", "message", "user_name", "user_email", "user_phone", "status"])
-    ][:limit]
+    rows = await search_ops_support_messages(search, status, limit)
     return api_success({"count": len(rows), "items": [_safe_support(row) for row in rows]})
 
 
@@ -446,16 +443,7 @@ async def safety_reports(
     limit: int = Query(default=100, ge=1, le=250),
     user=Depends(get_ops_user),
 ):
-    rows = await database.find_many(
-        "reports",
-        {"status": status} if status else None,
-        sort=[("updated_at", -1)],
-        limit=None if search else limit,
-    )
-    rows = [
-        row for row in rows
-        if _contains(row, search, ["report_type", "message", "description", "user_name", "user_email", "user_phone", "status"])
-    ][:limit]
+    rows = await search_ops_safety_reports(search, status, limit)
     return api_success({"count": len(rows), "items": [_safe_report(row) for row in rows]})
 
 
@@ -530,20 +518,8 @@ async def list_cases(
         assigned_to=assigned_to,
         priority=priority,
     )
-    rows = await database.find_many(
-        "ops_cases",
-        filters,
-        sort=[("updated_at", -1)],
-        limit=None if search else limit,
-    )
-    filtered = []
-    for row in rows:
-        if not _contains(row, search, ["case_number", "subject", "description", "status", "priority", "assigned_name"]):
-            continue
-        filtered.append(_safe_case(row))
-        if len(filtered) >= limit:
-            break
-    return api_success({"count": len(filtered), "items": filtered})
+    rows = await search_ops_cases(search, filters, limit)
+    return api_success({"count": len(rows), "items": [_safe_case(row) for row in rows]})
 
 
 @router.post("/cases")
@@ -924,16 +900,7 @@ async def audit_logs(
     user=Depends(get_ops_manager),
 ):
     is_admin = effective_ops_role(user) == "admin"
-    rows = await database.find_many(
-        "audit_logs",
-        sort=[("created_at", -1)],
-        limit=limit if is_admin else None,
-    )
-    if not is_admin:
-        rows = [
-            row for row in rows
-            if str(row.get("action") or "").startswith("ops_")
-        ][:limit]
+    rows = await list_ops_audit_logs(is_admin=is_admin, limit=limit)
     return api_success({
         "count": len(rows),
         "items": [_safe_audit_log(row) for row in rows],
