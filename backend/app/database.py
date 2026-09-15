@@ -39,6 +39,8 @@ COLLECTION_NAMES = [
     "delivery_handoffs",
     "work_availability",
     "worker_applications",
+    "worker_payout_methods",
+    "worker_payouts",
     "courier_shifts",
     "courier_shift_bookings",
     "restaurants",
