@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 
@@ -11,14 +12,26 @@ describe("LetsGoRide notification sound routing", () => {
   const backendNotifications = fs.readFileSync(path.join(repoRoot, "backend/app/services/notification_service.py"), "utf8");
   const courierOffers = fs.readFileSync(path.join(repoRoot, "backend/app/services/courier_offer_realtime_service.py"), "utf8");
 
-  it("bundles three original LetsGoRide sounds during native builds", () => {
-    expect(appConfig).toContain("generate-notification-sounds.js");
+  it("bundles three committed original LetsGoRide sounds without config-time filesystem writes", () => {
+    const soundHashes: Record<string, string> = {
+      "letsgoride_notification.wav": "6fa6a8261426ce2ee9e440ea3fbdac1e72356bc365b18c19c568ca87c77a354d",
+      "letsgoride_ride_request.wav": "3125d56277631803dcc11d18788c725f30c6c6763e9a1ff7d58f12f413a3811e",
+      "letsgoride_courier_request.wav": "c84ab4da43695325da5cc5cbb8224af8061ef6acdc28945d3324ba2eda3db428",
+    };
+
+    expect(appConfig).not.toContain("generate-notification-sounds.js");
     expect(generator).toContain('"letsgoride_notification.wav"');
     expect(generator).toContain('"letsgoride_ride_request.wav"');
     expect(generator).toContain('"letsgoride_courier_request.wav"');
-    expect(appJson).toContain("./assets/sounds/letsgoride_notification.wav");
-    expect(appJson).toContain("./assets/sounds/letsgoride_ride_request.wav");
-    expect(appJson).toContain("./assets/sounds/letsgoride_courier_request.wav");
+
+    for (const [fileName, expectedHash] of Object.entries(soundHashes)) {
+      const assetPath = path.join(mobileRoot, "assets", "sounds", fileName);
+      const wav = fs.readFileSync(assetPath);
+      expect(wav.subarray(0, 4).toString("ascii")).toBe("RIFF");
+      expect(wav.subarray(8, 12).toString("ascii")).toBe("WAVE");
+      expect(crypto.createHash("sha256").update(wav).digest("hex")).toBe(expectedHash);
+      expect(appJson).toContain(`./assets/sounds/${fileName}`);
+    }
   });
 
   it("uses separate high-priority Android channels for general, Ride and Courier alerts", () => {
