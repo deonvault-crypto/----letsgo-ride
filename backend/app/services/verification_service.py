@@ -14,6 +14,7 @@ from fastapi import UploadFile
 from app.config import get_settings
 from app.database import database
 from app.services.email_service import send_driver_verification_status_email
+from app.services.verification_duplicate_service import detect_duplicate_flags
 from app.services.verification_face_service import compare_selfie_to_identity
 from app.services.verification_ocr_service import EXTRACTABLE_FIELDS, extract_verification_fields
 from app.services.notification_service import create_app_notification, notify_admins
@@ -433,55 +434,13 @@ async def _detect_duplicate_flags(
 ) -> List[str]:
     if not settings.verification_duplicate_detection_enabled:
         return []
-
-    flags: List[str] = []
-    phone = str(user.get("phone") or driver.get("phone") or "").strip()
-    email = str(user.get("email") or driver.get("email") or "").strip().lower()
-
-    users = await database.find_many("users")
-    for other in users:
-        if other.get("id") == user.get("id"):
-            continue
-        if phone and str(other.get("phone") or "").strip() == phone:
-            flags.append("duplicate_phone")
-        if email and str(other.get("email") or "").strip().lower() == email:
-            flags.append("duplicate_email")
-
-    drivers = await database.find_many("drivers")
-    current_public_ids = {
-        document.get("cloudinary_public_id")
-        for document in documents
-        if document.get("cloudinary_public_id")
-    }
-    identity_number = str(extracted_fields.get("document_number") or "").strip().lower()
-    licence_number = str(extracted_fields.get("licence_number") or "").strip().lower()
-    plate_number = str(extracted_fields.get("plate_number") or "").strip().lower()
-
-    for other in drivers:
-        if other.get("id") == driver.get("id"):
-            continue
-        if phone and str(other.get("phone") or "").strip() == phone:
-            flags.append("duplicate_phone")
-        if email and str(other.get("email") or "").strip().lower() == email:
-            flags.append("duplicate_email")
-        for other_document in manual_verification_documents(other.get("documents", [])):
-            public_id = other_document.get("cloudinary_public_id")
-            if public_id and public_id in current_public_ids:
-                flags.append("duplicate_cloudinary_public_id")
-            other_ocr = other_document.get("ocr")
-            if not isinstance(other_ocr, Mapping):
-                continue
-            other_fields = other_ocr.get("extracted_fields")
-            if not isinstance(other_fields, Mapping):
-                continue
-            if identity_number and str(other_fields.get("document_number") or "").strip().lower() == identity_number:
-                flags.append("duplicate_identity_document_number")
-            if licence_number and str(other_fields.get("licence_number") or "").strip().lower() == licence_number:
-                flags.append("duplicate_driver_licence_number")
-            if plate_number and str(other_fields.get("plate_number") or "").strip().lower() == plate_number:
-                flags.append("duplicate_vehicle_plate")
-
-    return _dedupe_flags(flags)
+    return await detect_duplicate_flags(
+        user=user,
+        driver=driver,
+        documents=documents,
+        extracted_fields=extracted_fields,
+        normalize_documents=manual_verification_documents,
+    )
 
 
 def _calculate_risk(
