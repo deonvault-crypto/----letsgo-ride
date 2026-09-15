@@ -6,7 +6,6 @@ from app.services.courier_wallet_service import (
     COURIER_LEDGER_LIMIT,
     COURIER_PAYOUT_HISTORY_LIMIT,
     _recent_deliveries,
-    courier_wallet_summary,
 )
 from app.services.worker_wallet_service import wallet_summary
 
