@@ -130,19 +130,19 @@ async def list_payout_methods(user: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows = await database.find_many(
         "worker_payout_methods",
         {"user_id": user["id"], "worker_role": role, "status": "active"},
+        sort=[("is_default", -1), ("created_at", 1)],
     )
-    rows.sort(key=lambda item: (not bool(item.get("is_default")), str(item.get("created_at") or "")))
     return [_public_method(row) for row in rows]
 
 
 async def create_payout_method(payload: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
     role = _worker_role(user)
     clean = _normalized_payload(payload)
-    existing = await database.find_many(
+    existing = await database.find_one(
         "worker_payout_methods",
         {"user_id": user["id"], "worker_role": role, "status": "active"},
     )
-    make_default = bool(payload.get("make_default")) or not existing
+    make_default = bool(payload.get("make_default")) or existing is None
     timestamp = now_iso()
     row = {
         "id": new_id(),
@@ -237,8 +237,13 @@ async def delete_payout_method(method_id: str, user: Dict[str, Any]) -> Dict[str
         remaining = await database.find_many(
             "worker_payout_methods",
             {"user_id": user["id"], "worker_role": role, "status": "active"},
+            sort=[("created_at", 1)],
+            limit=1,
         )
         if remaining:
-            replacement = sorted(remaining, key=lambda item: str(item.get("created_at") or ""))[0]
-            await database.update_one("worker_payout_methods", replacement["id"], {"is_default": True, "updated_at": timestamp})
+            await database.update_one(
+                "worker_payout_methods",
+                remaining[0]["id"],
+                {"is_default": True, "updated_at": timestamp},
+            )
     return {"deleted": True, "id": method_id}
