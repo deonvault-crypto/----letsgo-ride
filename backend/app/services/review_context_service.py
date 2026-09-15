@@ -27,8 +27,11 @@ def review_transaction_type(review: Dict[str, Any]) -> str:
 
 
 async def _confirmed_requests_for_ride(ride_id: str) -> list[Dict[str, Any]]:
-    requests = await database.find_many("ride_requests", {"ride_id": ride_id})
-    return [request for request in requests if request.get("status") == "confirmed" and request.get("user_id")]
+    requests = await database.find_many(
+        "ride_requests",
+        {"ride_id": ride_id, "status": "confirmed"},
+    )
+    return [request for request in requests if request.get("user_id")]
 
 
 async def _resolve_intercity(transaction_id: str, reviewee_id: str, user: Dict[str, Any]) -> Optional[ReviewContext]:
@@ -82,7 +85,7 @@ async def _resolve_hailing(transaction_id: str, reviewee_id: str, user: Dict[str
         reviewer_role, reviewee_role = "driver", "passenger"
     elif user_id == passenger_user_id:
         if reviewee_id != driver_user_id:
-            raise PermissionError("Passengers can only review the driver on this Ride Now trip.")
+            raise PermissionError("Passengers can only review the driver for this Ride Now trip.")
         reviewer_role, reviewee_role = "passenger", "driver"
     else:
         raise PermissionError("Only Ride Now trip participants can leave reviews.")
