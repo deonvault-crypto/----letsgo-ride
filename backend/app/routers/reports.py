@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 
 from app.auth import get_current_user
 from app.database import database
@@ -35,7 +37,19 @@ async def create_report(payload: ReportCreateBody, user=Depends(get_current_user
 
 
 @router.get("/my")
-async def my_reports(user=Depends(get_current_user)):
-    if user.get("role") == "admin":
-        return api_success(await database.find_many("reports"))
-    return api_success(await database.find_many("reports", {"user_id": user["id"]}))
+async def my_reports(
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+    user=Depends(get_current_user),
+):
+    filters = None if user.get("role") == "admin" else {"user_id": user["id"]}
+    if limit is None:
+        # Backward compatibility for already-shipped clients that expect the full list.
+        return api_success(await database.find_many("reports", filters))
+    return api_success(
+        await database.find_many(
+            "reports",
+            filters,
+            sort=[("created_at", -1)],
+            limit=limit,
+        )
+    )
