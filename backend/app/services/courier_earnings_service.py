@@ -130,7 +130,13 @@ async def courier_earnings_summary(user: Dict[str, Any]) -> Dict[str, Any]:
         if len(latest) < 10:
             latest.append(job)
 
-    sessions = await database.find_many("courier_online_sessions", {"courier_user_id": user_id})
+    sessions = await database.find_many(
+        "courier_online_sessions",
+        {
+            "courier_user_id": user_id,
+            "ended_at": {"$gte": earliest_detail_start.isoformat()},
+        },
+    )
     profile = await database.find_one("courier_profiles", {"user_id": user_id})
     session_ranges: List[tuple[datetime, datetime]] = []
     for session in sessions:
