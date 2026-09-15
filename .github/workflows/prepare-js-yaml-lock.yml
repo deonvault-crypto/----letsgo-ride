@@ -1,0 +1,86 @@
+name: Prepare js-yaml lockfile security fix
+
+on:
+  pull_request:
+    branches:
+      - platform-v2-m1-m6
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-lock:
+    if: github.head_ref == 'cleanup/js-yaml-audit-fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: cleanup/js-yaml-audit-fix
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Regenerate only js-yaml lock entries
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp package-lock.json /tmp/package-lock-before.json
+          npm update js-yaml --package-lock-only --ignore-scripts
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          before = json.loads(Path('/tmp/package-lock-before.json').read_text())
+          after = json.loads(Path('package-lock.json').read_text())
+
+          for key in ('name', 'version', 'lockfileVersion', 'requires'):
+              if before.get(key) != after.get(key):
+                  raise SystemExit(f'Unexpected top-level lockfile change: {key}')
+
+          before_packages = before.get('packages', {})
+          after_packages = after.get('packages', {})
+          changed = sorted(
+              key for key in set(before_packages) | set(after_packages)
+              if before_packages.get(key) != after_packages.get(key)
+          )
+          allowed = {
+              'node_modules/js-yaml',
+              'node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml',
+          }
+          if set(changed) != allowed:
+              raise SystemExit(f'Unexpected lock entries changed: {changed}')
+
+          expected = {
+              'node_modules/js-yaml': '4.3.2',
+              'node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml': '3.15.2',
+          }
+          for package_path, version in expected.items():
+              actual = str(after_packages.get(package_path, {}).get('version') or '')
+              if actual != version:
+                  raise SystemExit(f'{package_path} resolved to {actual}, expected {version}')
+
+          print('Changed lock entries:', changed)
+          print('Root js-yaml:', after_packages['node_modules/js-yaml']['version'])
+          print('Nested js-yaml:', after_packages['node_modules/@istanbuljs/load-nyc-config/node_modules/js-yaml']['version'])
+          PY
+
+      - name: Commit only the permanent lockfile change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/prepare-js-yaml-lock.yml
+          git add mobile/package-lock.json
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(mobile): patch transitive js-yaml advisories"
+          git push origin HEAD:cleanup/js-yaml-audit-fix
