@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from pymongo.errors import DuplicateKeyError
 
@@ -179,28 +179,6 @@ async def get_delivery_pin(delivery_id: str, user: Dict[str, Any]) -> Dict[str, 
         "pin": str(handoff.get("pin") or ""),
         "verified": bool(handoff.get("verified_at")),
     }
-
-
-async def list_user_deliveries(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    user_id = _user_id(user)
-    if _is_admin(user):
-        deliveries = await database.find_many("courier_deliveries")
-    elif user.get("role") == "courier":
-        deliveries = await database.find_many("courier_deliveries", {"courier_user_id": user_id})
-    else:
-        deliveries = await database.find_many("courier_deliveries", {"sender_user_id": user_id})
-    return sorted(deliveries, key=lambda item: str(item.get("created_at") or ""), reverse=True)
-
-
-async def list_delivery_events(delivery_id: str, user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    await get_delivery(delivery_id, user)
-    events = await database.find_many(
-        "courier_events",
-        {"delivery_id": delivery_id},
-        sort=[("created_at", 1)],
-        limit=200,
-    )
-    return events
 
 
 async def cancel_delivery(

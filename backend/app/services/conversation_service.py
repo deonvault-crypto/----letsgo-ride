@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from app.database import database
 from app.services.notification_service import create_app_notification
@@ -68,12 +68,6 @@ async def ensure_conversation_for_hailing_trip(trip: Dict[str, Any]) -> Dict[str
     created = await insert_versioned_conversation(conversation)
     await publish_conversation_realtime(created, "conversation.created")
     return created
-
-
-async def list_conversations_for_user(user: Dict[str, Any]) -> List[Dict[str, Any]]:
-    conversations = await database.find_many("conversations")
-    allowed = [conversation for conversation in conversations if can_access_conversation(user, conversation)]
-    return [await enrich_conversation(conversation, user) for conversation in allowed]
 
 
 async def enrich_conversation(conversation: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
