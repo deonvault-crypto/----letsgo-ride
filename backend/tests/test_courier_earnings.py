@@ -67,7 +67,7 @@ class CourierEarningsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary["latest_payouts"][0]["delivery_id"], "delivery-today")
         self.assertNotIn("delivery-active", [item["delivery_id"] for item in summary["latest_payouts"]])
 
-    async def test_summary_batches_location_snapshot_reads(self):
+    async def test_summary_batches_location_snapshot_reads_and_bounds_sessions(self):
         now = datetime.now(timezone.utc)
         for index in range(12):
             await database.insert_one(
@@ -109,8 +109,16 @@ class CourierEarningsTests(unittest.IsolatedAsyncioTestCase):
             for call in find_many.await_args_list
             if call.args and call.args[0] == "courier_location_snapshots"
         ]
+        session_calls = [
+            call
+            for call in find_many.await_args_list
+            if call.args and call.args[0] == "courier_online_sessions"
+        ]
         self.assertEqual(len(snapshot_calls), 1)
         self.assertIn("$in", snapshot_calls[0].args[1]["delivery_id"])
+        self.assertEqual(len(session_calls), 1)
+        self.assertEqual(session_calls[0].args[1]["courier_user_id"], "courier-1")
+        self.assertIn("$gte", session_calls[0].args[1]["ended_at"])
         self.assertIsNotNone(summary["latest_payouts"][0]["distance_km"])
 
 
