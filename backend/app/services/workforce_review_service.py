@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from app.database import database
 from app.services.audit_service import write_audit_log
+from app.services.hailing_city_service import nationwide_city_ids
 from app.services.notification_service import create_app_notification
 from app.services.work_product_service import approved_work_products, with_approved_work_product
 from app.services.workforce_application_service import public_application
@@ -112,6 +113,7 @@ async def review_worker_application(
                 )
         elif product == "driver":
             driver = await database.find_one("drivers", {"user_id": applicant["id"]})
+            approved_hailing_classes = list((driver or {}).get("approved_hailing_classes") or ["ECONOMY"])
             driver_updates = {
                 "name": application.get("full_name") or applicant.get("name"),
                 "phone": application.get("phone") or applicant.get("phone"),
@@ -125,6 +127,12 @@ async def review_worker_application(
                 "identity_verification_state": "active",
                 "verification_provider": "manual",
                 "verification_checked_at": now,
+                # Driver verification is the Ride Now approval boundary. Every
+                # approved Driver can work nationwide; vehicle-class expansion
+                # beyond Economy remains explicit.
+                "hailing_enabled": True,
+                "approved_hailing_city_ids": nationwide_city_ids(),
+                "approved_hailing_classes": approved_hailing_classes,
                 "updated_at": now,
             }
             if driver:
@@ -168,7 +176,7 @@ async def review_worker_application(
         {
             "application_id": application_id,
             "application_status": status,
-            "product": application.get("product"),
+            "product": product if status == "APPROVED" else application.get("product"),
         },
     )
     return public_application(updated or application)
