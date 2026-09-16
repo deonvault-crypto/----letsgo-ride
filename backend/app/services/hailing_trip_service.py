@@ -214,8 +214,13 @@ async def approved_driver_for_hailing(user: Dict[str, Any], city_id: str, ride_c
 
 
 async def latest_vehicle(driver: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    vehicles = await database.find_many("vehicles", {"driver_id": driver["id"]})
-    return sorted(vehicles, key=lambda item: item.get("created_at") or "", reverse=True)[0] if vehicles else None
+    vehicles = await database.find_many(
+        "vehicles",
+        {"driver_id": driver["id"]},
+        sort=[("created_at", -1)],
+        limit=1,
+    )
+    return vehicles[0] if vehicles else None
 
 
 def driver_snapshot(driver: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
