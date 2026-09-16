@@ -108,10 +108,20 @@ async def get_authorized_trip(trip_id: str, user: Dict[str, Any]) -> Dict[str, A
 
 async def active_trip_for_user(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if user.get("role") == "driver":
-        trips = await database.find_many("hailing_trips", {"driver_user_id": user["id"], "status": {"$in": list(ACTIVE_DRIVER_STATUSES)}})
+        trips = await database.find_many(
+            "hailing_trips",
+            {"driver_user_id": user["id"], "status": {"$in": list(ACTIVE_DRIVER_STATUSES)}},
+            sort=[("created_at", -1)],
+            limit=1,
+        )
     else:
-        trips = await database.find_many("hailing_trips", {"passenger_user_id": user["id"], "status": {"$in": list(ACTIVE_PASSENGER_STATUSES)}})
-    return sorted(trips, key=lambda item: item.get("created_at") or "", reverse=True)[0] if trips else None
+        trips = await database.find_many(
+            "hailing_trips",
+            {"passenger_user_id": user["id"], "status": {"$in": list(ACTIVE_PASSENGER_STATUSES)}},
+            sort=[("created_at", -1)],
+            limit=1,
+        )
+    return trips[0] if trips else None
 
 
 async def transition_trip(trip: Dict[str, Any], next_status: str, updates: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
