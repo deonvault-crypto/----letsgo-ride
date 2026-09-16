@@ -531,7 +531,13 @@ async def update_driver_presence(payload: Dict[str, Any], user: Dict[str, Any]) 
 
 async def current_driver_offer(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     driver = await driver_profile_for_user(user)
-    offers = await database.find_many("hailing_dispatch_offers", {"driver_id": driver["id"], "status": "pending"})
+    filters = {"driver_id": driver["id"], "status": "pending"}
+    offers = await database.find_many("hailing_dispatch_offers", filters, limit=2)
+    # The presence reservation makes one pending offer the steady-state invariant.
+    # If legacy or anomalous data violates it, retain the previous full-selection
+    # semantics rather than silently changing which offer is shown to the Driver.
+    if len(offers) > 1:
+        offers = await database.find_many("hailing_dispatch_offers", filters)
     now = datetime.now(timezone.utc)
     pending = [offer for offer in offers if (parse_time(offer.get("expires_at")) or now) > now]
     if not pending:
