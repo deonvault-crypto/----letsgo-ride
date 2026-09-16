@@ -162,6 +162,10 @@ class Database:
             [("status", 1), ("is_accepting_orders", 1), ("name", 1)],
             name="public_restaurant_availability",
         )
+        await self.db["vehicles"].create_index(
+            [("driver_id", 1), ("created_at", -1)],
+            name="vehicles_by_driver_created",
+        )
         await self.db["worker_applications"].create_index(
             [("user_id", 1), ("product", 1)],
             name="one_worker_application_per_product",
