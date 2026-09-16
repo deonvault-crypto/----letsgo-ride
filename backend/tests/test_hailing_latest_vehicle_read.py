@@ -1,8 +1,21 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from app.database import database
+from app.database import Database, database
 from app.services.hailing_trip_service import latest_vehicle
+
+
+class _FakeCollection:
+    def __init__(self):
+        self.create_index = AsyncMock()
+
+
+class _FakeDatabase:
+    def __init__(self):
+        self.collections = {}
+
+    def __getitem__(self, name):
+        return self.collections.setdefault(name, _FakeCollection())
 
 
 class HailingLatestVehicleReadTests(unittest.IsolatedAsyncioTestCase):
@@ -61,6 +74,22 @@ class HailingLatestVehicleReadTests(unittest.IsolatedAsyncioTestCase):
             result = await latest_vehicle({"id": "driver-1"})
 
         self.assertIsNone(result)
+
+    async def test_database_indexes_latest_vehicle_lookup(self):
+        db = Database()
+        fake_db = _FakeDatabase()
+        db.db = fake_db
+
+        with (
+            patch.object(db, "_prepare_unique_user_id_index", new=AsyncMock()),
+            patch.object(db, "_prepare_unique_user_email_index", new=AsyncMock()),
+        ):
+            await db.ensure_indexes()
+
+        fake_db["vehicles"].create_index.assert_awaited_once_with(
+            [("driver_id", 1), ("created_at", -1)],
+            name="vehicles_by_driver_created",
+        )
 
 
 if __name__ == "__main__":
