@@ -12,7 +12,7 @@ def _base_production_env(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("MONGODB_URI", "mongodb://example.invalid")
     monkeypatch.setenv("MONGODB_DB_NAME", "letsgoride")
-    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://letsgoride-v2-production.onrender.com")
+    monkeypatch.setenv("PUBLIC_API_BASE_URL", "https://api.letsgoride.site")
     monkeypatch.setenv("CORS_ORIGINS", "https://letsgoride.site")
     monkeypatch.setenv("CLOUDINARY_CLOUD_NAME", "cloud")
     monkeypatch.setenv("CLOUDINARY_API_KEY", "key")
