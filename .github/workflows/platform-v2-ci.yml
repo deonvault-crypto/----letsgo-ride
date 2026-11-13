@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      API_ORIGIN: https://letsgoride-v2-production.onrender.com
+      API_ORIGIN: https://api.letsgoride.site
       SITE_ORIGIN: https://letsgoride.site
     steps:
       - name: Verify production liveness and Mongo readiness
