@@ -3,7 +3,7 @@ export const now = () => Date.now();
 export const uid = () => crypto.randomUUID();
 export const emailValue = value => String(value || '').trim().toLowerCase();
 export const allowedName = value => typeof value === 'string' && value.trim().length >= 2 && value.trim().length <= 100;
-export const allowedEmail = value => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value) && value.length <= 254;
+export const allowedEmail = value => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
 export const allowedPassword = value => typeof value === 'string' && value.length >= 12 && value.length <= 128;
 export const hex = buffer => Array.from(new Uint8Array(buffer), x => x.toString(16).padStart(2, '0')).join('');
 export const randomHex = bytes => hex(crypto.getRandomValues(new Uint8Array(bytes)));
