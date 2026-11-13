@@ -1,0 +1,14 @@
+{
+  "name": "letsgoride-fresh-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fresh start, isolated Cloudflare Worker/D1 API; no live cutover",
+  "scripts": {
+    "check": "node --check src/index.mjs && node --check src/security.mjs && node --check src/hailing.mjs && node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "miniflare": "4.20260730.0"
+  }
+}
