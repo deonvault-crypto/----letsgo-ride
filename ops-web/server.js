@@ -5,7 +5,7 @@ const path = require('path');
 
 const root = path.join(__dirname, 'public');
 const port = Number(process.env.PORT || 3000);
-const apiOrigin = new URL(process.env.LETSGORIDE_API_ORIGIN || 'https://letsgoride-v2-production.onrender.com');
+const apiOrigin = new URL(process.env.LETSGORIDE_API_ORIGIN || 'https://api.letsgoride.site');
 const apiClient = apiOrigin.protocol === 'http:' ? http : https;
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -30,7 +30,7 @@ function securityHeaders(ext) {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://letsgoride-v2-production.onrender.com; img-src 'self' data: https://tile.openstreetmap.org https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss://api.letsgoride.site; img-src 'self' data: https://tile.openstreetmap.org https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   };
 }
 
