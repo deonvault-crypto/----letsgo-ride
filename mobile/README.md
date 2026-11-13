@@ -30,7 +30,7 @@ The mobile app reads its API origin from the `EXPO_PUBLIC_API_BASE_URL` environm
 The production EAS profile currently sets:
 
 ```text
-https://letsgoride-v2-production.onrender.com
+https://api.letsgoride.site
 ```
 
 Development falls back to `http://127.0.0.1:8000` when `EXPO_PUBLIC_API_BASE_URL` is not set.
