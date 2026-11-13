@@ -7,7 +7,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://letsgoride-v2-production.onrender.com",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.letsgoride.site",
         "EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB": "false"
       },
       "ios": {
