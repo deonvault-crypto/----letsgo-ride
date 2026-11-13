@@ -10,7 +10,7 @@ describe("production-only native release profile", () => {
 
   it("targets only the live production API and public store release paths", () => {
     expect(eas.build.production.env.EXPO_PUBLIC_API_BASE_URL).toBe(
-      "https://letsgoride-v2-production.onrender.com",
+      "https://api.letsgoride.site",
     );
     expect(eas.build.production.android.buildType).toBe("app-bundle");
     expect(eas.submit.production.android.track).toBe("production");
