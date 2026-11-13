@@ -3,7 +3,7 @@ const platform = String(process.env.EAS_BUILD_PLATFORM || "").trim().toLowerCase
 const apiBaseUrl = String(process.env.EXPO_PUBLIC_API_BASE_URL || "").trim();
 const googleMapsAndroidApiKey = String(process.env.GOOGLE_MAPS_ANDROID_API_KEY || "").trim();
 const googleServicesJson = String(process.env.GOOGLE_SERVICES_JSON || "").trim();
-const PRODUCTION_API_ORIGIN = "https://letsgoride-v2-production.onrender.com";
+const PRODUCTION_API_ORIGIN = "https://api.letsgoride.site";
 
 if (profile && profile !== "production") {
   throw new Error(`Unsupported EAS build profile: ${profile}. LetsGoRide native releases are production-only.`);
