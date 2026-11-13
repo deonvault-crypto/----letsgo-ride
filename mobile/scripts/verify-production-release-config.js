@@ -4,7 +4,7 @@ const eas = require("../eas.json");
 const EXPECTED_PROJECT_ID = "6a3f6705-1e96-4f17-b884-b928baebf0ba";
 const EXPECTED_UPDATE_URL = `https://u.expo.dev/${EXPECTED_PROJECT_ID}`;
 const EXPECTED_PRODUCTION_ENV = Object.freeze({
-  EXPO_PUBLIC_API_BASE_URL: "https://api.letsgoride.site",
+  EXPO_PUBLIC_API_BASE_URL: "https://letsgoride-v2-production.onrender.com",
   EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB: "false",
 });
 

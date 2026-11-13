@@ -10,7 +10,7 @@ describe("production hardening final contract", () => {
   it("exposes one production EAS build and submit contract", () => {
     const eas = JSON.parse(readMobile("eas.json"));
     expect(Object.keys(eas.build)).toEqual(["production"]);
-    expect(eas.build.production.env.EXPO_PUBLIC_API_BASE_URL).toBe("https://api.letsgoride.site");
+    expect(eas.build.production.env.EXPO_PUBLIC_API_BASE_URL).toBe("https://letsgoride-v2-production.onrender.com");
     expect(eas.build.production.autoIncrement).toBe(true);
     expect(eas.build.production.android.buildType).toBe("app-bundle");
     expect(eas.submit.production.android.track).toBe("production");

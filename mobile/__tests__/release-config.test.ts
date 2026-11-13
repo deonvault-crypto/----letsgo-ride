@@ -26,23 +26,23 @@ describe("production release configuration", () => {
     expect(appConfig.android.package).toBe("com.letsgo.ride");
     expect(appConfig.version).toBe("2.0.5");
     expect(easConfig.build.production.env.EXPO_PUBLIC_API_BASE_URL).toBe(
-      "https://api.letsgoride.site",
+      "https://letsgoride-v2-production.onrender.com",
     );
   });
 
   it("rejects every non-production EAS build profile", () => {
-    expect(validate("development", "https://api.letsgoride.site")).toThrow();
+    expect(validate("development", "https://letsgoride-v2-production.onrender.com")).toThrow();
     expect(validate("preview", "https://letsgoride-v2-staging.onrender.com")).toThrow();
     expect(validate("staging", "https://letsgoride-v2-staging.onrender.com")).toThrow();
-    expect(validate("production", "https://api.letsgoride.site")).not.toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com")).not.toThrow();
   });
 
   it("rejects legacy, staging, credentialed, and path-scoped production API URLs", () => {
-    expect(validate("production", "https://api.letsgoride.site")).not.toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com")).not.toThrow();
     expect(validate("production", "https://letsgoride-backend.onrender.com")).toThrow();
     expect(validate("production", "https://letsgoride-v2-staging.onrender.com")).toThrow();
-    expect(validate("production", "https://user:secret@api.letsgoride.site")).toThrow();
-    expect(validate("production", "https://api.letsgoride.site/private")).toThrow();
+    expect(validate("production", "https://user:secret@letsgoride-v2-production.onrender.com")).toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com/private")).toThrow();
   });
 
   it("allows the complete active-trip background-location stack while blocking unrelated sensitive access", () => {
@@ -101,7 +101,7 @@ describe("production release configuration", () => {
   });
 
   it("fails closed when protected Android Maps or Firebase build configuration is absent", () => {
-    expect(validate("production", "https://api.letsgoride.site", "android", false)).toThrow();
-    expect(validate("production", "https://api.letsgoride.site", "android", true)).not.toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com", "android", false)).toThrow();
+    expect(validate("production", "https://letsgoride-v2-production.onrender.com", "android", true)).not.toThrow();
   });
 });

@@ -11,7 +11,7 @@ describe("canonical production release configuration", () => {
     expect(EXPECTED_PROJECT_ID).toBe("6a3f6705-1e96-4f17-b884-b928baebf0ba");
     expect(EXPECTED_UPDATE_URL).toBe(`https://u.expo.dev/${EXPECTED_PROJECT_ID}`);
     expect(EXPECTED_PRODUCTION_ENV).toEqual({
-      EXPO_PUBLIC_API_BASE_URL: "https://api.letsgoride.site",
+      EXPO_PUBLIC_API_BASE_URL: "https://letsgoride-v2-production.onrender.com",
       EXPO_PUBLIC_ENABLE_AUTHENTICATED_WEB: "false",
     });
   });

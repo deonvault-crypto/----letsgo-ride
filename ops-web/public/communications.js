@@ -27,7 +27,7 @@
     const token = state.token;
     const connect = () => {
       if (current !== generation || token !== state.token || state.currentView !== 'communications' || document.hidden) return;
-      socket = new WebSocket('wss://api.letsgoride.site/realtime', ['letsgoride.realtime.v1', `letsgoride.auth.${token}`]);
+      socket = new WebSocket('wss://letsgoride-v2-production.onrender.com/realtime', ['letsgoride.realtime.v1', `letsgoride.auth.${token}`]);
       const active = socket;
       active.onmessage = event => {
         if (current !== generation || active !== socket) return;

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const REALTIME_URL = 'wss://api.letsgoride.site/realtime';
+  const REALTIME_URL = 'wss://letsgoride-v2-production.onrender.com/realtime';
   const RECONNECT_MS = 1500;
   const RECONCILE_MS = 10000;
   const EVENT_REFRESH_DEBOUNCE_MS = 300;

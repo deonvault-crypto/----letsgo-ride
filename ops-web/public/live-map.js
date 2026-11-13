@@ -1,5 +1,5 @@
 (() => {
-  const REALTIME_URL = 'wss://api.letsgoride.site/realtime';
+  const REALTIME_URL = 'wss://letsgoride-v2-production.onrender.com/realtime';
   const ZIMBABWE_CENTER = [-19.0154, 29.1549];
   const HARARE_CENTER = [-17.8292, 31.0522];
   const ONLINE_RECONCILE_MS = 15000;

@@ -11,7 +11,7 @@ The public website is intentionally isolated on the `website-production` branch 
 - Operations dashboard: `ops-web/`
 - Public website source: `website-production` branch → `frontend/`
 - Public site: https://letsgoride.site
-- Production API: https://api.letsgoride.site
+- Production API: https://letsgoride-v2-production.onrender.com
 
 ## Release model
 
