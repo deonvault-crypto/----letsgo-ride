@@ -49,7 +49,7 @@ async function verifyEmail(request,env,ip) {
 }
 async function emailLogin(request,env,ip) {
  const b=await bodyJson(request),email=emailValue(b.email);
- if(!allowedEmail(email)||typeof b.password!=='string')throw new HttpError(401,'Invalid email or password.');
+ if(!allowedEmail(email)||typeof b.password!=='string'||b.password.length>128||b.password.length===0)throw new HttpError(401,'Invalid email or password.');
  await rateLimit(env.DB,'login-ip:'+await sha256(ip),20,3600000);
  await rateLimit(env.DB,'login-email:'+await sha256(email),10,3600000);
  const user=await env.DB.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
