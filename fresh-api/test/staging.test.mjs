@@ -42,12 +42,12 @@ const asUser=async ({email,role='passenger',name='Test Rider',verified=1})=>{
 before(async()=>{
  const root=fileURLToPath(new URL('../',import.meta.url));
  runtime=new Miniflare({scriptPath:root+'src/index.mjs',modules:true,
- modulesRoot:root,compatibilityDate:'2026-11-13',d1Databases:['DB']});
+ modulesRoot:root,compatibilityDate:'2026-07-29',d1Databases:['DB']});
  db=await runtime.getD1Database('DB');
  const sql=(await readFile(new URL('../migrations/0001_fresh_start.sql',import.meta.url),'utf8'))
  .replace(/^PRAGMA foreign_keys = ON;\s*/m,'');
  // The statements contain no triggers and are safe to split at semicolons.
- for(const statement of sql.split(';').map(x=>x.trim()).filter(Boolean))
+ for(const statement of sql.split(/;\n(?=\s*(?:--|CREATE|$))/).map(x=>x.trim()).filter(Boolean))
  await db.prepare(statement).run();
  env={DB:db,AUTH_PEPPER:secret,FRESH_START_STAGING:'true',SIMULATED_RIDES:'true'};
 });
