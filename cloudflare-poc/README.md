@@ -1,59 +1,67 @@
-# LetsGoRide · Cloudflare Workers + D1 migration laboratory
+# LetsGoRide Cloudflare migration lab
 
-**NOT the LetsGoRide production API. NOT a substitute for recovered MongoDB Atlas data.**
+This directory supports isolated development with synthetic records. The deployable entry point, `src/index.mjs`, exposes liveness and reports HTTP 503 for readiness and all product routes. The business test Worker under `test/fixtures/` runs only through Miniflare. The sample Wrangler configuration disables both public workers.dev and preview URLs.
 
-This directory is an isolated prototype for moving the existing Zimbabwe ride-hailing, courier, food, operations and payment platform to genuinely free starting infrastructure. Do not merge this branch or point mobile clients, DNS, payment webhooks or `api.letsgoride.site` at the prototype.
+## Run the Worker, D1 and recovery tests
 
-## Implemented now
-
-- `src/index.mjs`: a Worker with `GET /health/live` returning 200 but explicitly `production_ready:false`; `GET /health/ready` always returns 503, including when D1 is connected; every other endpoint returns 503 without writing data. Neither passing liveness nor connecting to D1 makes a ride-platform deployment ready.
-- `migrations/0001_mongo_archive.sql`: a D1/SQLite **staging** table retaining the original Mongo Extended JSON documents, original typed `_id` and document SHA-256 hashes for checking data integrity. This is not the application relational schema.
-- `scripts/ejson-to-d1.mjs`: offline migration preparation for a single recovered MongoDB **Extended JSON NDJSON** export. Produces private, size-bounded SQL INSERT chunks and a manifest. Handles ObjectIds in EJSON without changing them; rejects duplicate/missing IDs and oversized records rather than skipping data. Makes **no** remote or billable calls.
-- `test/`: synthetic Node and SQLite tests; no real LetsGoRide records or secrets.
-- `.github/workflows/cloudflare-poc-check.yml`: non-deploying CI for the prototype.
-
-## Run the tests for free
+Use Node 24, Python 3.12, and the same PyMongo version as the FastAPI backend.
 
 ```bash
-cd cloudflare-poc
+npm ci --no-audit --no-fund
+python -m pip install 'pymongo==4.9.2' 'pytest==8.4.2'
 npm run check
+python -m pytest -q test/test_recover_mongo.py
 ```
 
-No `npm install`, API token, Atlas account or Cloudflare account is needed to run these checks. Python 3.12+ is required for the SQLite import compatibility test.
+Miniflare starts the Workers runtime with isolated D1 and SQLite-backed Durable Objects. The tests cover geographical eligibility, concurrent driver assignment, offer expiration, outbox lease recovery, financial replay and recipient-scoped WebSocket delivery. They use generated records, a fixture identity map and no provider credentials.
 
-## When a real, authorized MongoDB export is available
+To run the deployable health Worker locally, copy `wrangler.example.jsonc` to the ignored `wrangler.jsonc` and use a placeholder UUID such as `00000000-0000-4000-8000-000000000001`. Run the following with Wrangler 4.161.0.
 
-1. Inventory **every** collection and indexes in the original `letsgoride` database. Do not omit users, credentials, driver payouts, audit logs, payments or event state. Preserve export backups before conversion.
-2. Use MongoDB export tooling to produce one Extended JSON object per line (NDJSON). This script **does not** accept raw `mongodump` BSON archive files; convert those using a trusted local tool first.
-3. Generate private import chunks in a location excluded from Git:
+```bash
+npx wrangler@4.161.0 d1 migrations apply DB --local
+npx wrangler@4.161.0 dev --local --ip 127.0.0.1
+```
+
+`GET /health/live` should return 200. `GET /health/ready` should return 503 with `database_status: connected` and `production_ready: false`. A remote smoke requires a signed-in Cloudflare account on Workers Free and a dedicated D1 binding. Keep lab resources free of production data and keep the test entry point out of the deployable bundle.
+
+## Recover the MongoDB snapshot
+
+Obtain a consistent, authorized Atlas snapshot or BSON dump. Preserve the original and its hashes in encrypted, access-controlled storage. When export access is restored, record the source collection inventory, counts, and collection options at the same snapshot point. A file inventory alone cannot establish that Atlas supplied every collection.
+
+`recover_mongo.py` accepts the uncompressed `letsgoride/` database directory from an authorized dump or a new dump of an isolated, successfully restored snapshot. Preserve the full backup if it contains an oplog, compressed archive, or other namespaces. Replay a valid oplog using MongoDB's documented restore procedure before creating the staging directory. Stage the dump and verify its contents locally in the protected workspace.
+
+```bash
+umask 077
+python scripts/recover_mongo.py stage /private/snapshot/letsgoride /private/recovery/letsgoride.sqlite3
+python scripts/recover_mongo.py verify /private/snapshot/letsgoride /private/recovery/letsgoride.sqlite3
+python scripts/recover_mongo.py export-ejson /private/recovery/letsgoride.sqlite3 users /private/recovery/users.ndjson
+```
+
+The archive stores each raw BSON document with its typed ID, collection and document SHA-256, and MongoDB metadata including index definitions and supported views. Verification compares the stored bytes, metadata, order, and counts against the supplied snapshot. Repeat the inventory comparison against the authorized source. Preserve the raw BSON as the recovery copy because Extended JSON has representation and row-size constraints.
+
+Use the EJSON converter with canonical Extended JSON for synthetic D1 import or offline transformation. Its chunks contain the source payloads. Keep recovered customer exports in the protected offline workspace and out of the Cloudflare lab.
 
 ```bash
 node scripts/ejson-to-d1.mjs \
   --collection users \
-  --input /private/mongo-export/users.ndjson \
+  --input /private/synthetic/users.ndjson \
   --output ./generated/users
 ```
 
-4. Compare every manifest's document count and SHA-256 with the original export. Import **to a separate empty lab D1 database** after applying the table migration. Verify each destination count and document hash before continuing.
-5. Build the actual D1 relational business schema and equivalents for Mongo queries/indexes; port user authentication, geospatial matching, ride state transitions, worker leasing, realtime connections and finance idempotency with tests before any production consideration.
+The converter refuses duplicate typed IDs within a canonical export, empty files, and statements approaching D1's 100 KB cap. A final manifest contains document counts and chunk SHA-256 values. The D1 archive schema stores documents for staging. The live application requires relational mappings and reconciliation for stable application IDs, lifecycle state, payments, audit and user access.
 
-Sensitive data: `generated/`, `exports/`, `*.ndjson`, `*.bson`, local Wrangler configuration and credentials are gitignored. Keep these in encrypted local storage; **never commit them**.
+## Run the FastAPI recovery smoke
 
-## Cloudflare account and deployment (lab only)
+The fixture exercises the existing API against a **fresh, disposable** MongoDB Community database and Redis on loopback. Install the backend dependencies, `httpx==0.28.1`, and start the two local services before running it from the repository root.
 
-There is no Cloudflare account connected to this ChatGPT session, so this repo change does **not** create a real D1 database or deploy a Worker. To deploy the lab later, sign in to a Cloudflare account, create a separate free-tier D1 database named `letsgoride-d1-lab`, copy `wrangler.example.jsonc` to gitignored `wrangler.jsonc` and substitute the actual created database ID for `REPLACE_WITH_YOUR_OWN_CLOUDFLARE_D1_UUID`. Apply only the lab migrations with Wrangler, then deploy to its separate lab hostname. **Never use your actual production domain or real payment secrets.**
+```bash
+env -i PATH="$PATH" PYTHONPATH="$PWD/backend" APP_ENV=test MONGODB_DB_NAME=letsgoride \
+  MONGODB_URI=mongodb://127.0.0.1:27867 REALTIME_REDIS_URL=redis://127.0.0.1:26387 \
+  RATE_LIMIT_REDIS_URL=redis://127.0.0.1:26387 STRIPE_ENABLED=false \
+  PASSENGER_CARD_PAYMENTS_ENABLED=false ADMIN_AUTO_CREATE=false ROUTING_PROVIDER=disabled \
+  COURIER_AUTO_PRICING_ENABLED=true COURIER_BASE_PRICE_USD=2 COURIER_PRICE_PER_KM_USD=0.5 \
+  COURIER_MINIMUM_PRICE_USD=2 COURIER_PAYOUT_PERCENT=70 \
+  timeout 45s python cloudflare-poc/test/fixtures/fastapi-recovery-smoke.py
+```
 
-The example intentionally contains no real D1 ID. It is not a deployed configuration.
-
-## Capacity and safety
-
-On the November 2026 free plan, Cloudflare Workers includes up to 100,000 requests/day but only 10 ms CPU time per request; free D1 has a 500 MB maximum per database, 100 KB SQL statement limit and 2 MB row/string maximum. The converter deliberately rejects records near the SQL limit. Exceeding D1's daily free quotas causes queries to fail until the quota resets — not acceptable for essential live rides without a documented failover.
-
-**Known blockers:** Atlas organization is suspended for unpaid invoices, production data export not available; current FastAPI uses MongoDB Motor queries and long-running dispatch, lifecycle, notifications and settlement tasks that this Worker has **not** migrated; payment, location, realtime and authentication contracts are not ported. Commercial use, quota and outage response must be reviewed for the final platform.
-
-References:
-- https://developers.cloudflare.com/workers/platform/limits/
-- https://developers.cloudflare.com/d1/platform/limits/
-- https://developers.cloudflare.com/d1/best-practices/import-export-data/
-
-See `docs/zero-cost-hosting-path.md` and draft PR #143 for the overall plan.
+See [the migration runbook](../docs/zero-cost-hosting-path.md) for provider quotas, recovery sequence and production gates.

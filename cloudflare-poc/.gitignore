@@ -5,6 +5,7 @@
 .env.*
 wrangler.jsonc
 wrangler.toml
+__pycache__/
 exports/
 generated/
 *.ndjson

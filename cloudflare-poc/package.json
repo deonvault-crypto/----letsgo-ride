@@ -5,7 +5,10 @@
   "type": "module",
   "description": "Fail-closed Cloudflare Worker and offline MongoDB EJSON → D1 archival staging proof of concept.",
   "scripts": {
-    "test": "node --test",
-    "check": "node --check src/index.mjs && node --check scripts/ejson-to-d1.mjs && node --test"
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/index.mjs && node --check scripts/ejson-to-d1.mjs && npm test"
+  },
+  "devDependencies": {
+    "miniflare": "4.20260730.0"
   }
 }

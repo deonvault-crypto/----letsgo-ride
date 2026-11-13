@@ -76,3 +76,31 @@ test('SQL injection in collection names is blocked', () => withTemp(async dir =>
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /not safe/);
 }));
+
+test('canonical EJSON retains embedded BSON field order, extended numbers and null IDs', () => withTemp(async dir => {
+  const input = join(dir, 'types.ndjson'), output = join(dir, 'generated');
+  await writeFile(input, [
+    '{"_id": {"10": {"$numberLong": "9007199254740993"}, "2": "x"}}',
+    '{"_id":{"2":"x","10":{"$numberLong":"9007199254740993"}}}',
+    '{"_id": null}',
+  ].join('\n'));
+  const converted = run(input, output);
+  assert.equal(converted.status, 0, converted.stderr);
+  const sql = await readFile(join(output, 'chunk-00001.sql'), 'utf8');
+  assert.ok(sql.includes("'{\"10\":{\"$numberLong\":\"9007199254740993\"},\"2\":\"x\"}'"));
+  assert.ok(sql.includes("'{\"2\":\"x\",\"10\":{\"$numberLong\":\"9007199254740993\"}}'"));
+  assert.ok(sql.includes("'null'"));
+  const retry = run(input, output);
+  assert.notEqual(retry.status, 0);
+  assert.equal(await readFile(join(output, 'chunk-00001.sql'), 'utf8'), sql);
+}));
+
+test('invalid JSON fails without putting input contents in the error', () => withTemp(async dir => {
+  const input = join(dir, 'invalid.ndjson'), output = join(dir, 'generated');
+  await writeFile(input, '{"_id":synthetic-sensitive-fragment}');
+  const result = run(input, output);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Record 1: invalid JSON/);
+  assert.doesNotMatch(result.stderr, /synthetic-sensitive-fragment/);
+  await assert.rejects(() => access(output));
+}));
