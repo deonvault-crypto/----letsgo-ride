@@ -21,12 +21,12 @@
 4. The current FastAPI startup creates a Mongo-leased **continuous worker supervisor**. Do **not** rely on its asyncio tasks to run indefinitely within ephemeral Vercel request Functions. Refactor settlement, ride lifecycle, communications, hailing dispatch and Stripe reconciliation into **durable queue/worker/cron executions with verified ownership and catch-up semantics**; keep atomic Mongo protections and no duplicate settlement.
 5. Verify WebSocket `/realtime` end to end, including reconnect after max Function duration, Redis pub/sub fan-out and authenticated Ops/mobile subscribers. Health should only report ready after all critical dependencies are ready.
 6. Verify API endpoints, payments and Stripe webhooks, Cloudinary uploads, notifications, auth, live trip tracking, and a real authenticated Ride Now ride across two devices. Verify Operations login, support, moderation and live map.
-7. Only **after** step 6: update the code-pinned mobile production API origin, its tests and CI smoke target, Ops API and WS origins, DNS and CORS. Use a controlled release/OTA with existing no-extra-native-build rule respected until specifically approved. Confirm installed clients can use the new endpoint.
+7. Only **after** step 6: release the prepared code-pinned mobile production API origin, tests and CI smoke target, Ops API and WS origins, DNS and CORS changes. Use a controlled release/OTA with existing no-extra-native-build rule respected until specifically approved. Confirm installed clients can use the new endpoint.
 8. Keep Render configured as a rollback fallback until measured production cutover and historical client transition are complete. **Do not delete Render or Mongo resources automatically.**
 
 ## Ops dashboard static deployment preparation
 
-A new `ops-web/vercel.json` config supports deployment with project Root Directory `ops-web`, Build Command `npm run check`, Output Directory `public`, and an external rewrite from `/api/*` to `https://api.letsgoride.site/*`. This is preparatory only: the Operations WebSocket clients still need their hard-coded origins changed to the new `wss://api.letsgoride.site/realtime` once verified, or they will keep trying Render. Never assume a static rewrite upgrades WebSockets.
+A new `ops-web/vercel.json` config supports deployment with project Root Directory `ops-web`, Build Command `npm run check`, Output Directory `public`, and an external rewrite from `/api/*` to `https://api.letsgoride.site/*`. The draft migration branch also updates the Operations WebSocket clients to `wss://api.letsgoride.site/realtime`, but these changes are **not live** until a reviewed deployment. Never assume a static rewrite upgrades WebSockets.
 
 ## Launch gate
 
