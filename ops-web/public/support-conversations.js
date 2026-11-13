@@ -1,5 +1,5 @@
 (() => {
-  const SUPPORT_REALTIME_URL = 'wss://letsgoride-v2-production.onrender.com/realtime';
+  const SUPPORT_REALTIME_URL = 'wss://api.letsgoride.site/realtime';
   let supportRealtimeSocket = null;
   let supportRealtimeRetry = null;
   let supportRealtimeGeneration = 0;
