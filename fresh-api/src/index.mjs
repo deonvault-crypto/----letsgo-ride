@@ -158,13 +158,13 @@ export default {
     AND status IN ('SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS') ORDER BY created_ms DESC LIMIT 1`).bind(user.id,user.id).first();
     return ok(row?await getTrip(env.DB,user,row.id):null);
    }
-   const trip=path.match(/^\\/hailing\\/trips\\/([0-9a-f-]+)$/);
+   const trip=path.match(new RegExp('^/hailing/trips/([0-9a-f-]+)$'));
    if(method==='GET'&&trip)return ok(await getTrip(env.DB,user,trip[1]));
-   const cancel=path.match(/^\\/hailing\\/trips\\/([0-9a-f-]+)\\/cancel$/);
+   const cancel=path.match(new RegExp('^/hailing/trips/([0-9a-f-]+)/cancel$'));
    if(method==='POST'&&cancel)return ok(await cancelTrip(env,user,cancel[1]));
    if(method==='POST'&&path==='/hailing/driver/online')return ok(await driverOnline(env,user,await bodyJson(request)));
    if(method==='GET'&&path==='/hailing/driver/offer')return ok(await driverOffer(env,user));
-   const accept=path.match(/^\\/hailing\\/offers\\/([0-9a-f-]+)\\/accept$/);
+   const accept=path.match(new RegExp('^/hailing/offers/([0-9a-f-]+)/accept$'));
    if(method==='POST'&&accept)return ok(await acceptOffer(env,user,accept[1]));
    if(method==='POST'&&path==='/hailing/driver/offline'){
     const active=await env.DB.prepare("SELECT 1 FROM trips WHERE driver_id=? AND status IN ('DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS')").bind(user.id).first();
@@ -183,7 +183,7 @@ export default {
     if(user.role!=='admin')throw new HttpError(403,'Admin permission required.');
     if(method==='GET'&&path==='/admin/overview')return ok(await adminOverview(env.DB));
     if(method==='GET'&&path==='/admin/verifications')return ok(await listVerifications(env.DB));
-    const review=path.match(/^\\/admin\\/verifications\\/([0-9a-f-]+)\\/status$/);
+    const review=path.match(new RegExp('^/admin/verifications/([0-9a-f-]+)/status$'));
     if(method==='PATCH'&&review)return ok(await adminReview(request,env,user,review[1]));
     if(method==='GET'&&path==='/admin/hailing/drivers'){
      const {results}=await env.DB.prepare(`SELECT a.*,u.name FROM driver_applications a JOIN users u ON u.id=a.user_id LIMIT 100`).all();
