@@ -26,7 +26,7 @@ class Settings:
         configured_public_api_base_url = self._get_env_first("PUBLIC_API_BASE_URL", "API_PUBLIC_BASE_URL")
         if self.is_production and not configured_public_api_base_url:
             raise RuntimeError("Production PUBLIC_API_BASE_URL must be explicitly configured.")
-        self.public_api_base_url = configured_public_api_base_url or "https://letsgoride-backend.onrender.com"
+        self.public_api_base_url = configured_public_api_base_url or "https://api.letsgoride.site"
         self.public_site_base_url = self._get_env_first("PUBLIC_SITE_BASE_URL") or "https://letsgoride.site"
         self.payout_data_encryption_key = self._get_env_first("PAYOUT_DATA_ENCRYPTION_KEY")
         self.realtime_redis_url = self._get_env_first("REALTIME_REDIS_URL", "REDIS_URL")
