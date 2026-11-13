@@ -64,6 +64,7 @@ export async function createQuote(env,user,data) {
 export async function dispatchOffer(db,tripId,timestamp) {
  const trip=await tripRow(db,tripId);
  if(!trip || trip.status!=='SEARCHING' || trip.search_expires_ms<=timestamp)return null;
+ await db.prepare("UPDATE dispatch_offers SET status='expired' WHERE status='pending' AND expires_ms<=?").bind(timestamp).run();
  const pickup=parse(trip.pickup_json), candidates=await db.prepare(`
  SELECT p.user_id,p.latitude,p.longitude FROM driver_presence p
  JOIN driver_applications a ON a.user_id=p.user_id JOIN users u ON u.id=p.user_id
@@ -71,8 +72,8 @@ export async function dispatchOffer(db,tripId,timestamp) {
  AND a.documents_verified=1 AND a.ride_class=? AND u.status='active' AND u.email_verified=1
  AND NOT EXISTS(SELECT 1 FROM trips t WHERE t.driver_id=p.user_id AND t.status IN
  ('DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'))
- AND NOT EXISTS(SELECT 1 FROM dispatch_offers o WHERE o.driver_id=p.user_id AND o.status='pending')
- ORDER BY p.last_seen_ms DESC LIMIT 40`).bind(timestamp-75000,trip.ride_class).all();
+ AND NOT EXISTS(SELECT 1 FROM dispatch_offers o WHERE o.driver_id=p.user_id AND (o.status='pending' OR o.trip_id=?))
+ ORDER BY p.last_seen_ms DESC LIMIT 40`).bind(timestamp-75000,trip.ride_class,tripId).all();
  const ranked=(candidates.results||[]).map(d=>({...d,distance:distanceKm(pickup,d)}))
  .filter(d=>d.distance<=20).sort((a,b)=>a.distance-b.distance);
  for(const d of ranked) {
@@ -91,18 +92,26 @@ export async function requestTrip(env,user,data) {
  if(data.payment_method && data.payment_method!=='cash') throw new HttpError(503,'Card payments are disabled.');
  const key=String(data.client_request_id||'');
  if(!key || key.length>100) throw new HttpError(400,'A client request ID is required.');
+ const prior=await env.DB.prepare('SELECT id,quote_id FROM trips WHERE passenger_id=? AND client_request_id=?').bind(user.id,key).first();
+ if(prior){
+  if(prior.quote_id!==data.quote_id)throw new HttpError(409,'Client request ID belongs to a different quote.');
+  return getTrip(env.DB,user,prior.id);
+ }
  const quote=await env.DB.prepare('SELECT * FROM quotes WHERE id=? AND passenger_id=? AND expires_ms>?')
   .bind(data.quote_id,user.id,now()).first();
  if(!quote) throw new HttpError(400,'Quote is missing or expired.');
  const timestamp=now(),id=uid();
  const r=await env.DB.prepare(`INSERT INTO trips(id,passenger_id,quote_id,client_request_id,status,created_ms,updated_ms,search_expires_ms)
  VALUES(?,?,?,?,'SEARCHING',?,?,?)
- ON CONFLICT(passenger_id,client_request_id) DO NOTHING RETURNING id`)
+ ON CONFLICT DO NOTHING RETURNING id`)
  .bind(id,user.id,quote.id,key,timestamp,timestamp,timestamp+90000).first();
- const existing=r?.id || (await env.DB.prepare('SELECT id FROM trips WHERE passenger_id=? AND client_request_id=?').bind(user.id,key).first())?.id;
- if(!existing) throw new HttpError(409,'You already have an active trip.');
- if(r?.id) await dispatchOffer(env.DB,id,timestamp);
- return getTrip(env.DB,user,existing);
+ if(r){
+  await dispatchOffer(env.DB,id,timestamp);
+  return getTrip(env.DB,user,id);
+ }
+ const winner=await env.DB.prepare('SELECT id,quote_id FROM trips WHERE passenger_id=? AND client_request_id=?').bind(user.id,key).first();
+ if(winner?.quote_id===quote.id)return getTrip(env.DB,user,winner.id);
+ throw new HttpError(409,'An active trip or conflicting request already exists.');
 }
 export async function driverOnline(env,user,data) {
  const profile=await env.DB.prepare(`SELECT * FROM driver_applications WHERE user_id=? AND status='approved' AND documents_verified=1`).bind(user.id).first();
@@ -129,22 +138,31 @@ export async function acceptOffer(env,user,offerId) {
   env.DB.prepare(`UPDATE trips SET driver_id=?,status='DRIVER_ASSIGNED',assigned_ms=?,updated_ms=?
  WHERE status='SEARCHING' AND search_expires_ms>?
  AND id=(SELECT trip_id FROM dispatch_offers WHERE id=? AND driver_id=? AND status='pending' AND expires_ms>?)
+ AND EXISTS (SELECT 1 FROM driver_presence p JOIN driver_applications a ON a.user_id=p.user_id
+ JOIN users u ON u.id=p.user_id JOIN quotes q ON q.id=trips.quote_id
+ WHERE p.user_id=? AND p.status='available' AND p.last_seen_ms>?
+ AND a.status='approved' AND a.documents_verified=1 AND a.ride_class=q.ride_class
+ AND u.status='active' AND u.email_verified=1)
  AND NOT EXISTS (SELECT 1 FROM trips active WHERE active.driver_id=? AND active.status IN
- ('DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS')) RETURNING id`).bind(user.id,timestamp,timestamp,timestamp,offerId,user.id,timestamp,user.id),
+ ('DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS')) RETURNING id`).bind(user.id,timestamp,timestamp,timestamp,offerId,user.id,timestamp,user.id,timestamp-75000,user.id),
   env.DB.prepare(`UPDATE dispatch_offers SET status='accepted'
- WHERE id=? AND driver_id=? AND status='pending' AND changes()=1`).bind(offerId,user.id)
+ WHERE id=? AND driver_id=? AND status='pending' AND changes()=1`).bind(offerId,user.id),
+  env.DB.prepare("UPDATE driver_presence SET status='on_trip' WHERE user_id=? AND changes()=1").bind(user.id)
  ]);
  if(!trip.results?.length || marked.meta.changes!==1)throw new HttpError(409,'Offer is no longer available.');
- await env.DB.prepare("UPDATE driver_presence SET status='on_trip' WHERE user_id=?").bind(user.id).run();
  return getTrip(env.DB,user,trip.results[0].id);
 }
 export async function cancelTrip(env,user,id) {
  const timestamp=now();
- const r=await env.DB.prepare(`UPDATE trips SET status='CANCELLED_BY_PASSENGER',payment_status='cancelled',updated_ms=?
- WHERE id=? AND passenger_id=? AND status IN ('SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVED') RETURNING id,driver_id`)
- .bind(timestamp,id,user.id).first();
- if(!r)throw new HttpError(409,'Trip cannot be cancelled in its current state.');
- await env.DB.prepare("UPDATE dispatch_offers SET status='cancelled' WHERE trip_id=? AND status='pending'").bind(id).run();
- if(r.driver_id)await env.DB.prepare("UPDATE driver_presence SET status='available' WHERE user_id=?").bind(r.driver_id).run();
+ const [cancelled]=await env.DB.batch([
+  env.DB.prepare(`UPDATE trips SET status='CANCELLED_BY_PASSENGER',payment_status='cancelled',updated_ms=?
+ WHERE id=? AND passenger_id=? AND status IN ('SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVED') RETURNING id`)
+ .bind(timestamp,id,user.id),
+  env.DB.prepare(`UPDATE driver_presence SET status='available' WHERE status='on_trip' AND changes()=1
+ AND user_id=(SELECT driver_id FROM trips WHERE id=?)`).bind(id),
+  env.DB.prepare(`UPDATE dispatch_offers SET status='cancelled' WHERE trip_id=? AND status='pending'
+ AND EXISTS (SELECT 1 FROM trips WHERE id=? AND passenger_id=? AND status='CANCELLED_BY_PASSENGER')`).bind(id,id,user.id)
+ ]);
+ if(!cancelled.results.length)throw new HttpError(409,'Trip cannot be cancelled in its current state.');
  return getTrip(env.DB,user,id);
 }

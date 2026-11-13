@@ -156,7 +156,14 @@ export default {
    if(method==='GET'&&path==='/hailing/trips/active'){
     const row=await env.DB.prepare(`SELECT id FROM trips WHERE (passenger_id=? OR driver_id=?)
     AND status IN ('SEARCHING','DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS') ORDER BY created_ms DESC LIMIT 1`).bind(user.id,user.id).first();
-    return ok(row?await getTrip(env.DB,user,row.id):null);
+    if(!row)return ok(null);
+    const timestamp=now();
+    await env.DB.prepare(`UPDATE trips SET status='NO_DRIVER_FOUND',payment_status='cancelled',updated_ms=?
+     WHERE id=? AND status='SEARCHING' AND search_expires_ms<=?`).bind(timestamp,row.id,timestamp).run();
+    const active=await getTrip(env.DB,user,row.id);
+    if(active.status==='NO_DRIVER_FOUND')return ok(null);
+    if(active.status==='SEARCHING'&&env.SIMULATED_RIDES==='true')await dispatchOffer(env.DB,row.id,timestamp);
+    return ok(active);
    }
    const trip=path.match(new RegExp('^/hailing/trips/([0-9a-f-]+)$'));
    if(method==='GET'&&trip)return ok(await getTrip(env.DB,user,trip[1]));

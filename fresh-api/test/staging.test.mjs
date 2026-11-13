@@ -49,6 +49,7 @@ before(async()=>{
  // The statements contain no triggers and are safe to split at semicolons.
  for(const statement of sql.split(/;\n(?=\s*(?:--|CREATE|$))/).map(x=>x.trim()).filter(Boolean))
  await db.prepare(statement).run();
+ await db.prepare(await readFile(new URL('../migrations/0002_offer_expiry.sql',import.meta.url),'utf8')).run();
  env={DB:db,AUTH_PEPPER:secret,FRESH_START_STAGING:'true',SIMULATED_RIDES:'true'};
 });
 after(async()=>{await runtime?.dispose();});
@@ -111,7 +112,13 @@ test('cash-only passenger-driver offer and admin approval guard',async()=>{
  assert.equal(offerRes.status,200);
  const offer=(await offerRes.json()).data;
  assert.equal(offer.trip.id,trip.id);
- const accepted=await appRequest('/hailing/offers/'+offer.offer.id+'/accept','POST',{},driver.token);
+ const acceptPath='/hailing/offers/'+offer.offer.id+'/accept';
+ await db.prepare("UPDATE driver_applications SET documents_verified=0 WHERE user_id=?").bind(driver.id).run();
+ assert.equal((await appRequest(acceptPath,'POST',{},driver.token)).status,409);
+ await db.prepare("UPDATE driver_applications SET documents_verified=1 WHERE user_id=?").bind(driver.id).run();
+ const accepts=await Promise.all([1,2].map(()=>appRequest(acceptPath,'POST',{},driver.token)));
+ assert.deepEqual(accepts.map(response=>response.status).sort(),[200,409]);
+ const accepted=accepts.find(response=>response.status===200);
  assert.equal(accepted.status,200);
  assert.equal((await accepted.json()).data.driver_user_id,driver.id);
  const replay=await appRequest('/hailing/offers/'+offer.offer.id+'/accept','POST',{},driver.token);
@@ -119,6 +126,21 @@ test('cash-only passenger-driver offer and admin approval guard',async()=>{
  const cancellation=await appRequest('/hailing/trips/'+trip.id+'/cancel','POST',{},passenger.token);
  assert.equal(cancellation.status,200);
  assert.equal((await cancellation.json()).data.status,'CANCELLED_BY_PASSENGER');
+ assert.equal(await db.prepare("SELECT status FROM driver_presence WHERE user_id=?").bind(driver.id).first('status'),'available');
+ await db.prepare("UPDATE quotes SET expires_ms=created_ms WHERE id=?").bind(quote.quote_id).run();
+ const afterExpiry=await appRequest('/hailing/trips','POST',request,passenger.token);
+ assert.equal((await afterExpiry.json()).data.id,trip.id);
+ const conflict=await appRequest('/hailing/trips','POST',{...request,quote_id:'different'},passenger.token);
+ assert.equal(conflict.status,409);
+ const next=await appRequest('/hailing/quotes','POST',{pickup,dropoff,ride_class:'ECONOMY'},passenger.token);
+ const nextQuote=(await next.json()).data.quote_id;
+ const nextTrip=await appRequest('/hailing/trips','POST',{...request,quote_id:nextQuote,client_request_id:'next-ride'},passenger.token);
+ const nextId=(await nextTrip.json()).data.id;
+ await db.prepare("UPDATE dispatch_offers SET expires_ms=0 WHERE trip_id=?").bind(nextId).run();
+ await appRequest('/hailing/trips/active','GET',null,passenger.token);
+ assert.equal(await db.prepare("SELECT status FROM dispatch_offers WHERE trip_id=?").bind(nextId).first('status'),'expired');
+ await db.prepare("UPDATE trips SET search_expires_ms=0 WHERE id=?").bind(nextId).run();
+ assert.equal((await (await appRequest('/hailing/trips/active','GET',null,passenger.token)).json()).data,null);
  const audits=await appRequest('/admin/audit-logs','GET',null,admin.token);
  assert.equal((await audits.json()).data.count,1);
 });

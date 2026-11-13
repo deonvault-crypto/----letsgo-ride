@@ -1,0 +1,27 @@
+name: Fresh D1 API checks
+on:
+  pull_request:
+    paths:
+      - 'fresh-api/**'
+      - '.github/workflows/fresh-api-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fresh-api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: fresh-api/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
