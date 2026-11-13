@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
+  "name": "letsgoride-d1-migration-lab",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-11-13",
+  "workers_dev": false,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "letsgoride-d1-lab",
+      "database_id": "REPLACE_WITH_YOUR_OWN_CLOUDFLARE_D1_UUID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

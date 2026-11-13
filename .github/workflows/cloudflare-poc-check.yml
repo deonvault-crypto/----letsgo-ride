@@ -1,0 +1,39 @@
+name: Cloudflare migration prototype CI (no deploy)
+
+on:
+  pull_request:
+    paths:
+      - 'cloudflare-poc/**'
+      - '.github/workflows/cloudflare-poc-check.yml'
+  push:
+    branches:
+      - 'infra/vercel-migration-20261113'
+    paths:
+      - 'cloudflare-poc/**'
+      - '.github/workflows/cloudflare-poc-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated lab dependencies
+        working-directory: cloudflare-poc
+        run: |
+          npm ci --no-audit --no-fund
+          python -m pip install 'pymongo==4.9.2' 'pytest==8.4.2'
+      - name: Offline lab checks (no credentials or deploy)
+        working-directory: cloudflare-poc
+        run: |
+          npm run check
+          python -m pytest -q test/test_recover_mongo.py

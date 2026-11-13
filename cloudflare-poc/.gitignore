@@ -1,0 +1,16 @@
+# Prevent accidental publication of real customer data and production credentials.
+.wrangler/
+.dev.vars
+.env
+.env.*
+wrangler.jsonc
+wrangler.toml
+__pycache__/
+exports/
+generated/
+*.ndjson
+*.bson
+*.archive
+*.gz
+*.sqlite3
+*.dump
